@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { X, Bell, Trash2, LogOut, Volume2, VolumeX, Smartphone, Download } from "lucide-react";
+import { X, Bell, Trash2, LogOut, Smartphone, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
-import { useSounds } from "@/hooks/use-sounds";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 
@@ -14,9 +13,7 @@ export const Settings = ({ onClose }: SettingsProps) => {
   const navigate = useNavigate();
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
-  const [soundsEnabled, setSoundsEnabled] = useState(true);
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
-  const { toggle: playToggle, setEnabled: setSoundsEnabledHook } = useSounds();
   const { lightTap } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
 
@@ -27,9 +24,6 @@ export const Settings = ({ onClose }: SettingsProps) => {
     const savedNotif = localStorage.getItem("notifications");
     if (savedNotif) setNotifications(savedNotif === "true");
 
-    const savedSounds = localStorage.getItem("soundsEnabled");
-    setSoundsEnabled(savedSounds !== "false");
-
     const savedHaptics = localStorage.getItem("hapticsEnabled");
     setHapticsEnabled(savedHaptics !== "false");
   }, []);
@@ -38,15 +32,6 @@ export const Settings = ({ onClose }: SettingsProps) => {
     const newValue = !notifications;
     setNotifications(newValue);
     localStorage.setItem("notifications", String(newValue));
-    playToggle();
-    lightTap();
-  };
-
-  const toggleSounds = () => {
-    const newValue = !soundsEnabled;
-    setSoundsEnabled(newValue);
-    setSoundsEnabledHook(newValue);
-    if (newValue) playToggle();
     lightTap();
   };
 
@@ -54,24 +39,24 @@ export const Settings = ({ onClose }: SettingsProps) => {
     const newValue = !hapticsEnabled;
     setHapticsEnabled(newValue);
     localStorage.setItem("hapticsEnabled", String(newValue));
-    playToggle();
     if (newValue) lightTap();
   };
 
   const handleRiskChange = (value: string) => {
     setDefaultRisk(value);
     localStorage.setItem("defaultRisk", value);
-    playToggle();
     lightTap();
   };
 
   const clearHistory = () => {
     localStorage.removeItem("positionSizeHistory");
+    lightTap();
   };
 
   const handleLogout = () => {
     localStorage.removeItem("user");
     localStorage.removeItem("isAuthenticated");
+    lightTap();
     navigate("/signin");
   };
 
@@ -99,32 +84,6 @@ export const Settings = ({ onClose }: SettingsProps) => {
               <span className="font-medium text-foreground">Appearance</span>
             </div>
             <ThemeToggle />
-          </div>
-        </div>
-
-        {/* Sounds */}
-        <div className="bg-secondary rounded-2xl overflow-hidden">
-          <div className="px-4 py-3 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              {soundsEnabled ? (
-                <Volume2 className="w-5 h-5 text-foreground" />
-              ) : (
-                <VolumeX className="w-5 h-5 text-foreground" />
-              )}
-              <span className="font-medium text-foreground">Sounds</span>
-            </div>
-            <button
-              onClick={toggleSounds}
-              className={`w-12 h-7 rounded-full transition-all duration-300 ${
-                soundsEnabled ? "bg-foreground" : "bg-muted"
-              }`}
-            >
-              <div
-                className={`w-5 h-5 rounded-full bg-background transition-all duration-300 ${
-                  soundsEnabled ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
           </div>
         </div>
 

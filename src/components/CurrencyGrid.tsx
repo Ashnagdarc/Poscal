@@ -1,4 +1,5 @@
-import { Check } from "lucide-react";
+import { useState } from "react";
+import { Check, Plus } from "lucide-react";
 
 export interface CurrencyPair {
   symbol: string;
@@ -28,6 +29,23 @@ interface CurrencyGridProps {
 }
 
 export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridProps) => {
+  const [showCustomInput, setShowCustomInput] = useState(false);
+  const [customSymbol, setCustomSymbol] = useState("");
+  const [customPipValue, setCustomPipValue] = useState("10");
+  const [customPipDecimal, setCustomPipDecimal] = useState("4");
+
+  const handleCustomSubmit = () => {
+    if (customSymbol.trim()) {
+      const customPair: CurrencyPair = {
+        symbol: customSymbol.toUpperCase(),
+        pipValue: parseFloat(customPipValue) || 10,
+        pipDecimal: parseInt(customPipDecimal) || 4,
+      };
+      onSelect(customPair);
+      onBack();
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
       {/* Header */}
@@ -45,6 +63,74 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
 
       {/* Grid */}
       <div className="flex-1 overflow-y-auto px-4 pb-8">
+        {/* Custom Input Section */}
+        {showCustomInput ? (
+          <div className="mb-6 p-4 bg-secondary rounded-2xl space-y-4">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Symbol (e.g. BTC/USD)
+              </label>
+              <input
+                type="text"
+                value={customSymbol}
+                onChange={(e) => setCustomSymbol(e.target.value)}
+                placeholder="XXX/XXX"
+                className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Pip Value ($)
+                </label>
+                <input
+                  type="number"
+                  value={customPipValue}
+                  onChange={(e) => setCustomPipValue(e.target.value)}
+                  placeholder="10"
+                  className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  Pip Decimals
+                </label>
+                <input
+                  type="number"
+                  value={customPipDecimal}
+                  onChange={(e) => setCustomPipDecimal(e.target.value)}
+                  placeholder="4"
+                  className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                />
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowCustomInput(false)}
+                className="flex-1 h-12 bg-background text-foreground rounded-xl font-semibold transition-all active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCustomSubmit}
+                disabled={!customSymbol.trim()}
+                className="flex-1 h-12 bg-foreground text-background rounded-xl font-semibold transition-all active:scale-95 disabled:opacity-50"
+              >
+                Add Pair
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowCustomInput(true)}
+            className="w-full mb-4 h-14 bg-secondary rounded-2xl flex items-center justify-center gap-2 text-foreground font-medium transition-all active:scale-[0.98]"
+          >
+            <Plus className="w-5 h-5" />
+            Add Custom Pair
+          </button>
+        )}
+
         <div className="grid grid-cols-3 gap-3">
           {CURRENCY_PAIRS.map((pair) => {
             const isSelected = selectedPair.symbol === pair.symbol;

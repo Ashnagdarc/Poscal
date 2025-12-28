@@ -1,5 +1,4 @@
 import { Delete } from "lucide-react";
-import { useSounds } from "@/hooks/use-sounds";
 import { useHaptics } from "@/hooks/use-haptics";
 
 interface NumPadProps {
@@ -11,11 +10,9 @@ interface NumPadProps {
 }
 
 export const NumPad = ({ value, onChange, onDone, label = "Enter Value", suffix = "pips" }: NumPadProps) => {
-  const { tap, calculate } = useSounds();
   const { lightTap } = useHaptics();
 
   const handlePress = (key: string) => {
-    tap();
     lightTap();
     
     if (key === "delete") {
@@ -30,7 +27,6 @@ export const NumPad = ({ value, onChange, onDone, label = "Enter Value", suffix 
   };
 
   const handleDone = () => {
-    calculate();
     lightTap();
     onDone();
   };
