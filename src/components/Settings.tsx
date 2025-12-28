@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SettingsProps {
   onClose: () => void;
@@ -11,6 +12,7 @@ interface SettingsProps {
 
 export const Settings = ({ onClose }: SettingsProps) => {
   const navigate = useNavigate();
+  const { user, signOut } = useAuth();
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -53,14 +55,11 @@ export const Settings = ({ onClose }: SettingsProps) => {
     lightTap();
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    localStorage.removeItem("isAuthenticated");
+  const handleLogout = async () => {
     lightTap();
+    await signOut();
     navigate("/signin");
   };
-
-  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
 
   return (
     <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
@@ -174,7 +173,7 @@ export const Settings = ({ onClose }: SettingsProps) => {
         </button>
 
         {/* Logout */}
-        {isAuthenticated && (
+        {user && (
           <button
             onClick={handleLogout}
             className="w-full bg-secondary rounded-2xl px-4 py-3 flex items-center gap-3 transition-all duration-200 active:scale-[0.98]"

@@ -24,6 +24,7 @@ import { CSVImport } from "@/components/CSVImport";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PnLInputModal } from "@/components/PnLInputModal";
 import { Skeleton } from "@/components/ui/skeleton";
+import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
 
 interface Trade {
   id: string;
@@ -228,22 +229,43 @@ const Journal = () => {
     setShowAddTrade(true);
   };
 
-  const handleImportTrades = async (parsedTrades: any[]) => {
+  const handleImportTrades = async (parsedTrades: unknown[]) => {
     if (!user) return;
     
-    const tradesToInsert = parsedTrades.map(t => ({
+    // Check import limit
+    if (parsedTrades.length > MAX_TRADES_PER_IMPORT) {
+      toast.error(`Cannot import more than ${MAX_TRADES_PER_IMPORT} trades at once`);
+      throw new Error(`Import limit exceeded`);
+    }
+
+    // Validate all trades
+    const { validTrades, errors, totalRejected } = validateTrades(parsedTrades);
+    
+    if (validTrades.length === 0) {
+      toast.error("No valid trades to import");
+      if (errors.length > 0) {
+        console.error("Validation errors:", errors);
+      }
+      throw new Error("Validation failed");
+    }
+
+    if (totalRejected > 0) {
+      toast.warning(`${totalRejected} trades were skipped due to validation errors`);
+    }
+    
+    const tradesToInsert = validTrades.map(t => ({
       user_id: user.id,
       pair: t.pair,
       direction: t.direction,
-      entry_price: t.entry_price || null,
-      exit_price: t.exit_price || null,
-      stop_loss: t.stop_loss || null,
-      take_profit: t.take_profit || null,
-      position_size: t.position_size || null,
-      risk_percent: t.risk_percent || null,
-      pnl: t.pnl || null,
-      status: t.status || 'open',
-      notes: t.notes || null,
+      entry_price: t.entry_price ?? null,
+      exit_price: t.exit_price ?? null,
+      stop_loss: t.stop_loss ?? null,
+      take_profit: t.take_profit ?? null,
+      position_size: t.position_size ?? null,
+      risk_percent: t.risk_percent ?? null,
+      pnl: t.pnl ?? null,
+      status: t.status,
+      notes: t.notes ?? null,
       entry_date: t.entry_date ? new Date(t.entry_date).toISOString() : new Date().toISOString(),
     }));
 
