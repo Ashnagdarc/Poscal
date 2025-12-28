@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { History as HistoryIcon, Trash2, ArrowLeft } from "lucide-react";
 import { BottomNav } from "@/components/BottomNav";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export interface HistoryItem {
   id: string;
@@ -18,16 +20,24 @@ export interface HistoryItem {
 const History = () => {
   const navigate = useNavigate();
   const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   useEffect(() => {
-    const savedHistory = localStorage.getItem("positionSizeHistory");
-    if (savedHistory) {
-      const parsed = JSON.parse(savedHistory);
-      setHistory(parsed.map((item: HistoryItem) => ({
-        ...item,
-        timestamp: new Date(item.timestamp)
-      })));
-    }
+    // Simulate loading for better UX
+    const timer = setTimeout(() => {
+      const savedHistory = localStorage.getItem("positionSizeHistory");
+      if (savedHistory) {
+        const parsed = JSON.parse(savedHistory);
+        setHistory(parsed.map((item: HistoryItem) => ({
+          ...item,
+          timestamp: new Date(item.timestamp)
+        })));
+      }
+      setIsLoading(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const clearHistory = () => {
@@ -66,7 +76,7 @@ const History = () => {
         </div>
         {history.length > 0 && (
           <button
-            onClick={clearHistory}
+            onClick={() => setShowClearConfirm(true)}
             className="w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
           >
             <Trash2 className="w-5 h-5 text-destructive" />
@@ -76,7 +86,23 @@ const History = () => {
 
       {/* History List */}
       <main className="flex-1 overflow-y-auto px-6 py-4">
-        {history.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-secondary rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : history.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-muted-foreground animate-fade-in">
             <HistoryIcon className="w-12 h-12 mb-3 opacity-30" />
             <p className="font-medium">No calculations saved</p>
@@ -128,6 +154,17 @@ const History = () => {
           </div>
         )}
       </main>
+
+      {/* Clear History Confirmation */}
+      <ConfirmDialog
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={clearHistory}
+        title="Clear History"
+        description="Are you sure you want to clear all calculation history? This action cannot be undone."
+        confirmText="Clear All"
+        variant="destructive"
+      />
 
       <BottomNav />
     </div>

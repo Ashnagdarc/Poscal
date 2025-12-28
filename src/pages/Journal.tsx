@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, 
@@ -10,7 +10,10 @@ import {
   Trash2,
   BarChart3,
   Upload,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Search,
+  Download,
+  Edit2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -18,6 +21,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { BottomNav } from "@/components/BottomNav";
 import { JournalAnalytics } from "@/components/JournalAnalytics";
 import { CSVImport } from "@/components/CSVImport";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { PnLInputModal } from "@/components/PnLInputModal";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface Trade {
   id: string;
@@ -48,6 +54,14 @@ const Journal = () => {
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  // Edit mode
+  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  
+  // Dialogs
+  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; tradeId: string | null }>({ isOpen: false, tradeId: null });
+  const [closeTradeModal, setCloseTradeModal] = useState<{ isOpen: boolean; trade: Trade | null }>({ isOpen: false, trade: null });
 
   // New trade form
   const [newTrade, setNewTrade] = useState({
@@ -146,26 +160,72 @@ const Journal = () => {
       console.error('Error adding trade:', error);
       toast.error("Failed to add trade");
     } else {
-      // Upload screenshots if any
       if (selectedScreenshots.length > 0 && data) {
         await uploadScreenshots(data.id);
       }
       
       toast.success("Trade added");
       setShowAddTrade(false);
-      setNewTrade({
-        pair: "EUR/USD",
-        direction: "long",
-        entry_price: "",
-        stop_loss: "",
-        take_profit: "",
-        position_size: "",
-        risk_percent: "",
-        notes: "",
-      });
-      setSelectedScreenshots([]);
+      resetForm();
       fetchTrades();
     }
+  };
+
+  const handleEditTrade = async () => {
+    if (!user || !editingTrade) return;
+
+    const { error } = await supabase
+      .from('trading_journal')
+      .update({
+        pair: newTrade.pair,
+        direction: newTrade.direction,
+        entry_price: newTrade.entry_price ? parseFloat(newTrade.entry_price) : null,
+        stop_loss: newTrade.stop_loss ? parseFloat(newTrade.stop_loss) : null,
+        take_profit: newTrade.take_profit ? parseFloat(newTrade.take_profit) : null,
+        position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
+        risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
+        notes: newTrade.notes || null,
+      })
+      .eq('id', editingTrade.id);
+
+    if (error) {
+      toast.error("Failed to update trade");
+    } else {
+      toast.success("Trade updated");
+      setShowAddTrade(false);
+      setEditingTrade(null);
+      resetForm();
+      fetchTrades();
+    }
+  };
+
+  const resetForm = () => {
+    setNewTrade({
+      pair: "EUR/USD",
+      direction: "long",
+      entry_price: "",
+      stop_loss: "",
+      take_profit: "",
+      position_size: "",
+      risk_percent: "",
+      notes: "",
+    });
+    setSelectedScreenshots([]);
+  };
+
+  const openEditModal = (trade: Trade) => {
+    setEditingTrade(trade);
+    setNewTrade({
+      pair: trade.pair,
+      direction: trade.direction,
+      entry_price: trade.entry_price?.toString() || "",
+      stop_loss: trade.stop_loss?.toString() || "",
+      take_profit: trade.take_profit?.toString() || "",
+      position_size: trade.position_size?.toString() || "",
+      risk_percent: trade.risk_percent?.toString() || "",
+      notes: trade.notes || "",
+    });
+    setShowAddTrade(true);
   };
 
   const handleImportTrades = async (parsedTrades: any[]) => {
@@ -230,6 +290,41 @@ const Journal = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (trades.length === 0) {
+      toast.error("No trades to export");
+      return;
+    }
+
+    const headers = ['Pair', 'Direction', 'Entry Price', 'Exit Price', 'Stop Loss', 'Take Profit', 'Position Size', 'Risk %', 'P&L', 'Status', 'Entry Date', 'Notes'];
+    const csvContent = [
+      headers.join(','),
+      ...trades.map(t => [
+        t.pair,
+        t.direction,
+        t.entry_price || '',
+        t.exit_price || '',
+        t.stop_loss || '',
+        t.take_profit || '',
+        t.position_size || '',
+        t.risk_percent || '',
+        t.pnl || '',
+        t.status,
+        t.entry_date || t.created_at,
+        `"${(t.notes || '').replace(/"/g, '""')}"`,
+      ].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `trading-journal-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Journal exported");
+  };
+
   const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files) {
@@ -248,16 +343,26 @@ const Journal = () => {
     }
   };
 
-  const filteredTrades = trades.filter(trade => {
-    if (filter === 'all') return true;
-    return trade.status === filter;
-  });
+  const filteredTrades = useMemo(() => {
+    return trades.filter(trade => {
+      const matchesFilter = filter === 'all' || trade.status === filter;
+      const matchesSearch = searchQuery === "" || 
+        trade.pair.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        trade.notes?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesFilter && matchesSearch;
+    });
+  }, [trades, filter, searchQuery]);
 
+  // Only count closed trades for win rate
+  const closedTrades = trades.filter(t => t.status === 'closed');
   const stats = {
     totalTrades: trades.length,
     openTrades: trades.filter(t => t.status === 'open').length,
-    winningTrades: trades.filter(t => t.pnl && t.pnl > 0).length,
-    totalPnl: trades.reduce((sum, t) => sum + (t.pnl || 0), 0),
+    winningTrades: closedTrades.filter(t => t.pnl && t.pnl > 0).length,
+    totalPnl: closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0),
+    winRate: closedTrades.length > 0 
+      ? Math.round((closedTrades.filter(t => t.pnl && t.pnl > 0).length / closedTrades.length) * 100)
+      : 0,
   };
 
   const formatDate = (dateString: string) => {
@@ -296,6 +401,12 @@ const Journal = () => {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={handleExportCSV}
+              className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
+            >
+              <Download className="w-5 h-5 text-foreground" />
+            </button>
+            <button
               onClick={() => setShowCSVImport(true)}
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
             >
@@ -325,9 +436,7 @@ const Journal = () => {
           <div className="bg-secondary rounded-2xl p-4">
             <p className="text-sm text-muted-foreground">Win Rate</p>
             <p className="text-2xl font-bold text-foreground">
-              {stats.totalTrades > 0 
-                ? `${Math.round((stats.winningTrades / stats.totalTrades) * 100)}%`
-                : "—"}
+              {closedTrades.length > 0 ? `${stats.winRate}%` : "—"}
             </p>
           </div>
           <div className={`rounded-2xl p-4 ${stats.totalPnl >= 0 ? 'bg-secondary' : 'bg-destructive/10'}`}>
@@ -336,6 +445,20 @@ const Journal = () => {
               {stats.totalPnl >= 0 ? '+' : ''}{stats.totalPnl.toFixed(2)}
             </p>
           </div>
+        </div>
+      </div>
+
+      {/* Search */}
+      <div className="px-6 mb-4">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search trades..."
+            className="w-full h-12 pl-12 pr-4 bg-secondary text-foreground rounded-xl outline-none focus:ring-2 focus:ring-foreground/10"
+          />
         </div>
       </div>
 
@@ -361,8 +484,20 @@ const Journal = () => {
       {/* Trades List */}
       <main className="flex-1 px-6 space-y-3 overflow-y-auto">
         {isLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-secondary rounded-2xl p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <Skeleton className="h-6 w-24" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : filteredTrades.length === 0 ? (
           <div className="text-center py-12">
@@ -393,11 +528,21 @@ const Journal = () => {
                     {trade.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-1">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    {formatDate(trade.entry_date || trade.created_at)}
-                  </span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      {formatDate(trade.entry_date || trade.created_at)}
+                    </span>
+                  </div>
+                  {trade.status === 'open' && (
+                    <button
+                      onClick={() => openEditModal(trade)}
+                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -429,14 +574,14 @@ const Journal = () => {
               {trade.status === 'open' && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => handleCloseTrade(trade.id, 0)}
+                    onClick={() => setCloseTradeModal({ isOpen: true, trade })}
                     className="flex-1 h-10 bg-background text-foreground text-sm font-medium rounded-xl flex items-center justify-center gap-1"
                   >
                     <Check className="w-4 h-4" />
                     Close Trade
                   </button>
                   <button
-                    onClick={() => handleDeleteTrade(trade.id)}
+                    onClick={() => setDeleteConfirm({ isOpen: true, tradeId: trade.id })}
                     className="h-10 w-10 bg-destructive/10 text-destructive rounded-xl flex items-center justify-center"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -462,20 +607,27 @@ const Journal = () => {
 
       {/* Add Trade FAB */}
       <button
-        onClick={() => setShowAddTrade(true)}
+        onClick={() => {
+          setEditingTrade(null);
+          resetForm();
+          setShowAddTrade(true);
+        }}
         className="fixed bottom-28 right-6 w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95"
       >
         <Plus className="w-6 h-6" />
       </button>
 
-      {/* Add Trade Modal */}
+      {/* Add/Edit Trade Modal */}
       {showAddTrade && (
         <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
           <header className="pt-12 pb-4 px-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-foreground">New Trade</h2>
+            <h2 className="text-xl font-bold text-foreground">
+              {editingTrade ? 'Edit Trade' : 'New Trade'}
+            </h2>
             <button
               onClick={() => {
                 setShowAddTrade(false);
+                setEditingTrade(null);
                 setSelectedScreenshots([]);
               }}
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center"
@@ -592,49 +744,51 @@ const Journal = () => {
             </div>
 
             {/* Screenshots Section */}
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
-              <div className="space-y-2">
-                {selectedScreenshots.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2">
-                    {selectedScreenshots.map((file, i) => (
-                      <div key={i} className="relative aspect-video bg-secondary rounded-xl overflow-hidden">
-                        <img 
-                          src={URL.createObjectURL(file)} 
-                          alt={`Preview ${i + 1}`} 
-                          className="w-full h-full object-cover"
-                        />
-                        <button
-                          onClick={() => setSelectedScreenshots(prev => prev.filter((_, idx) => idx !== i))}
-                          className="absolute top-1 right-1 w-6 h-6 bg-destructive text-background rounded-full flex items-center justify-center"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <label className="block border border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-foreground/50 transition-colors">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={handleScreenshotSelect}
-                    className="hidden"
-                  />
-                  <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">Tap to add screenshots</p>
-                </label>
+            {!editingTrade && (
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
+                <div className="space-y-2">
+                  {selectedScreenshots.length > 0 && (
+                    <div className="grid grid-cols-3 gap-2">
+                      {selectedScreenshots.map((file, i) => (
+                        <div key={i} className="relative aspect-video bg-secondary rounded-xl overflow-hidden">
+                          <img 
+                            src={URL.createObjectURL(file)} 
+                            alt={`Preview ${i + 1}`} 
+                            className="w-full h-full object-cover"
+                          />
+                          <button
+                            onClick={() => setSelectedScreenshots(prev => prev.filter((_, idx) => idx !== i))}
+                            className="absolute top-1 right-1 w-6 h-6 bg-destructive text-background rounded-full flex items-center justify-center"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <label className="block border border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-foreground/50 transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleScreenshotSelect}
+                      className="hidden"
+                    />
+                    <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Tap to add screenshots</p>
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
           </div>
 
           <div className="px-6 pb-8">
             <button
-              onClick={handleAddTrade}
+              onClick={editingTrade ? handleEditTrade : handleAddTrade}
               className="w-full h-14 bg-foreground text-background font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
             >
-              Add Trade
+              {editingTrade ? 'Update Trade' : 'Add Trade'}
             </button>
           </div>
         </div>
@@ -649,6 +803,34 @@ const Journal = () => {
       {showCSVImport && (
         <CSVImport onImport={handleImportTrades} onClose={() => setShowCSVImport(false)} />
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={deleteConfirm.isOpen}
+        onClose={() => setDeleteConfirm({ isOpen: false, tradeId: null })}
+        onConfirm={() => {
+          if (deleteConfirm.tradeId) {
+            handleDeleteTrade(deleteConfirm.tradeId);
+          }
+        }}
+        title="Delete Trade"
+        description="Are you sure you want to delete this trade? This action cannot be undone."
+        confirmText="Delete"
+        variant="destructive"
+      />
+
+      {/* P&L Input Modal */}
+      <PnLInputModal
+        isOpen={closeTradeModal.isOpen}
+        onClose={() => setCloseTradeModal({ isOpen: false, trade: null })}
+        onConfirm={(pnl) => {
+          if (closeTradeModal.trade) {
+            handleCloseTrade(closeTradeModal.trade.id, pnl);
+          }
+          setCloseTradeModal({ isOpen: false, trade: null });
+        }}
+        pair={closeTradeModal.trade?.pair || ""}
+      />
 
       <BottomNav />
     </div>
