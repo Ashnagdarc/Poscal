@@ -1,6 +1,5 @@
 import { Moon, Sun } from "lucide-react";
 import { useState, useEffect } from "react";
-import { useSounds } from "@/hooks/use-sounds";
 import { useHaptics } from "@/hooks/use-haptics";
 
 interface ThemeToggleProps {
@@ -9,7 +8,6 @@ interface ThemeToggleProps {
 
 export const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
   const [isDark, setIsDark] = useState(false);
-  const { toggle: playToggle } = useSounds();
   const { lightTap } = useHaptics();
 
   useEffect(() => {
@@ -20,7 +18,6 @@ export const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
   const toggleTheme = () => {
     const newValue = !isDark;
     setIsDark(newValue);
-    playToggle();
     lightTap();
 
     if (newValue) {

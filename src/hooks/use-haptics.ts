@@ -1,7 +1,15 @@
 export const useHaptics = () => {
+  const isEnabled = () => localStorage.getItem("hapticsEnabled") !== "false";
+
   const vibrate = (pattern: number | number[] = 10) => {
-    if (typeof navigator !== "undefined" && navigator.vibrate) {
-      navigator.vibrate(pattern);
+    if (!isEnabled()) return;
+    
+    if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+      try {
+        navigator.vibrate(pattern);
+      } catch {
+        // Vibration not supported
+      }
     }
   };
 
@@ -18,5 +26,6 @@ export const useHaptics = () => {
     heavyTap,
     success,
     error,
+    isEnabled,
   };
 };
