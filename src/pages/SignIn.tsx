@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Calculator } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -12,33 +14,35 @@ const SignIn = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const { error } = await signIn(email, password);
 
-    // Check localStorage for user
-    const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const user = JSON.parse(storedUser);
-      if (user.email === email && user.password === password) {
-        localStorage.setItem("isAuthenticated", "true");
-        toast.success("Welcome back!");
-        navigate("/");
-        return;
+    if (error) {
+      if (error.message.includes("Invalid login credentials")) {
+        toast.error("Invalid email or password");
+      } else if (error.message.includes("Email not confirmed")) {
+        toast.error("Please check your email to confirm your account");
+      } else {
+        toast.error(error.message);
       }
+      setIsLoading(false);
+      return;
     }
 
-    // Demo login
-    if (email && password.length >= 6) {
-      localStorage.setItem("user", JSON.stringify({ email, password }));
-      localStorage.setItem("isAuthenticated", "true");
-      toast.success("Signed in successfully!");
-      navigate("/");
-    } else {
-      toast.error("Invalid credentials");
-    }
-
+    toast.success("Welcome back!");
+    navigate("/");
     setIsLoading(false);
   };
 

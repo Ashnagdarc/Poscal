@@ -2,9 +2,11 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Calculator } from "lucide-react";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const SignUp = () => {
   const navigate = useNavigate();
+  const { signUp } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -13,20 +15,33 @@ const SignUp = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-
-    if (name && email && password.length >= 6) {
-      localStorage.setItem("user", JSON.stringify({ name, email, password }));
-      localStorage.setItem("isAuthenticated", "true");
-      toast.success("Account created successfully!");
-      navigate("/");
-    } else {
-      toast.error("Please fill all fields correctly");
+    
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
     }
 
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    setIsLoading(true);
+
+    const { error } = await signUp(email, password, name);
+
+    if (error) {
+      if (error.message.includes("User already registered")) {
+        toast.error("An account with this email already exists");
+      } else {
+        toast.error(error.message);
+      }
+      setIsLoading(false);
+      return;
+    }
+
+    toast.success("Account created! Please check your email to verify.");
+    navigate("/signin");
     setIsLoading(false);
   };
 
@@ -38,21 +53,20 @@ const SignUp = () => {
           <Calculator className="w-8 h-8 text-background" />
         </div>
         <h1 className="text-3xl font-bold text-foreground mb-2">Create Account</h1>
-        <p className="text-muted-foreground">Start calculating like a pro</p>
+        <p className="text-muted-foreground">Join thousands of traders</p>
       </div>
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-4 animate-slide-up">
         <div>
           <label className="block text-sm font-medium text-muted-foreground mb-2 ml-1">
-            Name
+            Full Name
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="Your name"
-            required
+            placeholder="John Doe"
             className="w-full h-14 px-4 bg-secondary text-foreground text-lg font-medium rounded-2xl border-0 outline-none transition-all duration-300 focus:ring-2 focus:ring-foreground/10 placeholder:text-muted-foreground/50"
           />
         </div>
@@ -80,7 +94,7 @@ const SignUp = () => {
               type={showPassword ? "text" : "password"}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Min 6 characters"
+              placeholder="••••••••"
               required
               minLength={6}
               className="w-full h-14 px-4 pr-12 bg-secondary text-foreground text-lg font-medium rounded-2xl border-0 outline-none transition-all duration-300 focus:ring-2 focus:ring-foreground/10 placeholder:text-muted-foreground/50"
@@ -100,7 +114,7 @@ const SignUp = () => {
           disabled={isLoading}
           className="w-full h-14 bg-foreground text-background text-lg font-semibold rounded-2xl transition-all duration-300 active:scale-[0.98] disabled:opacity-50"
         >
-          {isLoading ? "Creating account..." : "Create Account"}
+          {isLoading ? "Creating account..." : "Sign Up"}
         </button>
       </form>
 
