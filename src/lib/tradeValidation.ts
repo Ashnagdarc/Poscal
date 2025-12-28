@@ -54,11 +54,11 @@ export function validateTrades(trades: unknown[]): {
 
   for (let i = 0; i < trades.length; i++) {
     const result = validateTrade(trades[i]);
-    if (result.success) {
-      validTrades.push(result.data);
-    } else {
+    if (result.success === false) {
       errors.push(`Row ${i + 1}: ${result.error}`);
       totalRejected++;
+    } else {
+      validTrades.push(result.data);
     }
   }
 
