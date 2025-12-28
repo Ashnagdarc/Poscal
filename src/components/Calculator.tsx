@@ -4,14 +4,23 @@ import {
   TrendingDown, 
   TrendingUp,
   ChevronRight,
-  History,
-  Settings as SettingsIcon,
   Target
 } from "lucide-react";
 import { NumPad } from "./NumPad";
 import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
-import { Settings } from "./Settings";
-import { HistoryPanel, HistoryItem } from "./HistoryPanel";
+import { toast } from "sonner";
+
+export interface HistoryItem {
+  id: string;
+  pair: string;
+  balance: number;
+  risk: number;
+  stopLoss: number;
+  takeProfit: number;
+  positionSize: number;
+  riskReward: number;
+  timestamp: Date;
+}
 
 export const Calculator = () => {
   const [accountBalance, setAccountBalance] = useState("");
@@ -19,28 +28,16 @@ export const Calculator = () => {
   const [stopLossPips, setStopLossPips] = useState("");
   const [takeProfitPips, setTakeProfitPips] = useState("");
   const [selectedPair, setSelectedPair] = useState<CurrencyPair>(CURRENCY_PAIRS[0]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
   
   // UI State
   const [showNumPad, setShowNumPad] = useState<"balance" | "stopLoss" | "takeProfit" | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
-  const [showHistory, setShowHistory] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
 
   const riskPresets = [0.5, 1, 2, 3];
 
-  // Load saved settings and history
+  // Load saved settings
   useEffect(() => {
-    const savedHistory = localStorage.getItem("positionSizeHistory");
-    if (savedHistory) {
-      const parsed = JSON.parse(savedHistory);
-      setHistory(parsed.map((item: HistoryItem) => ({
-        ...item,
-        timestamp: new Date(item.timestamp)
-      })));
-    }
-
     const savedRisk = localStorage.getItem("defaultRisk");
     if (savedRisk) setRiskPercent(parseFloat(savedRisk));
 
@@ -74,6 +71,9 @@ export const Calculator = () => {
   const saveToHistory = () => {
     if (calculation.positionSize <= 0) return;
 
+    const savedHistory = localStorage.getItem("positionSizeHistory");
+    const history: HistoryItem[] = savedHistory ? JSON.parse(savedHistory) : [];
+
     const newItem: HistoryItem = {
       id: Date.now().toString(),
       pair: selectedPair.symbol,
@@ -87,13 +87,8 @@ export const Calculator = () => {
     };
 
     const newHistory = [newItem, ...history].slice(0, 20);
-    setHistory(newHistory);
     localStorage.setItem("positionSizeHistory", JSON.stringify(newHistory));
-  };
-
-  const clearHistory = () => {
-    setHistory([]);
-    localStorage.removeItem("positionSizeHistory");
+    toast.success("Saved to history");
   };
 
   const formatNumber = (num: number, decimals: number = 2) => {
@@ -121,7 +116,7 @@ export const Calculator = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="pt-12 pb-6 px-6 animate-fade-in flex items-center justify-between">
+      <header className="pt-12 pb-6 px-6 animate-fade-in">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
             <CalculatorIcon className="w-5 h-5 text-background" />
@@ -130,20 +125,6 @@ export const Calculator = () => {
             <h1 className="text-xl font-bold text-foreground">Position Size</h1>
             <p className="text-sm text-muted-foreground">Calculator</p>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowHistory(true)}
-            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-          >
-            <History className="w-5 h-5 text-foreground" />
-          </button>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-          >
-            <SettingsIcon className="w-5 h-5 text-foreground" />
-          </button>
         </div>
       </header>
 
@@ -315,20 +296,6 @@ export const Calculator = () => {
           onSelect={setSelectedPair}
           onBack={() => setShowCurrencyGrid(false)}
         />
-      )}
-
-      {/* History Panel */}
-      {showHistory && (
-        <HistoryPanel
-          history={history}
-          onClose={() => setShowHistory(false)}
-          onClear={clearHistory}
-        />
-      )}
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <Settings onClose={() => setShowSettings(false)} />
       )}
     </div>
   );

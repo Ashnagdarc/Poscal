@@ -1,4 +1,4 @@
-import { Calculator, BookOpen, User } from 'lucide-react';
+import { Calculator, BookOpen, User, History, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -8,13 +8,15 @@ export const BottomNav = () => {
   const { user } = useAuth();
 
   const navItems = [
-    { path: '/', icon: Calculator, label: 'Calculator' },
+    { path: '/', icon: Calculator, label: 'Calculate' },
+    { path: '/history', icon: History, label: 'History' },
     { path: '/journal', icon: BookOpen, label: 'Journal' },
     { path: user ? '/profile' : '/signin', icon: User, label: 'Profile' },
+    { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-6 pb-6 pt-3 z-40">
+    <nav className="fixed bottom-0 left-0 right-0 bg-background border-t border-border px-4 pb-6 pt-2 z-40">
       <div className="flex justify-around items-center max-w-md mx-auto">
         {navItems.map(({ path, icon: Icon, label }) => {
           const isActive = location.pathname === path;
@@ -22,14 +24,14 @@ export const BottomNav = () => {
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all duration-200 ${
+              className={`flex flex-col items-center gap-0.5 px-2 py-1 rounded-xl transition-all duration-200 ${
                 isActive
                   ? 'text-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
-              <Icon className={`w-6 h-6 ${isActive ? 'stroke-[2.5]' : ''}`} />
-              <span className="text-xs font-medium">{label}</span>
+              <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : ''}`} />
+              <span className="text-[10px] font-medium">{label}</span>
             </button>
           );
         })}
