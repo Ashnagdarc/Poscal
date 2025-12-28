@@ -8,12 +8,16 @@ import {
   X,
   Check,
   Trash2,
-  Edit2
+  BarChart3,
+  Upload,
+  Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { BottomNav } from "@/components/BottomNav";
+import { JournalAnalytics } from "@/components/JournalAnalytics";
+import { CSVImport } from "@/components/CSVImport";
 
 interface Trade {
   id: string;
@@ -31,6 +35,7 @@ interface Trade {
   notes: string | null;
   entry_date: string | null;
   created_at: string;
+  screenshot_urls?: string[];
 }
 
 const Journal = () => {
@@ -39,7 +44,10 @@ const Journal = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAddTrade, setShowAddTrade] = useState(false);
+  const [showAnalytics, setShowAnalytics] = useState(false);
+  const [showCSVImport, setShowCSVImport] = useState(false);
   const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
+  const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
 
   // New trade form
   const [newTrade, setNewTrade] = useState({
@@ -80,6 +88,30 @@ const Journal = () => {
     setIsLoading(false);
   };
 
+  const uploadScreenshots = async (tradeId: string): Promise<string[]> => {
+    if (!user || selectedScreenshots.length === 0) return [];
+    
+    const urls: string[] = [];
+    
+    for (const file of selectedScreenshots) {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}/${tradeId}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
+      
+      const { error } = await supabase.storage
+        .from('trade-screenshots')
+        .upload(fileName, file);
+      
+      if (!error) {
+        const { data } = supabase.storage
+          .from('trade-screenshots')
+          .getPublicUrl(fileName);
+        urls.push(data.publicUrl);
+      }
+    }
+    
+    return urls;
+  };
+
   const handleAddTrade = async () => {
     if (!user) {
       toast.error("Please sign in to add trades");
@@ -92,7 +124,7 @@ const Journal = () => {
       return;
     }
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('trading_journal')
       .insert({
         user_id: user.id,
@@ -106,12 +138,19 @@ const Journal = () => {
         notes: newTrade.notes || null,
         status: 'open',
         entry_date: new Date().toISOString(),
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('Error adding trade:', error);
       toast.error("Failed to add trade");
     } else {
+      // Upload screenshots if any
+      if (selectedScreenshots.length > 0 && data) {
+        await uploadScreenshots(data.id);
+      }
+      
       toast.success("Trade added");
       setShowAddTrade(false);
       setNewTrade({
@@ -124,8 +163,39 @@ const Journal = () => {
         risk_percent: "",
         notes: "",
       });
+      setSelectedScreenshots([]);
       fetchTrades();
     }
+  };
+
+  const handleImportTrades = async (parsedTrades: any[]) => {
+    if (!user) return;
+    
+    const tradesToInsert = parsedTrades.map(t => ({
+      user_id: user.id,
+      pair: t.pair,
+      direction: t.direction,
+      entry_price: t.entry_price || null,
+      exit_price: t.exit_price || null,
+      stop_loss: t.stop_loss || null,
+      take_profit: t.take_profit || null,
+      position_size: t.position_size || null,
+      risk_percent: t.risk_percent || null,
+      pnl: t.pnl || null,
+      status: t.status || 'open',
+      notes: t.notes || null,
+      entry_date: t.entry_date ? new Date(t.entry_date).toISOString() : new Date().toISOString(),
+    }));
+
+    const { error } = await supabase
+      .from('trading_journal')
+      .insert(tradesToInsert);
+
+    if (error) {
+      throw error;
+    }
+    
+    fetchTrades();
   };
 
   const handleCloseTrade = async (tradeId: string, pnl: number) => {
@@ -157,6 +227,24 @@ const Journal = () => {
     } else {
       toast.success("Trade deleted");
       fetchTrades();
+    }
+  };
+
+  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const validFiles = Array.from(files).filter(f => {
+        if (!f.type.startsWith('image/')) {
+          toast.error(`${f.name} is not an image`);
+          return false;
+        }
+        if (f.size > 5 * 1024 * 1024) {
+          toast.error(`${f.name} is too large (max 5MB)`);
+          return false;
+        }
+        return true;
+      });
+      setSelectedScreenshots(prev => [...prev, ...validFiles]);
     }
   };
 
@@ -201,8 +289,26 @@ const Journal = () => {
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header */}
       <header className="pt-12 pb-6 px-6 animate-fade-in">
-        <h1 className="text-2xl font-bold text-foreground">Trading Journal</h1>
-        <p className="text-muted-foreground">Track your trades</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">Trading Journal</h1>
+            <p className="text-muted-foreground">Track your trades</p>
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowCSVImport(true)}
+              className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
+            >
+              <Upload className="w-5 h-5 text-foreground" />
+            </button>
+            <button
+              onClick={() => setShowAnalytics(true)}
+              className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
+            >
+              <BarChart3 className="w-5 h-5 text-foreground" />
+            </button>
+          </div>
+        </div>
       </header>
 
       {/* Stats */}
@@ -368,7 +474,10 @@ const Journal = () => {
           <header className="pt-12 pb-4 px-6 flex items-center justify-between">
             <h2 className="text-xl font-bold text-foreground">New Trade</h2>
             <button
-              onClick={() => setShowAddTrade(false)}
+              onClick={() => {
+                setShowAddTrade(false);
+                setSelectedScreenshots([]);
+              }}
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center"
             >
               <X className="w-5 h-5 text-foreground" />
@@ -481,6 +590,43 @@ const Journal = () => {
                 placeholder="Trade setup notes..."
               />
             </div>
+
+            {/* Screenshots Section */}
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
+              <div className="space-y-2">
+                {selectedScreenshots.length > 0 && (
+                  <div className="grid grid-cols-3 gap-2">
+                    {selectedScreenshots.map((file, i) => (
+                      <div key={i} className="relative aspect-video bg-secondary rounded-xl overflow-hidden">
+                        <img 
+                          src={URL.createObjectURL(file)} 
+                          alt={`Preview ${i + 1}`} 
+                          className="w-full h-full object-cover"
+                        />
+                        <button
+                          onClick={() => setSelectedScreenshots(prev => prev.filter((_, idx) => idx !== i))}
+                          className="absolute top-1 right-1 w-6 h-6 bg-destructive text-background rounded-full flex items-center justify-center"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <label className="block border border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-foreground/50 transition-colors">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleScreenshotSelect}
+                    className="hidden"
+                  />
+                  <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+                  <p className="text-sm text-muted-foreground">Tap to add screenshots</p>
+                </label>
+              </div>
+            </div>
           </div>
 
           <div className="px-6 pb-8">
@@ -492,6 +638,16 @@ const Journal = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Analytics Modal */}
+      {showAnalytics && (
+        <JournalAnalytics trades={trades} onClose={() => setShowAnalytics(false)} />
+      )}
+
+      {/* CSV Import Modal */}
+      {showCSVImport && (
+        <CSVImport onImport={handleImportTrades} onClose={() => setShowCSVImport(false)} />
       )}
 
       <BottomNav />
