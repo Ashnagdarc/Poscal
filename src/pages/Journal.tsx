@@ -187,7 +187,8 @@ const Journal = () => {
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
       })
-      .eq('id', editingTrade.id);
+      .eq('id', editingTrade.id)
+      .eq('user_id', user.id);
 
     if (error) {
       toast.error("Failed to update trade");
@@ -281,6 +282,8 @@ const Journal = () => {
   };
 
   const handleCloseTrade = async (tradeId: string, pnl: number) => {
+    if (!user) return;
+    
     const { error } = await supabase
       .from('trading_journal')
       .update({ 
@@ -288,7 +291,8 @@ const Journal = () => {
         pnl,
         exit_date: new Date().toISOString() 
       })
-      .eq('id', tradeId);
+      .eq('id', tradeId)
+      .eq('user_id', user.id);
 
     if (error) {
       toast.error("Failed to close trade");
@@ -299,10 +303,13 @@ const Journal = () => {
   };
 
   const handleDeleteTrade = async (tradeId: string) => {
+    if (!user) return;
+    
     const { error } = await supabase
       .from('trading_journal')
       .delete()
-      .eq('id', tradeId);
+      .eq('id', tradeId)
+      .eq('user_id', user.id);
 
     if (error) {
       toast.error("Failed to delete trade");
