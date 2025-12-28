@@ -1,32 +1,14 @@
-import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = 'https://ywnmxrpasfikvwdgexdo.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl3bm14cnBhc2Zpa3Z3ZGdleGRvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1MzI1MTIsImV4cCI6MjA4MTEwODUxMn0.KSZYWWKUJ-M_5tWSYS21AXElOczwGzRu5cX6UiCqFvk';
 
-// Check if Supabase is configured
-export const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
+export const isSupabaseConfigured = true;
 
-// Create a placeholder client if not configured (to prevent crashes)
-const createSupabaseClient = (): SupabaseClient => {
-  if (!isSupabaseConfigured) {
-    console.warn('Supabase is not configured. Please connect Supabase in the sidebar.');
-    // Return a minimal client that won't work but won't crash
-    return createClient('https://placeholder.supabase.co', 'placeholder-key', {
-      auth: {
-        storage: localStorage,
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    });
-  }
-  
-  return createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: {
-      storage: localStorage,
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
-};
-
-export const supabase = createSupabaseClient();
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  },
+});
