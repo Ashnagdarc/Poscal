@@ -1,6 +1,10 @@
 import { useState, useEffect } from "react";
-import { X, Moon, Bell, Trash2, LogOut } from "lucide-react";
+import { X, Bell, Trash2, LogOut, Volume2, VolumeX, Smartphone, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { useSounds } from "@/hooks/use-sounds";
+import { useHaptics } from "@/hooks/use-haptics";
+import { usePWAInstall } from "@/hooks/use-pwa-install";
 
 interface SettingsProps {
   onClose: () => void;
@@ -8,42 +12,57 @@ interface SettingsProps {
 
 export const Settings = ({ onClose }: SettingsProps) => {
   const navigate = useNavigate();
-  const [darkMode, setDarkMode] = useState(false);
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
+  const [soundsEnabled, setSoundsEnabled] = useState(true);
+  const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const { toggle: playToggle, setEnabled: setSoundsEnabledHook } = useSounds();
+  const { lightTap } = useHaptics();
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
 
   useEffect(() => {
-    const isDark = document.documentElement.classList.contains("dark");
-    setDarkMode(isDark);
-    
     const savedRisk = localStorage.getItem("defaultRisk");
     if (savedRisk) setDefaultRisk(savedRisk);
     
     const savedNotif = localStorage.getItem("notifications");
     if (savedNotif) setNotifications(savedNotif === "true");
-  }, []);
 
-  const toggleDarkMode = () => {
-    const newValue = !darkMode;
-    setDarkMode(newValue);
-    if (newValue) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
+    const savedSounds = localStorage.getItem("soundsEnabled");
+    setSoundsEnabled(savedSounds !== "false");
+
+    const savedHaptics = localStorage.getItem("hapticsEnabled");
+    setHapticsEnabled(savedHaptics !== "false");
+  }, []);
 
   const toggleNotifications = () => {
     const newValue = !notifications;
     setNotifications(newValue);
     localStorage.setItem("notifications", String(newValue));
+    playToggle();
+    lightTap();
+  };
+
+  const toggleSounds = () => {
+    const newValue = !soundsEnabled;
+    setSoundsEnabled(newValue);
+    setSoundsEnabledHook(newValue);
+    if (newValue) playToggle();
+    lightTap();
+  };
+
+  const toggleHaptics = () => {
+    const newValue = !hapticsEnabled;
+    setHapticsEnabled(newValue);
+    localStorage.setItem("hapticsEnabled", String(newValue));
+    playToggle();
+    if (newValue) lightTap();
   };
 
   const handleRiskChange = (value: string) => {
     setDefaultRisk(value);
     localStorage.setItem("defaultRisk", value);
+    playToggle();
+    lightTap();
   };
 
   const clearHistory = () => {
@@ -77,18 +96,54 @@ export const Settings = ({ onClose }: SettingsProps) => {
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Moon className="w-5 h-5 text-foreground" />
-              <span className="font-medium text-foreground">Dark Mode</span>
+              <span className="font-medium text-foreground">Appearance</span>
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+
+        {/* Sounds */}
+        <div className="bg-secondary rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {soundsEnabled ? (
+                <Volume2 className="w-5 h-5 text-foreground" />
+              ) : (
+                <VolumeX className="w-5 h-5 text-foreground" />
+              )}
+              <span className="font-medium text-foreground">Sounds</span>
             </div>
             <button
-              onClick={toggleDarkMode}
+              onClick={toggleSounds}
               className={`w-12 h-7 rounded-full transition-all duration-300 ${
-                darkMode ? "bg-foreground" : "bg-muted"
+                soundsEnabled ? "bg-foreground" : "bg-muted"
               }`}
             >
               <div
                 className={`w-5 h-5 rounded-full bg-background transition-all duration-300 ${
-                  darkMode ? "translate-x-6" : "translate-x-1"
+                  soundsEnabled ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Haptics */}
+        <div className="bg-secondary rounded-2xl overflow-hidden">
+          <div className="px-4 py-3 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Smartphone className="w-5 h-5 text-foreground" />
+              <span className="font-medium text-foreground">Haptic Feedback</span>
+            </div>
+            <button
+              onClick={toggleHaptics}
+              className={`w-12 h-7 rounded-full transition-all duration-300 ${
+                hapticsEnabled ? "bg-foreground" : "bg-muted"
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-background transition-all duration-300 ${
+                  hapticsEnabled ? "translate-x-6" : "translate-x-1"
                 }`}
               />
             </button>
@@ -116,6 +171,17 @@ export const Settings = ({ onClose }: SettingsProps) => {
             </button>
           </div>
         </div>
+
+        {/* Install App */}
+        {isInstallable && !isInstalled && (
+          <button
+            onClick={promptInstall}
+            className="w-full bg-primary/10 rounded-2xl px-4 py-3 flex items-center gap-3 transition-all duration-200 active:scale-[0.98]"
+          >
+            <Download className="w-5 h-5 text-primary" />
+            <span className="font-medium text-primary">Install App</span>
+          </button>
+        )}
 
         {/* Default Risk */}
         <div className="bg-secondary rounded-2xl overflow-hidden">
