@@ -1,32 +1,31 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calculator, BookOpen, TrendingUp, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ChevronRight, ChevronLeft } from 'lucide-react';
+import onboardingCalculator from '@/assets/onboarding-calculator.png';
+import onboardingJournal from '@/assets/onboarding-journal.png';
+import onboardingGrowth from '@/assets/onboarding-growth.png';
 
 interface OnboardingStep {
-  icon: React.ReactNode;
+  image: string;
   title: string;
   description: string;
-  color: string;
 }
 
 const steps: OnboardingStep[] = [
   {
-    icon: <Calculator className="w-16 h-16" />,
+    image: onboardingCalculator,
     title: "Position Size Calculator",
     description: "Calculate the perfect position size for every trade based on your risk tolerance and account balance.",
-    color: "bg-foreground text-background",
   },
   {
-    icon: <BookOpen className="w-16 h-16" />,
+    image: onboardingJournal,
     title: "Trading Journal",
     description: "Track all your trades, analyze your performance with charts, and learn from your history.",
-    color: "bg-foreground text-background",
   },
   {
-    icon: <TrendingUp className="w-16 h-16" />,
+    image: onboardingGrowth,
     title: "Improve Your Trading",
     description: "Make data-driven decisions with analytics, win rate tracking, and profit factor analysis.",
-    color: "bg-foreground text-background",
   },
 ];
 
@@ -73,12 +72,12 @@ const Welcome = () => {
   const step = steps[currentStep];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="min-h-screen bg-background flex flex-col overflow-hidden">
       {/* Skip button */}
-      <header className="pt-12 px-6 flex justify-end">
+      <header className="pt-12 px-6 flex justify-end relative z-10">
         <button
           onClick={handleSkip}
-          className="text-muted-foreground text-sm font-medium"
+          className="text-muted-foreground text-sm font-medium hover:text-foreground transition-colors"
         >
           Skip
         </button>
@@ -90,9 +89,14 @@ const Welcome = () => {
           key={currentStep}
           className="animate-fade-in text-center max-w-sm"
         >
-          {/* Icon */}
-          <div className={`w-32 h-32 ${step.color} rounded-3xl flex items-center justify-center mx-auto mb-8`}>
-            {step.icon}
+          {/* Image */}
+          <div className="relative w-64 h-64 mx-auto mb-8">
+            <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-transparent rounded-3xl blur-3xl" />
+            <img 
+              src={step.image} 
+              alt={step.title}
+              className="relative w-full h-full object-contain drop-shadow-2xl"
+            />
           </div>
 
           {/* Title */}
@@ -115,10 +119,10 @@ const Welcome = () => {
             <button
               key={index}
               onClick={() => setCurrentStep(index)}
-              className={`w-2 h-2 rounded-full transition-all duration-300 ${
+              className={`h-2 rounded-full transition-all duration-300 ${
                 index === currentStep 
                   ? 'w-8 bg-foreground' 
-                  : 'bg-muted-foreground/30'
+                  : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
               }`}
             />
           ))}
@@ -129,7 +133,7 @@ const Welcome = () => {
           {currentStep > 0 && (
             <button
               onClick={handlePrev}
-              className="w-14 h-14 bg-secondary rounded-2xl flex items-center justify-center transition-all duration-200 active:scale-95"
+              className="w-14 h-14 bg-secondary rounded-2xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary/80"
             >
               <ChevronLeft className="w-6 h-6 text-foreground" />
             </button>
@@ -137,7 +141,7 @@ const Welcome = () => {
           
           <button
             onClick={handleNext}
-            className="flex-1 h-14 bg-foreground text-background font-semibold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
+            className="flex-1 h-14 bg-foreground text-background font-semibold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] hover:opacity-90"
           >
             {currentStep === steps.length - 1 ? 'Get Started' : 'Continue'}
             {currentStep < steps.length - 1 && <ChevronRight className="w-5 h-5" />}

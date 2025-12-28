@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { BottomNav } from "@/components/BottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
@@ -14,8 +15,10 @@ const Settings = () => {
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
+  const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const { lightTap } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
+  const { currency, setCurrency } = useCurrency();
 
   useEffect(() => {
     const savedRisk = localStorage.getItem("defaultRisk");
@@ -131,7 +134,45 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Haptics */}
+        {/* Account Currency */}
+        <div className="bg-secondary rounded-2xl overflow-hidden">
+          <button
+            onClick={() => setShowCurrencyPicker(!showCurrencyPicker)}
+            className="w-full px-4 py-3 flex items-center justify-between"
+          >
+            <div className="flex items-center gap-3">
+              <Coins className="w-5 h-5 text-foreground" />
+              <span className="font-medium text-foreground">Account Currency</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground">{currency.symbol} {currency.code}</span>
+              <ChevronRight className={`w-5 h-5 text-muted-foreground transition-transform ${showCurrencyPicker ? 'rotate-90' : ''}`} />
+            </div>
+          </button>
+          {showCurrencyPicker && (
+            <div className="px-4 pb-3 grid grid-cols-2 gap-2">
+              {ACCOUNT_CURRENCIES.map((curr) => (
+                <button
+                  key={curr.code}
+                  onClick={() => {
+                    setCurrency(curr);
+                    setShowCurrencyPicker(false);
+                    lightTap();
+                    toast.success(`Currency set to ${curr.name}`);
+                  }}
+                  className={`p-3 rounded-xl text-left transition-all duration-200 ${
+                    currency.code === curr.code
+                      ? 'bg-foreground text-background'
+                      : 'bg-background text-foreground'
+                  }`}
+                >
+                  <p className="font-semibold">{curr.symbol} {curr.code}</p>
+                  <p className={`text-xs ${currency.code === curr.code ? 'opacity-70' : 'text-muted-foreground'}`}>{curr.name}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">

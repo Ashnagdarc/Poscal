@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { NumPad } from "./NumPad";
 import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+import { useCurrency } from "@/contexts/CurrencyContext";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -33,6 +34,8 @@ export const Calculator = () => {
   const [showNumPad, setShowNumPad] = useState<"balance" | "stopLoss" | "takeProfit" | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
+
+  const { currency } = useCurrency();
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -151,7 +154,7 @@ export const Calculator = () => {
           <div>
             <p className="text-xs text-muted-foreground mb-1">Account Balance</p>
             <p className="text-lg font-bold text-foreground">
-              {accountBalance ? `$${parseFloat(accountBalance).toLocaleString()}` : "Tap to enter"}
+              {accountBalance ? `${currency.symbol}${parseFloat(accountBalance).toLocaleString()}` : "Tap to enter"}
             </p>
           </div>
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -228,7 +231,7 @@ export const Calculator = () => {
               <div className="text-center">
                 <p className="text-xs font-medium opacity-60 mb-1">Risk Amount</p>
                 <p className="text-xl font-semibold">
-                  ${formatNumber(calculation.riskAmount, 0)}
+                  {currency.symbol}{formatNumber(calculation.riskAmount, 0)}
                 </p>
               </div>
               <div className="text-center">
@@ -256,7 +259,7 @@ export const Calculator = () => {
                   <div className="text-center">
                     <p className="text-xs font-medium opacity-60 mb-1">Potential Profit</p>
                     <p className="text-xl font-semibold">
-                      +${formatNumber(calculation.potentialProfit, 0)}
+                      +{currency.symbol}{formatNumber(calculation.potentialProfit, 0)}
                     </p>
                   </div>
                 </div>
@@ -285,7 +288,7 @@ export const Calculator = () => {
             showNumPad === "balance" ? "Account Balance" :
             showNumPad === "stopLoss" ? "Stop Loss" : "Take Profit"
           }
-          suffix={showNumPad === "balance" ? "USD" : "pips"}
+          suffix={showNumPad === "balance" ? currency.code : "pips"}
         />
       )}
 
