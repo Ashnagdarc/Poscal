@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import poscalLogo from '@/assets/poscal-logo.png';
@@ -30,6 +30,39 @@ const Welcome = () => {
   const [currentStep, setCurrentStep] = useState(-1); // -1 = splash screen
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  
+  // Swipe gesture handling
+  const touchStartX = useRef<number | null>(null);
+  const touchEndX = useRef<number | null>(null);
+  const minSwipeDistance = 50;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchEndX.current = null;
+    touchStartX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    touchEndX.current = e.targetTouches[0].clientX;
+  };
+
+  const handleTouchEnd = () => {
+    if (!touchStartX.current || !touchEndX.current) return;
+    
+    const distance = touchStartX.current - touchEndX.current;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+    
+    if (isLeftSwipe && currentStep < steps.length - 1) {
+      mediumTap();
+      setCurrentStep(currentStep + 1);
+    } else if (isRightSwipe && currentStep > 0) {
+      lightTap();
+      setCurrentStep(currentStep - 1);
+    }
+    
+    touchStartX.current = null;
+    touchEndX.current = null;
+  };
 
   useEffect(() => {
     const seen = localStorage.getItem('hasSeenOnboarding');
@@ -127,8 +160,13 @@ const Welcome = () => {
         </button>
       </header>
 
-      {/* Content */}
-      <main className="flex-1 flex flex-col items-center justify-center px-8">
+      {/* Content with swipe gestures */}
+      <main 
+        className="flex-1 flex flex-col items-center justify-center px-8"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
         <div 
           key={currentStep}
           className="animate-fade-in text-center max-w-sm"
