@@ -7,6 +7,7 @@ import { BottomNav } from "@/components/BottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -125,6 +126,9 @@ const Settings = () => {
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>
         )}
+
+        {/* Admin User Management - Only visible to admins */}
+        <AdminUsersTab />
 
         {/* Appearance */}
         <div className="bg-secondary rounded-2xl overflow-hidden">
