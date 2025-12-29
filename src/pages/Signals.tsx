@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format, parseISO } from 'date-fns';
+import { useAdmin } from '@/hooks/use-admin';
+import { CreateSignalModal } from '@/components/CreateSignalModal';
+import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 
 interface TradingSignal {
   id: string;
@@ -23,6 +26,7 @@ interface TradingSignal {
   pips_to_tp2: number | null;
   pips_to_tp3: number | null;
   status: 'active' | 'closed' | 'cancelled';
+  result: 'win' | 'loss' | 'breakeven' | null;
   chart_image_url: string | null;
   notes: string | null;
   created_at: string;
@@ -48,6 +52,7 @@ const CURRENCY_PAIRS = [
 ];
 
 const Signals = () => {
+  const { isAdmin } = useAdmin();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +62,7 @@ const Signals = () => {
   // Filters
   const [pairFilter, setPairFilter] = useState('All Pairs');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [resultFilter, setResultFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
@@ -85,6 +91,14 @@ const Signals = () => {
       
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter);
+      }
+
+      if (resultFilter !== 'all') {
+        if (resultFilter === 'pending') {
+          query = query.is('result', null);
+        } else {
+          query = query.eq('result', resultFilter);
+        }
       }
       
       if (dateFilter) {
@@ -120,22 +134,51 @@ const Signals = () => {
 
   useEffect(() => {
     fetchSignals();
-  }, [currentPage, pairFilter, statusFilter, dateFilter]);
+  }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [pairFilter, statusFilter, dateFilter]);
+  }, [pairFilter, statusFilter, resultFilter, dateFilter]);
 
   const totalPages = Math.ceil(totalCount / SIGNALS_PER_PAGE);
 
   const clearFilters = () => {
     setPairFilter('All Pairs');
     setStatusFilter('all');
+    setResultFilter('all');
     setDateFilter('');
   };
 
-  const hasActiveFilters = pairFilter !== 'All Pairs' || statusFilter !== 'all' || dateFilter !== '';
+  const hasActiveFilters = pairFilter !== 'All Pairs' || statusFilter !== 'all' || resultFilter !== 'all' || dateFilter !== '';
+
+  const getResultBadge = (result: string | null) => {
+    switch (result) {
+      case 'win':
+        return (
+          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+            <Trophy className="w-3 h-3 mr-1" />
+            Win
+          </Badge>
+        );
+      case 'loss':
+        return (
+          <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+            <XCircle className="w-3 h-3 mr-1" />
+            Loss
+          </Badge>
+        );
+      case 'breakeven':
+        return (
+          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+            <Minus className="w-3 h-3 mr-1" />
+            BE
+          </Badge>
+        );
+      default:
+        return null;
+    }
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -224,15 +267,31 @@ const Signals = () => {
             </Select>
           </div>
 
-          <div className="relative">
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={resultFilter} onValueChange={setResultFilter}>
+              <SelectTrigger className="bg-secondary border-border">
+                <SelectValue placeholder="Result" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Results</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="win">Win</SelectItem>
+                <SelectItem value="loss">Loss</SelectItem>
+                <SelectItem value="breakeven">Breakeven</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <div className="relative">
             <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
-              className="pl-10 bg-secondary border-border"
-              placeholder="Filter by date"
-            />
+              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="pl-10 bg-secondary border-border"
+                placeholder="Filter by date"
+              />
+            </div>
           </div>
         </div>
       )}
@@ -305,7 +364,10 @@ const Signals = () => {
                       </span>
                     </div>
                   </div>
-                  <Badge className={getStatusColor(signal.status)}>{signal.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    {getResultBadge(signal.result)}
+                    <Badge className={getStatusColor(signal.status)}>{signal.status}</Badge>
+                  </div>
                 </div>
 
                 {/* Price Levels */}
@@ -362,23 +424,33 @@ const Signals = () => {
                   )}
                 </div>
 
-                {/* Notes & Chart */}
+                {/* Notes & Chart & Admin Actions */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     {format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}
                   </div>
-                  {signal.chart_image_url && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setSelectedImage(signal.chart_image_url)}
-                      className="h-7 text-xs"
-                    >
-                      <ImageIcon className="w-3 h-3 mr-1" />
-                      View Chart
-                    </Button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {signal.chart_image_url && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setSelectedImage(signal.chart_image_url)}
+                        className="h-7 text-xs"
+                      >
+                        <ImageIcon className="w-3 h-3 mr-1" />
+                        Chart
+                      </Button>
+                    )}
+                    {isAdmin && (
+                      <UpdateSignalModal
+                        signalId={signal.id}
+                        currentStatus={signal.status}
+                        currentResult={signal.result}
+                        onSignalUpdated={fetchSignals}
+                      />
+                    )}
+                  </div>
                 </div>
 
                 {signal.notes && (
@@ -434,6 +506,9 @@ const Signals = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Admin Create Button */}
+      {isAdmin && <CreateSignalModal onSignalCreated={fetchSignals} />}
 
       <BottomNav />
     </div>
