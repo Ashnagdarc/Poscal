@@ -37,7 +37,8 @@ const App = () => (
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/signals" element={<Signals />} />
-            <Route 
+            <Route path="/admin/users" element={<UserManagement />} />
+            <Route
               path="/profile" 
               element={
                 <ProtectedRoute>
