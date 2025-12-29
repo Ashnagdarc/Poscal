@@ -15,6 +15,7 @@ import Journal from "./pages/Journal";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Signals from "./pages/Signals";
+import UserManagement from "./pages/UserManagement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,7 +37,8 @@ const App = () => (
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/signals" element={<Signals />} />
-            <Route 
+            <Route path="/admin/users" element={<UserManagement />} />
+            <Route
               path="/profile" 
               element={
                 <ProtectedRoute>
