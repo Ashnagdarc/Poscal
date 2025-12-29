@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
 import poscalLogo from '@/assets/poscal-logo.png';
+import { useHaptics } from '@/hooks/use-haptics';
 
 interface OnboardingStep {
   title: string;
@@ -25,6 +26,7 @@ const steps: OnboardingStep[] = [
 
 const Welcome = () => {
   const navigate = useNavigate();
+  const { lightTap, mediumTap, success } = useHaptics();
   const [currentStep, setCurrentStep] = useState(-1); // -1 = splash screen
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
@@ -49,16 +51,24 @@ const Welcome = () => {
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
+      mediumTap();
       setCurrentStep(currentStep + 1);
     } else {
+      success();
       completeOnboarding();
     }
   };
 
   const handlePrev = () => {
     if (currentStep > 0) {
+      lightTap();
       setCurrentStep(currentStep - 1);
     }
+  };
+
+  const handleDotClick = (index: number) => {
+    lightTap();
+    setCurrentStep(index);
   };
 
   const completeOnboarding = () => {
@@ -67,6 +77,7 @@ const Welcome = () => {
   };
 
   const handleSkip = () => {
+    lightTap();
     completeOnboarding();
   };
 
@@ -78,11 +89,13 @@ const Welcome = () => {
   if (showSplash) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-scale-in">
+        <div className="animate-scale-in relative">
+          {/* Glow effect */}
+          <div className="absolute inset-0 blur-3xl bg-foreground/20 animate-pulse rounded-full scale-150" />
           <img 
             src={poscalLogo} 
             alt="Poscal"
-            className="w-64 h-auto drop-shadow-2xl"
+            className="relative w-64 h-auto drop-shadow-2xl"
           />
         </div>
       </div>
@@ -134,10 +147,10 @@ const Welcome = () => {
       <footer className="pb-12 px-6">
         {/* Progress dots */}
         <div className="flex justify-center gap-2 mb-8">
-          {steps.map((_, index) => (
+        {steps.map((_, index) => (
             <button
               key={index}
-              onClick={() => setCurrentStep(index)}
+              onClick={() => handleDotClick(index)}
               className={`h-2 rounded-full transition-all duration-300 ${
                 index === currentStep 
                   ? 'w-8 bg-foreground' 
