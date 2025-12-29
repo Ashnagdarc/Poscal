@@ -1,29 +1,23 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
-import onboardingCalculator from '@/assets/onboarding-calculator.png';
-import onboardingJournal from '@/assets/onboarding-journal.png';
-import onboardingGrowth from '@/assets/onboarding-growth.png';
+import poscalLogo from '@/assets/poscal-logo.png';
 
 interface OnboardingStep {
-  image: string;
   title: string;
   description: string;
 }
 
 const steps: OnboardingStep[] = [
   {
-    image: onboardingCalculator,
     title: "Position Size Calculator",
     description: "Calculate the perfect position size for every trade based on your risk tolerance and account balance.",
   },
   {
-    image: onboardingJournal,
     title: "Trading Journal",
     description: "Track all your trades, analyze your performance with charts, and learn from your history.",
   },
   {
-    image: onboardingGrowth,
     title: "Improve Your Trading",
     description: "Make data-driven decisions with analytics, win rate tracking, and profit factor analysis.",
   },
@@ -31,8 +25,9 @@ const steps: OnboardingStep[] = [
 
 const Welcome = () => {
   const navigate = useNavigate();
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = useState(-1); // -1 = splash screen
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
+  const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
     const seen = localStorage.getItem('hasSeenOnboarding');
@@ -41,6 +36,16 @@ const Welcome = () => {
       navigate('/', { replace: true });
     }
   }, [navigate]);
+
+  useEffect(() => {
+    if (showSplash) {
+      const timer = setTimeout(() => {
+        setShowSplash(false);
+        setCurrentStep(0);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showSplash]);
 
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
@@ -69,6 +74,21 @@ const Welcome = () => {
     return null;
   }
 
+  // Splash screen with large animated logo
+  if (showSplash) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-scale-in">
+          <img 
+            src={poscalLogo} 
+            alt="Poscal"
+            className="w-64 h-auto drop-shadow-2xl"
+          />
+        </div>
+      </div>
+    );
+  }
+
   const step = steps[currentStep];
 
   return (
@@ -89,13 +109,12 @@ const Welcome = () => {
           key={currentStep}
           className="animate-fade-in text-center max-w-sm"
         >
-          {/* Image */}
-          <div className="relative w-64 h-64 mx-auto mb-8">
-            <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-transparent rounded-3xl blur-3xl" />
+          {/* Logo */}
+          <div className="relative w-40 h-20 mx-auto mb-12">
             <img 
-              src={step.image} 
-              alt={step.title}
-              className="relative w-full h-full object-contain drop-shadow-2xl"
+              src={poscalLogo} 
+              alt="Poscal"
+              className="w-full h-full object-contain"
             />
           </div>
 
