@@ -136,6 +136,32 @@ const Signals = () => {
     fetchSignals();
   }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
 
+  // Real-time subscription
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+
+    const channel = supabase
+      .channel('trading-signals-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'trading_signals'
+        },
+        (payload) => {
+          console.log('Real-time update:', payload);
+          // Refetch to get updated data with correct pagination
+          fetchSignals();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -282,7 +308,6 @@ const Signals = () => {
             </Select>
 
             <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <Input
                 type="date"
