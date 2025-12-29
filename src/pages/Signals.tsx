@@ -1,34 +1,439 @@
-import { Radio } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
+import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { format, parseISO } from 'date-fns';
+
+interface TradingSignal {
+  id: string;
+  currency_pair: string;
+  direction: 'buy' | 'sell';
+  entry_price: number;
+  stop_loss: number;
+  take_profit_1: number;
+  take_profit_2: number | null;
+  take_profit_3: number | null;
+  pips_to_sl: number;
+  pips_to_tp1: number;
+  pips_to_tp2: number | null;
+  pips_to_tp3: number | null;
+  status: 'active' | 'closed' | 'cancelled';
+  chart_image_url: string | null;
+  notes: string | null;
+  created_at: string;
+  closed_at: string | null;
+}
+
+const SIGNALS_PER_PAGE = 5;
+
+const CURRENCY_PAIRS = [
+  'All Pairs',
+  'EUR/USD',
+  'GBP/USD',
+  'USD/JPY',
+  'USD/CHF',
+  'AUD/USD',
+  'USD/CAD',
+  'NZD/USD',
+  'EUR/GBP',
+  'EUR/JPY',
+  'GBP/JPY',
+  'XAU/USD',
+  'BTC/USD',
+];
 
 const Signals = () => {
+  const [signals, setSignals] = useState<TradingSignal[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  
+  // Filters
+  const [pairFilter, setPairFilter] = useState('All Pairs');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [dateFilter, setDateFilter] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  
+  // Image modal
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
+
+  const fetchSignals = async () => {
+    if (!isSupabaseConfigured) {
+      setError('Supabase not configured');
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      let query = supabase
+        .from('trading_signals')
+        .select('*', { count: 'exact' });
+
+      // Apply filters
+      if (pairFilter !== 'All Pairs') {
+        query = query.eq('currency_pair', pairFilter);
+      }
+      
+      if (statusFilter !== 'all') {
+        query = query.eq('status', statusFilter);
+      }
+      
+      if (dateFilter) {
+        const startOfDay = new Date(dateFilter);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(dateFilter);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        query = query
+          .gte('created_at', startOfDay.toISOString())
+          .lte('created_at', endOfDay.toISOString());
+      }
+
+      // Pagination
+      const from = (currentPage - 1) * SIGNALS_PER_PAGE;
+      const to = from + SIGNALS_PER_PAGE - 1;
+
+      const { data, error: fetchError, count } = await query
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (fetchError) throw fetchError;
+
+      setSignals(data || []);
+      setTotalCount(count || 0);
+    } catch (err: any) {
+      console.error('Error fetching signals:', err);
+      setError(err.message || 'Failed to fetch signals');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSignals();
+  }, [currentPage, pairFilter, statusFilter, dateFilter]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [pairFilter, statusFilter, dateFilter]);
+
+  const totalPages = Math.ceil(totalCount / SIGNALS_PER_PAGE);
+
+  const clearFilters = () => {
+    setPairFilter('All Pairs');
+    setStatusFilter('all');
+    setDateFilter('');
+  };
+
+  const hasActiveFilters = pairFilter !== 'All Pairs' || statusFilter !== 'all' || dateFilter !== '';
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'active':
+        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+      case 'closed':
+        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+      case 'cancelled':
+        return 'bg-red-500/20 text-red-400 border-red-500/30';
+      default:
+        return 'bg-muted text-muted-foreground';
+    }
+  };
+
+  const formatPrice = (price: number) => {
+    return price.toFixed(price >= 100 ? 2 : 5);
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <header className="pt-12 pb-6 px-6">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
-            <Radio className="w-5 h-5 text-background" />
+      <header className="pt-12 pb-4 px-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+              <Radio className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Trading Signals</h1>
+              <p className="text-sm text-muted-foreground">
+                {totalCount} signal{totalCount !== 1 ? 's' : ''} available
+              </p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Trading Signals</h1>
-            <p className="text-sm text-muted-foreground">Live signals from admin</p>
-          </div>
+          <Button
+            variant={showFilters ? 'secondary' : 'outline'}
+            size="icon"
+            onClick={() => setShowFilters(!showFilters)}
+            className="relative"
+          >
+            <Filter className="w-4 h-4" />
+            {hasActiveFilters && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+            )}
+          </Button>
         </div>
       </header>
 
-      {/* Content */}
-      <main className="px-6">
-        <div className="bg-secondary rounded-2xl p-6 text-center">
-          <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-          <h2 className="text-lg font-semibold text-foreground mb-2">Coming Soon</h2>
-          <p className="text-sm text-muted-foreground">
-            Trading signals will appear here once the database is connected.
-            Each signal will include currency pair, entry point, stop loss,
-            take profit levels, pip calculations, and chart images.
-          </p>
+      {/* Filters */}
+      {showFilters && (
+        <div className="px-6 pb-4 space-y-3 animate-in slide-in-from-top-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-foreground">Filters</span>
+            {hasActiveFilters && (
+              <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 text-xs">
+                <X className="w-3 h-3 mr-1" />
+                Clear
+              </Button>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={pairFilter} onValueChange={setPairFilter}>
+              <SelectTrigger className="bg-secondary border-border">
+                <SelectValue placeholder="Currency Pair" />
+              </SelectTrigger>
+              <SelectContent>
+                {CURRENCY_PAIRS.map((pair) => (
+                  <SelectItem key={pair} value={pair}>
+                    {pair}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="bg-secondary border-border">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="active">Active</SelectItem>
+                <SelectItem value="closed">Closed</SelectItem>
+                <SelectItem value="cancelled">Cancelled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="relative">
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="pl-10 bg-secondary border-border"
+              placeholder="Filter by date"
+            />
+          </div>
         </div>
+      )}
+
+      {/* Content */}
+      <main className="px-6 space-y-4">
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="bg-secondary rounded-2xl p-4 animate-pulse">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="h-6 w-24 bg-muted rounded" />
+                  <div className="h-5 w-16 bg-muted rounded" />
+                </div>
+                <div className="space-y-2">
+                  <div className="h-4 w-32 bg-muted rounded" />
+                  <div className="h-4 w-48 bg-muted rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-6 text-center">
+            <p className="text-destructive">{error}</p>
+            <Button variant="outline" size="sm" onClick={fetchSignals} className="mt-4">
+              Try Again
+            </Button>
+          </div>
+        ) : signals.length === 0 ? (
+          <div className="bg-secondary rounded-2xl p-6 text-center">
+            <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <h2 className="text-lg font-semibold text-foreground mb-2">No Signals Found</h2>
+            <p className="text-sm text-muted-foreground">
+              {hasActiveFilters
+                ? 'No signals match your filters. Try adjusting them.'
+                : 'No trading signals have been posted yet. Check back later!'}
+            </p>
+          </div>
+        ) : (
+          <>
+            {signals.map((signal) => (
+              <div
+                key={signal.id}
+                className="bg-secondary rounded-2xl p-4 border border-border/50"
+              >
+                {/* Header */}
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div
+                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                        signal.direction === 'buy'
+                          ? 'bg-emerald-500/20'
+                          : 'bg-red-500/20'
+                      }`}
+                    >
+                      {signal.direction === 'buy' ? (
+                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <TrendingDown className="w-4 h-4 text-red-400" />
+                      )}
+                    </div>
+                    <div>
+                      <span className="font-bold text-foreground">{signal.currency_pair}</span>
+                      <span
+                        className={`ml-2 text-xs font-semibold uppercase ${
+                          signal.direction === 'buy' ? 'text-emerald-400' : 'text-red-400'
+                        }`}
+                      >
+                        {signal.direction}
+                      </span>
+                    </div>
+                  </div>
+                  <Badge className={getStatusColor(signal.status)}>{signal.status}</Badge>
+                </div>
+
+                {/* Price Levels */}
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <span className="text-xs text-muted-foreground block">Entry</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {formatPrice(signal.entry_price)}
+                    </span>
+                  </div>
+                  <div className="bg-red-500/10 rounded-lg p-2">
+                    <span className="text-xs text-red-400 block">Stop Loss</span>
+                    <span className="text-sm font-semibold text-red-400">
+                      {formatPrice(signal.stop_loss)}
+                    </span>
+                    <span className="text-xs text-muted-foreground ml-1">
+                      ({signal.pips_to_sl} pips)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Take Profits */}
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="bg-emerald-500/10 rounded-lg p-2">
+                    <span className="text-xs text-emerald-400 block">TP1</span>
+                    <span className="text-sm font-semibold text-emerald-400">
+                      {formatPrice(signal.take_profit_1)}
+                    </span>
+                    <span className="text-xs text-muted-foreground block">
+                      {signal.pips_to_tp1}p
+                    </span>
+                  </div>
+                  {signal.take_profit_2 && (
+                    <div className="bg-emerald-500/10 rounded-lg p-2">
+                      <span className="text-xs text-emerald-400 block">TP2</span>
+                      <span className="text-sm font-semibold text-emerald-400">
+                        {formatPrice(signal.take_profit_2)}
+                      </span>
+                      <span className="text-xs text-muted-foreground block">
+                        {signal.pips_to_tp2}p
+                      </span>
+                    </div>
+                  )}
+                  {signal.take_profit_3 && (
+                    <div className="bg-emerald-500/10 rounded-lg p-2">
+                      <span className="text-xs text-emerald-400 block">TP3</span>
+                      <span className="text-sm font-semibold text-emerald-400">
+                        {formatPrice(signal.take_profit_3)}
+                      </span>
+                      <span className="text-xs text-muted-foreground block">
+                        {signal.pips_to_tp3}p
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Notes & Chart */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Clock className="w-3 h-3" />
+                    {format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}
+                  </div>
+                  {signal.chart_image_url && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setSelectedImage(signal.chart_image_url)}
+                      className="h-7 text-xs"
+                    >
+                      <ImageIcon className="w-3 h-3 mr-1" />
+                      View Chart
+                    </Button>
+                  )}
+                </div>
+
+                {signal.notes && (
+                  <p className="mt-2 text-xs text-muted-foreground bg-background/30 rounded-lg p-2">
+                    {signal.notes}
+                  </p>
+                )}
+              </div>
+            ))}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  Prev
+                </Button>
+                <span className="text-sm text-muted-foreground">
+                  Page {currentPage} of {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </Button>
+              </div>
+            )}
+          </>
+        )}
       </main>
+
+      {/* Chart Image Modal */}
+      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Chart Analysis</DialogTitle>
+          </DialogHeader>
+          {selectedImage && (
+            <img
+              src={selectedImage}
+              alt="Trading chart"
+              className="w-full rounded-lg"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       <BottomNav />
     </div>
