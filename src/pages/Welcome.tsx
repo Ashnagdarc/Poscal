@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import poscalLogo from '@/assets/poscal-logo.png';
 import { useHaptics } from '@/hooks/use-haptics';
 
@@ -104,9 +105,38 @@ const Welcome = () => {
     setCurrentStep(index);
   };
 
+  const fireConfetti = () => {
+    const duration = 1500;
+    const end = Date.now() + duration;
+
+    const frame = () => {
+      confetti({
+        particleCount: 3,
+        angle: 60,
+        spread: 55,
+        origin: { x: 0, y: 0.7 },
+        colors: ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'],
+      });
+      confetti({
+        particleCount: 3,
+        angle: 120,
+        spread: 55,
+        origin: { x: 1, y: 0.7 },
+        colors: ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'],
+      });
+
+      if (Date.now() < end) {
+        requestAnimationFrame(frame);
+      }
+    };
+
+    frame();
+  };
+
   const completeOnboarding = () => {
+    fireConfetti();
     localStorage.setItem('hasSeenOnboarding', 'true');
-    navigate('/');
+    setTimeout(() => navigate('/'), 800);
   };
 
   const handleSkip = () => {
