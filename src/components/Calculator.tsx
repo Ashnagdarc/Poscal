@@ -1,14 +1,17 @@
 import { useState, useMemo, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   Calculator as CalculatorIcon, 
   TrendingDown, 
   TrendingUp,
   ChevronRight,
-  Target
+  Target,
+  User
 } from "lucide-react";
 import { NumPad } from "./NumPad";
 import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -24,6 +27,8 @@ export interface HistoryItem {
 }
 
 export const Calculator = () => {
+  const navigate = useNavigate();
+  const { user } = useAuth();
   const [accountBalance, setAccountBalance] = useState("");
   const [riskPercent, setRiskPercent] = useState(1);
   const [stopLossPips, setStopLossPips] = useState("");
@@ -36,6 +41,9 @@ export const Calculator = () => {
   const [numPadValue, setNumPadValue] = useState("");
 
   const { currency } = useCurrency();
+  
+  const [showCustomRisk, setShowCustomRisk] = useState(false);
+  const [customRiskInput, setCustomRiskInput] = useState("");
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -120,14 +128,22 @@ export const Calculator = () => {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="pt-12 pb-6 px-6 animate-fade-in">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
-            <CalculatorIcon className="w-5 h-5 text-background" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
+              <CalculatorIcon className="w-5 h-5 text-background" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Position Size</h1>
+              <p className="text-sm text-muted-foreground">Calculator</p>
+            </div>
           </div>
-          <div>
-            <h1 className="text-xl font-bold text-foreground">Position Size</h1>
-            <p className="text-sm text-muted-foreground">Calculator</p>
-          </div>
+          <button
+            onClick={() => navigate(user ? '/profile' : '/signin')}
+            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all active:scale-95"
+          >
+            <User className="w-5 h-5 text-foreground" />
+          </button>
         </div>
       </header>
 
@@ -167,9 +183,12 @@ export const Calculator = () => {
             {riskPresets.map((preset) => (
               <button
                 key={preset}
-                onClick={() => setRiskPercent(preset)}
+                onClick={() => {
+                  setRiskPercent(preset);
+                  setShowCustomRisk(false);
+                }}
                 className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                  riskPercent === preset
+                  riskPercent === preset && !showCustomRisk
                     ? "bg-foreground text-background"
                     : "bg-secondary text-foreground"
                 }`}
@@ -177,7 +196,46 @@ export const Calculator = () => {
                 {preset}%
               </button>
             ))}
+            <button
+              onClick={() => setShowCustomRisk(true)}
+              className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
+                showCustomRisk || !riskPresets.includes(riskPercent)
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
+              {showCustomRisk || !riskPresets.includes(riskPercent) ? `${riskPercent}%` : "Custom"}
+            </button>
           </div>
+          {showCustomRisk && (
+            <div className="mt-3 flex gap-2">
+              <input
+                type="number"
+                value={customRiskInput}
+                onChange={(e) => setCustomRiskInput(e.target.value)}
+                placeholder="Enter risk %"
+                className="flex-1 h-12 px-4 bg-secondary text-foreground rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                autoFocus
+                min="0.1"
+                max="100"
+                step="0.1"
+              />
+              <button
+                onClick={() => {
+                  const value = parseFloat(customRiskInput);
+                  if (value > 0 && value <= 100) {
+                    setRiskPercent(value);
+                    setShowCustomRisk(false);
+                    setCustomRiskInput("");
+                  }
+                }}
+                disabled={!customRiskInput || parseFloat(customRiskInput) <= 0}
+                className="px-6 h-12 bg-foreground text-background rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
+              >
+                Set
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Stop Loss & Take Profit */}
@@ -189,7 +247,7 @@ export const Calculator = () => {
           >
             <div className="flex items-center gap-2 mb-1">
               <TrendingDown className="w-4 h-4 text-destructive" />
-              <p className="text-xs text-muted-foreground">Stop Loss</p>
+              <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
             </div>
             <p className="text-lg font-bold text-foreground">
               {stopLossPips ? `${stopLossPips} pips` : "—"}
@@ -203,7 +261,7 @@ export const Calculator = () => {
           >
             <div className="flex items-center gap-2 mb-1">
               <TrendingUp className="w-4 h-4 text-foreground" />
-              <p className="text-xs text-muted-foreground">Take Profit</p>
+              <p className="text-xs text-muted-foreground">Take Profit (pips)</p>
             </div>
             <p className="text-lg font-bold text-foreground">
               {takeProfitPips ? `${takeProfitPips} pips` : "—"}
