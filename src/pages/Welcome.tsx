@@ -103,11 +103,22 @@ const Welcome = () => {
   }
 
   const step = steps[currentStep];
+  const progress = ((currentStep + 1) / steps.length) * 100;
 
   return (
     <div className="min-h-screen bg-background flex flex-col overflow-hidden">
+      {/* Progress bar */}
+      <div className="pt-12 px-6">
+        <div className="h-1 bg-muted rounded-full overflow-hidden">
+          <div 
+            className="h-full bg-foreground rounded-full transition-all duration-500 ease-out"
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+      </div>
+
       {/* Skip button */}
-      <header className="pt-12 px-6 flex justify-end relative z-10">
+      <header className="pt-4 px-6 flex justify-end relative z-10">
         <button
           onClick={handleSkip}
           className="text-muted-foreground text-sm font-medium hover:text-foreground transition-colors"
@@ -143,22 +154,8 @@ const Welcome = () => {
         </div>
       </main>
 
-      {/* Progress & Navigation */}
+      {/* Navigation */}
       <footer className="pb-12 px-6">
-        {/* Progress dots */}
-        <div className="flex justify-center gap-2 mb-8">
-        {steps.map((_, index) => (
-            <button
-              key={index}
-              onClick={() => handleDotClick(index)}
-              className={`h-2 rounded-full transition-all duration-300 ${
-                index === currentStep 
-                  ? 'w-8 bg-foreground' 
-                  : 'w-2 bg-muted-foreground/30 hover:bg-muted-foreground/50'
-              }`}
-            />
-          ))}
-        </div>
 
         {/* Navigation buttons */}
         <div className="flex gap-3">
