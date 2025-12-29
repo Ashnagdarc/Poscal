@@ -12,7 +12,9 @@ import {
   Ban, 
   Loader2, 
   Search, 
-  RefreshCw 
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight
 } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -27,6 +29,8 @@ interface UserWithRole {
   is_banned: boolean;
 }
 
+const USERS_PER_PAGE = 10;
+
 const UserManagement = () => {
   const navigate = useNavigate();
   const { isAdmin, loading: adminLoading } = useAdmin();
@@ -34,6 +38,7 @@ const UserManagement = () => {
   const [users, setUsers] = useState<UserWithRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   
   const [confirmDialog, setConfirmDialog] = useState<{
@@ -216,6 +221,17 @@ const UserManagement = () => {
     user.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
+  const startIndex = (currentPage - 1) * USERS_PER_PAGE;
+  const endIndex = startIndex + USERS_PER_PAGE;
+  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
+
+  // Reset to page 1 when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "Never";
     return new Date(dateString).toLocaleDateString();
@@ -301,97 +317,153 @@ const UserManagement = () => {
             <p className="text-muted-foreground">No users found</p>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filteredUsers.map((user) => (
-              <div
-                key={user.id}
-                className={`bg-secondary rounded-2xl p-4 space-y-3 ${user.is_banned ? 'opacity-60 border border-destructive/30' : ''}`}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="font-medium text-foreground truncate">{user.email}</p>
-                      {user.is_admin && (
-                        <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Admin</span>
-                      )}
-                      {user.is_banned && (
-                        <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full">Banned</span>
-                      )}
+          <>
+            <div className="space-y-3">
+              {paginatedUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className={`bg-secondary rounded-2xl p-4 space-y-3 ${user.is_banned ? 'opacity-60 border border-destructive/30' : ''}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-foreground truncate">{user.email}</p>
+                        {user.is_admin && (
+                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Admin</span>
+                        )}
+                        {user.is_banned && (
+                          <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full">Banned</span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Joined: {formatDate(user.created_at)} • Last login: {formatDate(user.last_sign_in_at)}
+                      </p>
                     </div>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Joined: {formatDate(user.created_at)} • Last login: {formatDate(user.last_sign_in_at)}
-                    </p>
+                    {user.id === currentUser?.id && (
+                      <span className="text-xs bg-foreground/10 text-muted-foreground px-2 py-1 rounded-full">You</span>
+                    )}
                   </div>
-                  {user.id === currentUser?.id && (
-                    <span className="text-xs bg-foreground/10 text-muted-foreground px-2 py-1 rounded-full">You</span>
+                  
+                  {/* Action Buttons */}
+                  {user.id !== currentUser?.id && (
+                    <div className="flex gap-2">
+                      {user.is_admin ? (
+                        <button
+                          onClick={() => handleDemoteAdmin(user.id, user.email)}
+                          disabled={actionLoading === user.id}
+                          className="flex-1 h-10 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-amber-500/30 disabled:opacity-50"
+                        >
+                          {actionLoading === user.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <ShieldOff className="w-4 h-4" />
+                          )}
+                          Demote
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handlePromoteToAdmin(user.id, user.email)}
+                          disabled={actionLoading === user.id}
+                          className="flex-1 h-10 bg-primary/20 text-primary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-primary/30 disabled:opacity-50"
+                        >
+                          {actionLoading === user.id ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <Shield className="w-4 h-4" />
+                          )}
+                          Make Admin
+                        </button>
+                      )}
+                      
+                      <button
+                        onClick={() => handleBanUser(user.id, user.email, user.is_banned)}
+                        disabled={actionLoading === user.id}
+                        className={`flex-1 h-10 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${
+                          user.is_banned 
+                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/30' 
+                            : 'bg-orange-500/20 text-orange-600 dark:text-orange-400 hover:bg-orange-500/30'
+                        }`}
+                      >
+                        {actionLoading === user.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Ban className="w-4 h-4" />
+                        )}
+                        {user.is_banned ? 'Unban' : 'Ban'}
+                      </button>
+                      
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.email)}
+                        disabled={actionLoading === user.id}
+                        className="flex-1 h-10 bg-destructive/20 text-destructive rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-destructive/30 disabled:opacity-50"
+                      >
+                        {actionLoading === user.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-4 h-4" />
+                        )}
+                        Delete
+                      </button>
+                    </div>
                   )}
                 </div>
-                
-                {/* Action Buttons */}
-                {user.id !== currentUser?.id && (
-                  <div className="flex gap-2">
-                    {user.is_admin ? (
-                      <button
-                        onClick={() => handleDemoteAdmin(user.id, user.email)}
-                        disabled={actionLoading === user.id}
-                        className="flex-1 h-10 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-amber-500/30 disabled:opacity-50"
-                      >
-                        {actionLoading === user.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <ShieldOff className="w-4 h-4" />
-                        )}
-                        Demote
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => handlePromoteToAdmin(user.id, user.email)}
-                        disabled={actionLoading === user.id}
-                        className="flex-1 h-10 bg-primary/20 text-primary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-primary/30 disabled:opacity-50"
-                      >
-                        {actionLoading === user.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Shield className="w-4 h-4" />
-                        )}
-                        Make Admin
-                      </button>
-                    )}
-                    
+              ))}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <div className="bg-secondary rounded-2xl p-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm text-muted-foreground">
+                    Showing {startIndex + 1}-{Math.min(endIndex, filteredUsers.length)} of {filteredUsers.length}
+                  </p>
+                  <div className="flex items-center gap-2">
                     <button
-                      onClick={() => handleBanUser(user.id, user.email, user.is_banned)}
-                      disabled={actionLoading === user.id}
-                      className={`flex-1 h-10 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${
-                        user.is_banned 
-                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/30' 
-                          : 'bg-orange-500/20 text-orange-600 dark:text-orange-400 hover:bg-orange-500/30'
-                      }`}
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="w-10 h-10 bg-background rounded-xl flex items-center justify-center transition-all hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {actionLoading === user.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Ban className="w-4 h-4" />
-                      )}
-                      {user.is_banned ? 'Unban' : 'Ban'}
+                      <ChevronLeft className="w-5 h-5 text-foreground" />
                     </button>
-                    
+                    <div className="flex gap-1">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => setCurrentPage(pageNum)}
+                            className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${
+                              currentPage === pageNum
+                                ? 'bg-foreground text-background'
+                                : 'bg-background text-foreground hover:bg-muted'
+                            }`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <button
-                      onClick={() => handleDeleteUser(user.id, user.email)}
-                      disabled={actionLoading === user.id}
-                      className="flex-1 h-10 bg-destructive/20 text-destructive rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-destructive/30 disabled:opacity-50"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="w-10 h-10 bg-background rounded-xl flex items-center justify-center transition-all hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {actionLoading === user.id ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="w-4 h-4" />
-                      )}
-                      Delete
+                      <ChevronRight className="w-5 h-5 text-foreground" />
                     </button>
                   </div>
-                )}
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+          </>
         )}
       </main>
       
