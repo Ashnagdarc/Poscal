@@ -8,6 +8,7 @@ export interface CurrencyPair {
 }
 
 export const CURRENCY_PAIRS: CurrencyPair[] = [
+  // Major Pairs
   { symbol: "EUR/USD", pipValue: 10, pipDecimal: 4 },
   { symbol: "GBP/USD", pipValue: 10, pipDecimal: 4 },
   { symbol: "USD/JPY", pipValue: 9.09, pipDecimal: 2 },
@@ -15,11 +16,33 @@ export const CURRENCY_PAIRS: CurrencyPair[] = [
   { symbol: "AUD/USD", pipValue: 10, pipDecimal: 4 },
   { symbol: "USD/CAD", pipValue: 7.58, pipDecimal: 4 },
   { symbol: "NZD/USD", pipValue: 10, pipDecimal: 4 },
+  // Cross Pairs
   { symbol: "EUR/GBP", pipValue: 12.74, pipDecimal: 4 },
   { symbol: "EUR/JPY", pipValue: 9.09, pipDecimal: 2 },
   { symbol: "GBP/JPY", pipValue: 9.09, pipDecimal: 2 },
+  { symbol: "EUR/AUD", pipValue: 6.45, pipDecimal: 4 },
+  { symbol: "EUR/CAD", pipValue: 7.58, pipDecimal: 4 },
+  { symbol: "EUR/CHF", pipValue: 10.64, pipDecimal: 4 },
+  { symbol: "GBP/AUD", pipValue: 6.45, pipDecimal: 4 },
+  { symbol: "GBP/CAD", pipValue: 7.58, pipDecimal: 4 },
+  { symbol: "GBP/CHF", pipValue: 10.64, pipDecimal: 4 },
+  { symbol: "AUD/JPY", pipValue: 9.09, pipDecimal: 2 },
+  { symbol: "AUD/CAD", pipValue: 7.58, pipDecimal: 4 },
+  { symbol: "AUD/CHF", pipValue: 10.64, pipDecimal: 4 },
+  { symbol: "AUD/NZD", pipValue: 10, pipDecimal: 4 },
+  { symbol: "CAD/JPY", pipValue: 9.09, pipDecimal: 2 },
+  { symbol: "CHF/JPY", pipValue: 9.09, pipDecimal: 2 },
+  { symbol: "NZD/JPY", pipValue: 9.09, pipDecimal: 2 },
+  { symbol: "NZD/CAD", pipValue: 7.58, pipDecimal: 4 },
+  { symbol: "NZD/CHF", pipValue: 10.64, pipDecimal: 4 },
+  // Commodities
   { symbol: "XAU/USD", pipValue: 1, pipDecimal: 2 },
   { symbol: "XAG/USD", pipValue: 0.5, pipDecimal: 3 },
+  // Indices & Crypto (approximate values)
+  { symbol: "US30", pipValue: 1, pipDecimal: 0 },
+  { symbol: "US100", pipValue: 1, pipDecimal: 0 },
+  { symbol: "BTC/USD", pipValue: 1, pipDecimal: 2 },
+  { symbol: "ETH/USD", pipValue: 1, pipDecimal: 2 },
 ];
 
 interface CurrencyGridProps {

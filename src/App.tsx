@@ -14,6 +14,7 @@ import Profile from "./pages/Profile";
 import Journal from "./pages/Journal";
 import History from "./pages/History";
 import Settings from "./pages/Settings";
+import Signals from "./pages/Signals";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/journal" element={<Journal />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/signals" element={<Signals />} />
             <Route 
               path="/profile" 
               element={

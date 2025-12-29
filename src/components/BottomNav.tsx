@@ -1,17 +1,15 @@
-import { Calculator, BookOpen, User, History, Settings } from 'lucide-react';
+import { Calculator, BookOpen, Radio, History, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '@/contexts/AuthContext';
 
 export const BottomNav = () => {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
 
   const navItems = [
     { path: '/', icon: Calculator, label: 'Calculate' },
     { path: '/history', icon: History, label: 'History' },
     { path: '/journal', icon: BookOpen, label: 'Journal' },
-    { path: user ? '/profile' : '/signin', icon: User, label: 'Profile' },
+    { path: '/signals', icon: Radio, label: 'Signals' },
     { path: '/settings', icon: Settings, label: 'Settings' },
   ];
 
