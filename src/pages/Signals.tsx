@@ -12,6 +12,7 @@ import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { useLivePrices } from '@/hooks/use-live-prices';
+import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
 
 interface TradingSignal {
@@ -58,6 +59,7 @@ const CURRENCY_PAIRS = [
 
 const Signals = () => {
   const { isAdmin } = useAdmin();
+  const { sendNotification, permission } = useNotifications();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -178,24 +180,44 @@ const Signals = () => {
                 description: `Take Profit 1 reached`,
                 duration: 5000
               });
+              if (permission === 'granted') {
+                sendNotification(`🎯 ${newSignal.currency_pair} - TP1 Hit!`, {
+                  body: 'Take Profit 1 reached'
+                });
+              }
             }
             if (!prevSignal.tp2_hit && newSignal.tp2_hit) {
               toast.success(`🎯 ${newSignal.currency_pair} - TP2 Hit!`, {
                 description: `Take Profit 2 reached`,
                 duration: 5000
               });
+              if (permission === 'granted') {
+                sendNotification(`🎯 ${newSignal.currency_pair} - TP2 Hit!`, {
+                  body: 'Take Profit 2 reached'
+                });
+              }
             }
             if (!prevSignal.tp3_hit && newSignal.tp3_hit) {
               toast.success(`🏆 ${newSignal.currency_pair} - TP3 Hit!`, {
                 description: `All take profits reached! Trade closed as WIN`,
                 duration: 7000
               });
+              if (permission === 'granted') {
+                sendNotification(`🏆 ${newSignal.currency_pair} - TP3 Hit!`, {
+                  body: 'All take profits reached! Trade closed as WIN'
+                });
+              }
             }
             if (prevSignal.status === 'active' && newSignal.status === 'closed' && newSignal.result === 'loss') {
               toast.error(`❌ ${newSignal.currency_pair} - Stop Loss Hit`, {
                 description: `Trade closed as LOSS`,
                 duration: 5000
               });
+              if (permission === 'granted') {
+                sendNotification(`❌ ${newSignal.currency_pair} - Stop Loss Hit`, {
+                  body: 'Trade closed as LOSS'
+                });
+              }
             }
           }
           
@@ -216,6 +238,11 @@ const Signals = () => {
             description: `${newSignal.direction.toUpperCase()} at ${newSignal.entry_price}`,
             duration: 5000
           });
+          if (permission === 'granted') {
+            sendNotification(`📊 New Signal: ${newSignal.currency_pair}`, {
+              body: `${newSignal.direction.toUpperCase()} at ${newSignal.entry_price}`
+            });
+          }
           fetchSignals();
         }
       )

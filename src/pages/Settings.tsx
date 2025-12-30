@@ -8,6 +8,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { AdminUsersTab } from "@/components/AdminUsersTab";
+import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -198,12 +199,15 @@ const Settings = () => {
           </div>
         </div>
 
-        {/* Notifications */}
+        {/* Push Notifications Settings */}
+        <NotificationSettings />
+
+        {/* In-App Notifications Toggle */}
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Bell className="w-5 h-5 text-foreground" />
-              <span className="font-medium text-foreground">Notifications</span>
+              <span className="font-medium text-foreground">In-App Toasts</span>
             </div>
             <button
               onClick={toggleNotifications}
