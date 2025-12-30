@@ -15,26 +15,46 @@ serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    
+    console.log('Creating Supabase client with URL:', supabaseUrl);
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { subscription, user_id } = await req.json();
+    const body = await req.json();
+    console.log('Received body:', JSON.stringify(body));
+    
+    const { subscription, user_id } = body;
 
     if (!subscription || !subscription.endpoint) {
-      throw new Error('Invalid subscription data');
+      console.error('Invalid subscription data:', subscription);
+      throw new Error('Invalid subscription data - missing endpoint');
+    }
+
+    if (!subscription.keys?.p256dh || !subscription.keys?.auth) {
+      console.error('Invalid subscription keys:', subscription.keys);
+      throw new Error('Invalid subscription data - missing keys');
     }
 
     console.log('Saving push subscription for user:', user_id);
     console.log('Endpoint:', subscription.endpoint);
+    console.log('Keys present:', { p256dh: !!subscription.keys.p256dh, auth: !!subscription.keys.auth });
 
     // Check if subscription already exists
-    const { data: existing } = await supabase
+    const { data: existing, error: selectError } = await supabase
       .from('push_subscriptions')
       .select('id')
       .eq('endpoint', subscription.endpoint)
       .maybeSingle();
 
+    if (selectError) {
+      console.error('Error checking existing subscription:', selectError);
+      throw selectError;
+    }
+
+    console.log('Existing subscription:', existing);
+
     if (existing) {
       // Update existing subscription
+      console.log('Updating existing subscription:', existing.id);
       const { error } = await supabase
         .from('push_subscriptions')
         .update({
@@ -45,21 +65,30 @@ serve(async (req) => {
         })
         .eq('endpoint', subscription.endpoint);
 
-      if (error) throw error;
-      console.log('Updated existing subscription');
+      if (error) {
+        console.error('Error updating subscription:', error);
+        throw error;
+      }
+      console.log('Successfully updated existing subscription');
     } else {
       // Insert new subscription
-      const { error } = await supabase
+      console.log('Inserting new subscription');
+      const { data: inserted, error } = await supabase
         .from('push_subscriptions')
         .insert({
           endpoint: subscription.endpoint,
           p256dh: subscription.keys.p256dh,
           auth: subscription.keys.auth,
           user_id: user_id || null,
-        });
+        })
+        .select('id')
+        .single();
 
-      if (error) throw error;
-      console.log('Created new subscription');
+      if (error) {
+        console.error('Error inserting subscription:', error);
+        throw error;
+      }
+      console.log('Successfully created new subscription:', inserted);
     }
 
     return new Response(

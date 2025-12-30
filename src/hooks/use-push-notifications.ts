@@ -96,19 +96,28 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         });
       }
 
-      console.log('[push] Push subscription:', subscription);
+      const subJson = subscription.toJSON();
+      console.log('[push] Push subscription obtained:', JSON.stringify(subJson));
+      console.log('[push] User ID:', user?.id ?? 'anonymous');
 
       // Send subscription to server
       const { data, error } = await supabase.functions.invoke('subscribe-push', {
         body: {
-          subscription: subscription.toJSON(),
+          subscription: subJson,
           user_id: user?.id ?? null,
         },
       });
 
+      console.log('[push] subscribe-push response:', { data, error });
+
       if (error) {
         console.error('[push] subscribe-push failed:', error);
-        throw error;
+        throw new Error(error.message || 'Failed to save subscription to server');
+      }
+
+      if (data?.error) {
+        console.error('[push] subscribe-push returned error:', data.error);
+        throw new Error(data.error);
       }
 
       console.log('[push] subscribe-push success:', data);
