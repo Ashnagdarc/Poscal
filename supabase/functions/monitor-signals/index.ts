@@ -65,7 +65,14 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
   const updates: Partial<TradingSignal> & { shouldClose?: boolean } = {};
   const isBuy = signal.direction === 'buy';
   
+  // Determine the final TP level (the highest TP that's set)
+  const hasTp3 = signal.take_profit_3 !== null;
+  const hasTp2 = signal.take_profit_2 !== null;
+  // TP1 is always required
+  
   console.log(`Checking ${signal.currency_pair} (${signal.direction}): current=${currentPrice}, entry=${signal.entry_price}, SL=${signal.stop_loss}`);
+  console.log(`  TPs: TP1=${signal.take_profit_1}, TP2=${signal.take_profit_2 || 'N/A'}, TP3=${signal.take_profit_3 || 'N/A'}`);
+  console.log(`  Final target: ${hasTp3 ? 'TP3' : hasTp2 ? 'TP2' : 'TP1'}`);
   
   // Check Stop Loss
   if (isBuy) {
@@ -86,42 +93,86 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
     }
   }
   
-  // Check Take Profits (in order: TP3 -> TP2 -> TP1 for proper tracking)
+  // Check Take Profits
   if (isBuy) {
     // For BUY: price needs to go UP to hit TPs
-    if (signal.take_profit_3 && !signal.tp3_hit && currentPrice >= signal.take_profit_3) {
-      console.log(`🟢 TP3 HIT for ${signal.currency_pair}`);
+    
+    // Check TP3 (only if set)
+    if (hasTp3 && !signal.tp3_hit && currentPrice >= signal.take_profit_3!) {
+      console.log(`🏆 TP3 HIT (FINAL) for ${signal.currency_pair} - Closing as WIN`);
       updates.tp3_hit = true;
       updates.tp2_hit = true;
       updates.tp1_hit = true;
       updates.status = 'closed';
       updates.result = 'win';
       updates.shouldClose = true;
-    } else if (signal.take_profit_2 && !signal.tp2_hit && currentPrice >= signal.take_profit_2) {
+    } 
+    // Check TP2 (only if set)
+    else if (hasTp2 && !signal.tp2_hit && currentPrice >= signal.take_profit_2!) {
       console.log(`🟢 TP2 HIT for ${signal.currency_pair}`);
       updates.tp2_hit = true;
       updates.tp1_hit = true;
-    } else if (!signal.tp1_hit && currentPrice >= signal.take_profit_1) {
+      
+      // If TP3 is NOT set, TP2 is the final target - close as win
+      if (!hasTp3) {
+        console.log(`  ➡️ TP2 is FINAL target - Closing as WIN`);
+        updates.status = 'closed';
+        updates.result = 'win';
+        updates.shouldClose = true;
+      }
+    } 
+    // Check TP1
+    else if (!signal.tp1_hit && currentPrice >= signal.take_profit_1) {
       console.log(`🟢 TP1 HIT for ${signal.currency_pair}`);
       updates.tp1_hit = true;
+      
+      // If neither TP2 nor TP3 is set, TP1 is the final target - close as win
+      if (!hasTp2 && !hasTp3) {
+        console.log(`  ➡️ TP1 is FINAL target - Closing as WIN`);
+        updates.status = 'closed';
+        updates.result = 'win';
+        updates.shouldClose = true;
+      }
     }
   } else {
     // For SELL: price needs to go DOWN to hit TPs
-    if (signal.take_profit_3 && !signal.tp3_hit && currentPrice <= signal.take_profit_3) {
-      console.log(`🟢 TP3 HIT for ${signal.currency_pair}`);
+    
+    // Check TP3 (only if set)
+    if (hasTp3 && !signal.tp3_hit && currentPrice <= signal.take_profit_3!) {
+      console.log(`🏆 TP3 HIT (FINAL) for ${signal.currency_pair} - Closing as WIN`);
       updates.tp3_hit = true;
       updates.tp2_hit = true;
       updates.tp1_hit = true;
       updates.status = 'closed';
       updates.result = 'win';
       updates.shouldClose = true;
-    } else if (signal.take_profit_2 && !signal.tp2_hit && currentPrice <= signal.take_profit_2) {
+    } 
+    // Check TP2 (only if set)
+    else if (hasTp2 && !signal.tp2_hit && currentPrice <= signal.take_profit_2!) {
       console.log(`🟢 TP2 HIT for ${signal.currency_pair}`);
       updates.tp2_hit = true;
       updates.tp1_hit = true;
-    } else if (!signal.tp1_hit && currentPrice <= signal.take_profit_1) {
+      
+      // If TP3 is NOT set, TP2 is the final target - close as win
+      if (!hasTp3) {
+        console.log(`  ➡️ TP2 is FINAL target - Closing as WIN`);
+        updates.status = 'closed';
+        updates.result = 'win';
+        updates.shouldClose = true;
+      }
+    } 
+    // Check TP1
+    else if (!signal.tp1_hit && currentPrice <= signal.take_profit_1) {
       console.log(`🟢 TP1 HIT for ${signal.currency_pair}`);
       updates.tp1_hit = true;
+      
+      // If neither TP2 nor TP3 is set, TP1 is the final target - close as win
+      if (!hasTp2 && !hasTp3) {
+        console.log(`  ➡️ TP1 is FINAL target - Closing as WIN`);
+        updates.status = 'closed';
+        updates.result = 'win';
+        updates.shouldClose = true;
+      }
     }
   }
   
