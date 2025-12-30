@@ -16,7 +16,9 @@ import History from "./pages/History";
 import Settings from "./pages/Settings";
 import Signals from "./pages/Signals";
 import UserManagement from "./pages/UserManagement";
+import AdminUpdates from "./pages/AdminUpdates";
 import NotFound from "./pages/NotFound";
+import { AppUpdateModal } from "./components/AppUpdateModal";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +30,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <CurrencyProvider>
+          <AppUpdateModal />
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/welcome" element={<Welcome />} />
@@ -49,6 +52,14 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <UserManagement />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/updates" 
+              element={
+                <ProtectedRoute>
+                  <AdminUpdates />
                 </ProtectedRoute>
               } 
             />
