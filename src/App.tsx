@@ -36,8 +36,22 @@ const App = () => (
             <Route path="/journal" element={<Journal />} />
             <Route path="/history" element={<History />} />
             <Route path="/settings" element={<Settings />} />
-            <Route path="/signals" element={<Signals />} />
-            <Route path="/admin/users" element={<UserManagement />} />
+            <Route 
+              path="/signals" 
+              element={
+                <ProtectedRoute>
+                  <Signals />
+                </ProtectedRoute>
+              } 
+            />
+            <Route 
+              path="/admin/users" 
+              element={
+                <ProtectedRoute>
+                  <UserManagement />
+                </ProtectedRoute>
+              } 
+            />
             <Route
               path="/profile" 
               element={
