@@ -173,7 +173,20 @@ export const UpdateSignalModal = ({
 
               <div className="space-y-2">
                 <Label>Result</Label>
-                <Select value={result} onValueChange={setResult}>
+                <Select 
+                  value={result} 
+                  onValueChange={(value) => {
+                    setResult(value);
+                    // Auto-close when setting a final result
+                    if (value !== 'pending' && status === 'active') {
+                      setStatus('closed');
+                    }
+                    // Auto-reopen if setting back to pending
+                    if (value === 'pending' && status === 'closed') {
+                      setStatus('active');
+                    }
+                  }}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
@@ -184,6 +197,9 @@ export const UpdateSignalModal = ({
                     <SelectItem value="breakeven">Breakeven</SelectItem>
                   </SelectContent>
                 </Select>
+                {result !== 'pending' && status === 'active' && (
+                  <p className="text-xs text-amber-400">⚠️ Status will be set to "Closed" automatically</p>
+                )}
               </div>
 
               {/* TP Hit Toggles */}
