@@ -22,6 +22,11 @@ interface TradingSignal {
   tp3_hit: boolean;
 }
 
+interface CheckResult extends Partial<TradingSignal> {
+  shouldClose?: boolean;
+  notificationType?: 'tp1' | 'tp2' | 'tp3' | 'sl';
+}
+
 // Map currency pairs to Twelve Data symbols
 const SYMBOL_MAP: Record<string, string> = {
   'EUR/USD': 'EUR/USD',
@@ -61,14 +66,12 @@ async function fetchPrice(symbol: string, apiKey: string): Promise<number | null
   }
 }
 
-function checkLevels(signal: TradingSignal, currentPrice: number): Partial<TradingSignal> & { shouldClose?: boolean } {
-  const updates: Partial<TradingSignal> & { shouldClose?: boolean } = {};
+function checkLevels(signal: TradingSignal, currentPrice: number): CheckResult {
+  const updates: CheckResult = {};
   const isBuy = signal.direction === 'buy';
   
-  // Determine the final TP level (the highest TP that's set)
   const hasTp3 = signal.take_profit_3 !== null;
   const hasTp2 = signal.take_profit_2 !== null;
-  // TP1 is always required
   
   console.log(`Checking ${signal.currency_pair} (${signal.direction}): current=${currentPrice}, entry=${signal.entry_price}, SL=${signal.stop_loss}`);
   console.log(`  TPs: TP1=${signal.take_profit_1}, TP2=${signal.take_profit_2 || 'N/A'}, TP3=${signal.take_profit_3 || 'N/A'}`);
@@ -81,6 +84,7 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
       updates.status = 'closed';
       updates.result = 'loss';
       updates.shouldClose = true;
+      updates.notificationType = 'sl';
       return updates;
     }
   } else {
@@ -89,6 +93,7 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
       updates.status = 'closed';
       updates.result = 'loss';
       updates.shouldClose = true;
+      updates.notificationType = 'sl';
       return updates;
     }
   }
@@ -106,14 +111,15 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
       updates.status = 'closed';
       updates.result = 'win';
       updates.shouldClose = true;
+      updates.notificationType = 'tp3';
     } 
     // Check TP2 (only if set)
     else if (hasTp2 && !signal.tp2_hit && currentPrice >= signal.take_profit_2!) {
       console.log(`🟢 TP2 HIT for ${signal.currency_pair}`);
       updates.tp2_hit = true;
       updates.tp1_hit = true;
+      updates.notificationType = 'tp2';
       
-      // If TP3 is NOT set, TP2 is the final target - close as win
       if (!hasTp3) {
         console.log(`  ➡️ TP2 is FINAL target - Closing as WIN`);
         updates.status = 'closed';
@@ -125,8 +131,8 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
     else if (!signal.tp1_hit && currentPrice >= signal.take_profit_1) {
       console.log(`🟢 TP1 HIT for ${signal.currency_pair}`);
       updates.tp1_hit = true;
+      updates.notificationType = 'tp1';
       
-      // If neither TP2 nor TP3 is set, TP1 is the final target - close as win
       if (!hasTp2 && !hasTp3) {
         console.log(`  ➡️ TP1 is FINAL target - Closing as WIN`);
         updates.status = 'closed';
@@ -146,14 +152,15 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
       updates.status = 'closed';
       updates.result = 'win';
       updates.shouldClose = true;
+      updates.notificationType = 'tp3';
     } 
     // Check TP2 (only if set)
     else if (hasTp2 && !signal.tp2_hit && currentPrice <= signal.take_profit_2!) {
       console.log(`🟢 TP2 HIT for ${signal.currency_pair}`);
       updates.tp2_hit = true;
       updates.tp1_hit = true;
+      updates.notificationType = 'tp2';
       
-      // If TP3 is NOT set, TP2 is the final target - close as win
       if (!hasTp3) {
         console.log(`  ➡️ TP2 is FINAL target - Closing as WIN`);
         updates.status = 'closed';
@@ -165,8 +172,8 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
     else if (!signal.tp1_hit && currentPrice <= signal.take_profit_1) {
       console.log(`🟢 TP1 HIT for ${signal.currency_pair}`);
       updates.tp1_hit = true;
+      updates.notificationType = 'tp1';
       
-      // If neither TP2 nor TP3 is set, TP1 is the final target - close as win
       if (!hasTp2 && !hasTp3) {
         console.log(`  ➡️ TP1 is FINAL target - Closing as WIN`);
         updates.status = 'closed';
@@ -177,6 +184,37 @@ function checkLevels(signal: TradingSignal, currentPrice: number): Partial<Tradi
   }
   
   return updates;
+}
+
+async function sendPushNotification(
+  supabaseUrl: string,
+  supabaseKey: string,
+  title: string,
+  body: string,
+  tag: string,
+  data: Record<string, unknown>
+): Promise<void> {
+  try {
+    console.log(`📤 Sending push notification: ${title}`);
+    const response = await fetch(`${supabaseUrl}/functions/v1/send-push-notification`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ title, body, tag, data }),
+    });
+    
+    if (!response.ok) {
+      const text = await response.text();
+      console.error('Push notification failed:', response.status, text);
+    } else {
+      const result = await response.json();
+      console.log('Push notification result:', result);
+    }
+  } catch (error) {
+    console.error('Error sending push notification:', error);
+  }
 }
 
 serve(async (req) => {
@@ -229,19 +267,19 @@ serve(async (req) => {
     const uniquePairs = [...new Set(signals.map(s => s.currency_pair))];
     console.log(`Unique pairs to check: ${uniquePairs.join(', ')}`);
     
-    // Fetch current prices for all pairs (with rate limiting consideration)
+    // Fetch current prices for all pairs
     const priceMap: Record<string, number> = {};
     for (const pair of uniquePairs) {
       const price = await fetchPrice(pair, TWELVE_DATA_API_KEY);
       if (price !== null) {
         priceMap[pair] = price;
       }
-      // Small delay to avoid rate limiting (Twelve Data free tier: 8 req/min)
       await new Promise(resolve => setTimeout(resolve, 200));
     }
     
     // Process each signal
-    const results: { signalId: string; updates: any }[] = [];
+    const results: { signalId: string; updates: unknown }[] = [];
+    const notifications: { type: string; pair: string }[] = [];
     
     for (const signal of signals) {
       const currentPrice = priceMap[signal.currency_pair];
@@ -253,11 +291,10 @@ serve(async (req) => {
       const updates = checkLevels(signal as TradingSignal, currentPrice);
       
       if (Object.keys(updates).length > 0) {
-        // Remove the shouldClose flag before updating
-        const { shouldClose, ...dbUpdates } = updates;
+        const { shouldClose, notificationType, ...dbUpdates } = updates;
         
         if (shouldClose) {
-          (dbUpdates as any).closed_at = new Date().toISOString();
+          (dbUpdates as Record<string, unknown>).closed_at = new Date().toISOString();
         }
         
         console.log(`Updating signal ${signal.id}:`, dbUpdates);
@@ -271,17 +308,50 @@ serve(async (req) => {
           console.error(`Failed to update signal ${signal.id}:`, updateError);
         } else {
           results.push({ signalId: signal.id, updates: dbUpdates });
+          
+          // Send push notification for TP/SL hits
+          if (notificationType) {
+            const pair = signal.currency_pair;
+            let title = '';
+            let body = '';
+            
+            if (notificationType === 'sl') {
+              title = `🔴 Stop Loss Hit - ${pair}`;
+              body = `${pair} ${signal.direction.toUpperCase()} signal hit stop loss at ${signal.stop_loss}`;
+            } else if (notificationType === 'tp1') {
+              title = `🟢 TP1 Hit - ${pair}`;
+              body = `${pair} ${signal.direction.toUpperCase()} signal hit Take Profit 1 at ${signal.take_profit_1}`;
+            } else if (notificationType === 'tp2') {
+              title = `🟢 TP2 Hit - ${pair}`;
+              body = `${pair} ${signal.direction.toUpperCase()} signal hit Take Profit 2 at ${signal.take_profit_2}`;
+            } else if (notificationType === 'tp3') {
+              title = `🏆 TP3 Hit - ${pair}`;
+              body = `${pair} ${signal.direction.toUpperCase()} signal hit Take Profit 3 at ${signal.take_profit_3}`;
+            }
+            
+            await sendPushNotification(
+              SUPABASE_URL,
+              SUPABASE_SERVICE_ROLE_KEY,
+              title,
+              body,
+              'signal-update',
+              { type: 'signal', signalId: signal.id, notificationType }
+            );
+            
+            notifications.push({ type: notificationType, pair });
+          }
         }
       }
     }
     
-    console.log(`✅ Monitor complete. Updated ${results.length} signals`);
+    console.log(`✅ Monitor complete. Updated ${results.length} signals, sent ${notifications.length} notifications`);
     
     return new Response(JSON.stringify({ 
       success: true, 
       message: `Processed ${signals.length} signals, updated ${results.length}`,
       processed: signals.length,
       updated: results.length,
+      notifications: notifications.length,
       updates: results
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
