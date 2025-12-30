@@ -10,6 +10,7 @@ export const NotificationSettings = () => {
     isSupported, 
     isSubscribed, 
     loading, 
+    lastError,
     subscribe, 
     unsubscribe 
   } = usePushNotifications();
@@ -21,7 +22,7 @@ export const NotificationSettings = () => {
     } else if (permission === 'denied') {
       toast.error('Notification permission denied. Please enable in browser settings.');
     } else {
-      toast.error('Failed to enable push notifications. Please try again.');
+      toast.error(lastError ? `Failed to enable push: ${lastError}` : 'Failed to enable push notifications. Please try again.');
     }
   };
 
