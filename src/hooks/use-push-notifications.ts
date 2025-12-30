@@ -2,9 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-// This should match your VAPID_PUBLIC_KEY secret
-// You'll need to update this with your actual VAPID public key
-const VAPID_PUBLIC_KEY = 'YOUR_VAPID_PUBLIC_KEY';
+const VAPID_PUBLIC_KEY = 'BIKdCaWdeDFW1_vulFr0CMSwr3GAGpEB-iz2rMRiN4k5FcbNrpcIP5GgmlN4TLHZhE_izyZVIVYGh07k2qy3Tcw';
 
 interface UsePushNotificationsResult {
   isSupported: boolean;
