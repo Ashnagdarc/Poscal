@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -133,6 +133,21 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
       const { error } = await supabase.from('trading_signals').insert(signalData);
 
       if (error) throw error;
+
+      // Send push notification to all subscribers
+      try {
+        await supabase.functions.invoke('send-push-notification', {
+          body: {
+            title: `📊 New Signal: ${formData.currency_pair}`,
+            body: `${formData.direction.toUpperCase()} at ${entry}`,
+            tag: 'new-signal',
+            data: { type: 'signal' },
+          },
+        });
+      } catch (pushError) {
+        console.error('Failed to send push notification:', pushError);
+        // Don't fail the signal creation if push fails
+      }
 
       toast.success('Signal created successfully!');
       setOpen(false);
