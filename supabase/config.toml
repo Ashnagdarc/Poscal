@@ -9,3 +9,6 @@ max_rows = 1000
 
 [functions.monitor-signals]
 verify_jwt = false
+
+[functions.get-live-prices]
+verify_jwt = false

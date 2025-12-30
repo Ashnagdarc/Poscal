@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -11,6 +11,8 @@ import { format, parseISO } from 'date-fns';
 import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
+import { useLivePrices } from '@/hooks/use-live-prices';
+import { toast } from 'sonner';
 
 interface TradingSignal {
   id: string;
@@ -71,6 +73,18 @@ const Signals = () => {
   
   // Image modal
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
+  
+  // Track previous signal states for notifications
+  const prevSignalsRef = useRef<Map<string, TradingSignal>>(new Map());
+  
+  // Get unique active pairs for live price fetching
+  const activeSymbols = [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
+  
+  const { prices, loading: pricesLoading, lastUpdated, refresh: refreshPrices } = useLivePrices({
+    symbols: activeSymbols,
+    enabled: activeSymbols.length > 0,
+    refreshInterval: 30000 // 30 seconds
+  });
 
   const fetchSignals = async () => {
     if (!isSupabaseConfigured) {
@@ -139,7 +153,7 @@ const Signals = () => {
     fetchSignals();
   }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
 
-  // Real-time subscription
+  // Real-time subscription with notifications
   useEffect(() => {
     if (!isSupabaseConfigured) return;
 
@@ -148,13 +162,60 @@ const Signals = () => {
       .on(
         'postgres_changes',
         {
-          event: '*',
+          event: 'UPDATE',
           schema: 'public',
           table: 'trading_signals'
         },
         (payload) => {
           console.log('Real-time update:', payload);
+          const newSignal = payload.new as TradingSignal;
+          const prevSignal = prevSignalsRef.current.get(newSignal.id);
+          
+          // Check for TP/SL notifications
+          if (prevSignal) {
+            if (!prevSignal.tp1_hit && newSignal.tp1_hit) {
+              toast.success(`🎯 ${newSignal.currency_pair} - TP1 Hit!`, {
+                description: `Take Profit 1 reached`,
+                duration: 5000
+              });
+            }
+            if (!prevSignal.tp2_hit && newSignal.tp2_hit) {
+              toast.success(`🎯 ${newSignal.currency_pair} - TP2 Hit!`, {
+                description: `Take Profit 2 reached`,
+                duration: 5000
+              });
+            }
+            if (!prevSignal.tp3_hit && newSignal.tp3_hit) {
+              toast.success(`🏆 ${newSignal.currency_pair} - TP3 Hit!`, {
+                description: `All take profits reached! Trade closed as WIN`,
+                duration: 7000
+              });
+            }
+            if (prevSignal.status === 'active' && newSignal.status === 'closed' && newSignal.result === 'loss') {
+              toast.error(`❌ ${newSignal.currency_pair} - Stop Loss Hit`, {
+                description: `Trade closed as LOSS`,
+                duration: 5000
+              });
+            }
+          }
+          
           // Refetch to get updated data with correct pagination
+          fetchSignals();
+        }
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'trading_signals'
+        },
+        (payload) => {
+          const newSignal = payload.new as TradingSignal;
+          toast.info(`📊 New Signal: ${newSignal.currency_pair}`, {
+            description: `${newSignal.direction.toUpperCase()} at ${newSignal.entry_price}`,
+            duration: 5000
+          });
           fetchSignals();
         }
       )
@@ -164,6 +225,13 @@ const Signals = () => {
       supabase.removeChannel(channel);
     };
   }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
+  
+  // Update previous signals ref when signals change
+  useEffect(() => {
+    const newMap = new Map<string, TradingSignal>();
+    signals.forEach(s => newMap.set(s.id, s));
+    prevSignalsRef.current = newMap;
+  }, [signals]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -242,17 +310,34 @@ const Signals = () => {
               </p>
             </div>
           </div>
-          <Button
-            variant={showFilters ? 'secondary' : 'outline'}
-            size="icon"
-            onClick={() => setShowFilters(!showFilters)}
-            className="relative"
-          >
-            <Filter className="w-4 h-4" />
-            {hasActiveFilters && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+          <div className="flex items-center gap-2">
+            {activeSymbols.length > 0 && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={refreshPrices}
+                disabled={pricesLoading}
+                className="relative"
+                title={lastUpdated ? `Last updated: ${format(lastUpdated, 'HH:mm:ss')}` : 'Refresh prices'}
+              >
+                <RefreshCw className={`w-4 h-4 ${pricesLoading ? 'animate-spin' : ''}`} />
+                {Object.keys(prices).length > 0 && (
+                  <Wifi className="absolute -top-1 -right-1 w-3 h-3 text-emerald-500" />
+                )}
+              </Button>
             )}
-          </Button>
+            <Button
+              variant={showFilters ? 'secondary' : 'outline'}
+              size="icon"
+              onClick={() => setShowFilters(!showFilters)}
+              className="relative"
+            >
+              <Filter className="w-4 h-4" />
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -398,6 +483,23 @@ const Signals = () => {
                   </div>
                 </div>
 
+                {/* Live Price for Active Signals */}
+                {signal.status === 'active' && prices[signal.currency_pair] && (
+                  <div className="mb-3 bg-primary/10 rounded-lg p-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wifi className="w-3 h-3 text-primary animate-pulse" />
+                      <span className="text-xs text-muted-foreground">Live Price</span>
+                    </div>
+                    <span className={`text-sm font-bold ${
+                      signal.direction === 'buy'
+                        ? prices[signal.currency_pair] > signal.entry_price ? 'text-emerald-400' : 'text-red-400'
+                        : prices[signal.currency_pair] < signal.entry_price ? 'text-emerald-400' : 'text-red-400'
+                    }`}>
+                      {formatPrice(prices[signal.currency_pair])}
+                    </span>
+                  </div>
+                )}
+
                 {/* Price Levels */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
                   <div className="bg-background/50 rounded-lg p-2">
@@ -490,6 +592,16 @@ const Signals = () => {
                         signalId={signal.id}
                         currentStatus={signal.status}
                         currentResult={signal.result}
+                        currentStopLoss={signal.stop_loss}
+                        currentTakeProfit1={signal.take_profit_1}
+                        currentTakeProfit2={signal.take_profit_2}
+                        currentTakeProfit3={signal.take_profit_3}
+                        currentEntryPrice={signal.entry_price}
+                        currencyPair={signal.currency_pair}
+                        direction={signal.direction}
+                        tp1Hit={signal.tp1_hit || false}
+                        tp2Hit={signal.tp2_hit || false}
+                        tp3Hit={signal.tp3_hit || false}
                         onSignalUpdated={fetchSignals}
                       />
                     )}
