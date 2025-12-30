@@ -39,6 +39,60 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
     return Math.abs(Math.round((target - entry) * multiplier));
   };
 
+  const validateLevels = (
+    direction: 'buy' | 'sell',
+    entry: number,
+    sl: number,
+    tp1: number,
+    tp2: number | null,
+    tp3: number | null
+  ): string | null => {
+    if (direction === 'buy') {
+      // For BUY: SL must be below entry, TPs must be above entry
+      if (sl >= entry) {
+        return 'Stop Loss must be below Entry Price for a BUY trade';
+      }
+      if (tp1 <= entry) {
+        return 'Take Profit 1 must be above Entry Price for a BUY trade';
+      }
+      if (tp2 !== null && tp2 <= entry) {
+        return 'Take Profit 2 must be above Entry Price for a BUY trade';
+      }
+      if (tp3 !== null && tp3 <= entry) {
+        return 'Take Profit 3 must be above Entry Price for a BUY trade';
+      }
+      // TPs should be in ascending order
+      if (tp2 !== null && tp2 <= tp1) {
+        return 'Take Profit 2 must be higher than Take Profit 1';
+      }
+      if (tp3 !== null && tp2 !== null && tp3 <= tp2) {
+        return 'Take Profit 3 must be higher than Take Profit 2';
+      }
+    } else {
+      // For SELL: SL must be above entry, TPs must be below entry
+      if (sl <= entry) {
+        return 'Stop Loss must be above Entry Price for a SELL trade';
+      }
+      if (tp1 >= entry) {
+        return 'Take Profit 1 must be below Entry Price for a SELL trade';
+      }
+      if (tp2 !== null && tp2 >= entry) {
+        return 'Take Profit 2 must be below Entry Price for a SELL trade';
+      }
+      if (tp3 !== null && tp3 >= entry) {
+        return 'Take Profit 3 must be below Entry Price for a SELL trade';
+      }
+      // TPs should be in descending order (lower is better for SELL)
+      if (tp2 !== null && tp2 >= tp1) {
+        return 'Take Profit 2 must be lower than Take Profit 1';
+      }
+      if (tp3 !== null && tp2 !== null && tp3 >= tp2) {
+        return 'Take Profit 3 must be lower than Take Profit 2';
+      }
+    }
+    return null; // All validations passed
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -49,6 +103,14 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
       const tp1 = parseFloat(formData.take_profit_1);
       const tp2 = formData.take_profit_2 ? parseFloat(formData.take_profit_2) : null;
       const tp3 = formData.take_profit_3 ? parseFloat(formData.take_profit_3) : null;
+
+      // Validate levels
+      const validationError = validateLevels(formData.direction, entry, sl, tp1, tp2, tp3);
+      if (validationError) {
+        toast.error(validationError);
+        setLoading(false);
+        return;
+      }
 
       const signalData = {
         currency_pair: formData.currency_pair,
