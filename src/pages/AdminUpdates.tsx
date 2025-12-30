@@ -1,0 +1,281 @@
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Plus, Trash2, Megaphone, Calendar } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { useAdmin } from '@/hooks/use-admin';
+import { BottomNav } from '@/components/BottomNav';
+import { toast } from 'sonner';
+import { format } from 'date-fns';
+
+interface AppUpdate {
+  id: string;
+  title: string;
+  description: string;
+  created_at: string;
+  is_active: boolean;
+}
+
+const AdminUpdates = () => {
+  const navigate = useNavigate();
+  const { isAdmin, loading: adminLoading } = useAdmin();
+  const [updates, setUpdates] = useState<AppUpdate[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    description: '',
+  });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!adminLoading && !isAdmin) {
+      navigate('/');
+    }
+  }, [isAdmin, adminLoading, navigate]);
+
+  const fetchUpdates = async () => {
+    if (!isSupabaseConfigured) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('app_updates')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setUpdates(data || []);
+    } catch (err: any) {
+      console.error('Error fetching updates:', err);
+      toast.error('Failed to fetch updates');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAdmin) {
+      fetchUpdates();
+    }
+  }, [isAdmin]);
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title.trim() || !formData.description.trim()) {
+      toast.error('Please fill in all fields');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const { error } = await supabase.from('app_updates').insert({
+        title: formData.title.trim(),
+        description: formData.description.trim(),
+        is_active: true,
+      });
+
+      if (error) throw error;
+
+      toast.success('Update posted successfully! Users will be notified.');
+      setFormData({ title: '', description: '' });
+      setCreateOpen(false);
+      fetchUpdates();
+    } catch (err: any) {
+      console.error('Error creating update:', err);
+      toast.error(err.message || 'Failed to create update');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await supabase.from('app_updates').delete().eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('Update deleted');
+      setUpdates(updates.filter((u) => u.id !== id));
+    } catch (err: any) {
+      console.error('Error deleting update:', err);
+      toast.error(err.message || 'Failed to delete update');
+    }
+  };
+
+  const toggleActive = async (id: string, currentStatus: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('app_updates')
+        .update({ is_active: !currentStatus })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success(currentStatus ? 'Update deactivated' : 'Update activated');
+      fetchUpdates();
+    } catch (err: any) {
+      console.error('Error toggling update:', err);
+      toast.error('Failed to update status');
+    }
+  };
+
+  if (adminLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header */}
+      <header className="pt-12 pb-4 px-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+              <Megaphone className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">App Updates</h1>
+              <p className="text-sm text-muted-foreground">
+                Post updates for users to see
+              </p>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main className="px-6 space-y-4">
+        {/* Create Button */}
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogTrigger asChild>
+            <Button className="w-full gap-2">
+              <Plus className="w-4 h-4" />
+              Create New Update
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create App Update</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Title</Label>
+                <Input
+                  value={formData.title}
+                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  placeholder="e.g., New Feature: Dark Mode"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Description</Label>
+                <Textarea
+                  value={formData.description}
+                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  placeholder="Describe what's new or what has been updated..."
+                  rows={4}
+                  required
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => setCreateOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" className="flex-1" disabled={submitting}>
+                  {submitting ? 'Posting...' : 'Post Update'}
+                </Button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Updates List */}
+        {loading ? (
+          <div className="space-y-4">
+            {[1, 2, 3].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardHeader>
+                  <div className="h-5 w-32 bg-muted rounded" />
+                </CardHeader>
+                <CardContent>
+                  <div className="h-4 w-full bg-muted rounded mb-2" />
+                  <div className="h-4 w-3/4 bg-muted rounded" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : updates.length === 0 ? (
+          <Card>
+            <CardContent className="py-8 text-center">
+              <Megaphone className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">No updates posted yet</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {updates.map((update) => (
+              <Card key={update.id} className={!update.is_active ? 'opacity-50' : ''}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <CardTitle className="text-lg">{update.title}</CardTitle>
+                      <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                        <Calendar className="w-3 h-3" />
+                        {format(new Date(update.created_at), 'MMM dd, yyyy HH:mm')}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant={update.is_active ? 'secondary' : 'outline'}
+                        size="sm"
+                        onClick={() => toggleActive(update.id, update.is_active)}
+                      >
+                        {update.is_active ? 'Active' : 'Inactive'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => handleDelete(update.id)}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {update.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <BottomNav />
+    </div>
+  );
+};
+
+export default AdminUpdates;

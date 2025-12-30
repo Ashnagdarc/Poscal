@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone } from "lucide-react";
+import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { BottomNav } from "@/components/BottomNav";
@@ -14,6 +15,7 @@ import { toast } from "sonner";
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isAdmin } = useAdmin();
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -131,7 +133,21 @@ const Settings = () => {
         {/* Admin User Management - Only visible to admins */}
         <AdminUsersTab />
 
-        {/* Appearance */}
+        {/* Admin App Updates - Only visible to admins */}
+        {isAdmin && (
+          <button
+            onClick={() => navigate('/admin/updates')}
+            className="w-full bg-secondary rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-200 active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <Megaphone className="w-5 h-5 text-primary" />
+              <span className="font-medium text-foreground">App Updates</span>
+              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Admin</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+        )}
+
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">
             <span className="font-medium text-foreground">Appearance</span>
