@@ -81,6 +81,21 @@ const AdminUpdates = () => {
 
       if (error) throw error;
 
+      // Send push notification to all subscribers
+      try {
+        await supabase.functions.invoke('send-push-notification', {
+          body: {
+            title: `📢 App Update: ${formData.title.trim()}`,
+            body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
+            tag: 'app-update',
+            data: { type: 'update' },
+          },
+        });
+      } catch (pushError) {
+        console.error('Failed to send push notification:', pushError);
+        // Don't fail the update creation if push fails
+      }
+
       toast.success('Update posted successfully! Users will be notified.');
       setFormData({ title: '', description: '' });
       setCreateOpen(false);
