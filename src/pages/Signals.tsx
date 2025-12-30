@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,9 @@ interface TradingSignal {
   notes: string | null;
   created_at: string;
   closed_at: string | null;
+  tp1_hit: boolean;
+  tp2_hit: boolean;
+  tp3_hit: boolean;
 }
 
 const SIGNALS_PER_PAGE = 5;
@@ -416,7 +419,12 @@ const Signals = () => {
 
                 {/* Take Profits */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className="bg-emerald-500/10 rounded-lg p-2">
+                  <div className={`rounded-lg p-2 relative ${signal.tp1_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                    {signal.tp1_hit && (
+                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                        <Check className="w-3 h-3 text-white" />
+                      </div>
+                    )}
                     <span className="text-xs text-emerald-400 block">TP1</span>
                     <span className="text-sm font-semibold text-emerald-400">
                       {formatPrice(signal.take_profit_1)}
@@ -426,7 +434,12 @@ const Signals = () => {
                     </span>
                   </div>
                   {signal.take_profit_2 && (
-                    <div className="bg-emerald-500/10 rounded-lg p-2">
+                    <div className={`rounded-lg p-2 relative ${signal.tp2_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                      {signal.tp2_hit && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
                       <span className="text-xs text-emerald-400 block">TP2</span>
                       <span className="text-sm font-semibold text-emerald-400">
                         {formatPrice(signal.take_profit_2)}
@@ -437,7 +450,12 @@ const Signals = () => {
                     </div>
                   )}
                   {signal.take_profit_3 && (
-                    <div className="bg-emerald-500/10 rounded-lg p-2">
+                    <div className={`rounded-lg p-2 relative ${signal.tp3_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                      {signal.tp3_hit && (
+                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
+                          <Check className="w-3 h-3 text-white" />
+                        </div>
+                      )}
                       <span className="text-xs text-emerald-400 block">TP3</span>
                       <span className="text-sm font-semibold text-emerald-400">
                         {formatPrice(signal.take_profit_3)}
