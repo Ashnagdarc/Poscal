@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Push Notification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background: #3b82f6;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .output {
+            background: #f3f4f6;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .success {
+            color: #059669;
+        }
+        .error {
+            color: #dc2626;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Push Notifications</h1>
+    <p>This page tests if push notifications are working correctly.</p>
+    
+    <div>
+        <button onclick="testPushNotification()">Send Test Push Notification</button>
+        <button onclick="checkSubscription()">Check Subscription Status</button>
+    </div>
+    
+    <div id="output" class="output">Ready...</div>
+
+    <script type="module">
+        // Get from your .env file or Supabase dashboard
+        const SUPABASE_URL = 'https://ywnmxrpasfikvwdgexdo.supabase.co';
+        const SUPABASE_ANON_KEY = prompt('Enter your Supabase ANON KEY:') || '';
+
+        window.log = function(message, type = 'info') {
+            const output = document.getElementById('output');
+            const timestamp = new Date().toLocaleTimeString();
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : '';
+            output.innerHTML += `\n[${timestamp}] ${message}`;
+            if (className) {
+                output.classList.add(className);
+            }
+            output.scrollTop = output.scrollHeight;
+        };
+
+        window.checkSubscription = async function() {
+            log('Checking subscription status...', 'info');
+            
+            try {
+                if (!('serviceWorker' in navigator)) {
+                    log('❌ Service Workers not supported', 'error');
+                    return;
+                }
+
+                const registration = await navigator.serviceWorker.ready;
+                const subscription = await registration.pushManager.getSubscription();
+                
+                if (subscription) {
+                    log('✅ Push subscription exists', 'success');
+                    log(`Endpoint: ${subscription.endpoint.substring(0, 50)}...`);
+                    
+                    // Check if it's in database
+                    const response = await fetch(`${SUPABASE_URL}/rest/v1/push_subscriptions?endpoint=eq.${encodeURIComponent(subscription.endpoint)}&select=id,created_at`, {
+                        headers: {
+                            'apikey': SUPABASE_ANON_KEY,
+                            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                        }
+                    });
+                    
+                    const data = await response.json();
+                    if (data.length > 0) {
+                        log(`✅ Subscription found in database (ID: ${data[0].id})`, 'success');
+                        log(`Created: ${data[0].created_at}`);
+                    } else {
+                        log('⚠️ Subscription NOT found in database', 'error');
+                    }
+                } else {
+                    log('❌ No push subscription found', 'error');
+                }
+            } catch (error) {
+                log(`❌ Error: ${error.message}`, 'error');
+            }
+        };
+
+        window.testPushNotification = async function() {
+            log('Sending test push notification...', 'info');
+            
+            try {
+                const response = await fetch(`${SUPABASE_URL}/functions/v1/send-push-notification`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_ANON_KEY,
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+                    },
+                    body: JSON.stringify({
+                        title: '🧪 Test Notification',
+                        body: 'This is a test notification from the test page!',
+                        tag: 'test',
+                        data: { type: 'test' }
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (response.ok) {
+                    log('✅ Push notification request successful', 'success');
+                    log(`Response: ${JSON.stringify(result, null, 2)}`);
+                    
+                    if (result.sent > 0) {
+                        log(`✅ Successfully sent to ${result.sent} device(s)`, 'success');
+                    } else {
+                        log(`⚠️ No notifications sent (${result.message || 'unknown reason'})`, 'error');
+                    }
+                    
+                    if (result.failed > 0) {
+                        log(`⚠️ ${result.failed} notification(s) failed`, 'error');
+                    }
+                } else {
+                    log(`❌ Error: ${JSON.stringify(result, null, 2)}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ Network Error: ${error.message}`, 'error');
+            }
+        };
+
+        // Auto-check on load
+        if (SUPABASE_URL.includes('YOUR_SUPABASE')) {
+            log('⚠️ Please update SUPABASE_URL and SUPABASE_ANON_KEY in the script', 'error');
+        } else {
+            checkSubscription();
+        }
+    </script>
+</body>
+</html>

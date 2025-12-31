@@ -147,7 +147,14 @@ serve(async (req) => {
       throw new Error('Title is required');
     }
 
-    console.log('Sending push notification:', { title, body, tag });
+    console.log('=== PUSH NOTIFICATION REQUEST ===');
+    console.log('Title:', title);
+    console.log('Body:', body);
+    console.log('Tag:', tag);
+    console.log('VAPID keys configured:', {
+      publicKey: !!vapidPublicKey,
+      privateKey: !!vapidPrivateKey
+    });
 
     // Get all push subscriptions
     const { data: subscriptions, error: fetchError } = await supabase
@@ -160,6 +167,16 @@ serve(async (req) => {
     }
 
     console.log(`Found ${subscriptions?.length || 0} subscriptions`);
+    
+    if (subscriptions && subscriptions.length > 0) {
+      subscriptions.forEach((sub, index) => {
+        const endpoint = sub.endpoint;
+        const isApple = endpoint.includes('push.apple.com');
+        const isGoogleFCM = endpoint.includes('fcm.googleapis.com');
+        console.log(`Subscription ${index + 1}: ${isApple ? 'Apple' : isGoogleFCM ? 'Google FCM' : 'Other'}`);
+        console.log(`  Endpoint: ${endpoint.substring(0, 50)}...`);
+      });
+    }
 
     if (!subscriptions || subscriptions.length === 0) {
       return new Response(
@@ -182,6 +199,10 @@ serve(async (req) => {
     const expiredSubscriptions: string[] = [];
 
     for (const sub of subscriptions) {
+      const isApple = sub.endpoint.includes('push.apple.com');
+      console.log(`\n--- Sending push to ${isApple ? 'Apple' : 'Other'} device ---`);
+      console.log(`Subscription ID: ${sub.id}`);
+      
       try {
         await sendWebPush(
           {
@@ -196,9 +217,9 @@ serve(async (req) => {
           vapidPrivateKey
         );
         successCount++;
-        console.log(`Successfully sent to subscription ${sub.id}`);
+        console.log(`✓ Successfully sent to subscription ${sub.id}`);
       } catch (err) {
-        console.error(`Failed to send to subscription ${sub.id}:`, err);
+        console.error(`✗ Failed to send to subscription ${sub.id}:`, err);
         failCount++;
         const errorMessage = err instanceof Error ? err.message : String(err);
         if (errorMessage.includes('410') || errorMessage.includes('404')) {
