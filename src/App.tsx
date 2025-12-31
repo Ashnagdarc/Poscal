@@ -9,6 +9,8 @@ import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
+import { PushDebugPanel } from "./components/PushDebugPanel";
+import { useAdmin } from "./hooks/use-admin";
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -25,6 +27,61 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
+const AppContent = () => {
+  const isAdmin = useAdmin();
+  
+  return (
+    <>
+      <AppUpdateModal />
+      {isAdmin && <PushDebugPanel />}
+      <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<Index />} />
+          <Route path="/welcome" element={<Welcome />} />
+          <Route path="/signin" element={<SignIn />} />
+          <Route path="/signup" element={<SignUp />} />
+          <Route path="/journal" element={<Journal />} />
+          <Route path="/history" element={<History />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route 
+            path="/signals" 
+            element={
+              <ProtectedRoute>
+                <Signals />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/users" 
+            element={
+              <ProtectedRoute>
+                <UserManagement />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/updates" 
+            element={
+              <ProtectedRoute>
+                <AdminUpdates />
+              </ProtectedRoute>
+            } 
+          />
+          <Route
+            path="/profile" 
+            element={
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            } 
+          />
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </Suspense>
+    </>
+  );
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -33,52 +90,7 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <CurrencyProvider>
-          <AppUpdateModal />
-          <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
-          <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/welcome" element={<Welcome />} />
-            <Route path="/signin" element={<SignIn />} />
-            <Route path="/signup" element={<SignUp />} />
-            <Route path="/journal" element={<Journal />} />
-            <Route path="/history" element={<History />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route 
-              path="/signals" 
-              element={
-                <ProtectedRoute>
-                  <Signals />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/users" 
-              element={
-                <ProtectedRoute>
-                  <UserManagement />
-                </ProtectedRoute>
-              } 
-            />
-            <Route 
-              path="/admin/updates" 
-              element={
-                <ProtectedRoute>
-                  <AdminUpdates />
-                </ProtectedRoute>
-              } 
-            />
-            <Route
-              path="/profile" 
-              element={
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              } 
-            />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-          </Suspense>
+            <AppContent />
           </CurrencyProvider>
         </AuthProvider>
       </BrowserRouter>

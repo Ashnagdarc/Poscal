@@ -18,6 +18,17 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('push', (event) => {
   console.log('[SW] Push event received!', event);
   
+  // Send message to all clients
+  const sendMessageToClients = (message, type = 'info') => {
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({ type: 'SW_LOG', message, logType: type });
+      });
+    });
+  };
+  
+  sendMessageToClients('🔔 Push event received!', 'success');
+  
   let data = {
     title: 'PosCal Notification',
     body: 'You have a new notification',
@@ -31,16 +42,22 @@ self.addEventListener('push', (event) => {
     try {
       const parsed = event.data.json();
       console.log('[SW] Push data parsed:', parsed);
+      sendMessageToClients(`📦 Data: ${JSON.stringify(parsed).substring(0, 100)}`, 'info');
       data = { ...data, ...parsed };
     } catch (e) {
       console.error('[SW] Error parsing push data:', e);
-      console.log('[SW] Raw push data:', event.data.text());
+      const rawText = event.data.text();
+      console.log('[SW] Raw push data:', rawText);
+      sendMessageToClients(`❌ Parse error: ${e.message}`, 'error');
+      sendMessageToClients(`Raw: ${rawText.substring(0, 100)}`, 'info');
     }
   } else {
     console.log('[SW] No data in push event');
+    sendMessageToClients('⚠️ No data in push event', 'error');
   }
 
   console.log('[SW] Showing notification:', data.title);
+  sendMessageToClients(`📢 Showing: ${data.title}`, 'info');
   
   const options = {
     body: data.body,
@@ -58,8 +75,14 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(data.title, options)
-      .then(() => console.log('[SW] Notification shown successfully'))
-      .catch(err => console.error('[SW] Error showing notification:', err))
+      .then(() => {
+        console.log('[SW] Notification shown successfully');
+        sendMessageToClients('✅ Notification shown successfully!', 'success');
+      })
+      .catch(err => {
+        console.error('[SW] Error showing notification:', err);
+        sendMessageToClients(`❌ Error showing notification: ${err.message}`, 'error');
+      })
   );
 });
 
