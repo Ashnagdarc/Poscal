@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Base64 URL decode helper
+// Base64 URL decode helper (for subscription keys)
 function base64UrlDecode(input: string): Uint8Array {
   input = input.replace(/-/g, '+').replace(/_/g, '/');
   const pad = input.length % 4;
@@ -13,6 +13,16 @@ function base64UrlDecode(input: string): Uint8Array {
     if (pad === 1) throw new Error('Invalid base64url string');
     input += new Array(5 - pad).join('=');
   }
+  const base64 = atob(input);
+  const bytes = new Uint8Array(base64.length);
+  for (let i = 0; i < base64.length; i++) {
+    bytes[i] = base64.charCodeAt(i);
+  }
+  return bytes;
+}
+
+// Regular base64 decode helper (for VAPID keys)
+function base64Decode(input: string): Uint8Array {
   const base64 = atob(input);
   const bytes = new Uint8Array(base64.length);
   for (let i = 0; i < base64.length; i++) {
@@ -39,8 +49,8 @@ async function generateVAPIDHeader(
   
   const unsignedToken = `${header}.${payload}`;
   
-  // Import private key
-  const privateKeyBytes = base64UrlDecode(vapidPrivateKey);
+  // Import private key (VAPID keys use regular base64, not base64url)
+  const privateKeyBytes = base64Decode(vapidPrivateKey);
   const key = await crypto.subtle.importKey(
     'pkcs8',
     privateKeyBytes,
@@ -60,6 +70,38 @@ async function generateVAPIDHeader(
     .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
   
   return `${unsignedToken}.${signatureBase64}`;
+}
+
+// HKDF-Expand function
+async function hkdfExpand(prk: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
+  const iterations = Math.ceil(length / 32);
+  const output = new Uint8Array(length);
+  let t = new Uint8Array(0);
+  let offset = 0;
+
+  for (let i = 0; i < iterations; i++) {
+    const combined = new Uint8Array(t.length + info.length + 1);
+    combined.set(t);
+    combined.set(info, t.length);
+    combined[t.length + info.length] = i + 1;
+
+    const key = await crypto.subtle.importKey(
+      'raw',
+      prk,
+      { name: 'HMAC', hash: 'SHA-256' },
+      false,
+      ['sign']
+    );
+    
+    const signed = await crypto.subtle.sign('HMAC', key, combined);
+    t = new Uint8Array(signed);
+    
+    const copyLength = Math.min(t.length, length - offset);
+    output.set(t.subarray(0, copyLength), offset);
+    offset += copyLength;
+  }
+
+  return output;
 }
 
 // Encrypt payload using aes128gcm
@@ -102,52 +144,28 @@ async function encryptPayload(
   // Decode auth secret
   const authSecret = base64UrlDecode(userAuthSecret);
   
-  // Derive encryption key using HKDF
+  // HKDF-Extract: derive PRK from auth secret and shared secret
   const authInfo = new TextEncoder().encode('Content-Encoding: auth\0');
-  const authInput = new Uint8Array(authSecret.length + sharedSecret.byteLength);
-  authInput.set(authSecret);
-  authInput.set(new Uint8Array(sharedSecret), authSecret.length);
+  const ikmAuth = new Uint8Array(authSecret.length + sharedSecret.byteLength);
+  ikmAuth.set(authSecret);
+  ikmAuth.set(new Uint8Array(sharedSecret), authSecret.length);
   
-  const authSecretKey = await crypto.subtle.importKey(
+  const authKey = await crypto.subtle.importKey(
     'raw',
-    authInput,
+    salt,
     { name: 'HMAC', hash: 'SHA-256' },
     false,
     ['sign']
   );
-  const prk = await crypto.subtle.sign('HMAC', authSecretKey, authInfo);
+  const prk = new Uint8Array(await crypto.subtle.sign('HMAC', authKey, ikmAuth));
   
-  const keyInfo = new Uint8Array([
-    ...new TextEncoder().encode('Content-Encoding: aes128gcm\0'),
-    ...new Uint8Array(0)
-  ]);
-  const keyInput = new Uint8Array([...new Uint8Array(prk), ...keyInfo, 1]);
-  const keyHmacKey = await crypto.subtle.importKey(
-    'raw',
-    new Uint8Array(prk),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const ikm = await crypto.subtle.sign('HMAC', keyHmacKey, keyInfo);
+  // HKDF-Expand: derive content encryption key
+  const keyInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0P-256\0');
+  const contentEncryptionKey = await hkdfExpand(prk, keyInfo, 16);
   
-  const contentEncryptionKey = new Uint8Array(ikm).slice(0, 16);
-  
-  // Derive nonce
-  const nonceInfo = new Uint8Array([
-    ...new TextEncoder().encode('Content-Encoding: nonce\0'),
-    ...new Uint8Array(0)
-  ]);
-  const nonceInput = new Uint8Array([...new Uint8Array(prk), ...nonceInfo, 1]);
-  const nonceHmacKey = await crypto.subtle.importKey(
-    'raw',
-    new Uint8Array(prk),
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const nonceIkm = await crypto.subtle.sign('HMAC', nonceHmacKey, nonceInfo);
-  const nonce = new Uint8Array(nonceIkm).slice(0, 12);
+  // HKDF-Expand: derive nonce
+  const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0P-256\0');
+  const nonce = await hkdfExpand(prk, nonceInfo, 12);
   
   // Import key for AES-GCM
   const aesKey = await crypto.subtle.importKey(
@@ -236,19 +254,36 @@ Deno.serve(async (req) => {
     for (const sub of subscriptions) {
       try {
         const isApple = sub.endpoint.includes('push.apple.com');
-        console.log(`\nSending to ${isApple ? 'Apple' : 'Android'} device...`);
+        const isGoogle = sub.endpoint.includes('fcm.googleapis.com');
+        console.log(`\n=== Sending to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Other'} device ===`);
+        console.log(`Endpoint: ${sub.endpoint.substring(0, 60)}...`);
         
         // Encrypt payload
+        console.log('Encrypting payload...');
         const { ciphertext, salt, publicKey } = await encryptPayload(
           payload,
           sub.p256dh,
           sub.auth
         );
+        console.log(`Encryption complete: salt=${salt.length}B, publicKey=${publicKey.length}B, ciphertext=${ciphertext.length}B`);
         
         // Generate VAPID header
+        console.log('Generating VAPID JWT...');
         const jwt = await generateVAPIDHeader(sub.endpoint, vapidPublicKey, vapidPrivateKey);
+        console.log(`VAPID JWT generated (${jwt.length} chars)`);
+        
+        // Prepare body
+        const body = new Uint8Array([
+          ...salt,
+          0, 0, 0x10, 0, // Record size (4096)
+          publicKey.length,
+          ...publicKey,
+          ...ciphertext
+        ]);
+        console.log(`Body size: ${body.length} bytes`);
         
         // Send push notification
+        console.log('Sending HTTP POST...');
         const response = await fetch(sub.endpoint, {
           method: 'POST',
           headers: {
@@ -257,26 +292,30 @@ Deno.serve(async (req) => {
             'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
             'TTL': '86400',
           },
-          body: new Uint8Array([
-            ...salt,
-            0, 0, 0x10, 0, // Record size (4096)
-            publicKey.length,
-            ...publicKey,
-            ...ciphertext
-          ])
+          body
         });
+
+        console.log(`Response status: ${response.status} ${response.statusText}`);
+        console.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
 
         if (response.ok || response.status === 201) {
           successCount++;
-          console.log(`✓ Success (${response.status})`);
+          console.log(`✓ SUCCESS - Notification sent to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'device'}`);
         } else {
           failCount++;
           const errorText = await response.text();
-          console.error(`✗ Failed (${response.status}): ${errorText}`);
+          console.error(`✗ FAILED - Status ${response.status}`);
+          console.error(`Error body: ${errorText}`);
+          console.error(`Subscription ID: ${sub.id}`);
         }
       } catch (err) {
         failCount++;
-        console.error(`✗ Error sending to subscription:`, err);
+        console.error(`✗ EXCEPTION:`, err);
+        console.error(`Subscription ID: ${sub.id}`);
+        if (err instanceof Error) {
+          console.error(`Error message: ${err.message}`);
+          console.error(`Error stack: ${err.stack}`);
+        }
       }
     }
 
