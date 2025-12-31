@@ -153,6 +153,26 @@ export function PushDebugPanel() {
     addLog('Sending test push via Edge Function...', 'info');
     try {
       const { supabase } = await import('@/integrations/supabase/client');
+      
+      // First check how many subscriptions exist
+      const { data: subs, error: subError } = await supabase
+        .from('push_subscriptions')
+        .select('endpoint, created_at');
+      
+      if (subError) {
+        addLog(`❌ DB Error: ${subError.message}`, 'error');
+      } else {
+        addLog(`📊 Found ${subs?.length || 0} subscriptions in DB`, 'info');
+        if (subs && subs.length > 0) {
+          subs.forEach((sub, i) => {
+            const isApple = sub.endpoint.includes('push.apple.com');
+            const isGoogle = sub.endpoint.includes('fcm.googleapis.com');
+            const age = Math.floor((Date.now() - new Date(sub.created_at).getTime()) / (1000 * 60 * 60 * 24));
+            addLog(`  ${i+1}. ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Unknown'} (${age}d old)`, 'info');
+          });
+        }
+      }
+      
       const result = await supabase.functions.invoke('send-push-notification', {
         body: {
           title: '🧪 Manual Test from Debug Panel',
@@ -168,6 +188,7 @@ export function PushDebugPanel() {
         addLog(`❌ Error: ${JSON.stringify(result.error)}`, 'error');
       } else if (result.data) {
         addLog(`✅ Success: ${JSON.stringify(result.data)}`, 'success');
+        addLog(`⚠️ If you didn't get notification, subscription is stale!`, 'error');
       }
     } catch (err) {
       addLog(`❌ Exception: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
