@@ -49,14 +49,22 @@ async function generateVAPIDHeader(
   
   const unsignedToken = `${header}.${payload}`;
   
-  // Decode the raw private key (VAPID keys are base64url encoded 32-byte raw keys)
+  // Decode the raw private key and public key (VAPID keys are base64url encoded)
   const privateKeyBytes = base64UrlDecode(vapidPrivateKey);
+  const publicKeyBytes = base64UrlDecode(vapidPublicKey);
   
-  // Convert raw EC private key to JWK format for import
+  // Extract x and y coordinates from uncompressed public key (65 bytes: 0x04 + 32 bytes x + 32 bytes y)
+  // Skip first byte (0x04 format indicator)
+  const x = publicKeyBytes.slice(1, 33);
+  const y = publicKeyBytes.slice(33, 65);
+  
+  // Convert raw EC key to JWK format for import
   const privateKeyJwk = {
     kty: 'EC',
     crv: 'P-256',
     d: btoa(String.fromCharCode(...privateKeyBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+    x: btoa(String.fromCharCode(...x)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
+    y: btoa(String.fromCharCode(...y)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
     ext: true
   };
   
