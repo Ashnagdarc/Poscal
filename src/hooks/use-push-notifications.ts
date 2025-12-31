@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 
-const VAPID_PUBLIC_KEY = 'BIKdCaWdeDFW1_vulFr0CMSwr3GAGpEB-iz2rMRiN4k5FcbNrpcIP5GgmlN4TLHZhE_izyZVIVYGh07k2qy3Tcw';
+const VAPID_PUBLIC_KEY = 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
 
 interface UsePushNotificationsResult {
   isSupported: boolean;

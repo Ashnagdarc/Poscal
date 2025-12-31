@@ -187,7 +187,7 @@ export const Settings = ({ onClose }: SettingsProps) => {
       {/* App Info */}
       <div className="px-6 pb-8 text-center">
         <p className="text-xs text-muted-foreground">Position Size Calculator v1.0</p>
-        <p className="text-xs text-muted-foreground mt-1">Made with ♥ for traders</p>
+        <p className="text-xs text-muted-foreground mt-1">Officially sponsored by MandeFX</p>
       </div>
     </div>
   );

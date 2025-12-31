@@ -20,7 +20,7 @@ const Settings = () => {
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
-  const { lightTap } = useHaptics();
+  const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { currency, setCurrency } = useCurrency();
 
@@ -198,7 +198,12 @@ const Settings = () => {
           <div className="px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Smartphone className="w-5 h-5 text-foreground" />
-              <span className="font-medium text-foreground">Haptic Feedback</span>
+              <div className="flex flex-col">
+                <span className="font-medium text-foreground">Haptic Feedback</span>
+                {!isSupported() && (
+                  <span className="text-xs text-muted-foreground">Using audio feedback on this device</span>
+                )}
+              </div>
             </div>
             <button
               onClick={toggleHaptics}
@@ -306,7 +311,7 @@ const Settings = () => {
       {/* App Info */}
       <div className="px-6 pb-4 text-center">
         <p className="text-xs text-muted-foreground">Position Size Calculator v1.0</p>
-        <p className="text-xs text-muted-foreground mt-1">Made with ♥ for traders</p>
+        <p className="text-xs text-muted-foreground mt-1">Officially sponsored by MandeFX</p>
       </div>
 
       <BottomNav />
