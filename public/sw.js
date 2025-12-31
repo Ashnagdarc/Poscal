@@ -16,9 +16,8 @@ self.addEventListener('activate', (event) => {
 
 // Handle push events
 self.addEventListener('push', (event) => {
-  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
-  if (isDev) console.log('Push received:', event);
-
+  console.log('[SW] Push event received!', event);
+  
   let data = {
     title: 'PosCal Notification',
     body: 'You have a new notification',
@@ -30,12 +29,19 @@ self.addEventListener('push', (event) => {
 
   if (event.data) {
     try {
-      data = { ...data, ...event.data.json() };
+      const parsed = event.data.json();
+      console.log('[SW] Push data parsed:', parsed);
+      data = { ...data, ...parsed };
     } catch (e) {
-      if (isDev) console.error('Error parsing push data:', e);
+      console.error('[SW] Error parsing push data:', e);
+      console.log('[SW] Raw push data:', event.data.text());
     }
+  } else {
+    console.log('[SW] No data in push event');
   }
 
+  console.log('[SW] Showing notification:', data.title);
+  
   const options = {
     body: data.body,
     icon: data.icon || '/pwa-192x192.png',
@@ -52,6 +58,8 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     self.registration.showNotification(data.title, options)
+      .then(() => console.log('[SW] Notification shown successfully'))
+      .catch(err => console.error('[SW] Error showing notification:', err))
   );
 });
 
