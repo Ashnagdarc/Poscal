@@ -3,22 +3,25 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
-import Welcome from "./pages/Welcome";
-import SignIn from "./pages/SignIn";
-import SignUp from "./pages/SignUp";
-import Profile from "./pages/Profile";
-import Journal from "./pages/Journal";
-import History from "./pages/History";
-import Settings from "./pages/Settings";
-import Signals from "./pages/Signals";
-import UserManagement from "./pages/UserManagement";
-import AdminUpdates from "./pages/AdminUpdates";
-import NotFound from "./pages/NotFound";
 import { AppUpdateModal } from "./components/AppUpdateModal";
+
+// Lazy load pages that aren't immediately needed
+const Welcome = lazy(() => import("./pages/Welcome"));
+const SignIn = lazy(() => import("./pages/SignIn"));
+const SignUp = lazy(() => import("./pages/SignUp"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Journal = lazy(() => import("./pages/Journal"));
+const History = lazy(() => import("./pages/History"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Signals = lazy(() => import("./pages/Signals"));
+const UserManagement = lazy(() => import("./pages/UserManagement"));
+const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
@@ -31,6 +34,7 @@ const App = () => (
         <AuthProvider>
           <CurrencyProvider>
           <AppUpdateModal />
+          <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/welcome" element={<Welcome />} />
@@ -74,6 +78,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </Suspense>
           </CurrencyProvider>
         </AuthProvider>
       </BrowserRouter>

@@ -53,4 +53,36 @@ export default defineConfig(({ mode }) => ({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Separate React and React DOM
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          // Radix UI components (large library)
+          'radix-ui': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-select',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-toast',
+            '@radix-ui/react-scroll-area',
+            '@radix-ui/react-accordion',
+            '@radix-ui/react-alert-dialog',
+            '@radix-ui/react-navigation-menu',
+          ],
+          // Charts library
+          'charts': ['recharts'],
+          // Supabase and TanStack Query
+          'data-libs': ['@supabase/supabase-js', '@tanstack/react-query'],
+          // Form libraries
+          'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          // Icons and utilities
+          'utils': ['lucide-react', 'date-fns', 'clsx', 'tailwind-merge'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 1000,
+  },
 }));
