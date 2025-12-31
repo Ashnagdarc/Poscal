@@ -56,7 +56,29 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
           setSwRegistration(registration);
 
           const subscription = await registration.pushManager.getSubscription();
-          setIsSubscribed(!!subscription);
+          if (subscription) {
+            logger.log('[push] Browser has subscription:', subscription.endpoint);
+            // Verify subscription exists in database
+            const { data, error } = await supabase
+              .from('push_subscriptions')
+              .select('id')
+              .eq('endpoint', subscription.endpoint)
+              .maybeSingle();
+            
+            if (error) {
+              logger.error('[push] Error checking subscription in database:', error);
+              setIsSubscribed(false);
+            } else if (data) {
+              logger.log('[push] Subscription verified in database:', data.id);
+              setIsSubscribed(true);
+            } else {
+              logger.warn('[push] Browser has subscription but not found in database. Will re-subscribe.');
+              setIsSubscribed(false);
+            }
+          } else {
+            logger.log('[push] No browser subscription found');
+            setIsSubscribed(false);
+          }
         } catch (error) {
           logger.error('[push] Service Worker registration failed:', error);
         }
@@ -100,8 +122,16 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       const subJson = subscription.toJSON();
       logger.log('[push] Push subscription obtained:', JSON.stringify(subJson));
       logger.log('[push] User ID:', user?.id ?? 'anonymous');
+      logger.log('[push] Endpoint:', subJson.endpoint);
+      logger.log('[push] Keys present:', { 
+        p256dh: !!subJson.keys?.p256dh, 
+        auth: !!subJson.keys?.auth,
+        p256dhLength: subJson.keys?.p256dh?.length,
+        authLength: subJson.keys?.auth?.length
+      });
 
       // Send subscription to server
+      logger.log('[push] Invoking subscribe-push function...');
       const { data, error } = await supabase.functions.invoke('subscribe-push', {
         body: {
           subscription: subJson,
@@ -113,15 +143,23 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
 
       if (error) {
         logger.error('[push] subscribe-push failed:', error);
+        setIsSubscribed(false);
         throw new Error(error.message || 'Failed to save subscription to server');
       }
 
       if (data?.error) {
         logger.error('[push] subscribe-push returned error:', data.error);
+        setIsSubscribed(false);
         throw new Error(data.error);
       }
 
-      logger.log('[push] subscribe-push success:', data);
+      if (!data?.success) {
+        logger.error('[push] subscribe-push did not return success:', data);
+        setIsSubscribed(false);
+        throw new Error('Failed to save subscription to database');
+      }
+
+      logger.log('[push] subscribe-push success - subscription saved to database:', data);
       setIsSubscribed(true);
       return true;
     } catch (error) {
