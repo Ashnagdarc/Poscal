@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import webpush from "npm:web-push@3.6.7";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,13 +22,6 @@ serve(async (req) => {
       console.error('VAPID keys not configured');
       throw new Error('VAPID keys not configured');
     }
-
-    // Configure web-push with VAPID details
-    webpush.setVapidDetails(
-      'mailto:admin@poscal.app',
-      vapidPublicKey,
-      vapidPrivateKey
-    );
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -88,43 +80,43 @@ serve(async (req) => {
 
     let successCount = 0;
     let failCount = 0;
-    const expiredSubscriptions: string[] = [];
 
-    for (const sub of subscriptions) {
-      const isApple = sub.endpoint.includes('push.apple.com');
-      console.log(`\n--- Sending push to ${isApple ? 'Apple' : 'Other'} device ---`);
-      console.log(`Subscription ID: ${sub.id}`);
+    // Use web-push-deno library
+    try {
+      const webPushModule = await import('https://deno.land/x/web_push@0.0.2/mod.ts');
       
-      try {
-        // Use web-push library for proper encryption
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.p256dh,
-            auth: sub.auth,
-          },
-        };
+      webPushModule.setVapidDetails(
+        'mailto:admin@poscal.app',
+        vapidPublicKey,
+        vapidPrivateKey
+      );
+
+      for (const sub of subscriptions) {
+        const isApple = sub.endpoint.includes('push.apple.com');
+        console.log(`\n--- Sending push to ${isApple ? 'Apple' : 'Other'} device ---`);
+        console.log(`Subscription ID: ${sub.id}`);
         
-        await webpush.sendNotification(pushSubscription, payload);
-        successCount++;
-        console.log(`✓ Successfully sent to subscription ${sub.id}`);
-      } catch (err) {
-        console.error(`✗ Failed to send to subscription ${sub.id}:`, err);
-        failCount++;
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        if (errorMessage.includes('410') || errorMessage.includes('404')) {
-          expiredSubscriptions.push(sub.id);
+        try {
+          await webPushModule.sendNotification(
+            {
+              endpoint: sub.endpoint,
+              keys: {
+                p256dh: sub.p256dh,
+                auth: sub.auth,
+              },
+            },
+            payload
+          );
+          successCount++;
+          console.log(`✓ Successfully sent to subscription ${sub.id}`);
+        } catch (err) {
+          console.error(`✗ Failed to send to subscription ${sub.id}:`, err);
+          failCount++;
         }
       }
-    }
-
-    // Clean up expired subscriptions
-    if (expiredSubscriptions.length > 0) {
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .in('id', expiredSubscriptions);
-      console.log(`Cleaned up ${expiredSubscriptions.length} expired subscriptions`);
+    } catch (importErr) {
+      console.error('Failed to import web-push module:', importErr);
+      throw new Error(`Web push module error: ${importErr instanceof Error ? importErr.message : 'Unknown'}`);
     }
 
     return new Response(
@@ -132,7 +124,6 @@ serve(async (req) => {
         success: true,
         sent: successCount,
         failed: failCount,
-        cleaned: expiredSubscriptions.length,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
