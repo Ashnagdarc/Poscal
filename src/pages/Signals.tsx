@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -144,7 +145,7 @@ const Signals = () => {
       setSignals(data || []);
       setTotalCount(count || 0);
     } catch (err: any) {
-      console.error('Error fetching signals:', err);
+      logger.error('Error fetching signals:', err);
       setError(err.message || 'Failed to fetch signals');
     } finally {
       setLoading(false);
@@ -169,7 +170,7 @@ const Signals = () => {
           table: 'trading_signals'
         },
         (payload) => {
-          console.log('Real-time update:', payload);
+          logger.log('Real-time update:', payload);
           const newSignal = payload.new as TradingSignal;
           const prevSignal = prevSignalsRef.current.get(newSignal.id);
           

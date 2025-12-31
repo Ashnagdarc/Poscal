@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 import { useAdmin } from '@/hooks/use-admin';
 import { BottomNav } from '@/components/BottomNav';
 import { toast } from 'sonner';
@@ -51,7 +52,7 @@ const AdminUpdates = () => {
       if (error) throw error;
       setUpdates(data || []);
     } catch (err: any) {
-      console.error('Error fetching updates:', err);
+      logger.error('Error fetching updates:', err);
       toast.error('Failed to fetch updates');
     } finally {
       setLoading(false);
@@ -92,7 +93,7 @@ const AdminUpdates = () => {
           },
         });
       } catch (pushError) {
-        console.error('Failed to send push notification:', pushError);
+        logger.error('Failed to send push notification:', pushError);
         // Don't fail the update creation if push fails
       }
 
@@ -101,7 +102,7 @@ const AdminUpdates = () => {
       setCreateOpen(false);
       fetchUpdates();
     } catch (err: any) {
-      console.error('Error creating update:', err);
+      logger.error('Error creating update:', err);
       toast.error(err.message || 'Failed to create update');
     } finally {
       setSubmitting(false);
@@ -117,7 +118,7 @@ const AdminUpdates = () => {
       toast.success('Update deleted');
       setUpdates(updates.filter((u) => u.id !== id));
     } catch (err: any) {
-      console.error('Error deleting update:', err);
+      logger.error('Error deleting update:', err);
       toast.error(err.message || 'Failed to delete update');
     }
   };
@@ -134,7 +135,7 @@ const AdminUpdates = () => {
       toast.success(currentStatus ? 'Update deactivated' : 'Update activated');
       fetchUpdates();
     } catch (err: any) {
-      console.error('Error toggling update:', err);
+      logger.error('Error toggling update:', err);
       toast.error('Failed to update status');
     }
   };

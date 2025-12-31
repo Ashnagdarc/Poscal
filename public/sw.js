@@ -1,17 +1,23 @@
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installing...');
+  // Only log in development
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    console.log('Service Worker installing...');
+  }
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activated');
+  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
+    console.log('Service Worker activated');
+  }
   event.waitUntil(clients.claim());
 });
 
 // Handle push events
 self.addEventListener('push', (event) => {
-  console.log('Push received:', event);
+  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+  if (isDev) console.log('Push received:', event);
 
   let data = {
     title: 'PosCal Notification',
@@ -26,7 +32,7 @@ self.addEventListener('push', (event) => {
     try {
       data = { ...data, ...event.data.json() };
     } catch (e) {
-      console.error('Error parsing push data:', e);
+      if (isDev) console.error('Error parsing push data:', e);
     }
   }
 
@@ -51,7 +57,8 @@ self.addEventListener('push', (event) => {
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
-  console.log('Notification clicked:', event);
+  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+  if (isDev) console.log('Notification clicked:', event);
   event.notification.close();
 
   if (event.action === 'dismiss') {
@@ -81,8 +88,35 @@ self.addEventListener('notificationclick', (event) => {
   );
 });
 
-// Handle push subscription change
-self.addEventListener('pushsubscriptionchange', (event) => {
-  console.log('Push subscription changed:', event);
-  // Re-subscribe logic could be added here
+// Handle push subscription change - Critical for production!
+self.addEventListener('pushsubscriptionchange', async (event) => {
+  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+  if (isDev) console.log('Push subscription changed:', event);
+  
+  // Re-subscribe with new subscription
+  event.waitUntil(
+    (async () => {
+      try {
+        const newSubscription = await event.currentTarget.registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0'
+        });
+        
+        // Send new subscription to backend
+        await fetch('/api/update-push-subscription', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            oldSubscription: event.oldSubscription?.toJSON(),
+            newSubscription: newSubscription.toJSON()
+          })
+        });
+        
+        if (isDev) console.log('Push subscription renewed successfully');
+      } catch (error) {
+        // Always log errors in production for monitoring
+        console.error('Failed to renew push subscription:', error);
+      }
+    })()
+  );
 });

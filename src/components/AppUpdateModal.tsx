@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/use-notifications';
@@ -157,6 +157,9 @@ export const AppUpdateModal = () => {
             </div>
             <DialogTitle className="text-xl">{update.title}</DialogTitle>
           </div>
+          <DialogDescription>
+            New update available - {format(new Date(update.created_at), 'MMMM dd, yyyy')}
+          </DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">

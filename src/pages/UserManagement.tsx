@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase, isSupabaseConfigured } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { 
@@ -62,14 +63,14 @@ const UserManagement = () => {
       const { data, error } = await supabase.rpc('get_all_users_admin');
       
       if (error) {
-        console.error('Error fetching users:', error);
+        logger.error('Error fetching users:', error);
         toast.error("Failed to fetch users");
         return;
       }
       
       setUsers(data || []);
     } catch (err) {
-      console.error('Error:', err);
+      logger.error('Error:', err);
       toast.error("Failed to fetch users");
     } finally {
       setLoading(false);
@@ -107,7 +108,7 @@ const UserManagement = () => {
             fetchUsers();
           }
         } catch (err) {
-          console.error('Error promoting user:', err);
+          logger.error('Error promoting user:', err);
           toast.error("Failed to promote user");
         } finally {
           setActionLoading(null);
@@ -141,7 +142,7 @@ const UserManagement = () => {
           toast.success(`${userEmail} is no longer an admin`);
           fetchUsers();
         } catch (err) {
-          console.error('Error demoting user:', err);
+          logger.error('Error demoting user:', err);
           toast.error("Failed to demote user");
         } finally {
           setActionLoading(null);
@@ -176,7 +177,7 @@ const UserManagement = () => {
           toast.success(isBanned ? `${userEmail} has been unbanned` : `${userEmail} has been banned`);
           fetchUsers();
         } catch (err) {
-          console.error('Error toggling ban:', err);
+          logger.error('Error toggling ban:', err);
           toast.error("Failed to update ban status");
         } finally {
           setActionLoading(null);
@@ -208,7 +209,7 @@ const UserManagement = () => {
           toast.success(`${userEmail} has been deleted`);
           fetchUsers();
         } catch (err) {
-          console.error('Error deleting user:', err);
+          logger.error('Error deleting user:', err);
           toast.error("Failed to delete user");
         } finally {
           setActionLoading(null);

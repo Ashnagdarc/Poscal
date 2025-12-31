@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import { logger } from '@/lib/logger';
 
 const VAPID_PUBLIC_KEY = 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
 
@@ -51,13 +52,13 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         try {
           const registration = await navigator.serviceWorker.register('/sw.js');
           await navigator.serviceWorker.ready;
-          console.log('[push] Service Worker registered:', registration);
+          logger.log('[push] Service Worker registered:', registration);
           setSwRegistration(registration);
 
           const subscription = await registration.pushManager.getSubscription();
           setIsSubscribed(!!subscription);
         } catch (error) {
-          console.error('[push] Service Worker registration failed:', error);
+          logger.error('[push] Service Worker registration failed:', error);
         }
       }
     };
@@ -97,8 +98,8 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       }
 
       const subJson = subscription.toJSON();
-      console.log('[push] Push subscription obtained:', JSON.stringify(subJson));
-      console.log('[push] User ID:', user?.id ?? 'anonymous');
+      logger.log('[push] Push subscription obtained:', JSON.stringify(subJson));
+      logger.log('[push] User ID:', user?.id ?? 'anonymous');
 
       // Send subscription to server
       const { data, error } = await supabase.functions.invoke('subscribe-push', {
@@ -108,23 +109,23 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         },
       });
 
-      console.log('[push] subscribe-push response:', { data, error });
+      logger.log('[push] subscribe-push response:', { data, error });
 
       if (error) {
-        console.error('[push] subscribe-push failed:', error);
+        logger.error('[push] subscribe-push failed:', error);
         throw new Error(error.message || 'Failed to save subscription to server');
       }
 
       if (data?.error) {
-        console.error('[push] subscribe-push returned error:', data.error);
+        logger.error('[push] subscribe-push returned error:', data.error);
         throw new Error(data.error);
       }
 
-      console.log('[push] subscribe-push success:', data);
+      logger.log('[push] subscribe-push success:', data);
       setIsSubscribed(true);
       return true;
     } catch (error) {
-      console.error('[push] Error subscribing to push:', error);
+      logger.error('[push] Error subscribing to push:', error);
       const message = error instanceof Error ? error.message : 'Unknown error';
       setLastError(message);
       return false;
@@ -145,7 +146,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       setIsSubscribed(false);
       return true;
     } catch (error) {
-      console.error('[push] Error unsubscribing from push:', error);
+      logger.error('[push] Error unsubscribing from push:', error);
       return false;
     } finally {
       setLoading(false);

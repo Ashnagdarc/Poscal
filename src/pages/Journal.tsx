@@ -18,6 +18,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { JournalAnalytics } from "@/components/JournalAnalytics";
 import { CSVImport } from "@/components/CSVImport";
@@ -95,7 +96,7 @@ const Journal = () => {
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.error('Error fetching trades:', error);
+      logger.error('Error fetching trades:', error);
       toast.error("Failed to load trades");
     } else {
       setTrades(data || []);
@@ -158,7 +159,7 @@ const Journal = () => {
       .single();
 
     if (error) {
-      console.error('Error adding trade:', error);
+      logger.error('Error adding trade:', error);
       toast.error("Failed to add trade");
     } else {
       if (selectedScreenshots.length > 0 && data) {
@@ -245,7 +246,7 @@ const Journal = () => {
     if (validTrades.length === 0) {
       toast.error("No valid trades to import");
       if (errors.length > 0) {
-        console.error("Validation errors:", errors);
+        logger.error("Validation errors:", errors);
       }
       throw new Error("Validation failed");
     }

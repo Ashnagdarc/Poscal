@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -52,7 +53,7 @@ const Profile = () => {
       .maybeSingle();
 
     if (error) {
-      console.error('Error fetching profile:', error);
+      logger.error('Error fetching profile:', error);
     } else if (data) {
       setProfile(data);
       setFullName(data.full_name || "");
@@ -121,7 +122,7 @@ const Profile = () => {
       toast.success("Avatar updated!");
       fetchProfile();
     } catch (error: any) {
-      console.error('Avatar upload error:', error);
+      logger.error('Avatar upload error:', error);
       if (error.message?.includes('bucket') || error.message?.includes('not found')) {
         toast.error("Storage not configured. Please run the SQL migration.");
       } else {
