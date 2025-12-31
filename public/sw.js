@@ -1,7 +1,7 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v13-push-enabled';
+const SW_VERSION = 'v14-push-debug';
 console.log(`[SW] Loading service worker ${SW_VERSION}`);
 
 // Precache assets injected by Workbox
@@ -29,18 +29,23 @@ self.addEventListener('activate', (event) => {
 
 // Handle push events
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push event received!', event);
+  console.log('========================================');
+  console.log('[SW] 🔥 PUSH EVENT RECEIVED!', event);
+  console.log('[SW] Has data:', !!event.data);
+  console.log('========================================');
   
   // Send message to all clients
   const sendMessageToClients = (message, type = 'info') => {
     self.clients.matchAll().then(clients => {
+      console.log(`[SW] Sending message to ${clients.length} clients:`, message);
       clients.forEach(client => {
         client.postMessage({ type: 'SW_LOG', message, logType: type });
       });
     });
   };
   
-  sendMessageToClients('🔔 Push event received!', 'success');
+  sendMessageToClients('🔔 PUSH EVENT RECEIVED!', 'success');
+  sendMessageToClients(`🔥 This is a real push from Apple/Google!`, 'success');
   
   let data = {
     title: 'PosCal Notification',

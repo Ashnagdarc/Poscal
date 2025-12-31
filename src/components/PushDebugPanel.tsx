@@ -101,7 +101,25 @@ export function PushDebugPanel() {
         const isApple = endpoint.includes('push.apple.com');
         const isGoogle = endpoint.includes('fcm.googleapis.com');
         addLog(`Subscribed to: ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Unknown'}`, 'success');
-        addLog(`Endpoint: ${endpoint.substring(0, 50)}...`, 'info');
+        addLog(`Endpoint: ${endpoint.substring(0, 60)}...`, 'info');
+        
+        // Check if this subscription exists in database
+        const { supabase } = await import('@/integrations/supabase/client');
+        const { data, error } = await supabase
+          .from('push_subscriptions')
+          .select('id, created_at')
+          .eq('endpoint', endpoint)
+          .maybeSingle();
+        
+        if (error) {
+          addLog(`❌ Database check error: ${error.message}`, 'error');
+        } else if (data) {
+          addLog(`✅ Subscription found in DB (ID: ${data.id})`, 'success');
+          addLog(`📅 Created: ${new Date(data.created_at).toLocaleString()}`, 'info');
+        } else {
+          addLog(`❌ SUBSCRIPTION NOT IN DATABASE!`, 'error');
+          addLog(`This is why you're not getting notifications!`, 'error');
+        }
       } else {
         addLog('No push subscription found!', 'error');
       }
@@ -156,6 +174,60 @@ export function PushDebugPanel() {
     }
   };
 
+  const resubscribe = async () => {
+    addLog('Re-subscribing to push notifications...', 'info');
+    try {
+      const { usePushNotifications } = await import('@/hooks/use-push-notifications');
+      addLog('Calling subscribe...', 'info');
+      // This is a hack - we need to get the subscribe function
+      // Better to just do it inline
+      const reg = await navigator.serviceWorker.ready;
+      
+      // Get existing subscription
+      let sub = await reg.pushManager.getSubscription();
+      if (sub) {
+        addLog('Unsubscribing old subscription...', 'info');
+        await sub.unsubscribe();
+      }
+      
+      // Subscribe with VAPID key
+      const VAPID_PUBLIC_KEY = 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
+      const urlBase64ToUint8Array = (base64String: string) => {
+        const padding = '='.repeat((4 - base64String.length % 4) % 4);
+        const base64 = (base64String + padding).replace(/\-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        return Uint8Array.from([...rawData].map(char => char.charCodeAt(0)));
+      };
+      
+      const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: applicationServerKey as BufferSource,
+      });
+      
+      addLog('✅ Subscribed to push!', 'success');
+      addLog(`Endpoint: ${sub.endpoint.substring(0, 60)}...`, 'info');
+      
+      // Save to database
+      const { supabase } = await import('@/integrations/supabase/client');
+      const subJson = sub.toJSON();
+      const result = await supabase.functions.invoke('subscribe-push', {
+        body: {
+          subscription: subJson,
+          user_id: null,
+        },
+      });
+      
+      if (result.error) {
+        addLog(`❌ Save error: ${result.error.message}`, 'error');
+      } else {
+        addLog('✅ Saved to database!', 'success');
+      }
+    } catch (err) {
+      addLog(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+    }
+  };
+
   const clearLogs = () => setLogs([]);
 
   if (!isVisible) {
@@ -175,14 +247,17 @@ export function PushDebugPanel() {
         <div className="flex items-center justify-between p-4 border-b">
           <h3 className="font-semibold text-sm">Push Debug</h3>
           <div className="flex gap-1 flex-wrap">
-            <Button size="sm" variant="outline" onClick={testNotification} className="text-xs px-2 h-8">
-              Test
-            </Button>
             <Button size="sm" variant="default" onClick={sendTestPush} className="text-xs px-2 h-8 bg-purple-600">
               📤 Push
             </Button>
+            <Button size="sm" variant="default" onClick={resubscribe} className="text-xs px-2 h-8 bg-blue-600">
+              🔔 Subscribe
+            </Button>
             <Button size="sm" variant="outline" onClick={checkSubscription} className="text-xs px-2 h-8">
-              Sub
+              Sub?
+            </Button>
+            <Button size="sm" variant="outline" onClick={testNotification} className="text-xs px-2 h-8">
+              Test
             </Button>
             <Button size="sm" variant="outline" onClick={refreshServiceWorker} className="text-xs px-2 h-8">
               Refresh
