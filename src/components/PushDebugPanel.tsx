@@ -71,6 +71,45 @@ export function PushDebugPanel() {
     }
   };
 
+  const refreshServiceWorker = async () => {
+    addLog('Refreshing service worker...', 'info');
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg) {
+        await reg.update();
+        addLog('Service worker update triggered', 'success');
+        
+        // Wait a bit then reload
+        setTimeout(() => {
+          addLog('Reloading page...', 'info');
+          window.location.reload();
+        }, 1000);
+      }
+    } catch (err) {
+      addLog(`Error: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+    }
+  };
+
+  const checkSubscription = async () => {
+    addLog('Checking push subscription...', 'info');
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      
+      if (sub) {
+        const endpoint = sub.endpoint;
+        const isApple = endpoint.includes('push.apple.com');
+        const isGoogle = endpoint.includes('fcm.googleapis.com');
+        addLog(`Subscribed to: ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Unknown'}`, 'success');
+        addLog(`Endpoint: ${endpoint.substring(0, 50)}...`, 'info');
+      } else {
+        addLog('No push subscription found!', 'error');
+      }
+    } catch (err) {
+      addLog(`Error: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+    }
+  };
+
   const clearLogs = () => setLogs([]);
 
   if (!isVisible) {
@@ -93,11 +132,17 @@ export function PushDebugPanel() {
             <Button size="sm" variant="outline" onClick={testNotification}>
               Test
             </Button>
+            <Button size="sm" variant="outline" onClick={checkSubscription}>
+              Check Sub
+            </Button>
+            <Button size="sm" variant="outline" onClick={refreshServiceWorker}>
+              Refresh SW
+            </Button>
             <Button size="sm" variant="outline" onClick={clearLogs}>
               Clear
             </Button>
             <Button size="sm" variant="ghost" onClick={() => setIsVisible(false)}>
-              Close
+              ✕
             </Button>
           </div>
         </div>
