@@ -49,8 +49,51 @@ async function generateVAPIDHeader(
   
   const unsignedToken = `${header}.${payload}`;
   
-  // Import private key (VAPID keys use regular base64, not base64url)
-  const privateKeyBytes = base64Decode(vapidPrivateKey);
+  // Import private key
+  console.log('Attempting to import VAPID private key...');
+  console.log(`Private key length: ${vapidPrivateKey.length} characters`);
+  console.log(`Private key first 20 chars: ${vapidPrivateKey.substring(0, 20)}...`);
+  
+  let privateKeyBytes: Uint8Array;
+  let importFormat: 'pkcs8' | 'jwk' = 'pkcs8';
+  
+  // Check if it's JWK format (starts with '{')
+  if (vapidPrivateKey.trim().startsWith('{')) {
+    console.log('Detected JWK format');
+    const jwk = JSON.parse(vapidPrivateKey);
+    const key = await crypto.subtle.importKey(
+      'jwk',
+      jwk,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      false,
+      ['sign']
+    );
+    
+    // Sign and return early
+    const signature = await crypto.subtle.sign(
+      { name: 'ECDSA', hash: 'SHA-256' },
+      key,
+      new TextEncoder().encode(unsignedToken)
+    );
+    
+    const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
+      .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+    
+    return `${unsignedToken}.${signatureBase64}`;
+  }
+  
+  // Try base64url decode (standard for VAPID keys from web-push libraries)
+  try {
+    console.log('Trying base64url decode...');
+    privateKeyBytes = base64UrlDecode(vapidPrivateKey);
+    console.log(`Decoded to ${privateKeyBytes.length} bytes`);
+  } catch (e) {
+    console.log('base64url decode failed, trying regular base64...');
+    privateKeyBytes = base64Decode(vapidPrivateKey);
+    console.log(`Decoded to ${privateKeyBytes.length} bytes`);
+  }
+  
+  console.log('Importing as PKCS#8...');
   const key = await crypto.subtle.importKey(
     'pkcs8',
     privateKeyBytes,
