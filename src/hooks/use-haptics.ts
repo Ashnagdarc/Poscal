@@ -1,8 +1,24 @@
+import { useRef } from 'react';
+
 export const useHaptics = () => {
+  const audioContextRef = useRef<AudioContext | null>(null);
+  
   const isEnabled = () => localStorage.getItem("hapticsEnabled") !== "false";
 
   const isSupported = () => {
     return typeof navigator !== "undefined" && "vibrate" in navigator;
+  };
+
+  // Initialize audio context lazily
+  const getAudioContext = () => {
+    if (!audioContextRef.current) {
+      try {
+        audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      } catch (e) {
+        return null;
+      }
+    }
+    return audioContextRef.current;
   };
 
   // Audio feedback for iOS devices
@@ -10,7 +26,14 @@ export const useHaptics = () => {
     if (!isEnabled()) return;
     
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const audioContext = getAudioContext();
+      if (!audioContext) return;
+
+      // Resume context if suspended (iOS requirement)
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+      
       const oscillator = audioContext.createOscillator();
       const gainNode = audioContext.createGain();
       
@@ -19,22 +42,34 @@ export const useHaptics = () => {
       
       // Different frequencies for different tap types
       const frequencies = {
-        short: 1000,
-        medium: 800,
-        long: 600
+        short: 1200,
+        medium: 900,
+        long: 700
       };
       
       oscillator.frequency.value = frequencies[duration];
       oscillator.type = 'sine';
       
-      // Quick fade out for a tap effect
-      gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.05);
+      // Very subtle volume and quick fade
+      const now = audioContext.currentTime;
+      gainNode.gain.setValueAtTime(0.05, now);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, now + 0.04);
       
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.05);
+      oscillator.start(now);
+      oscillator.stop(now + 0.04);
+      
+      // Clean up
+      setTimeout(() => {
+        try {
+          oscillator.disconnect();
+          gainNode.disconnect();
+        } catch (e) {
+          // Already disconnected
+        }
+      }, 100);
     } catch (error) {
       // Audio not supported or blocked
+      console.debug('Audio feedback failed:', error);
     }
   };
 
@@ -54,7 +89,6 @@ export const useHaptics = () => {
       playTapSound('short');
       return true;
     }
-    return false;
   };
 
   const lightTap = () => {
