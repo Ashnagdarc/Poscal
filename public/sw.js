@@ -1,16 +1,17 @@
+// Service Worker for Push Notifications with Workbox
+importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
+
+// Precache assets injected by Workbox
+workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
+
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
-  // Only log in development
-  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
-    console.log('Service Worker installing...');
-  }
+  console.log('[SW] Installing...');
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  if (self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1') {
-    console.log('Service Worker activated');
-  }
+  console.log('[SW] Activated');
   event.waitUntil(clients.claim());
 });
 
