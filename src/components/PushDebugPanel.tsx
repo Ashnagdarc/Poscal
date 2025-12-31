@@ -131,6 +131,31 @@ export function PushDebugPanel() {
     }
   };
 
+  const sendTestPush = async () => {
+    addLog('Sending test push via Edge Function...', 'info');
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const result = await supabase.functions.invoke('send-push-notification', {
+        body: {
+          title: '🧪 Manual Test from Debug Panel',
+          body: 'Testing if Edge Function can send push notifications',
+          tag: 'debug-test',
+          data: { type: 'test', source: 'debug-panel' }
+        }
+      });
+      
+      addLog(`Response: ${JSON.stringify(result)}`, result.error ? 'error' : 'success');
+      
+      if (result.error) {
+        addLog(`❌ Error: ${JSON.stringify(result.error)}`, 'error');
+      } else if (result.data) {
+        addLog(`✅ Success: ${JSON.stringify(result.data)}`, 'success');
+      }
+    } catch (err) {
+      addLog(`❌ Exception: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+    }
+  };
+
   const clearLogs = () => setLogs([]);
 
   if (!isVisible) {
@@ -153,6 +178,9 @@ export function PushDebugPanel() {
             <Button size="sm" variant="outline" onClick={testNotification} className="text-xs px-2 h-8">
               Test
             </Button>
+            <Button size="sm" variant="default" onClick={sendTestPush} className="text-xs px-2 h-8 bg-purple-600">
+              📤 Push
+            </Button>
             <Button size="sm" variant="outline" onClick={checkSubscription} className="text-xs px-2 h-8">
               Sub
             </Button>
@@ -160,7 +188,7 @@ export function PushDebugPanel() {
               Refresh
             </Button>
             <Button size="sm" variant="destructive" onClick={forceReregister} className="text-xs px-2 h-8">
-              Force Reset
+              Reset
             </Button>
             <Button size="sm" variant="outline" onClick={clearLogs} className="text-xs px-2 h-8">
               Clear

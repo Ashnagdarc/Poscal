@@ -84,7 +84,8 @@ const AdminUpdates = () => {
 
       // Send push notification to all subscribers
       try {
-        await supabase.functions.invoke('send-push-notification', {
+        logger.log('📤 Invoking send-push-notification Edge Function...');
+        const pushResult = await supabase.functions.invoke('send-push-notification', {
           body: {
             title: `📢 App Update: ${formData.title.trim()}`,
             body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
@@ -92,8 +93,16 @@ const AdminUpdates = () => {
             data: { type: 'update' },
           },
         });
+        logger.log('✅ Push notification response:', pushResult);
+        if (pushResult.error) {
+          logger.error('❌ Push error:', pushResult.error);
+          toast.error('Push notification failed to send');
+        } else {
+          logger.log('📨 Push sent successfully:', pushResult.data);
+        }
       } catch (pushError) {
-        logger.error('Failed to send push notification:', pushError);
+        logger.error('❌ Exception sending push notification:', pushError);
+        toast.error('Push notification error: ' + (pushError as Error).message);
         // Don't fail the update creation if push fails
       }
 
