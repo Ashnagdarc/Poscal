@@ -110,6 +110,27 @@ export function PushDebugPanel() {
     }
   };
 
+  const forceReregister = async () => {
+    addLog('Force re-registering service worker...', 'info');
+    try {
+      // Unregister all service workers
+      const regs = await navigator.serviceWorker.getRegistrations();
+      addLog(`Found ${regs.length} service worker(s)`, 'info');
+      
+      for (const reg of regs) {
+        await reg.unregister();
+        addLog('Unregistered service worker', 'success');
+      }
+      
+      addLog('Reloading in 2 seconds...', 'info');
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+    } catch (err) {
+      addLog(`Error: ${err instanceof Error ? err.message : 'Unknown'}`, 'error');
+    }
+  };
+
   const clearLogs = () => setLogs([]);
 
   if (!isVisible) {
@@ -127,21 +148,24 @@ export function PushDebugPanel() {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-end">
       <Card className="w-full h-[70vh] bg-white rounded-t-2xl flex flex-col">
         <div className="flex items-center justify-between p-4 border-b">
-          <h3 className="font-semibold">Push Notification Debug</h3>
-          <div className="flex gap-2">
-            <Button size="sm" variant="outline" onClick={testNotification}>
+          <h3 className="font-semibold text-sm">Push Debug</h3>
+          <div className="flex gap-1 flex-wrap">
+            <Button size="sm" variant="outline" onClick={testNotification} className="text-xs px-2 h-8">
               Test
             </Button>
-            <Button size="sm" variant="outline" onClick={checkSubscription}>
-              Check Sub
+            <Button size="sm" variant="outline" onClick={checkSubscription} className="text-xs px-2 h-8">
+              Sub
             </Button>
-            <Button size="sm" variant="outline" onClick={refreshServiceWorker}>
-              Refresh SW
+            <Button size="sm" variant="outline" onClick={refreshServiceWorker} className="text-xs px-2 h-8">
+              Refresh
             </Button>
-            <Button size="sm" variant="outline" onClick={clearLogs}>
+            <Button size="sm" variant="destructive" onClick={forceReregister} className="text-xs px-2 h-8">
+              Force Reset
+            </Button>
+            <Button size="sm" variant="outline" onClick={clearLogs} className="text-xs px-2 h-8">
               Clear
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setIsVisible(false)}>
+            <Button size="sm" variant="ghost" onClick={() => setIsVisible(false)} className="text-xs px-2 h-8">
               ✕
             </Button>
           </div>

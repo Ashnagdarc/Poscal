@@ -1,18 +1,30 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
+const SW_VERSION = 'v13-push-enabled';
+console.log(`[SW] Loading service worker ${SW_VERSION}`);
+
 // Precache assets injected by Workbox
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
 
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing...');
+  console.log(`[SW] Installing ${SW_VERSION}...`);
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activated');
-  event.waitUntil(clients.claim());
+  console.log(`[SW] Activated ${SW_VERSION}`);
+  event.waitUntil(
+    clients.claim().then(() => {
+      // Send version to all clients
+      return clients.matchAll().then(clients => {
+        clients.forEach(client => {
+          client.postMessage({ type: 'SW_LOG', message: `✅ Service Worker ${SW_VERSION} activated!`, logType: 'success' });
+        });
+      });
+    })
+  );
 });
 
 // Handle push events
