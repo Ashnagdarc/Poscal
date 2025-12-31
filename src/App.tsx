@@ -9,8 +9,6 @@ import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
-import { PushDebugPanel } from "./components/PushDebugPanel";
-import { useAdmin } from "./hooks/use-admin";
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -28,12 +26,9 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  const isAdmin = useAdmin();
-  
   return (
     <>
       <AppUpdateModal />
-      {isAdmin && <PushDebugPanel />}
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Index />} />
