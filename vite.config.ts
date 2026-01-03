@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => ({
       strategies: "injectManifest",
       srcDir: "public",
       filename: "sw.js",
-      includeAssets: ["favicon.ico", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
+      includeAssets: ["favicon.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
       manifest: {
         name: "Position Size Calculator",
         short_name: "Pos Size Calc",
