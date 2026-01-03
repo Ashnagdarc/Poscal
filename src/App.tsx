@@ -8,6 +8,7 @@ import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
@@ -31,6 +32,7 @@ const queryClient = new QueryClient();
 const AppContent = () => {
   return (
     <>
+      <SkipLink />
       <AppUpdateModal />
       <PWAInstallPrompt />
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>

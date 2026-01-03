@@ -612,11 +612,13 @@ const Journal = () => {
       {/* Filter */}
       <div className="px-6 mb-4">
         <div className="flex gap-2 items-center">
-          <div className="flex gap-2 flex-1">
+          <div className="flex gap-2 flex-1" role="group" aria-label="Filter trades by status">
             {(['all', 'open', 'closed'] as const).map((f) => (
               <button
                 key={f}
+                type="button"
                 onClick={() => dispatchFilters({ type: 'SET_FILTER', payload: f })}
+                aria-pressed={filters.filter === f}
                 className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
                   filters.filter === f 
                     ? 'bg-foreground text-background' 
