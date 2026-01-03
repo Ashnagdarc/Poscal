@@ -9,6 +9,7 @@ import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
+import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -29,6 +30,7 @@ const AppContent = () => {
   return (
     <>
       <AppUpdateModal />
+      <PWAInstallPrompt />
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Index />} />
