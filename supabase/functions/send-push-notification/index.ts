@@ -105,7 +105,7 @@ async function hkdfExpand(prk: Uint8Array, info: Uint8Array, length: number): Pr
 
     const key = await crypto.subtle.importKey(
       'raw',
-      prk,
+      prk.buffer.slice(prk.byteOffset, prk.byteOffset + prk.byteLength) as ArrayBuffer,
       { name: 'HMAC', hash: 'SHA-256' },
       false,
       ['sign']
@@ -143,7 +143,7 @@ async function encryptPayload(
   const userPublicKeyBytes = base64UrlDecode(userPublicKey);
   const userPublicKeyCrypto = await crypto.subtle.importKey(
     'raw',
-    userPublicKeyBytes,
+    userPublicKeyBytes.buffer.slice(userPublicKeyBytes.byteOffset, userPublicKeyBytes.byteOffset + userPublicKeyBytes.byteLength) as ArrayBuffer,
     { name: 'ECDH', namedCurve: 'P-256' },
     false,
     []
@@ -188,7 +188,7 @@ async function encryptPayload(
   // Import key for AES-GCM
   const aesKey = await crypto.subtle.importKey(
     'raw',
-    contentEncryptionKey,
+    contentEncryptionKey.buffer.slice(contentEncryptionKey.byteOffset, contentEncryptionKey.byteOffset + contentEncryptionKey.byteLength) as ArrayBuffer,
     'AES-GCM',
     false,
     ['encrypt']
@@ -201,7 +201,7 @@ async function encryptPayload(
   paddedPayload[payloadBytes.length] = 2; // Padding delimiter
   
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce, tagLength: 128 },
+    { name: 'AES-GCM', iv: nonce.buffer.slice(nonce.byteOffset, nonce.byteOffset + nonce.byteLength) as ArrayBuffer, tagLength: 128 },
     aesKey,
     paddedPayload
   );
