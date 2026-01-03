@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
@@ -12,9 +12,16 @@ import { format, parseISO } from 'date-fns';
 import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
+import { TradingAccountModal } from '@/components/TradingAccountModal';
+import { TakeSignalModal } from '@/components/TakeSignalModal';
 import { useLivePrices } from '@/hooks/use-live-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
+import { Tables } from '@/types/database.types';
+
+type TradingAccount = Tables<'trading_accounts'>;
+type TakenTrade = Tables<'taken_trades'>;
 
 interface TradingSignal {
   id: string;
@@ -60,12 +67,20 @@ const CURRENCY_PAIRS = [
 
 const Signals = () => {
   const { isAdmin } = useAdmin();
+  const { user } = useAuth();
   const { sendNotification, permission } = useNotifications();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Trading accounts
+  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
+  const [takenTrades, setTakenTrades] = useState<TakenTrade[]>([]);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [showTakeSignalModal, setShowTakeSignalModal] = useState(false);
+  const [selectedSignalForTake, setSelectedSignalForTake] = useState<TradingSignal | null>(null);
   
   // Filters
   const [pairFilter, setPairFilter] = useState('All Pairs');
@@ -88,6 +103,73 @@ const Signals = () => {
     enabled: activeSymbols.length > 0,
     refreshInterval: 30000 // 30 seconds
   });
+
+  // Fetch trading accounts
+  const fetchAccounts = async () => {
+    if (!isSupabaseConfigured || !user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('trading_accounts')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setAccounts(data || []);
+    } catch (err: any) {
+      logger.error('Error fetching accounts:', err);
+    }
+  };
+
+  // Fetch taken trades
+  const fetchTakenTrades = async () => {
+    if (!isSupabaseConfigured || !user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('taken_trades')
+        .select('*')
+        .eq('user_id', user.id);
+      
+      if (error) throw error;
+      setTakenTrades(data || []);
+    } catch (err: any) {
+      logger.error('Error fetching taken trades:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchAccounts();
+      fetchTakenTrades();
+    }
+  }, [user]);
+
+  const handleTakeSignal = (signal: TradingSignal) => {
+    if (!user) {
+      toast.error('Please sign in to take signals');
+      return;
+    }
+    if (accounts.length === 0) {
+      toast.error('Please create a trading account first');
+      setShowAccountModal(true);
+      return;
+    }
+    setSelectedSignalForTake(signal);
+    setShowTakeSignalModal(true);
+  };
+
+  const isSignalTaken = (signalId: string) => {
+    return takenTrades.some(t => t.signal_id === signalId);
+  };
+
+  // Calculate total balance across all accounts
+  const totalBalance = accounts.reduce((sum, acc) => sum + acc.current_balance, 0);
+  const totalInitialBalance = accounts.reduce((sum, acc) => sum + acc.initial_balance, 0);
+  const totalPnL = totalBalance - totalInitialBalance;
+  const totalPnLPercent = totalInitialBalance > 0 ? (totalPnL / totalInitialBalance) * 100 : 0;
 
   const fetchSignals = async () => {
     if (!isSupabaseConfigured) {
@@ -369,6 +451,67 @@ const Signals = () => {
         </div>
       </header>
 
+      {/* Trading Account Dashboard */}
+      {user && (
+        <div className="px-6 pb-4">
+          <div className="bg-secondary rounded-2xl p-4 border border-border/50">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-5 h-5 text-primary" />
+                <span className="font-semibold text-foreground">My Trading Accounts</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowAccountModal(true)}
+                className="h-7"
+              >
+                <Plus className="w-3 h-3 mr-1" />
+                Add
+              </Button>
+            </div>
+            
+            {accounts.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-2">
+                No trading accounts yet. Add one to start taking signals.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2 text-center">
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <p className="text-xs text-muted-foreground">Total Balance</p>
+                    <p className="text-sm font-bold text-foreground">
+                      ${totalBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-background/50 rounded-lg p-2">
+                    <p className="text-xs text-muted-foreground">Open Trades</p>
+                    <p className="text-sm font-bold text-foreground">
+                      {takenTrades.filter(t => t.status === 'open').length}
+                    </p>
+                  </div>
+                  <div className={`rounded-lg p-2 ${totalPnL >= 0 ? 'bg-emerald-500/10' : 'bg-red-500/10'}`}>
+                    <p className="text-xs text-muted-foreground">Total P/L</p>
+                    <p className={`text-sm font-bold ${totalPnL >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {totalPnL >= 0 ? '+' : ''}{totalPnLPercent.toFixed(2)}%
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Account list */}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {accounts.map((account) => (
+                    <Badge key={account.id} variant="secondary" className="text-xs">
+                      {account.account_name}: {account.currency} {account.current_balance.toLocaleString()}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Filters */}
       {showFilters && (
         <div className="px-6 pb-4 space-y-3 animate-in slide-in-from-top-2">
@@ -615,6 +758,23 @@ const Signals = () => {
                         Chart
                       </Button>
                     )}
+                    {signal.status === 'active' && !isSignalTaken(signal.id) && (
+                      <Button
+                        variant="default"
+                        size="sm"
+                        onClick={() => handleTakeSignal(signal)}
+                        className="h-7 text-xs bg-primary"
+                      >
+                        <Target className="w-3 h-3 mr-1" />
+                        Take
+                      </Button>
+                    )}
+                    {signal.status === 'active' && isSignalTaken(signal.id) && (
+                      <Badge className="bg-primary/20 text-primary border-primary/30">
+                        <Check className="w-3 h-3 mr-1" />
+                        Taken
+                      </Badge>
+                    )}
                     {isAdmin && (
                       <UpdateSignalModal
                         signalId={signal.id}
@@ -692,6 +852,27 @@ const Signals = () => {
 
       {/* Admin Create Button */}
       {isAdmin && <CreateSignalModal onSignalCreated={fetchSignals} />}
+
+      {/* Trading Account Modal */}
+      <TradingAccountModal
+        open={showAccountModal}
+        onOpenChange={setShowAccountModal}
+        onAccountCreated={() => {
+          fetchAccounts();
+        }}
+      />
+
+      {/* Take Signal Modal */}
+      <TakeSignalModal
+        open={showTakeSignalModal}
+        onOpenChange={setShowTakeSignalModal}
+        signal={selectedSignalForTake}
+        accounts={accounts}
+        onTradeTaken={() => {
+          fetchAccounts();
+          fetchTakenTrades();
+        }}
+      />
 
       <BottomNav />
     </div>
