@@ -7,7 +7,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
+import { calculatePips } from '@/lib/forexCalculations';
+import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
+import { SignalFormSchema } from '@/lib/formValidation';
 
 const CURRENCY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD',
@@ -32,12 +35,6 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
     chart_image_url: '',
     notes: '',
   });
-
-  const calculatePips = (entry: number, target: number, pair: string): number => {
-    const isJpy = pair.includes('JPY');
-    const multiplier = isJpy ? 100 : 10000;
-    return Math.abs(Math.round((target - entry) * multiplier));
-  };
 
   const validateLevels = (
     direction: 'buy' | 'sell',
@@ -98,6 +95,15 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
     setLoading(true);
 
     try {
+      // First validate with Zod schema
+      const validation = SignalFormSchema.safeParse(formData);
+      if (!validation.success) {
+        const firstError = validation.error.errors[0];
+        toast.error(firstError.message);
+        setLoading(false);
+        return;
+      }
+
       const entry = parseFloat(formData.entry_price);
       const sl = parseFloat(formData.stop_loss);
       const tp1 = parseFloat(formData.take_profit_1);
@@ -163,9 +169,9 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         notes: '',
       });
       onSignalCreated();
-    } catch (err: any) {
-      console.error('Error creating signal:', err);
-      toast.error(err.message || 'Failed to create signal');
+    } catch (error) {
+      logger.error('Error creating signal:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create signal');
     } finally {
       setLoading(false);
     }

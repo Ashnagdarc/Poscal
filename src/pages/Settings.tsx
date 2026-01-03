@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
@@ -10,6 +10,7 @@ import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { FixTrades } from "@/pages/FixTrades";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -133,6 +134,20 @@ const Settings = () => {
         {/* Admin User Management - Only visible to admins */}
         <AdminUsersTab />
 
+        {/* Manage Trading Accounts */}
+        {user && (
+          <button
+            onClick={() => navigate('/manage-accounts')}
+            className="w-full bg-secondary rounded-2xl px-4 py-3 flex items-center justify-between transition-all duration-200 active:scale-[0.98]"
+          >
+            <div className="flex items-center gap-3">
+              <Wallet className="w-5 h-5 text-primary" />
+              <span className="font-medium text-foreground">Manage Trading Accounts</span>
+            </div>
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          </button>
+        )}
+
         {/* Admin App Updates - Only visible to admins */}
         {isAdmin && (
           <button
@@ -147,6 +162,9 @@ const Settings = () => {
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>
         )}
+
+        {/* Admin Fix Trades - Only visible to admins */}
+        {isAdmin && <FixTrades />}
 
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">

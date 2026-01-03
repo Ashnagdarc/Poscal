@@ -9,6 +9,8 @@ interface Trade {
   status: 'open' | 'closed' | 'cancelled';
   entry_date: string | null;
   created_at: string;
+  account_id: string | null;
+  account_name?: string;
 }
 
 interface JournalAnalyticsProps {

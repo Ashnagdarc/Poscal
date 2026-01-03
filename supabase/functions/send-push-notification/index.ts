@@ -1,5 +1,8 @@
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
 
+import { edgeLogger } from "../_shared/logger.ts";
+import { checkRateLimit, getClientIdentifier, createRateLimitHeaders, RATE_LIMITS } from "../_shared/rate-limiter.ts";
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -220,6 +223,24 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // Apply rate limiting
+    const clientId = getClientIdentifier(req);
+    const rateLimit = checkRateLimit(clientId, RATE_LIMITS.PUSH_NOTIFICATION);
+    
+    if (rateLimit.isLimited) {
+      return new Response(JSON.stringify({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          ...createRateLimitHeaders(rateLimit.remaining, rateLimit.resetTime)
+        },
+      });
+    }
+
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY');
     const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY');
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
@@ -235,9 +256,9 @@ Deno.serve(async (req) => {
       throw new Error('Title is required');
     }
 
-    console.log('=== PUSH NOTIFICATION REQUEST ===');
-    console.log('Title:', title);
-    console.log('Body:', body);
+    edgeLogger.log('=== PUSH NOTIFICATION REQUEST ===');
+    edgeLogger.log('Title:', title);
+    edgeLogger.log('Body:', body);
 
     // Fetch subscriptions
     const subsResponse = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?select=*`, {
@@ -248,7 +269,7 @@ Deno.serve(async (req) => {
     });
 
     const subscriptions = await subsResponse.json();
-    console.log(`Found ${subscriptions.length} subscriptions`);
+    edgeLogger.log(`Found ${subscriptions.length} subscriptions`);
 
     if (subscriptions.length === 0) {
       return new Response(
@@ -273,22 +294,22 @@ Deno.serve(async (req) => {
       try {
         const isApple = sub.endpoint.includes('push.apple.com');
         const isGoogle = sub.endpoint.includes('fcm.googleapis.com');
-        console.log(`\n=== Sending to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Other'} device ===`);
-        console.log(`Endpoint: ${sub.endpoint.substring(0, 60)}...`);
+        edgeLogger.log(`\n=== Sending to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Other'} device ===`);
+        edgeLogger.log(`Endpoint: ${sub.endpoint.substring(0, 60)}...`);
         
         // Encrypt payload
-        console.log('Encrypting payload...');
+        edgeLogger.log('Encrypting payload...');
         const { ciphertext, salt, publicKey } = await encryptPayload(
           payload,
           sub.p256dh,
           sub.auth
         );
-        console.log(`Encryption complete: salt=${salt.length}B, publicKey=${publicKey.length}B, ciphertext=${ciphertext.length}B`);
+        edgeLogger.log(`Encryption complete: salt=${salt.length}B, publicKey=${publicKey.length}B, ciphertext=${ciphertext.length}B`);
         
         // Generate VAPID header
-        console.log('Generating VAPID JWT...');
+        edgeLogger.log('Generating VAPID JWT...');
         const jwt = await generateVAPIDHeader(sub.endpoint, vapidPublicKey, vapidPrivateKey);
-        console.log(`VAPID JWT generated (${jwt.length} chars)`);
+        edgeLogger.log(`VAPID JWT generated (${jwt.length} chars)`);
         
         // Prepare body
         const body = new Uint8Array([
@@ -298,10 +319,10 @@ Deno.serve(async (req) => {
           ...publicKey,
           ...ciphertext
         ]);
-        console.log(`Body size: ${body.length} bytes`);
+        edgeLogger.log(`Body size: ${body.length} bytes`);
         
         // Send push notification
-        console.log('Sending HTTP POST...');
+        edgeLogger.log('Sending HTTP POST...');
         const response = await fetch(sub.endpoint, {
           method: 'POST',
           headers: {
@@ -313,26 +334,26 @@ Deno.serve(async (req) => {
           body
         });
 
-        console.log(`Response status: ${response.status} ${response.statusText}`);
-        console.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
+        edgeLogger.log(`Response status: ${response.status} ${response.statusText}`);
+        edgeLogger.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
 
         if (response.ok || response.status === 201) {
           successCount++;
-          console.log(`✓ SUCCESS - Notification sent to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'device'}`);
+          edgeLogger.log(`✓ SUCCESS - Notification sent to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'device'}`);
         } else {
           failCount++;
           const errorText = await response.text();
-          console.error(`✗ FAILED - Status ${response.status}`);
-          console.error(`Error body: ${errorText}`);
-          console.error(`Subscription ID: ${sub.id}`);
+          edgeLogger.error(`✗ FAILED - Status ${response.status}`);
+          edgeLogger.error(`Error body: ${errorText}`);
+          edgeLogger.error(`Subscription ID: ${sub.id}`);
         }
       } catch (err) {
         failCount++;
-        console.error(`✗ EXCEPTION:`, err);
-        console.error(`Subscription ID: ${sub.id}`);
+        edgeLogger.error(`✗ EXCEPTION:`, err);
+        edgeLogger.error(`Subscription ID: ${sub.id}`);
         if (err instanceof Error) {
-          console.error(`Error message: ${err.message}`);
-          console.error(`Error stack: ${err.stack}`);
+          edgeLogger.error(`Error message: ${err.message}`);
+          edgeLogger.error(`Error stack: ${err.stack}`);
         }
       }
     }
@@ -342,7 +363,7 @@ Deno.serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
-    console.error('Error in send-push-notification:', err);
+    edgeLogger.error('Error in send-push-notification:', err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

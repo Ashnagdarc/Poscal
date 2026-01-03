@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { checkRateLimit, getClientIdentifier, createRateLimitHeaders, RATE_LIMITS } from "../_shared/rate-limiter.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,6 +17,24 @@ serve(async (req) => {
   }
 
   try {
+    // Apply rate limiting
+    const clientId = getClientIdentifier(req);
+    const rateLimit = checkRateLimit(clientId, RATE_LIMITS.LIVE_PRICES);
+    
+    if (rateLimit.isLimited) {
+      return new Response(JSON.stringify({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          ...createRateLimitHeaders(rateLimit.remaining, rateLimit.resetTime)
+        },
+      });
+    }
+
     const TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
     
     if (!TWELVE_DATA_API_KEY) {
@@ -61,8 +80,15 @@ serve(async (req) => {
     
     console.log('Parsed prices:', prices);
     
+    // Get rate limit info for response headers
+    const rateLimitHeaders = createRateLimitHeaders(rateLimit.remaining, rateLimit.resetTime);
+    
     return new Response(JSON.stringify({ prices }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { 
+        ...corsHeaders, 
+        'Content-Type': 'application/json',
+        ...rateLimitHeaders
+      },
     });
     
   } catch (error: unknown) {

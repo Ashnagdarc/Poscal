@@ -3,46 +3,45 @@ import { Check, Plus } from "lucide-react";
 
 export interface CurrencyPair {
   symbol: string;
-  pipValue: number;
-  pipDecimal: number;
+  pipDecimal: number; // Number of decimal places (4 for most pairs, 2 for JPY pairs)
 }
 
 export const CURRENCY_PAIRS: CurrencyPair[] = [
   // Major Pairs
-  { symbol: "EUR/USD", pipValue: 10, pipDecimal: 4 },
-  { symbol: "GBP/USD", pipValue: 10, pipDecimal: 4 },
-  { symbol: "USD/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "USD/CHF", pipValue: 10.64, pipDecimal: 4 },
-  { symbol: "AUD/USD", pipValue: 10, pipDecimal: 4 },
-  { symbol: "USD/CAD", pipValue: 7.58, pipDecimal: 4 },
-  { symbol: "NZD/USD", pipValue: 10, pipDecimal: 4 },
+  { symbol: "EUR/USD", pipDecimal: 4 },
+  { symbol: "GBP/USD", pipDecimal: 4 },
+  { symbol: "USD/JPY", pipDecimal: 2 },
+  { symbol: "USD/CHF", pipDecimal: 4 },
+  { symbol: "AUD/USD", pipDecimal: 4 },
+  { symbol: "USD/CAD", pipDecimal: 4 },
+  { symbol: "NZD/USD", pipDecimal: 4 },
   // Cross Pairs
-  { symbol: "EUR/GBP", pipValue: 12.74, pipDecimal: 4 },
-  { symbol: "EUR/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "GBP/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "EUR/AUD", pipValue: 6.45, pipDecimal: 4 },
-  { symbol: "EUR/CAD", pipValue: 7.58, pipDecimal: 4 },
-  { symbol: "EUR/CHF", pipValue: 10.64, pipDecimal: 4 },
-  { symbol: "GBP/AUD", pipValue: 6.45, pipDecimal: 4 },
-  { symbol: "GBP/CAD", pipValue: 7.58, pipDecimal: 4 },
-  { symbol: "GBP/CHF", pipValue: 10.64, pipDecimal: 4 },
-  { symbol: "AUD/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "AUD/CAD", pipValue: 7.58, pipDecimal: 4 },
-  { symbol: "AUD/CHF", pipValue: 10.64, pipDecimal: 4 },
-  { symbol: "AUD/NZD", pipValue: 10, pipDecimal: 4 },
-  { symbol: "CAD/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "CHF/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "NZD/JPY", pipValue: 9.09, pipDecimal: 2 },
-  { symbol: "NZD/CAD", pipValue: 7.58, pipDecimal: 4 },
-  { symbol: "NZD/CHF", pipValue: 10.64, pipDecimal: 4 },
+  { symbol: "EUR/GBP", pipDecimal: 4 },
+  { symbol: "EUR/JPY", pipDecimal: 2 },
+  { symbol: "GBP/JPY", pipDecimal: 2 },
+  { symbol: "EUR/AUD", pipDecimal: 4 },
+  { symbol: "EUR/CAD", pipDecimal: 4 },
+  { symbol: "EUR/CHF", pipDecimal: 4 },
+  { symbol: "GBP/AUD", pipDecimal: 4 },
+  { symbol: "GBP/CAD", pipDecimal: 4 },
+  { symbol: "GBP/CHF", pipDecimal: 4 },
+  { symbol: "AUD/JPY", pipDecimal: 2 },
+  { symbol: "AUD/CAD", pipDecimal: 4 },
+  { symbol: "AUD/CHF", pipDecimal: 4 },
+  { symbol: "AUD/NZD", pipDecimal: 4 },
+  { symbol: "CAD/JPY", pipDecimal: 2 },
+  { symbol: "CHF/JPY", pipDecimal: 2 },
+  { symbol: "NZD/JPY", pipDecimal: 2 },
+  { symbol: "NZD/CAD", pipDecimal: 4 },
+  { symbol: "NZD/CHF", pipDecimal: 4 },
   // Commodities
-  { symbol: "XAU/USD", pipValue: 1, pipDecimal: 2 },
-  { symbol: "XAG/USD", pipValue: 0.5, pipDecimal: 3 },
-  // Indices & Crypto (approximate values)
-  { symbol: "US30", pipValue: 1, pipDecimal: 0 },
-  { symbol: "US100", pipValue: 1, pipDecimal: 0 },
-  { symbol: "BTC/USD", pipValue: 1, pipDecimal: 2 },
-  { symbol: "ETH/USD", pipValue: 1, pipDecimal: 2 },
+  { symbol: "XAU/USD", pipDecimal: 2 },
+  { symbol: "XAG/USD", pipDecimal: 3 },
+  // Indices & Crypto
+  { symbol: "US30", pipDecimal: 0 },
+  { symbol: "US100", pipDecimal: 0 },
+  { symbol: "BTC/USD", pipDecimal: 2 },
+  { symbol: "ETH/USD", pipDecimal: 2 },
 ];
 
 interface CurrencyGridProps {
@@ -54,14 +53,12 @@ interface CurrencyGridProps {
 export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridProps) => {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSymbol, setCustomSymbol] = useState("");
-  const [customPipValue, setCustomPipValue] = useState("10");
   const [customPipDecimal, setCustomPipDecimal] = useState("4");
 
   const handleCustomSubmit = () => {
     if (customSymbol.trim()) {
       const customPair: CurrencyPair = {
         symbol: customSymbol.toUpperCase(),
-        pipValue: parseFloat(customPipValue) || 10,
         pipDecimal: parseInt(customPipDecimal) || 4,
       };
       onSelect(customPair);
@@ -102,31 +99,17 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
                 autoFocus
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                  Pip Value ($)
-                </label>
-                <input
-                  type="number"
-                  value={customPipValue}
-                  onChange={(e) => setCustomPipValue(e.target.value)}
-                  placeholder="10"
-                  className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                  Pip Decimals
-                </label>
-                <input
-                  type="number"
-                  value={customPipDecimal}
-                  onChange={(e) => setCustomPipDecimal(e.target.value)}
-                  placeholder="4"
-                  className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                />
-              </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                Pip Decimals (2 for JPY, 4 for most others)
+              </label>
+              <input
+                type="number"
+                value={customPipDecimal}
+                onChange={(e) => setCustomPipDecimal(e.target.value)}
+                placeholder="4"
+                className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+              />
             </div>
             <div className="flex gap-3">
               <button

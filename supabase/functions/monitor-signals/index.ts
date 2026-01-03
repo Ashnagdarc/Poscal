@@ -1,10 +1,117 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { checkRateLimit, getClientIdentifier, createRateLimitHeaders, RATE_LIMITS } from "../_shared/rate-limiter.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Forex calculation constants
+const STANDARD_LOT_SIZE = 100000;
+
+// Dynamic pair configuration
+function getPairConfig(pair: string) {
+  const [base, quote] = pair.split('/');
+  
+  // Handle metals
+  if (base === 'XAU' || base === 'XAG') {
+    return {
+      baseCurrency: base,
+      quoteCurrency: quote,
+      pipMultiplier: base === 'XAU' ? 10 : 100,
+      pipValueBase: base === 'XAU' ? 10 : 0.5,
+    };
+  }
+  
+  // Handle crypto
+  if (base === 'BTC' || base === 'ETH') {
+    return {
+      baseCurrency: base,
+      quoteCurrency: quote,
+      pipMultiplier: 10,
+      pipValueBase: 1,
+    };
+  }
+  
+  // Handle JPY pairs
+  if (quote === 'JPY') {
+    return {
+      baseCurrency: base,
+      quoteCurrency: quote,
+      pipMultiplier: 100,
+      pipValueBase: 9.09,
+    };
+  }
+  
+  // Default: Standard 4 decimal place pairs
+  return {
+    baseCurrency: base,
+    quoteCurrency: quote,
+    pipMultiplier: 10000,
+    pipValueBase: 10,
+  };
+}
+
+function calculatePips(price1: number, price2: number, pair: string): number {
+  const config = getPairConfig(pair);
+  return Math.abs(Math.round((price1 - price2) * config.pipMultiplier * 100) / 100);
+}
+
+function getPipValueInUSD(pair: string, currentPrice?: number): number {
+  const config = getPairConfig(pair);
+  const pipSize = 1 / config.pipMultiplier;
+
+  // If quote currency is USD, pip value is straightforward
+  if (config.quoteCurrency === 'USD') {
+    return STANDARD_LOT_SIZE * pipSize;
+  }
+
+  // For USD-base pairs, calculate based on current price
+  if (config.baseCurrency === 'USD' && currentPrice) {
+    return (STANDARD_LOT_SIZE * pipSize) / currentPrice;
+  }
+
+  // Fallback to approximate value
+  return config.pipValueBase;
+}
+
+function calculatePositionSize(
+  riskAmount: number,
+  stopLossPips: number,
+  pair: string,
+  currentPrice?: number
+): number {
+  const pipValueUSD = getPipValueInUSD(pair, currentPrice);
+  const positionSize = riskAmount / (stopLossPips * pipValueUSD);
+  return Math.round(positionSize * 100) / 100;
+}
+
+function calculatePnL(
+  entryPrice: number,
+  exitPrice: number,
+  positionSize: number,
+  pair: string,
+  direction: 'long' | 'short'
+): number {
+  const pips = calculatePips(entryPrice, exitPrice, pair);
+  const pipValueUSD = getPipValueInUSD(pair, entryPrice);
+  
+  let pnl = positionSize * pips * pipValueUSD;
+  
+  // Adjust for direction
+  if (direction === 'short') {
+    if (exitPrice > entryPrice) {
+      pnl = -pnl;
+    }
+  } else {
+    if (exitPrice < entryPrice) {
+      pnl = -pnl;
+    }
+  }
+  
+  return Math.round(pnl * 100) / 100;
+}
 
 interface TradingSignal {
   id: string;
@@ -42,6 +149,143 @@ const SYMBOL_MAP: Record<string, string> = {
   'XAU/USD': 'XAU/USD',
   'BTC/USD': 'BTC/USD',
 };
+
+async function handleCloseTakenTrades(
+  supabase: any,
+  signal: TradingSignal,
+  signalResult: string
+): Promise<void> {
+  try {
+    // Fetch all open taken trades for this signal
+    const { data: takenTrades, error: fetchError } = await supabase
+      .from('taken_trades')
+      .select('*, trading_accounts(currency, current_balance)')
+      .eq('signal_id', signal.id)
+      .eq('status', 'open');
+
+    if (fetchError) {
+      console.error(`Error fetching taken trades for signal ${signal.id}:`, fetchError);
+      return;
+    }
+
+    if (!takenTrades || takenTrades.length === 0) {
+      console.log(`No open taken trades found for signal ${signal.id}`);
+      return;
+    }
+
+    console.log(`Processing ${takenTrades.length} taken trades for signal ${signal.id}`);
+
+    // Process each taken trade
+    for (const trade of takenTrades) {
+      console.log(`Processing trade ${trade.id} with risk: ${trade.risk_amount}`);
+      
+      // Calculate position size based on signal parameters
+      const positionSize = calculatePositionSize(
+        trade.risk_amount,
+        signal.pips_to_sl,
+        signal.currency_pair,
+        signal.entry_price
+      );
+      
+      console.log(`Position size: ${positionSize} lots for ${signal.currency_pair}`);
+      
+      let pnl = 0;
+      let pnlPercent = 0;
+      let balanceAdjustment = 0;
+      let exitPrice = signal.entry_price;
+      
+      const direction = signal.direction === 'buy' ? 'long' : 'short';
+      
+      if (signalResult === 'win') {
+        exitPrice = signal.take_profit_1;
+        pnl = calculatePnL(
+          signal.entry_price,
+          signal.take_profit_1,
+          positionSize,
+          signal.currency_pair,
+          direction
+        );
+        // Calculate pnl_percent based on account balance impact
+        pnlPercent = trade.risk_percent * (pnl / trade.risk_amount);
+        balanceAdjustment = pnl;
+      } else if (signalResult === 'loss') {
+        exitPrice = signal.stop_loss;
+        pnl = -trade.risk_amount;
+        pnlPercent = -trade.risk_percent;
+        balanceAdjustment = pnl;
+      } else if (signalResult === 'breakeven') {
+        exitPrice = signal.entry_price;
+        pnl = 0;
+        pnlPercent = 0;
+        balanceAdjustment = 0;
+      }
+      
+      console.log(`P&L: ${pnl}, Balance adjustment: ${balanceAdjustment}`);
+
+      // Update the taken trade
+      const { error: updateTradeError } = await supabase
+        .from('taken_trades')
+        .update({
+          status: 'closed',
+          result: signalResult,
+          pnl,
+          pnl_percent: pnlPercent,
+          closed_at: new Date().toISOString(),
+          journaled: true
+        })
+        .eq('id', trade.id);
+
+      if (updateTradeError) {
+        console.error(`Failed to update taken trade ${trade.id}:`, updateTradeError);
+        continue;
+      }
+
+      // Update account balance
+      const newBalance = trade.trading_accounts.current_balance + balanceAdjustment;
+      const { error: balanceError } = await supabase
+        .from('trading_accounts')
+        .update({ 
+          current_balance: newBalance,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', trade.account_id);
+
+      if (balanceError) {
+        console.error(`Failed to update account balance ${trade.account_id}:`, balanceError);
+      }
+
+      // Create journal entry
+      const { error: journalError } = await supabase
+        .from('trading_journal')
+        .insert({
+          user_id: trade.user_id,
+          pair: signal.currency_pair,
+          direction: signal.direction === 'buy' ? 'long' : 'short',
+          entry_price: signal.entry_price,
+          exit_price: exitPrice,
+          stop_loss: signal.stop_loss,
+          take_profit: signal.take_profit_1,
+          position_size: positionSize,
+          risk_percent: trade.risk_percent,
+          pnl,
+          pnl_percent: pnlPercent,
+          status: 'closed',
+          notes: `Auto-closed from signal: ${signal.currency_pair} ${signal.direction.toUpperCase()} - ${signalResult.toUpperCase()}`,
+          entry_date: trade.created_at
+        });
+
+      if (journalError) {
+        console.error(`Failed to create journal entry for trade ${trade.id}:`, journalError);
+      } else {
+        console.log(`✅ Successfully processed trade ${trade.id}: P&L ${pnl > 0 ? '+' : ''}${pnl.toFixed(2)}`);
+      }
+    }
+
+    console.log(`Successfully processed ${takenTrades.length} taken trades for signal ${signal.id}`);
+  } catch (err) {
+    console.error(`Error closing taken trades for signal ${signal.id}:`, err);
+  }
+}
 
 async function fetchPrice(symbol: string, apiKey: string): Promise<number | null> {
   try {
@@ -224,6 +468,24 @@ serve(async (req) => {
   }
 
   try {
+    // Apply rate limiting (generous for internal cron jobs)
+    const clientId = getClientIdentifier(req);
+    const rateLimit = checkRateLimit(clientId, RATE_LIMITS.SIGNAL_MONITOR);
+    
+    if (rateLimit.isLimited) {
+      return new Response(JSON.stringify({ 
+        error: 'Rate limit exceeded. Please try again later.',
+        retryAfter: Math.ceil((rateLimit.resetTime - Date.now()) / 1000)
+      }), {
+        status: 429,
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          ...createRateLimitHeaders(rateLimit.remaining, rateLimit.resetTime)
+        },
+      });
+    }
+
     const TWELVE_DATA_API_KEY = Deno.env.get('TWELVE_DATA_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -308,6 +570,12 @@ serve(async (req) => {
           console.error(`Failed to update signal ${signal.id}:`, updateError);
         } else {
           results.push({ signalId: signal.id, updates: dbUpdates });
+          
+          // If signal is closed, handle taken trades
+          if (shouldClose && updates.result) {
+            console.log(`Signal ${signal.id} closed with result: ${updates.result}`);
+            await handleCloseTakenTrades(supabase, signal as TradingSignal, updates.result);
+          }
           
           // Send push notification for TP/SL hits
           if (notificationType) {

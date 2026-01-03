@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,24 +7,45 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Plus, Edit } from 'lucide-react';
+import { Tables } from '@/types/database.types';
+import { AccountFormSchema } from '@/lib/formValidation';
+
+type TradingAccount = Tables<'trading_accounts'>;
 
 interface TradingAccountModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onAccountCreated: () => void;
+  editingAccount?: TradingAccount | null;
 }
 
 const PLATFORMS = ['MT4', 'MT5', 'cTrader', 'TradingView', 'Other'];
 const CURRENCIES = ['USD', 'EUR', 'GBP', 'JPY', 'AUD', 'CAD', 'CHF', 'NZD'];
 
-export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: TradingAccountModalProps) => {
+export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated, editingAccount }: TradingAccountModalProps) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [accountName, setAccountName] = useState('');
   const [platform, setPlatform] = useState('');
   const [balance, setBalance] = useState('');
   const [currency, setCurrency] = useState('USD');
+
+  // Populate form when editing
+  useEffect(() => {
+    if (editingAccount) {
+      setAccountName(editingAccount.account_name);
+      setPlatform(editingAccount.platform);
+      setBalance(editingAccount.initial_balance.toString());
+      setCurrency(editingAccount.currency);
+    } else {
+      // Reset form when creating new
+      setAccountName('');
+      setPlatform('');
+      setBalance('');
+      setCurrency('USD');
+    }
+  }, [editingAccount, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,34 +55,62 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
       return;
     }
 
-    if (!accountName.trim() || !platform || !balance) {
-      toast.error('Please fill in all required fields');
+    // Validate with Zod schema
+    const validation = AccountFormSchema.safeParse({
+      account_name: accountName,
+      platform,
+      initial_balance: balance,
+      currency,
+    });
+
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
     const balanceNum = parseFloat(balance);
-    if (isNaN(balanceNum) || balanceNum <= 0) {
-      toast.error('Please enter a valid balance');
-      return;
-    }
 
     setLoading(true);
 
     try {
-      const { error } = await supabase
-        .from('trading_accounts')
-        .insert({
-          user_id: user.id,
-          account_name: accountName.trim(),
-          platform,
-          initial_balance: balanceNum,
-          current_balance: balanceNum,
-          currency,
-        });
+      if (editingAccount) {
+        // Update existing account
+        const { error } = await supabase
+          .from('trading_accounts')
+          .update({
+            account_name: accountName.trim(),
+            platform,
+            currency,
+            // Update initial_balance and adjust current_balance proportionally
+            initial_balance: balanceNum,
+            current_balance: editingAccount.current_balance + (balanceNum - editingAccount.initial_balance),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', editingAccount.id)
+          .eq('user_id', user.id);
 
-      if (error) throw error;
+        if (error) throw error;
 
-      toast.success('Trading account created successfully!');
+        toast.success('Trading account updated successfully!');
+      } else {
+        // Create new account
+        const { error } = await supabase
+          .from('trading_accounts')
+          .insert({
+            user_id: user.id,
+            account_name: accountName.trim(),
+            platform,
+            initial_balance: balanceNum,
+            current_balance: balanceNum,
+            currency,
+          });
+
+        if (error) throw error;
+
+        toast.success('Trading account created successfully!');
+      }
+
       onAccountCreated();
       onOpenChange(false);
       
@@ -70,8 +119,9 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
       setPlatform('');
       setBalance('');
       setCurrency('USD');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to create account');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : `Failed to ${editingAccount ? 'update' : 'create'} account`;
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -82,8 +132,17 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Plus className="w-5 h-5" />
-            Add Trading Account
+            {editingAccount ? (
+              <>
+                <Edit className="w-5 h-5" />
+                Edit Trading Account
+              </>
+            ) : (
+              <>
+                <Plus className="w-5 h-5" />
+                Add Trading Account
+              </>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -96,6 +155,7 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
               disabled={loading}
+              autoFocus={!editingAccount}
             />
           </div>
 
@@ -117,7 +177,9 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="balance">Account Balance *</Label>
+              <Label htmlFor="balance">
+                {editingAccount ? 'Initial Balance *' : 'Account Balance *'}
+              </Label>
               <Input
                 id="balance"
                 type="number"
@@ -128,6 +190,11 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
                 onChange={(e) => setBalance(e.target.value)}
                 disabled={loading}
               />
+              {editingAccount && (
+                <p className="text-xs text-muted-foreground">
+                  Current: {editingAccount.currency} {editingAccount.current_balance.toFixed(2)}
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -151,10 +218,10 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated }: Tr
             {loading ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Creating...
+                {editingAccount ? 'Updating...' : 'Creating...'}
               </>
             ) : (
-              'Create Account'
+              editingAccount ? 'Update Account' : 'Create Account'
             )}
           </Button>
         </form>

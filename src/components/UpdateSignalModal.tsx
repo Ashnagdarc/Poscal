@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { logger } from '@/lib/logger';
+import { calculatePositionSize, calculatePnL, calculatePips } from '@/lib/forexCalculations';
 
 interface UpdateSignalModalProps {
   signalId: string;
@@ -25,18 +27,6 @@ interface UpdateSignalModalProps {
   tp3Hit: boolean;
   onSignalUpdated: () => void;
 }
-
-// Helper to calculate pips
-const calculatePips = (price1: number, price2: number, pair: string): number => {
-  const isJPYPair = pair.includes('JPY');
-  const isXAUPair = pair.includes('XAU');
-  
-  let pipMultiplier = 10000;
-  if (isJPYPair) pipMultiplier = 100;
-  if (isXAUPair) pipMultiplier = 10;
-  
-  return Math.abs(Math.round((price1 - price2) * pipMultiplier));
-};
 
 export const UpdateSignalModal = ({ 
   signalId, 
@@ -126,14 +116,190 @@ export const UpdateSignalModal = ({
 
       if (error) throw error;
 
+      // If signal is being closed, update all taken trades
+      if (status === 'closed' && currentStatus !== 'closed' && updateData.result) {
+        await handleCloseTakenTrades(signalId, updateData.result);
+      }
+
       toast.success('Signal updated successfully!');
       setOpen(false);
       onSignalUpdated();
-    } catch (err: any) {
-      console.error('Error updating signal:', err);
-      toast.error(err.message || 'Failed to update signal');
+    } catch (error) {
+      logger.error('Error updating signal:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to update signal');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCloseTakenTrades = async (signalId: string, signalResult: string) => {
+    try {
+      console.log(`🔄 Starting to close taken trades for signal ${signalId} with result: ${signalResult}`);
+      
+      // Fetch all open taken trades for this signal
+      const { data: takenTrades, error: fetchError } = await supabase
+        .from('taken_trades')
+        .select('*')
+        .eq('signal_id', signalId)
+        .eq('status', 'open');
+
+      if (fetchError) {
+        console.error('Error fetching taken trades:', fetchError);
+        throw fetchError;
+      }
+      
+      if (!takenTrades || takenTrades.length === 0) {
+        console.log('No open taken trades found for this signal');
+        return;
+      }
+
+      console.log(`📊 Found ${takenTrades.length} taken trades to process`);
+
+      // Process each taken trade
+      for (const trade of takenTrades) {
+        console.log(`Processing trade ${trade.id} with risk: ${trade.risk_amount}`);
+        
+        // Calculate P&L based on result and risk amount
+        // Calculate P&L and position size using proper forex calculations
+        const { data: signalData } = await supabase
+          .from('trading_signals')
+          .select('pips_to_sl, pips_to_tp1, entry_price')
+          .eq('id', signalId)
+          .single();
+        
+        if (!signalData) {
+          console.error('Could not fetch signal data');
+          continue;
+        }
+        
+        // Calculate position size in lots
+        const positionSize = calculatePositionSize(
+          trade.risk_amount,
+          signalData.pips_to_sl,
+          currencyPair,
+          'USD',
+          signalData.entry_price
+        );
+        
+        console.log(`📊 Position size: ${positionSize} lots for ${currencyPair}`);
+        
+        let pnl = 0;
+        let pnlPercent = 0;
+        let balanceAdjustment = 0;
+        let exitPrice = currentEntryPrice;
+        
+        if (signalResult === 'win') {
+          exitPrice = currentTakeProfit1;
+          pnl = calculatePnL(
+            currentEntryPrice,
+            currentTakeProfit1,
+            positionSize,
+            currencyPair,
+            direction === 'buy' ? 'long' : 'short'
+          );
+          // Calculate pnl_percent based on account balance impact
+          pnlPercent = trade.risk_percent * (pnl / trade.risk_amount);
+          balanceAdjustment = pnl;
+        } else if (signalResult === 'loss') {
+          exitPrice = currentStopLoss;
+          pnl = -trade.risk_amount; // Loss is the risk amount
+          pnlPercent = -trade.risk_percent;
+          balanceAdjustment = pnl;
+        } else if (signalResult === 'breakeven') {
+          exitPrice = currentEntryPrice;
+          pnl = 0;
+          pnlPercent = 0;
+          balanceAdjustment = 0;
+        }
+
+        console.log(`💰 P&L: ${pnl}, Balance adjustment: ${balanceAdjustment}`);
+
+        // Update the taken trade
+        const { error: updateTradeError } = await supabase
+          .from('taken_trades')
+          .update({
+            status: 'closed',
+            result: signalResult,
+            pnl,
+            pnl_percent: pnlPercent,
+            closed_at: new Date().toISOString(),
+            journaled: true
+          })
+          .eq('id', trade.id);
+
+        if (updateTradeError) {
+          console.error(`❌ Failed to update taken trade ${trade.id}:`, updateTradeError);
+          continue;
+        }
+        
+        console.log(`✅ Updated taken trade ${trade.id}`);
+
+        // Fetch current account balance
+        const { data: accountData, error: accountFetchError } = await supabase
+          .from('trading_accounts')
+          .select('current_balance')
+          .eq('id', trade.account_id)
+          .single();
+
+        if (accountFetchError || !accountData) {
+          console.error(`❌ Failed to fetch account ${trade.account_id}:`, accountFetchError);
+          continue;
+        }
+
+        // Update account balance
+        const newBalance = accountData.current_balance + balanceAdjustment;
+        console.log(`📈 Updating account balance: ${accountData.current_balance} + ${balanceAdjustment} = ${newBalance}`);
+        
+        const { error: balanceError } = await supabase
+          .from('trading_accounts')
+          .update({ 
+            current_balance: newBalance,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', trade.account_id);
+
+        if (balanceError) {
+          console.error(`❌ Failed to update account balance ${trade.account_id}:`, balanceError);
+          continue;
+        }
+        
+        console.log(`✅ Updated account balance`);
+
+        // Create journal entry
+        console.log(`📝 Creating journal entry with position size: ${positionSize.toFixed(2)} lots`);
+        
+        const { error: journalError } = await supabase
+          .from('trading_journal')
+          .insert({
+            user_id: trade.user_id,
+            pair: currencyPair,
+            direction: direction === 'buy' ? 'long' : 'short',
+            entry_price: currentEntryPrice,
+            exit_price: exitPrice,
+            stop_loss: currentStopLoss,
+            take_profit: currentTakeProfit1,
+            position_size: positionSize,
+            risk_percent: trade.risk_percent,
+            pnl,
+            pnl_percent: pnlPercent,
+            status: 'closed',
+            notes: `Auto-closed from signal: ${currencyPair} ${direction.toUpperCase()} - ${signalResult.toUpperCase()}`,
+            entry_date: trade.created_at
+          });
+
+        if (journalError) {
+          console.error(`❌ Failed to create journal entry for trade ${trade.id}:`, journalError);
+        } else {
+          console.log(`✅ Created journal entry`);
+        }
+      }
+
+      logger.log(`✅ Successfully processed ${takenTrades.length} taken trades`);
+      toast.success(`Processed ${takenTrades.length} trade(s). Check your journal!`);
+    } catch (error) {
+      logger.error('❌ Error closing taken trades:', error);
+      toast.error('Failed to process taken trades');
+      // Don't throw - we don't want to block the signal update
     }
   };
 

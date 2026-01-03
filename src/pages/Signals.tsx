@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target, Settings } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
@@ -14,11 +14,12 @@ import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { TradingAccountModal } from '@/components/TradingAccountModal';
 import { TakeSignalModal } from '@/components/TakeSignalModal';
-import { useLivePrices } from '@/hooks/use-live-prices';
+import { useLivePricesQuery } from '@/hooks/queries/use-live-prices-query';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tables } from '@/types/database.types';
+import { useNavigate } from 'react-router-dom';
 
 type TradingAccount = Tables<'trading_accounts'>;
 type TakenTrade = Tables<'taken_trades'>;
@@ -68,6 +69,7 @@ const CURRENCY_PAIRS = [
 const Signals = () => {
   const { isAdmin } = useAdmin();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { sendNotification, permission } = useNotifications();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,11 +100,13 @@ const Signals = () => {
   // Get unique active pairs for live price fetching
   const activeSymbols = [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
   
-  const { prices, loading: pricesLoading, lastUpdated, refresh: refreshPrices } = useLivePrices({
+  const { data: prices = {}, isLoading: pricesLoading, dataUpdatedAt, refetch: refreshPrices } = useLivePricesQuery({
     symbols: activeSymbols,
     enabled: activeSymbols.length > 0,
-    refreshInterval: 30000 // 30 seconds
+    refetchInterval: 30000 // 30 seconds
   });
+  
+  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   // Fetch trading accounts
   const fetchAccounts = async () => {
@@ -118,8 +122,8 @@ const Signals = () => {
       
       if (error) throw error;
       setAccounts(data || []);
-    } catch (err: any) {
-      logger.error('Error fetching accounts:', err);
+    } catch (error) {
+      logger.error('Error fetching accounts:', error);
     }
   };
 
@@ -135,8 +139,8 @@ const Signals = () => {
       
       if (error) throw error;
       setTakenTrades(data || []);
-    } catch (err: any) {
-      logger.error('Error fetching taken trades:', err);
+    } catch (error) {
+      logger.error('Error fetching taken trades:', error);
     }
   };
 
@@ -170,6 +174,31 @@ const Signals = () => {
   const totalInitialBalance = accounts.reduce((sum, acc) => sum + acc.initial_balance, 0);
   const totalPnL = totalBalance - totalInitialBalance;
   const totalPnLPercent = totalInitialBalance > 0 ? (totalPnL / totalInitialBalance) * 100 : 0;
+
+  // Fix account balance - restore to initial for open trades
+  const fixAccountBalance = async (accountId: string) => {
+    const account = accounts.find(a => a.id === accountId);
+    if (!account) return;
+
+    try {
+      const { error } = await supabase
+        .from('trading_accounts')
+        .update({
+          current_balance: account.initial_balance,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', accountId);
+
+      if (error) throw error;
+
+      toast.success('Balance restored!');
+      fetchAccounts();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to restore balance';
+      toast.error(message);
+      logger.error('Balance restore error:', error);
+    }
+  };
 
   const fetchSignals = async () => {
     if (!isSupabaseConfigured) {
@@ -226,9 +255,9 @@ const Signals = () => {
 
       setSignals(data || []);
       setTotalCount(count || 0);
-    } catch (err: any) {
-      logger.error('Error fetching signals:', err);
-      setError(err.message || 'Failed to fetch signals');
+    } catch (error) {
+      logger.error('Error fetching signals:', error);
+      setError(error instanceof Error ? error.message : 'Failed to fetch signals');
     } finally {
       setLoading(false);
     }
@@ -460,15 +489,26 @@ const Signals = () => {
                 <Wallet className="w-5 h-5 text-primary" />
                 <span className="font-semibold text-foreground">My Trading Accounts</span>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowAccountModal(true)}
-                className="h-7"
-              >
-                <Plus className="w-3 h-3 mr-1" />
-                Add
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => navigate('/manage-accounts')}
+                  className="h-7 w-7"
+                  title="Manage accounts"
+                >
+                  <Settings className="w-3.5 h-3.5" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAccountModal(true)}
+                  className="h-7"
+                >
+                  <Plus className="w-3 h-3 mr-1" />
+                  Add
+                </Button>
+              </div>
             </div>
             
             {accounts.length === 0 ? (
@@ -501,9 +541,22 @@ const Signals = () => {
                 {/* Account list */}
                 <div className="flex flex-wrap gap-2 mt-2">
                   {accounts.map((account) => (
-                    <Badge key={account.id} variant="secondary" className="text-xs">
-                      {account.account_name}: {account.currency} {account.current_balance.toLocaleString()}
-                    </Badge>
+                    <div key={account.id} className="flex items-center gap-1">
+                      <Badge variant="secondary" className="text-xs">
+                        {account.account_name}: {account.currency} {account.current_balance.toLocaleString()}
+                      </Badge>
+                      {account.current_balance < account.initial_balance && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => fixAccountBalance(account.id)}
+                          className="h-5 px-2 text-xs text-amber-400 hover:text-amber-300"
+                          title="Restore to initial balance"
+                        >
+                          Fix
+                        </Button>
+                      )}
+                    </div>
                   ))}
                 </div>
               </div>

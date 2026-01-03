@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useReducer } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Plus, 
@@ -13,7 +13,9 @@ import {
   Image as ImageIcon,
   Search,
   Download,
-  Edit2
+  Edit2,
+  Filter,
+  Wallet
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,6 +28,8 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PnLInputModal } from "@/components/PnLInputModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
+import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
+import { NewTradeFormSchema } from "@/lib/formValidation";
 
 interface Trade {
   id: string;
@@ -44,6 +48,15 @@ interface Trade {
   entry_date: string | null;
   created_at: string;
   screenshot_urls?: string[];
+  account_id: string | null;
+  account_name?: string;
+}
+
+interface TradingAccount {
+  id: string;
+  account_name: string;
+  platform: string;
+  is_active: boolean;
 }
 
 const Journal = () => {
@@ -51,19 +64,14 @@ const Journal = () => {
   const { user } = useAuth();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [showAddTrade, setShowAddTrade] = useState(false);
-  const [showAnalytics, setShowAnalytics] = useState(false);
-  const [showCSVImport, setShowCSVImport] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'open' | 'closed'>('all');
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
   
-  // Edit mode
-  const [editingTrade, setEditingTrade] = useState<Trade | null>(null);
+  // Trading accounts
+  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
   
-  // Dialogs
-  const [deleteConfirm, setDeleteConfirm] = useState<{ isOpen: boolean; tradeId: string | null }>({ isOpen: false, tradeId: null });
-  const [closeTradeModal, setCloseTradeModal] = useState<{ isOpen: boolean; trade: Trade | null }>({ isOpen: false, trade: null });
+  // Use reducers for filters and modals (performance optimization)
+  const [filters, dispatchFilters] = useReducer(filtersReducer, initialFiltersState);
+  const [modals, dispatchModals] = useReducer(modalReducer, initialModalState);
 
   // New trade form
   const [newTrade, setNewTrade] = useState({
@@ -75,23 +83,53 @@ const Journal = () => {
     position_size: "",
     risk_percent: "",
     notes: "",
+    account_id: "",
   });
 
   useEffect(() => {
     if (user) {
       fetchTrades();
+      fetchAccounts();
     } else {
       setIsLoading(false);
     }
   }, [user]);
 
+  // Keyboard shortcuts
+  useKeyboardShortcut([
+    {
+      key: 'n',
+      ctrl: true,
+      handler: () => {
+        dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
+        resetForm();
+        dispatchModals({ type: 'OPEN_ADD_TRADE' });
+      }
+    },
+    {
+      key: 'Escape',
+      handler: () => {
+        if (modals.showAddTrade) {
+          dispatchModals({ type: 'CLOSE_ADD_TRADE' });
+        }
+      }
+    }
+  ], true);
+
+  // Focus trap for modal
+  const modalRef = useFocusTrap(modals.showAddTrade);
+
   const fetchTrades = async () => {
     if (!user) return;
     
     setIsLoading(true);
+    // Fetch with left join to get account name, but exclude trades from deleted accounts
     const { data, error } = await supabase
       .from('trading_journal')
-      .select('*')
+      .select(`
+        *,
+        trading_accounts!left(account_name)
+      `)
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
 
@@ -99,9 +137,31 @@ const Journal = () => {
       logger.error('Error fetching trades:', error);
       toast.error("Failed to load trades");
     } else {
-      setTrades(data || []);
+      // Map the data to include account_name from the join
+      const mappedData = (data || []).map(trade => ({
+        ...trade,
+        account_name: trade.trading_accounts?.account_name || 'No Account',
+      }));
+      setTrades(mappedData);
     }
     setIsLoading(false);
+  };
+  
+  const fetchAccounts = async () => {
+    if (!user) return;
+    
+    const { data, error } = await supabase
+      .from('trading_accounts')
+      .select('id, account_name, platform, is_active')
+      .eq('user_id', user.id)
+      .eq('is_active', true)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      logger.error('Error fetching accounts:', error);
+    } else {
+      setAccounts(data || []);
+    }
   };
 
   const uploadScreenshots = async (tradeId: string): Promise<string[]> => {
@@ -135,8 +195,11 @@ const Journal = () => {
       return;
     }
 
-    if (!newTrade.pair) {
-      toast.error("Please enter a currency pair");
+    // Validate form data
+    const validation = NewTradeFormSchema.safeParse(newTrade);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
       return;
     }
 
@@ -152,6 +215,7 @@ const Journal = () => {
         position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
+        account_id: newTrade.account_id || null,
         status: 'open',
         entry_date: new Date().toISOString(),
       })
@@ -167,14 +231,22 @@ const Journal = () => {
       }
       
       toast.success("Trade added");
-      setShowAddTrade(false);
+      dispatchModals({ type: 'CLOSE_ADD_TRADE' });
       resetForm();
       fetchTrades();
     }
   };
 
   const handleEditTrade = async () => {
-    if (!user || !editingTrade) return;
+    if (!user || !modals.editingTrade) return;
+
+    // Validate form data
+    const validation = NewTradeFormSchema.safeParse(newTrade);
+    if (!validation.success) {
+      const firstError = validation.error.errors[0];
+      toast.error(firstError.message);
+      return;
+    }
 
     const { error } = await supabase
       .from('trading_journal')
@@ -187,16 +259,17 @@ const Journal = () => {
         position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
+        account_id: newTrade.account_id || null,
       })
-      .eq('id', editingTrade.id)
+      .eq('id', modals.editingTrade.id)
       .eq('user_id', user.id);
 
     if (error) {
       toast.error("Failed to update trade");
     } else {
       toast.success("Trade updated");
-      setShowAddTrade(false);
-      setEditingTrade(null);
+      dispatchModals({ type: 'CLOSE_ADD_TRADE' });
+      dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
       resetForm();
       fetchTrades();
     }
@@ -212,12 +285,13 @@ const Journal = () => {
       position_size: "",
       risk_percent: "",
       notes: "",
+      account_id: "",
     });
     setSelectedScreenshots([]);
   };
 
   const openEditModal = (trade: Trade) => {
-    setEditingTrade(trade);
+    dispatchModals({ type: 'SET_EDITING_TRADE', payload: trade });
     setNewTrade({
       pair: trade.pair,
       direction: trade.direction,
@@ -227,8 +301,9 @@ const Journal = () => {
       position_size: trade.position_size?.toString() || "",
       risk_percent: trade.risk_percent?.toString() || "",
       notes: trade.notes || "",
+      account_id: trade.account_id || "",
     });
-    setShowAddTrade(true);
+    dispatchModals({ type: 'OPEN_ADD_TRADE' });
   };
 
   const handleImportTrades = async (parsedTrades: unknown[]) => {
@@ -375,13 +450,51 @@ const Journal = () => {
 
   const filteredTrades = useMemo(() => {
     return trades.filter(trade => {
-      const matchesFilter = filter === 'all' || trade.status === filter;
-      const matchesSearch = searchQuery === "" || 
-        trade.pair.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        trade.notes?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesFilter && matchesSearch;
+      const matchesFilter = filters.filter === 'all' || trade.status === filters.filter;
+      const matchesSearch = filters.searchQuery === "" || 
+        trade.pair.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
+        trade.notes?.toLowerCase().includes(filters.searchQuery.toLowerCase());
+      
+      // Account filter
+      const matchesAccount = filters.selectedAccountId === 'all' || trade.account_id === filters.selectedAccountId;
+      
+      // Date filters
+      const tradeDate = new Date(trade.entry_date || trade.created_at);
+      const matchesMonth = filters.selectedMonth === 'all' || 
+        (tradeDate.getMonth() + 1).toString() === filters.selectedMonth;
+      const matchesYear = filters.selectedYear === 'all' || 
+        tradeDate.getFullYear().toString() === filters.selectedYear;
+      
+      return matchesFilter && matchesSearch && matchesAccount && matchesMonth && matchesYear;
     });
-  }, [trades, filter, searchQuery]);
+  }, [trades, filters]);
+  
+  // Get unique months and years from trades
+  const availableMonths = useMemo(() => {
+    const months = new Set<string>();
+    trades.forEach(trade => {
+      const date = new Date(trade.entry_date || trade.created_at);
+      months.add((date.getMonth() + 1).toString());
+    });
+    return Array.from(months).sort((a, b) => parseInt(a) - parseInt(b));
+  }, [trades]);
+  
+  const availableYears = useMemo(() => {
+    const years = new Set<string>();
+    trades.forEach(trade => {
+      const date = new Date(trade.entry_date || trade.created_at);
+      years.add(date.getFullYear().toString());
+    });
+    return Array.from(years).sort((a, b) => parseInt(b) - parseInt(a));
+  }, [trades]);
+  
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  const hasActiveFilters = filters.selectedAccountId !== 'all' || filters.selectedMonth !== 'all' || filters.selectedYear !== 'all';
+  
+  const clearFilters = () => {
+    dispatchFilters({ type: 'RESET_FILTERS' });
+  };
 
   // Only count closed trades for win rate
   const closedTrades = trades.filter(t => t.status === 'closed');
@@ -432,21 +545,24 @@ const Journal = () => {
           <div className="flex gap-2">
             <button
               onClick={handleExportCSV}
+              aria-label="Export trades to CSV"
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
             >
-              <Download className="w-5 h-5 text-foreground" />
+              <Download className="w-5 h-5 text-foreground" aria-hidden="true" />
             </button>
             <button
-              onClick={() => setShowCSVImport(true)}
+              onClick={() => dispatchModals({ type: 'OPEN_CSV_IMPORT' })}
+              aria-label="Import trades from CSV"
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
             >
-              <Upload className="w-5 h-5 text-foreground" />
+              <Upload className="w-5 h-5 text-foreground" aria-hidden="true" />
             </button>
             <button
-              onClick={() => setShowAnalytics(true)}
+              onClick={() => dispatchModals({ type: 'OPEN_ANALYTICS' })}
+              aria-label="View analytics"
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
             >
-              <BarChart3 className="w-5 h-5 text-foreground" />
+              <BarChart3 className="w-5 h-5 text-foreground" aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -481,12 +597,13 @@ const Journal = () => {
       {/* Search */}
       <div className="px-6 mb-4">
         <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" aria-hidden="true" />
           <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            type="search"
+            value={filters.searchQuery}
+            onChange={(e) => dispatchFilters({ type: 'SET_SEARCH_QUERY', payload: e.target.value })}
             placeholder="Search trades..."
+            aria-label="Search trades"
             className="w-full h-12 pl-12 pr-4 bg-secondary text-foreground rounded-xl outline-none focus:ring-2 focus:ring-foreground/10"
           />
         </div>
@@ -494,22 +611,110 @@ const Journal = () => {
 
       {/* Filter */}
       <div className="px-6 mb-4">
-        <div className="flex gap-2">
-          {(['all', 'open', 'closed'] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
-                filter === f 
-                  ? 'bg-foreground text-background' 
-                  : 'bg-secondary text-foreground'
-              }`}
-            >
-              {f.charAt(0).toUpperCase() + f.slice(1)}
-            </button>
-          ))}
+        <div className="flex gap-2 items-center">
+          <div className="flex gap-2 flex-1">
+            {(['all', 'open', 'closed'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => dispatchFilters({ type: 'SET_FILTER', payload: f })}
+                className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+                  filters.filter === f 
+                    ? 'bg-foreground text-background' 
+                    : 'bg-secondary text-foreground'
+                }`}
+              >
+                {f.charAt(0).toUpperCase() + f.slice(1)}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => dispatchFilters({ type: 'TOGGLE_FILTERS' })}
+            aria-label="Toggle filters"
+            aria-expanded={filters.showFilters}
+            aria-pressed={hasActiveFilters}
+            className={`px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 relative ${
+              hasActiveFilters
+                ? 'bg-primary text-primary-foreground' 
+                : 'bg-secondary text-foreground'
+            }`}
+          >
+            <Filter className="w-4 h-4" aria-hidden="true" />
+            {hasActiveFilters && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full" />
+            )}
+          </button>
         </div>
       </div>
+      
+      {/* Advanced Filters */}
+      {filters.showFilters && (
+        <div className="px-6 mb-4 space-y-3 animate-slide-up">
+          <div className="bg-secondary rounded-2xl p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-foreground">Filters</h3>
+              {hasActiveFilters && (
+                <button
+                  onClick={clearFilters}
+                  className="text-xs text-primary hover:underline"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+            
+            {/* Account Filter */}
+            <div>
+              <label className="block text-xs text-muted-foreground mb-2">Trading Account</label>
+              <select
+                value={filters.selectedAccountId}
+                onChange={(e) => dispatchFilters({ type: 'SET_ACCOUNT_ID', payload: e.target.value })}
+                className="w-full h-10 px-3 bg-background text-foreground rounded-lg outline-none text-sm"
+              >
+                <option value="all">All Accounts</option>
+                {accounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.account_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Month Filter */}
+            <div>
+              <label className="block text-xs text-muted-foreground mb-2">Month</label>
+              <select
+                value={filters.selectedMonth}
+                onChange={(e) => dispatchFilters({ type: 'SET_MONTH', payload: e.target.value })}
+                className="w-full h-10 px-3 bg-background text-foreground rounded-lg outline-none text-sm"
+              >
+                <option value="all">All Months</option>
+                {availableMonths.map(month => (
+                  <option key={month} value={month}>
+                    {monthNames[parseInt(month) - 1]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            {/* Year Filter */}
+            <div>
+              <label className="block text-xs text-muted-foreground mb-2">Year</label>
+              <select
+                value={filters.selectedYear}
+                onChange={(e) => dispatchFilters({ type: 'SET_YEAR', payload: e.target.value })}
+                className="w-full h-10 px-3 bg-background text-foreground rounded-lg outline-none text-sm"
+              >
+                <option value="all">All Years</option>
+                {availableYears.map(year => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Trades List */}
       <main className="flex-1 px-6 space-y-3 overflow-y-auto">
@@ -597,6 +802,13 @@ const Journal = () => {
                 )}
               </div>
 
+              {trade.account_name && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                  <Wallet className="w-3 h-3" />
+                  <span>{trade.account_name}</span>
+                </div>
+              )}
+
               {trade.notes && (
                 <p className="text-sm text-muted-foreground mb-3">{trade.notes}</p>
               )}
@@ -604,14 +816,14 @@ const Journal = () => {
               {trade.status === 'open' && (
                 <div className="flex gap-2">
                   <button
-                    onClick={() => setCloseTradeModal({ isOpen: true, trade })}
+                    onClick={() => dispatchModals({ type: 'OPEN_CLOSE_TRADE', payload: trade })}
                     className="flex-1 h-10 bg-background text-foreground text-sm font-medium rounded-xl flex items-center justify-center gap-1"
                   >
                     <Check className="w-4 h-4" />
                     Close Trade
                   </button>
                   <button
-                    onClick={() => setDeleteConfirm({ isOpen: true, tradeId: trade.id })}
+                    onClick={() => dispatchModals({ type: 'OPEN_DELETE_CONFIRM', payload: trade.id })}
                     className="h-10 w-10 bg-destructive/10 text-destructive rounded-xl flex items-center justify-center"
                   >
                     <Trash2 className="w-4 h-4" />
@@ -638,35 +850,69 @@ const Journal = () => {
       {/* Add Trade FAB */}
       <button
         onClick={() => {
-          setEditingTrade(null);
+          dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
           resetForm();
-          setShowAddTrade(true);
+          dispatchModals({ type: 'OPEN_ADD_TRADE' });
         }}
+        aria-label="Add new trade (Ctrl+N)"
+        title="Add new trade (Ctrl+N)"
         className="fixed bottom-28 right-6 w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95"
       >
-        <Plus className="w-6 h-6" />
+        <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
 
       {/* Add/Edit Trade Modal */}
-      {showAddTrade && (
-        <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
+      {modals.showAddTrade && (
+        <div 
+          ref={modalRef}
+          className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trade-modal-title"
+        >
           <header className="pt-12 pb-4 px-6 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-foreground">
-              {editingTrade ? 'Edit Trade' : 'New Trade'}
+            <h2 id="trade-modal-title" className="text-xl font-bold text-foreground">
+              {modals.editingTrade ? 'Edit Trade' : 'New Trade'}
             </h2>
             <button
               onClick={() => {
-                setShowAddTrade(false);
-                setEditingTrade(null);
+                dispatchModals({ type: 'CLOSE_ADD_TRADE' });
+                dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
                 setSelectedScreenshots([]);
               }}
+              aria-label="Close dialog (Esc)"
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center"
             >
-              <X className="w-5 h-5 text-foreground" />
+              <X className="w-5 h-5 text-foreground" aria-hidden="true" />
             </button>
           </header>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            {/* Trading Account Selection */}
+            <div>
+              <label className="block text-sm text-muted-foreground mb-2">
+                <Wallet className="w-4 h-4 inline mr-1" />
+                Trading Account (Optional)
+              </label>
+              <select
+                value={newTrade.account_id}
+                onChange={(e) => setNewTrade({ ...newTrade, account_id: e.target.value })}
+                className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+              >
+                <option value="">No Account</option>
+                {accounts.map(account => (
+                  <option key={account.id} value={account.id}>
+                    {account.account_name} ({account.platform})
+                  </option>
+                ))}
+              </select>
+              {accounts.length === 0 && (
+                <p className="text-xs text-muted-foreground mt-1">
+                  No trading accounts yet. Add one in Settings to link trades.
+                </p>
+              )}
+            </div>
+            
             <div>
               <label className="block text-sm text-muted-foreground mb-2">Currency Pair</label>
               <input
@@ -774,7 +1020,7 @@ const Journal = () => {
             </div>
 
             {/* Screenshots Section */}
-            {!editingTrade && (
+            {!modals.editingTrade && (
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
                 <div className="space-y-2">
@@ -815,32 +1061,32 @@ const Journal = () => {
 
           <div className="px-6 pb-8">
             <button
-              onClick={editingTrade ? handleEditTrade : handleAddTrade}
+              onClick={modals.editingTrade ? handleEditTrade : handleAddTrade}
               className="w-full h-14 bg-foreground text-background font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
             >
-              {editingTrade ? 'Update Trade' : 'Add Trade'}
+              {modals.editingTrade ? 'Update Trade' : 'Add Trade'}
             </button>
           </div>
         </div>
       )}
 
       {/* Analytics Modal */}
-      {showAnalytics && (
-        <JournalAnalytics trades={trades} onClose={() => setShowAnalytics(false)} />
+      {modals.showAnalytics && (
+        <JournalAnalytics trades={filteredTrades} onClose={() => dispatchModals({ type: 'CLOSE_ANALYTICS' })} />
       )}
 
       {/* CSV Import Modal */}
-      {showCSVImport && (
-        <CSVImport onImport={handleImportTrades} onClose={() => setShowCSVImport(false)} />
+      {modals.showCSVImport && (
+        <CSVImport onImport={handleImportTrades} onClose={() => dispatchModals({ type: 'CLOSE_CSV_IMPORT' })} />
       )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
-        isOpen={deleteConfirm.isOpen}
-        onClose={() => setDeleteConfirm({ isOpen: false, tradeId: null })}
+        isOpen={modals.deleteConfirm.isOpen}
+        onClose={() => dispatchModals({ type: 'CLOSE_DELETE_CONFIRM' })}
         onConfirm={() => {
-          if (deleteConfirm.tradeId) {
-            handleDeleteTrade(deleteConfirm.tradeId);
+          if (modals.deleteConfirm.tradeId) {
+            handleDeleteTrade(modals.deleteConfirm.tradeId);
           }
         }}
         title="Delete Trade"
@@ -851,15 +1097,15 @@ const Journal = () => {
 
       {/* P&L Input Modal */}
       <PnLInputModal
-        isOpen={closeTradeModal.isOpen}
-        onClose={() => setCloseTradeModal({ isOpen: false, trade: null })}
+        isOpen={modals.closeTradeModal.isOpen}
+        onClose={() => dispatchModals({ type: 'CLOSE_CLOSE_TRADE' })}
         onConfirm={(pnl) => {
-          if (closeTradeModal.trade) {
-            handleCloseTrade(closeTradeModal.trade.id, pnl);
+          if (modals.closeTradeModal.trade) {
+            handleCloseTrade(modals.closeTradeModal.trade.id, pnl);
           }
-          setCloseTradeModal({ isOpen: false, trade: null });
+          dispatchModals({ type: 'CLOSE_CLOSE_TRADE' });
         }}
-        pair={closeTradeModal.trade?.pair || ""}
+        pair={modals.closeTradeModal.trade?.pair || ""}
       />
 
       <BottomNav />

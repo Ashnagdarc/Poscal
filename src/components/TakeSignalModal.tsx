@@ -91,26 +91,14 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
 
       if (insertError) throw insertError;
 
-      // Deduct risk amount from account balance
-      const newBalance = selectedAccount!.current_balance - riskAmount;
-      const { error: updateError } = await supabase
-        .from('trading_accounts')
-        .update({ 
-          current_balance: newBalance,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', selectedAccountId);
-
-      if (updateError) throw updateError;
-
       toast.success(`Signal taken! Risking ${riskPercentNum}% (${selectedAccount!.currency} ${riskAmount.toFixed(2)})`);
       onTradeTaken();
       onOpenChange(false);
       
       // Reset form
       setRiskPercent('1');
-    } catch (error: any) {
-      toast.error(error.message || 'Failed to take signal');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to take signal');
     } finally {
       setLoading(false);
     }
@@ -201,7 +189,10 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
                   <strong>Risk Amount:</strong> {selectedAccount.currency} {riskAmount.toFixed(2)}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Balance after: {selectedAccount.currency} {(selectedAccount.current_balance - riskAmount).toFixed(2)}
+                  <strong>Current Balance:</strong> {selectedAccount.currency} {selectedAccount.current_balance.toFixed(2)}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 italic">
+                  Balance will only change when the trade closes
                 </p>
               </div>
             )}

@@ -121,9 +121,10 @@ const Profile = () => {
 
       toast.success("Avatar updated!");
       fetchProfile();
-    } catch (error: any) {
+    } catch (error) {
       logger.error('Avatar upload error:', error);
-      if (error.message?.includes('bucket') || error.message?.includes('not found')) {
+      const message = error instanceof Error ? error.message : '';
+      if (message.includes('bucket') || message.includes('not found')) {
         toast.error("Storage not configured. Please run the SQL migration.");
       } else {
         toast.error("Failed to upload avatar");

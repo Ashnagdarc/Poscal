@@ -2,19 +2,25 @@
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
 const SW_VERSION = 'v14-push-debug';
-console.log(`[SW] Loading service worker ${SW_VERSION}`);
+const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
+
+// Conditional logging helper
+const log = (...args) => isDev && console.log(`[SW]`, ...args);
+const error = (...args) => console.error(`[SW]`, ...args); // Always log errors
+
+log(`Loading service worker ${SW_VERSION}`);
 
 // Precache assets injected by Workbox
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
 
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
-  console.log(`[SW] Installing ${SW_VERSION}...`);
+  log(`Installing ${SW_VERSION}...`);
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
-  console.log(`[SW] Activated ${SW_VERSION}`);
+  log(`Activated ${SW_VERSION}`);
   event.waitUntil(
     clients.claim().then(() => {
       // Send version to all clients
@@ -29,23 +35,26 @@ self.addEventListener('activate', (event) => {
 
 // Handle push events
 self.addEventListener('push', (event) => {
-  console.log('========================================');
-  console.log('[SW] 🔥 PUSH EVENT RECEIVED!', event);
-  console.log('[SW] Has data:', !!event.data);
-  console.log('========================================');
+  log('========================================');
+  log('🔥 PUSH EVENT RECEIVED!', event);
+  log('Has data:', !!event.data);
+  log('========================================');
   
-  // Send message to all clients
+  // Send message to all clients (only in dev)
   const sendMessageToClients = (message, type = 'info') => {
+    if (!isDev) return;
     self.clients.matchAll().then(clients => {
-      console.log(`[SW] Sending message to ${clients.length} clients:`, message);
+      log(`Sending message to ${clients.length} clients:`, message);
       clients.forEach(client => {
         client.postMessage({ type: 'SW_LOG', message, logType: type });
       });
     });
   };
   
-  sendMessageToClients('🔔 PUSH EVENT RECEIVED!', 'success');
-  sendMessageToClients(`🔥 This is a real push from Apple/Google!`, 'success');
+  if (isDev) {
+    sendMessageToClients('🔔 PUSH EVENT RECEIVED!', 'success');
+    sendMessageToClients(`🔥 This is a real push from Apple/Google!`, 'success');
+  }
   
   let data = {
     title: 'PosCal Notification',
@@ -59,23 +68,25 @@ self.addEventListener('push', (event) => {
   if (event.data) {
     try {
       const parsed = event.data.json();
-      console.log('[SW] Push data parsed:', parsed);
-      sendMessageToClients(`📦 Data: ${JSON.stringify(parsed).substring(0, 100)}`, 'info');
+      log('Push data parsed:', parsed);
+      if (isDev) sendMessageToClients(`📦 Data: ${JSON.stringify(parsed).substring(0, 100)}`, 'info');
       data = { ...data, ...parsed };
     } catch (e) {
-      console.error('[SW] Error parsing push data:', e);
+      error('Error parsing push data:', e);
       const rawText = event.data.text();
-      console.log('[SW] Raw push data:', rawText);
-      sendMessageToClients(`❌ Parse error: ${e.message}`, 'error');
-      sendMessageToClients(`Raw: ${rawText.substring(0, 100)}`, 'info');
+      log('Raw push data:', rawText);
+      if (isDev) {
+        sendMessageToClients(`❌ Parse error: ${e.message}`, 'error');
+        sendMessageToClients(`Raw: ${rawText.substring(0, 100)}`, 'info');
+      }
     }
   } else {
-    console.log('[SW] No data in push event');
-    sendMessageToClients('⚠️ No data in push event', 'error');
+    log('No data in push event');
+    if (isDev) sendMessageToClients('⚠️ No data in push event', 'error');
   }
 
-  console.log('[SW] Showing notification:', data.title);
-  sendMessageToClients(`📢 Showing: ${data.title}`, 'info');
+  log('Showing notification:', data.title);
+  if (isDev) sendMessageToClients(`📢 Showing: ${data.title}`, 'info');
   
   const options = {
     body: data.body,
@@ -94,20 +105,19 @@ self.addEventListener('push', (event) => {
   event.waitUntil(
     self.registration.showNotification(data.title, options)
       .then(() => {
-        console.log('[SW] Notification shown successfully');
-        sendMessageToClients('✅ Notification shown successfully!', 'success');
+        log('Notification shown successfully');
+        if (isDev) sendMessageToClients('✅ Notification shown successfully!', 'success');
       })
       .catch(err => {
-        console.error('[SW] Error showing notification:', err);
-        sendMessageToClients(`❌ Error showing notification: ${err.message}`, 'error');
+        error('Error showing notification:', err);
+        if (isDev) sendMessageToClients(`❌ Error showing notification: ${err.message}`, 'error');
       })
   );
 });
 
 // Handle notification click
 self.addEventListener('notificationclick', (event) => {
-  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
-  if (isDev) console.log('Notification clicked:', event);
+  log('Notification clicked:', event);
   event.notification.close();
 
   if (event.action === 'dismiss') {
@@ -139,8 +149,7 @@ self.addEventListener('notificationclick', (event) => {
 
 // Handle push subscription change - Critical for production!
 self.addEventListener('pushsubscriptionchange', async (event) => {
-  const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
-  if (isDev) console.log('Push subscription changed:', event);
+  log('Push subscription changed:', event);
   
   // Re-subscribe with new subscription
   event.waitUntil(
@@ -161,10 +170,10 @@ self.addEventListener('pushsubscriptionchange', async (event) => {
           })
         });
         
-        if (isDev) console.log('Push subscription renewed successfully');
-      } catch (error) {
+        log('Push subscription renewed successfully');
+      } catch (err) {
         // Always log errors in production for monitoring
-        console.error('Failed to renew push subscription:', error);
+        error('Failed to renew push subscription:', err);
       }
     })()
   );

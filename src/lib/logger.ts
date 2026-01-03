@@ -5,26 +5,28 @@
 
 const isDevelopment = import.meta.env.DEV;
 
+type LogArgs = unknown[];
+
 export const logger = {
-  log: (...args: any[]) => {
+  log: (...args: LogArgs): void => {
     if (isDevelopment) {
       console.log(...args);
     }
   },
   
-  error: (...args: any[]) => {
+  error: (...args: LogArgs): void => {
     if (isDevelopment) {
       console.error(...args);
     }
   },
   
-  warn: (...args: any[]) => {
+  warn: (...args: LogArgs): void => {
     if (isDevelopment) {
       console.warn(...args);
     }
   },
   
-  info: (...args: any[]) => {
+  info: (...args: LogArgs): void => {
     if (isDevelopment) {
       console.info(...args);
     }

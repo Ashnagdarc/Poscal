@@ -179,6 +179,7 @@ export type Database = {
       }
       trading_journal: {
         Row: {
+          account_id: string | null
           created_at: string | null
           direction: string
           entry_date: string | null
@@ -199,6 +200,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_id?: string | null
           created_at?: string | null
           direction: string
           entry_date?: string | null
@@ -219,6 +221,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_id?: string | null
           created_at?: string | null
           direction?: string
           entry_date?: string | null

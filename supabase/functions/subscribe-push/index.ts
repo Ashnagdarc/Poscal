@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { edgeLogger } from "../_shared/logger.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -16,27 +17,27 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     
-    console.log('Creating Supabase client with URL:', supabaseUrl);
+    edgeLogger.log('Creating Supabase client with URL:', supabaseUrl);
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     const body = await req.json();
-    console.log('Received body:', JSON.stringify(body));
+    edgeLogger.log('Received body:', JSON.stringify(body));
     
     const { subscription, user_id } = body;
 
     if (!subscription || !subscription.endpoint) {
-      console.error('Invalid subscription data:', subscription);
+      edgeLogger.error('Invalid subscription data:', subscription);
       throw new Error('Invalid subscription data - missing endpoint');
     }
 
     if (!subscription.keys?.p256dh || !subscription.keys?.auth) {
-      console.error('Invalid subscription keys:', subscription.keys);
+      edgeLogger.error('Invalid subscription keys:', subscription.keys);
       throw new Error('Invalid subscription data - missing keys');
     }
 
-    console.log('Saving push subscription for user:', user_id);
-    console.log('Endpoint:', subscription.endpoint);
-    console.log('Keys present:', { p256dh: !!subscription.keys.p256dh, auth: !!subscription.keys.auth });
+    edgeLogger.log('Saving push subscription for user:', user_id);
+    edgeLogger.log('Endpoint:', subscription.endpoint);
+    edgeLogger.log('Keys present:', { p256dh: !!subscription.keys.p256dh, auth: !!subscription.keys.auth });
 
     // Check if subscription already exists
     const { data: existing, error: selectError } = await supabase
@@ -46,15 +47,15 @@ serve(async (req) => {
       .maybeSingle();
 
     if (selectError) {
-      console.error('Error checking existing subscription:', selectError);
+      edgeLogger.error('Error checking existing subscription:', selectError);
       throw selectError;
     }
 
-    console.log('Existing subscription:', existing);
+    edgeLogger.log('Existing subscription:', existing);
 
     if (existing) {
       // Update existing subscription
-      console.log('Updating existing subscription:', existing.id);
+      edgeLogger.log('Updating existing subscription:', existing.id);
       const { error } = await supabase
         .from('push_subscriptions')
         .update({
@@ -66,13 +67,13 @@ serve(async (req) => {
         .eq('endpoint', subscription.endpoint);
 
       if (error) {
-        console.error('Error updating subscription:', error);
+        edgeLogger.error('Error updating subscription:', error);
         throw error;
       }
-      console.log('Successfully updated existing subscription');
+      edgeLogger.log('Successfully updated existing subscription');
     } else {
       // Insert new subscription
-      console.log('Inserting new subscription');
+      edgeLogger.log('Inserting new subscription');
       const { data: inserted, error } = await supabase
         .from('push_subscriptions')
         .insert({
@@ -85,10 +86,10 @@ serve(async (req) => {
         .single();
 
       if (error) {
-        console.error('Error inserting subscription:', error);
+        edgeLogger.error('Error inserting subscription:', error);
         throw error;
       }
-      console.log('Successfully created new subscription:', inserted);
+      edgeLogger.log('Successfully created new subscription:', inserted);
     }
 
     return new Response(
@@ -96,7 +97,7 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
-    console.error('Error in subscribe-push:', err);
+    edgeLogger.error('Error in subscribe-push:', err);
     const errorMessage = err instanceof Error ? err.message : 'Unknown error';
     return new Response(
       JSON.stringify({ error: errorMessage }),

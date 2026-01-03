@@ -1,6 +1,7 @@
 # Debugging 404 NOT_FOUND Error
 
 ## Error Details
+
 ```
 404: NOT_FOUND
 Code: NOT_FOUND
@@ -19,6 +20,7 @@ This error is coming from Supabase, not your React app. Here's how to debug it:
 ## Common Causes & Solutions
 
 ### 1. **Twelve Data API Key Missing**
+
 If you see errors related to `get-live-prices`:
 
 ```bash
@@ -26,7 +28,8 @@ If you see errors related to `get-live-prices`:
 npx supabase secrets set TWELVE_DATA_API_KEY=your_api_key_here
 ```
 
-### 2. **VAPID Keys Missing** 
+### 2. **VAPID Keys Missing**
+
 If you see errors related to push notifications:
 
 ```bash
@@ -39,6 +42,7 @@ npx supabase secrets set VAPID_PRIVATE_KEY=your_private_key
 ```
 
 ### 3. **Environment Variables Not Set**
+
 Check if environment variables are set:
 
 ```bash
@@ -46,6 +50,7 @@ npx supabase secrets list
 ```
 
 ### 4. **Function Timeout or Error**
+
 Check function logs:
 
 ```bash
@@ -62,10 +67,13 @@ Run this in your browser console while on your site:
 
 ```javascript
 // Test get-live-prices function
-const { data, error } = await window.supabase?.functions.invoke('get-live-prices', {
-  body: { symbols: ['EUR/USD'] }
-});
-console.log('Result:', data, 'Error:', error);
+const { data, error } = await window.supabase?.functions.invoke(
+  "get-live-prices",
+  {
+    body: { symbols: ["EUR/USD"] },
+  }
+);
+console.log("Result:", data, "Error:", error);
 ```
 
 ## If Still Having Issues

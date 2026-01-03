@@ -12,6 +12,8 @@ import { NumPad } from "./NumPad";
 import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useLivePrices } from "@/hooks/use-live-prices";
+import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -45,6 +47,15 @@ export const Calculator = () => {
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
 
+  // Fetch live price for the selected pair
+  const { prices, loading: pricesLoading } = useLivePrices({
+    symbols: [selectedPair.symbol],
+    enabled: true,
+    refreshInterval: 30000 // Refresh every 30 seconds
+  });
+  
+  const currentLivePrice = prices[selectedPair.symbol];
+
   const riskPresets = [0.5, 1, 2, 3];
 
   // Load saved settings
@@ -64,7 +75,15 @@ export const Calculator = () => {
     const risk = riskPercent;
     const slPips = parseFloat(stopLossPips) || 0;
     const tpPips = parseFloat(takeProfitPips) || 0;
-    const pipVal = selectedPair.pipValue;
+    
+    // Use dynamic pip value calculation with live price
+    // Falls back to static value if live price not available
+    const pipVal = getPipValueInUSD(
+      selectedPair.symbol,
+      'USD',
+      currentLivePrice || undefined,
+      prices // Pass all prices for cross-pair conversion
+    );
 
     if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
       return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0 };
@@ -72,12 +91,12 @@ export const Calculator = () => {
 
     const riskAmount = (balance * risk) / 100;
     const positionSize = riskAmount / (slPips * pipVal);
-    const units = positionSize * 100000;
+    const units = positionSize * STANDARD_LOT_SIZE;
     const riskReward = tpPips > 0 ? tpPips / slPips : 0;
     const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
 
     return { riskAmount, positionSize, units, riskReward, potentialProfit };
-  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair]);
+  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, prices]);
 
   const saveToHistory = () => {
     if (calculation.positionSize <= 0) return;

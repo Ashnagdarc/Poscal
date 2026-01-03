@@ -51,8 +51,8 @@ const AdminUpdates = () => {
 
       if (error) throw error;
       setUpdates(data || []);
-    } catch (err: any) {
-      logger.error('Error fetching updates:', err);
+    } catch (error) {
+      logger.error('Error fetching updates:', error);
       toast.error('Failed to fetch updates');
     } finally {
       setLoading(false);
@@ -110,9 +110,9 @@ const AdminUpdates = () => {
       setFormData({ title: '', description: '' });
       setCreateOpen(false);
       fetchUpdates();
-    } catch (err: any) {
-      logger.error('Error creating update:', err);
-      toast.error(err.message || 'Failed to create update');
+    } catch (error) {
+      logger.error('Error creating update:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to create update');
     } finally {
       setSubmitting(false);
     }
@@ -126,9 +126,9 @@ const AdminUpdates = () => {
 
       toast.success('Update deleted');
       setUpdates(updates.filter((u) => u.id !== id));
-    } catch (err: any) {
-      logger.error('Error deleting update:', err);
-      toast.error(err.message || 'Failed to delete update');
+    } catch (error) {
+      logger.error('Error deleting update:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete update');
     }
   };
 
@@ -143,8 +143,8 @@ const AdminUpdates = () => {
 
       toast.success(currentStatus ? 'Update deactivated' : 'Update activated');
       fetchUpdates();
-    } catch (err: any) {
-      logger.error('Error toggling update:', err);
+    } catch (error) {
+      logger.error('Error toggling update:', error);
       toast.error('Failed to update status');
     }
   };
