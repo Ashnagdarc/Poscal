@@ -90,6 +90,93 @@ export type Database = {
         }
         Relationships: []
       }
+      taken_trades: {
+        Row: {
+          id: string
+          user_id: string
+          account_id: string
+          signal_id: string
+          risk_percent: number
+          risk_amount: number
+          status: string
+          result: string | null
+          pnl: number | null
+          pnl_percent: number | null
+          closed_at: string | null
+          journaled: boolean
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          account_id: string
+          signal_id: string
+          risk_percent: number
+          risk_amount: number
+          status?: string
+          result?: string | null
+          pnl?: number | null
+          pnl_percent?: number | null
+          closed_at?: string | null
+          journaled?: boolean
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          account_id?: string
+          signal_id?: string
+          risk_percent?: number
+          risk_amount?: number
+          status?: string
+          result?: string | null
+          pnl?: number | null
+          pnl_percent?: number | null
+          closed_at?: string | null
+          journaled?: boolean
+          created_at?: string | null
+        }
+        Relationships: []
+      }
+      trading_accounts: {
+        Row: {
+          id: string
+          user_id: string
+          account_name: string
+          platform: string
+          initial_balance: number
+          current_balance: number
+          currency: string
+          is_active: boolean
+          created_at: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          account_name: string
+          platform: string
+          initial_balance: number
+          current_balance: number
+          currency?: string
+          is_active?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          account_name?: string
+          platform?: string
+          initial_balance?: number
+          current_balance?: number
+          currency?: string
+          is_active?: boolean
+          created_at?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       trading_journal: {
         Row: {
           created_at: string | null
