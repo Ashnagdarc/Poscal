@@ -17,6 +17,7 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 const Welcome = lazy(() => import("./pages/Welcome"));
 const SignIn = lazy(() => import("./pages/SignIn"));
 const SignUp = lazy(() => import("./pages/SignUp"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Journal = lazy(() => import("./pages/Journal"));
 const History = lazy(() => import("./pages/History"));
@@ -41,6 +42,7 @@ const AppContent = () => {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/journal" element={<Journal />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
