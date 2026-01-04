@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Edit, Trash2, AlertTriangle, Wallet, Plus, DollarSign } from 'lucide-react';
+import { ArrowLeft, Edit, Trash2, AlertTriangle, Wallet, Plus, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { BottomNav } from '@/components/BottomNav';
 import { TradingAccountModal } from '@/components/TradingAccountModal';
+import { AccountPerformanceDashboard } from '@/components/AccountPerformanceDashboard';
 import { Button } from '@/components/ui/button';
 import { ConfirmDialog } from '@/components/ui/confirm-dialog';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tables } from '@/types/database.types';
 import { logger } from '@/lib/logger';
 
@@ -28,6 +30,7 @@ export const ManageAccounts = () => {
     isOpen: false,
     account: null,
   });
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (user) {
@@ -136,6 +139,18 @@ export const ManageAccounts = () => {
     const pnl = account.current_balance - account.initial_balance;
     const pnlPercent = (pnl / account.initial_balance) * 100;
     return { pnl, pnlPercent };
+  };
+
+  const toggleAccountExpanded = (accountId: string) => {
+    setExpandedAccounts(prev => {
+      const next = new Set(prev);
+      if (next.has(accountId)) {
+        next.delete(accountId);
+      } else {
+        next.add(accountId);
+      }
+      return next;
+    });
   };
 
   return (
@@ -299,7 +314,7 @@ export const ManageAccounts = () => {
                   )}
 
                   {/* Actions */}
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 mb-3">
                     <Button
                       variant={account.is_active ? 'outline' : 'default'}
                       size="sm"
@@ -308,7 +323,31 @@ export const ManageAccounts = () => {
                     >
                       {account.is_active ? 'Deactivate' : 'Activate'}
                     </Button>
+                    <Collapsible open={expandedAccounts.has(account.id)}>
+                      <CollapsibleTrigger asChild>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => toggleAccountExpanded(account.id)}
+                          className="flex-1 gap-1"
+                        >
+                          Analytics
+                          {expandedAccounts.has(account.id) ? (
+                            <ChevronUp className="w-4 h-4" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4" />
+                          )}
+                        </Button>
+                      </CollapsibleTrigger>
+                    </Collapsible>
                   </div>
+
+                  {/* Performance Dashboard */}
+                  <Collapsible open={expandedAccounts.has(account.id)}>
+                    <CollapsibleContent className="pt-2 border-t border-border/30">
+                      <AccountPerformanceDashboard account={account} />
+                    </CollapsibleContent>
+                  </Collapsible>
                 </div>
               );
             })}
