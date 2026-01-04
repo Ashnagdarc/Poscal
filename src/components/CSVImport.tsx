@@ -144,7 +144,7 @@ export const CSVImport = ({ onImport, onClose }: CSVImportProps) => {
       await onImport(parsedTrades);
       toast.success(`Imported ${parsedTrades.length} trades`);
       onClose();
-    } catch (error) {
+    } catch {
       toast.error('Failed to import trades');
     }
     setIsImporting(false);

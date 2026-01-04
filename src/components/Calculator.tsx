@@ -48,7 +48,7 @@ export const Calculator = () => {
   const [customRiskInput, setCustomRiskInput] = useState("");
 
   // Fetch live price for the selected pair
-  const { prices, loading: pricesLoading } = useLivePrices({
+  const { prices, loading: _pricesLoading } = useLivePrices({
     symbols: [selectedPair.symbol],
     enabled: true,
     refreshInterval: 30000 // Refresh every 30 seconds

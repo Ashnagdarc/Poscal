@@ -89,7 +89,7 @@ export const UpdateSignalModal = ({
         throw new Error('Invalid price values');
       }
 
-      const updateData: Record<string, any> = {
+      const updateData: Record<string, string | number | null | undefined> = {
         status,
         result: result === 'pending' ? null : result,
         stop_loss: sl,

@@ -115,7 +115,7 @@ export const AppUpdateModal = () => {
         },
         (payload) => {
           // If the deleted update is the one being shown, close the modal
-          if (update && payload.old && (payload.old as any).id === update.id) {
+          if (update && payload.old && (payload.old as { id: string }).id === update.id) {
             setOpen(false);
             setUpdate(null);
           }
@@ -130,8 +130,8 @@ export const AppUpdateModal = () => {
         },
         (payload) => {
           // If update is deactivated, close the modal
-          if (update && payload.new && (payload.new as any).id === update.id) {
-            if (!(payload.new as any).is_active) {
+          if (update && payload.new && (payload.new as { id: string; is_active: boolean }).id === update.id) {
+            if (!(payload.new as { id: string; is_active: boolean }).is_active) {
               setOpen(false);
               setUpdate(null);
             }

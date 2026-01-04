@@ -10,7 +10,6 @@ import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { NotificationSettings } from "@/components/NotificationSettings";
-import { FixTrades } from "@/pages/FixTrades";
 import { toast } from "sonner";
 
 const Settings = () => {
@@ -162,9 +161,6 @@ const Settings = () => {
             <ChevronRight className="w-5 h-5 text-muted-foreground" />
           </button>
         )}
-
-        {/* Admin Fix Trades - Only visible to admins */}
-        {isAdmin && <FixTrades />}
 
         <div className="bg-secondary rounded-2xl overflow-hidden">
           <div className="px-4 py-3 flex items-center justify-between">

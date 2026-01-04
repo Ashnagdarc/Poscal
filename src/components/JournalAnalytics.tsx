@@ -56,7 +56,7 @@ export const JournalAnalytics = ({ trades, onClose }: JournalAnalyticsProps) => 
   }, [closedTrades]);
 
   // Monthly P&L
-  const monthlyPnl = useMemo(() => {
+  const _monthlyPnl = useMemo(() => {
     const monthMap: Record<string, number> = {};
     closedTrades.forEach(t => {
       const date = new Date(t.entry_date || t.created_at);

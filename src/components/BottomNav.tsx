@@ -1,6 +1,5 @@
 import { Calculator, BookOpen, Radio, History, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { VisuallyHidden } from './VisuallyHidden';
 
 export const BottomNav = () => {
   const navigate = useNavigate();

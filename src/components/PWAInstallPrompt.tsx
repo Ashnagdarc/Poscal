@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Download, Share, Plus } from 'lucide-react';
+import { Download, Share, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { usePWAInstall } from '@/hooks/use-pwa-install';
@@ -16,12 +16,12 @@ export const PWAInstallPrompt = () => {
 
   useEffect(() => {
     // Detect iOS
-    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+    const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
     setIsIOS(iOS);
 
     // Check if app is already running in standalone mode
     const standalone = window.matchMedia('(display-mode: standalone)').matches ||
-      (window.navigator as any).standalone === true;
+      (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsStandalone(standalone);
 
     // Check if we should show the prompt
