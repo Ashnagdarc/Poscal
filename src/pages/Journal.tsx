@@ -30,6 +30,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
 import { NewTradeFormSchema } from "@/lib/formValidation";
+import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
+import { useFocusTrap } from "@/hooks/use-focus-trap";
 
 interface Trade {
   id: string;
