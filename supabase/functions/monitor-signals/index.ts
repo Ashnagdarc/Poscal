@@ -122,6 +122,10 @@ interface TradingSignal {
   take_profit_1: number;
   take_profit_2: number | null;
   take_profit_3: number | null;
+  pips_to_sl: number;
+  pips_to_tp1: number;
+  pips_to_tp2: number | null;
+  pips_to_tp3: number | null;
   status: string;
   result: string | null;
   tp1_hit: boolean;

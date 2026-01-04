@@ -89,7 +89,7 @@ export const UpdateSignalModal = ({
         throw new Error('Invalid price values');
       }
 
-      const updateData: Record<string, string | number | null | undefined> = {
+      const updateData: Record<string, string | number | boolean | null | undefined> = {
         status,
         result: result === 'pending' ? null : result,
         stop_loss: sl,
@@ -118,7 +118,7 @@ export const UpdateSignalModal = ({
 
       // If signal is being closed, update all taken trades
       if (status === 'closed' && currentStatus !== 'closed' && updateData.result) {
-        await handleCloseTakenTrades(signalId, updateData.result);
+        await handleCloseTakenTrades(signalId, String(updateData.result));
       }
 
       toast.success('Signal updated successfully!');

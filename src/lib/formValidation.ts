@@ -41,11 +41,26 @@ export const SignalFormSchema = z.object({
     .min(1, "Currency pair is required")
     .max(20, "Pair name too long"),
   direction: z.enum(['buy', 'sell']),
-  entry_price: z.number().positive("Entry price must be positive"),
-  stop_loss: z.number().positive("Stop loss must be positive"),
-  take_profit_1: z.number().positive("TP1 must be positive"),
-  take_profit_2: z.number().positive("TP2 must be positive").optional().nullable(),
-  take_profit_3: z.number().positive("TP3 must be positive").optional().nullable(),
+  entry_price: z.string()
+    .min(1, "Entry price is required")
+    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
+    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
+  stop_loss: z.string()
+    .min(1, "Stop loss is required")
+    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
+    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
+  take_profit_1: z.string()
+    .min(1, "Take profit 1 is required")
+    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
+    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
+  take_profit_2: z.string()
+    .optional()
+    .refine(val => !val || !isNaN(parseFloat(val)), "Must be a valid number")
+    .refine(val => !val || parseFloat(val) > 0, "Must be greater than 0"),
+  take_profit_3: z.string()
+    .optional()
+    .refine(val => !val || !isNaN(parseFloat(val)), "Must be a valid number")
+    .refine(val => !val || parseFloat(val) > 0, "Must be greater than 0"),
   notes: z.string().max(1000, "Notes too long").optional(),
 });
 

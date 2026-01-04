@@ -454,7 +454,7 @@ const Signals = () => {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={refreshPrices}
+                onClick={() => refreshPrices()}
                 disabled={pricesLoading}
                 className="relative"
                 title={lastUpdated ? `Last updated: ${format(lastUpdated, 'HH:mm:ss')}` : 'Refresh prices'}
