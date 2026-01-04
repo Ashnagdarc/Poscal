@@ -118,27 +118,54 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         return;
       }
 
-      const signalData = {
+      const signalData: any = {
         currency_pair: formData.currency_pair,
         direction: formData.direction,
         entry_price: entry,
         stop_loss: sl,
         take_profit_1: tp1,
-        take_profit_2: tp2,
-        take_profit_3: tp3,
-        pips_to_sl: calculatePips(entry, sl, formData.currency_pair),
-        pips_to_tp1: calculatePips(entry, tp1, formData.currency_pair),
-        pips_to_tp2: tp2 ? calculatePips(entry, tp2, formData.currency_pair) : null,
-        pips_to_tp3: tp3 ? calculatePips(entry, tp3, formData.currency_pair) : null,
-        chart_image_url: formData.chart_image_url || null,
-        notes: formData.notes || null,
+        pips_to_sl: Math.round(calculatePips(entry, sl, formData.currency_pair)),
+        pips_to_tp1: Math.round(calculatePips(entry, tp1, formData.currency_pair)),
         status: 'active',
-        result: null,
       };
+
+      // Add optional fields only if they have values
+      if (tp2) {
+        signalData.take_profit_2 = tp2;
+        signalData.pips_to_tp2 = Math.round(calculatePips(entry, tp2, formData.currency_pair));
+      }
+      if (tp3) {
+        signalData.take_profit_3 = tp3;
+        signalData.pips_to_tp3 = Math.round(calculatePips(entry, tp3, formData.currency_pair));
+      }
+      if (formData.chart_image_url) {
+        signalData.chart_image_url = formData.chart_image_url;
+      }
+      if (formData.notes) {
+        signalData.notes = formData.notes;
+      }
+
+      console.log('📤 Attempting to insert signal with data:', JSON.stringify(signalData, null, 2));
 
       const { error } = await supabase.from('trading_signals').insert(signalData);
 
-      if (error) throw error;
+      if (error) {
+        console.error('Database error details:', error);
+        console.error('Error code:', error.code);
+        console.error('Error message:', error.message);
+        console.error('Error details:', error.details);
+        console.error('Error hint:', error.hint);
+        
+        // Try to fetch an existing signal to compare structure
+        const { data: existingSignal } = await supabase
+          .from('trading_signals')
+          .select('*')
+          .limit(1)
+          .single();
+        console.log('📋 Example existing signal structure:', existingSignal);
+        
+        throw error;
+      }
 
       // Send push notification to all subscribers
       try {

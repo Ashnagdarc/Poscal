@@ -64,12 +64,12 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
 
     try {
       // Check if already taken
-      const { data: existingTrade } = await supabase
+      const { data: existingTrade, error: checkError } = await supabase
         .from('taken_trades')
         .select('id')
         .eq('user_id', user.id)
         .eq('signal_id', signal.id)
-        .single();
+        .maybeSingle();
 
       if (existingTrade) {
         toast.error('You have already taken this signal');
@@ -77,8 +77,17 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
         return;
       }
 
+      console.log('📝 Creating taken trade:', {
+        user_id: user.id,
+        account_id: selectedAccountId,
+        signal_id: signal.id,
+        risk_percent: riskPercentNum,
+        risk_amount: riskAmount,
+        status: 'open',
+      });
+
       // Insert the taken trade
-      const { error: insertError } = await supabase
+      const { data: newTrade, error: insertError } = await supabase
         .from('taken_trades')
         .insert({
           user_id: user.id,
@@ -87,9 +96,16 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
           risk_percent: riskPercentNum,
           risk_amount: riskAmount,
           status: 'open',
-        });
+        })
+        .select()
+        .single();
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error('❌ Failed to create taken trade:', insertError);
+        throw insertError;
+      }
+
+      console.log('✅ Taken trade created:', newTrade);
 
       toast.success(`Signal taken! Risking ${riskPercentNum}% (${selectedAccount!.currency} ${riskAmount.toFixed(2)})`);
       onTradeTaken();

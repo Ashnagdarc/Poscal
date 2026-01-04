@@ -210,8 +210,16 @@ async function handleCloseTakenTrades(
         balanceAdjustment = pnl;
       } else if (signalResult === 'loss') {
         exitPrice = signal.stop_loss;
-        pnl = -trade.risk_amount;
-        pnlPercent = -trade.risk_percent;
+        // Calculate actual loss based on stop loss price (not just risk amount)
+        pnl = calculatePnL(
+          signal.entry_price,
+          signal.stop_loss,
+          positionSize,
+          signal.currency_pair,
+          direction
+        );
+        // Calculate pnl_percent based on account balance impact
+        pnlPercent = trade.risk_percent * (pnl / trade.risk_amount);
         balanceAdjustment = pnl;
       } else if (signalResult === 'breakeven') {
         exitPrice = signal.entry_price;
@@ -259,6 +267,7 @@ async function handleCloseTakenTrades(
         .from('trading_journal')
         .insert({
           user_id: trade.user_id,
+          account_id: trade.account_id,
           pair: signal.currency_pair,
           direction: signal.direction === 'buy' ? 'long' : 'short',
           entry_price: signal.entry_price,

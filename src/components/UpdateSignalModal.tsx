@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Edit2 } from 'lucide-react';
+import { Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -46,6 +46,8 @@ export const UpdateSignalModal = ({
 }: UpdateSignalModalProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [status, setStatus] = useState(currentStatus);
   const [result, setResult] = useState(currentResult || 'pending');
   
@@ -96,10 +98,10 @@ export const UpdateSignalModal = ({
         take_profit_1: tp1,
         take_profit_2: tp2,
         take_profit_3: tp3,
-        pips_to_sl: calculatePips(currentEntryPrice, sl, currencyPair),
-        pips_to_tp1: calculatePips(currentEntryPrice, tp1, currencyPair),
-        pips_to_tp2: tp2 ? calculatePips(currentEntryPrice, tp2, currencyPair) : null,
-        pips_to_tp3: tp3 ? calculatePips(currentEntryPrice, tp3, currencyPair) : null,
+        pips_to_sl: Math.round(calculatePips(currentEntryPrice, sl, currencyPair)),
+        pips_to_tp1: Math.round(calculatePips(currentEntryPrice, tp1, currencyPair)),
+        pips_to_tp2: tp2 ? Math.round(calculatePips(currentEntryPrice, tp2, currencyPair)) : null,
+        pips_to_tp3: tp3 ? Math.round(calculatePips(currentEntryPrice, tp3, currencyPair)) : null,
         tp1_hit: tp1HitState,
         tp2_hit: tp2HitState,
         tp3_hit: tp3HitState,
@@ -121,6 +123,11 @@ export const UpdateSignalModal = ({
         await handleCloseTakenTrades(signalId, updateData.result);
       }
 
+      // If signal is being cancelled, cancel all open taken trades without P/L impact
+      if (status === 'cancelled' && currentStatus !== 'cancelled') {
+        await handleCancelTakenTrades(signalId);
+      }
+
       toast.success('Signal updated successfully!');
       setOpen(false);
       onSignalUpdated();
@@ -134,172 +141,116 @@ export const UpdateSignalModal = ({
 
   const handleCloseTakenTrades = async (signalId: string, signalResult: string) => {
     try {
-      console.log(`🔄 Starting to close taken trades for signal ${signalId} with result: ${signalResult}`);
+      console.log(`🔄 Calling Edge Function to close taken trades for signal ${signalId} with result: ${signalResult}`);
       
-      // Fetch all open taken trades for this signal
-      const { data: takenTrades, error: fetchError } = await supabase
-        .from('taken_trades')
-        .select('*')
-        .eq('signal_id', signalId)
-        .eq('status', 'open');
+      // Call the Edge Function which has service role access
+      const { data, error } = await supabase.functions.invoke('close-signal-trades', {
+        body: { signalId, signalResult }
+      });
 
-      if (fetchError) {
-        console.error('Error fetching taken trades:', fetchError);
-        throw fetchError;
+      if (error) {
+        console.error('❌ Edge Function error:', error);
+        throw error;
       }
+
+      console.log('✅ Edge Function response:', data);
       
-      if (!takenTrades || takenTrades.length === 0) {
-        console.log('No open taken trades found for this signal');
-        return;
+      if (data.count > 0) {
+        toast.success(`Processed ${data.count} trade(s). Check your journal!`);
+      } else {
+        toast.info('No open trades found for this signal');
       }
-
-      console.log(`📊 Found ${takenTrades.length} taken trades to process`);
-
-      // Process each taken trade
-      for (const trade of takenTrades) {
-        console.log(`Processing trade ${trade.id} with risk: ${trade.risk_amount}`);
-        
-        // Calculate P&L based on result and risk amount
-        // Calculate P&L and position size using proper forex calculations
-        const { data: signalData } = await supabase
-          .from('trading_signals')
-          .select('pips_to_sl, pips_to_tp1, entry_price')
-          .eq('id', signalId)
-          .single();
-        
-        if (!signalData) {
-          console.error('Could not fetch signal data');
-          continue;
-        }
-        
-        // Calculate position size in lots
-        const positionSize = calculatePositionSize(
-          trade.risk_amount,
-          signalData.pips_to_sl,
-          currencyPair,
-          'USD',
-          signalData.entry_price
-        );
-        
-        console.log(`📊 Position size: ${positionSize} lots for ${currencyPair}`);
-        
-        let pnl = 0;
-        let pnlPercent = 0;
-        let balanceAdjustment = 0;
-        let exitPrice = currentEntryPrice;
-        
-        if (signalResult === 'win') {
-          exitPrice = currentTakeProfit1;
-          pnl = calculatePnL(
-            currentEntryPrice,
-            currentTakeProfit1,
-            positionSize,
-            currencyPair,
-            direction === 'buy' ? 'long' : 'short'
-          );
-          // Calculate pnl_percent based on account balance impact
-          pnlPercent = trade.risk_percent * (pnl / trade.risk_amount);
-          balanceAdjustment = pnl;
-        } else if (signalResult === 'loss') {
-          exitPrice = currentStopLoss;
-          pnl = -trade.risk_amount; // Loss is the risk amount
-          pnlPercent = -trade.risk_percent;
-          balanceAdjustment = pnl;
-        } else if (signalResult === 'breakeven') {
-          exitPrice = currentEntryPrice;
-          pnl = 0;
-          pnlPercent = 0;
-          balanceAdjustment = 0;
-        }
-
-        console.log(`💰 P&L: ${pnl}, Balance adjustment: ${balanceAdjustment}`);
-
-        // Update the taken trade
-        const { error: updateTradeError } = await supabase
-          .from('taken_trades')
-          .update({
-            status: 'closed',
-            result: signalResult,
-            pnl,
-            pnl_percent: pnlPercent,
-            closed_at: new Date().toISOString(),
-            journaled: true
-          })
-          .eq('id', trade.id);
-
-        if (updateTradeError) {
-          console.error(`❌ Failed to update taken trade ${trade.id}:`, updateTradeError);
-          continue;
-        }
-        
-        console.log(`✅ Updated taken trade ${trade.id}`);
-
-        // Fetch current account balance
-        const { data: accountData, error: accountFetchError } = await supabase
-          .from('trading_accounts')
-          .select('current_balance')
-          .eq('id', trade.account_id)
-          .single();
-
-        if (accountFetchError || !accountData) {
-          console.error(`❌ Failed to fetch account ${trade.account_id}:`, accountFetchError);
-          continue;
-        }
-
-        // Update account balance
-        const newBalance = accountData.current_balance + balanceAdjustment;
-        console.log(`📈 Updating account balance: ${accountData.current_balance} + ${balanceAdjustment} = ${newBalance}`);
-        
-        const { error: balanceError } = await supabase
-          .from('trading_accounts')
-          .update({ 
-            current_balance: newBalance,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', trade.account_id);
-
-        if (balanceError) {
-          console.error(`❌ Failed to update account balance ${trade.account_id}:`, balanceError);
-          continue;
-        }
-        
-        console.log(`✅ Updated account balance`);
-
-        // Create journal entry
-        console.log(`📝 Creating journal entry with position size: ${positionSize.toFixed(2)} lots`);
-        
-        const { error: journalError } = await supabase
-          .from('trading_journal')
-          .insert({
-            user_id: trade.user_id,
-            pair: currencyPair,
-            direction: direction === 'buy' ? 'long' : 'short',
-            entry_price: currentEntryPrice,
-            exit_price: exitPrice,
-            stop_loss: currentStopLoss,
-            take_profit: currentTakeProfit1,
-            position_size: positionSize,
-            risk_percent: trade.risk_percent,
-            pnl,
-            pnl_percent: pnlPercent,
-            status: 'closed',
-            notes: `Auto-closed from signal: ${currencyPair} ${direction.toUpperCase()} - ${signalResult.toUpperCase()}`,
-            entry_date: trade.created_at
-          });
-
-        if (journalError) {
-          console.error(`❌ Failed to create journal entry for trade ${trade.id}:`, journalError);
-        } else {
-          console.log(`✅ Created journal entry`);
-        }
-      }
-
-      logger.log(`✅ Successfully processed ${takenTrades.length} taken trades`);
-      toast.success(`Processed ${takenTrades.length} trade(s). Check your journal!`);
     } catch (error) {
       logger.error('❌ Error closing taken trades:', error);
       toast.error('Failed to process taken trades');
-      // Don't throw - we don't want to block the signal update
+    }
+  };
+
+  const handleCancelTakenTrades = async (signalId: string) => {
+    try {
+      console.log(`🔄 Cancelling all open taken trades for signal ${signalId}`);
+      
+      // Simply close taken trades as cancelled with no P/L impact
+      const { error } = await supabase
+        .from('taken_trades')
+        .update({ 
+          status: 'cancelled',
+          closed_at: new Date().toISOString()
+        })
+        .eq('signal_id', signalId)
+        .eq('status', 'open');
+
+      if (error) {
+        console.error('❌ Error cancelling taken trades:', error);
+        throw error;
+      }
+
+      console.log('✅ Cancelled taken trades');
+      toast.info('Open trades for this signal have been cancelled');
+    } catch (error) {
+      logger.error('❌ Error cancelling taken trades:', error);
+      toast.error('Failed to cancel taken trades');
+    }
+  };
+
+  const handleDeleteSignal = async () => {
+    setDeleteLoading(true);
+    try {
+      console.log(`🗑️ Deleting signal ${signalId}`);
+      
+      // First, delete or cancel all taken trades for this signal
+      const { data: takenTrades, error: fetchError } = await supabase
+        .from('taken_trades')
+        .select('id')
+        .eq('signal_id', signalId);
+
+      if (fetchError) throw fetchError;
+
+      const takenTradeCount = takenTrades?.length || 0;
+
+      // Delete all taken trades (admin can delete via RLS or we cancel them)
+      if (takenTradeCount > 0) {
+        const { error: deleteTakenTradesError } = await supabase
+          .from('taken_trades')
+          .delete()
+          .eq('signal_id', signalId);
+
+        // If delete fails due to RLS, try updating to cancelled instead
+        if (deleteTakenTradesError) {
+          console.log('Could not delete taken trades, marking as cancelled instead');
+          const { error: cancelError } = await supabase
+            .from('taken_trades')
+            .update({ status: 'cancelled', closed_at: new Date().toISOString() })
+            .eq('signal_id', signalId);
+          
+          if (cancelError) throw cancelError;
+        }
+      }
+
+      // Now delete the signal
+      const { error: deleteSignalError } = await supabase
+        .from('trading_signals')
+        .delete()
+        .eq('id', signalId);
+
+      if (deleteSignalError) throw deleteSignalError;
+
+      console.log('✅ Signal deleted');
+      
+      if (takenTradeCount > 0) {
+        toast.success(`Signal deleted. ${takenTradeCount} taken trade(s) removed.`);
+      } else {
+        toast.success('Signal deleted successfully');
+      }
+      
+      setOpen(false);
+      onSignalUpdated();
+    } catch (error) {
+      logger.error('❌ Error deleting signal:', error);
+      toast.error(error instanceof Error ? error.message : 'Failed to delete signal');
+    } finally {
+      setDeleteLoading(false);
+      setShowDeleteConfirm(false);
     }
   };
 
@@ -461,18 +412,62 @@ export const UpdateSignalModal = ({
             </TabsContent>
           </Tabs>
 
-          <div className="flex gap-3 pt-4">
-            <Button
-              type="button"
-              variant="outline"
-              className="flex-1"
-              onClick={() => setOpen(false)}
-            >
-              Cancel
-            </Button>
-            <Button type="submit" className="flex-1" disabled={loading}>
-              {loading ? 'Saving...' : 'Save'}
-            </Button>
+          <div className="flex flex-col gap-3 pt-4">
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="flex-1"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" className="flex-1" disabled={loading}>
+                {loading ? 'Saving...' : 'Save'}
+              </Button>
+            </div>
+            
+            {/* Delete Section */}
+            {!showDeleteConfirm ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full text-red-500 hover:text-red-600 hover:bg-red-500/10"
+                onClick={() => setShowDeleteConfirm(true)}
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete Signal
+              </Button>
+            ) : (
+              <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 space-y-2">
+                <p className="text-sm text-red-400 font-medium">⚠️ Are you sure?</p>
+                <p className="text-xs text-muted-foreground">
+                  This will permanently delete the signal and all associated taken trades. This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    disabled={deleteLoading}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1"
+                    onClick={handleDeleteSignal}
+                    disabled={deleteLoading}
+                  >
+                    {deleteLoading ? 'Deleting...' : 'Delete Forever'}
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </form>
       </DialogContent>

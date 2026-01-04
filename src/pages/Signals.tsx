@@ -166,7 +166,38 @@ const Signals = () => {
   };
 
   const isSignalTaken = (signalId: string) => {
-    return takenTrades.some(t => t.signal_id === signalId);
+    return takenTrades.some(t => t.signal_id === signalId && t.status === 'open');
+  };
+
+  const getTakenTrade = (signalId: string) => {
+    return takenTrades.find(t => t.signal_id === signalId && t.status === 'open');
+  };
+
+  const handleCancelTakenTrade = async (signalId: string) => {
+    if (!user) return;
+    
+    const takenTrade = getTakenTrade(signalId);
+    if (!takenTrade) return;
+
+    try {
+      const { error } = await supabase
+        .from('taken_trades')
+        .update({ 
+          status: 'cancelled',
+          closed_at: new Date().toISOString()
+        })
+        .eq('id', takenTrade.id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      toast.success('Trade cancelled successfully');
+      fetchTakenTrades();
+      fetchAccounts(); // Refresh in case of balance updates
+    } catch (error) {
+      logger.error('Error cancelling taken trade:', error);
+      toast.error('Failed to cancel trade');
+    }
   };
 
   // Calculate total balance across all accounts
@@ -174,31 +205,6 @@ const Signals = () => {
   const totalInitialBalance = accounts.reduce((sum, acc) => sum + acc.initial_balance, 0);
   const totalPnL = totalBalance - totalInitialBalance;
   const totalPnLPercent = totalInitialBalance > 0 ? (totalPnL / totalInitialBalance) * 100 : 0;
-
-  // Fix account balance - restore to initial for open trades
-  const fixAccountBalance = async (accountId: string) => {
-    const account = accounts.find(a => a.id === accountId);
-    if (!account) return;
-
-    try {
-      const { error } = await supabase
-        .from('trading_accounts')
-        .update({
-          current_balance: account.initial_balance,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', accountId);
-
-      if (error) throw error;
-
-      toast.success('Balance restored!');
-      fetchAccounts();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Failed to restore balance';
-      toast.error(message);
-      logger.error('Balance restore error:', error);
-    }
-  };
 
   const fetchSignals = async () => {
     if (!isSupabaseConfigured) {
@@ -541,22 +547,9 @@ const Signals = () => {
                 {/* Account list */}
                 <div className="flex flex-wrap gap-2 mt-2">
                   {accounts.map((account) => (
-                    <div key={account.id} className="flex items-center gap-1">
-                      <Badge variant="secondary" className="text-xs">
-                        {account.account_name}: {account.currency} {account.current_balance.toLocaleString()}
-                      </Badge>
-                      {account.current_balance < account.initial_balance && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => fixAccountBalance(account.id)}
-                          className="h-5 px-2 text-xs text-amber-400 hover:text-amber-300"
-                          title="Restore to initial balance"
-                        >
-                          Fix
-                        </Button>
-                      )}
-                    </div>
+                    <Badge key={account.id} variant="secondary" className="text-xs">
+                      {account.account_name}: {account.currency} {account.current_balance.toLocaleString()}
+                    </Badge>
                   ))}
                 </div>
               </div>
@@ -823,10 +816,16 @@ const Signals = () => {
                       </Button>
                     )}
                     {signal.status === 'active' && isSignalTaken(signal.id) && (
-                      <Badge className="bg-primary/20 text-primary border-primary/30">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCancelTakenTrade(signal.id)}
+                        className="h-7 text-xs border-primary/30 text-primary hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30"
+                      >
                         <Check className="w-3 h-3 mr-1" />
                         Taken
-                      </Badge>
+                        <XCircle className="w-3 h-3 ml-1" />
+                      </Button>
                     )}
                     {isAdmin && (
                       <UpdateSignalModal
