@@ -14,6 +14,7 @@ import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { TradingAccountModal } from '@/components/TradingAccountModal';
 import { TakeSignalModal } from '@/components/TakeSignalModal';
+import { CloseTradeModal } from '@/components/CloseTradeModal';
 import { useLivePricesQuery } from '@/hooks/queries/use-live-prices-query';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
@@ -167,6 +168,21 @@ const Signals = () => {
 
   const isSignalTaken = (signalId: string) => {
     return takenTrades.some(t => t.signal_id === signalId);
+  };
+
+  const getOpenTrade = (signalId: string) => {
+    return takenTrades.find(t => t.signal_id === signalId && t.status === 'open');
+  };
+
+  // Close trade modal state
+  const [showCloseTradeModal, setShowCloseTradeModal] = useState(false);
+  const [selectedTradeForClose, setSelectedTradeForClose] = useState<TakenTrade | null>(null);
+  const [selectedSignalForClose, setSelectedSignalForClose] = useState<TradingSignal | null>(null);
+
+  const handleCloseTrade = (trade: TakenTrade, signal: TradingSignal) => {
+    setSelectedTradeForClose(trade);
+    setSelectedSignalForClose(signal);
+    setShowCloseTradeModal(true);
   };
 
   // Calculate total balance across all accounts
@@ -823,10 +839,23 @@ const Signals = () => {
                       </Button>
                     )}
                     {signal.status === 'active' && isSignalTaken(signal.id) && (
-                      <Badge className="bg-primary/20 text-primary border-primary/30">
-                        <Check className="w-3 h-3 mr-1" />
-                        Taken
-                      </Badge>
+                      <>
+                        <Badge className="bg-primary/20 text-primary border-primary/30">
+                          <Check className="w-3 h-3 mr-1" />
+                          Taken
+                        </Badge>
+                        {getOpenTrade(signal.id) && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleCloseTrade(getOpenTrade(signal.id)!, signal)}
+                            className="h-7 text-xs border-amber-500/50 text-amber-500 hover:bg-amber-500/10"
+                          >
+                            <X className="w-3 h-3 mr-1" />
+                            Close
+                          </Button>
+                        )}
+                      </>
                     )}
                     {isAdmin && (
                       <UpdateSignalModal
@@ -926,6 +955,27 @@ const Signals = () => {
           fetchTakenTrades();
         }}
       />
+
+      {/* Close Trade Modal */}
+      {selectedTradeForClose && selectedSignalForClose && (
+        <CloseTradeModal
+          open={showCloseTradeModal}
+          onOpenChange={setShowCloseTradeModal}
+          trade={selectedTradeForClose}
+          signal={{
+            currency_pair: selectedSignalForClose.currency_pair,
+            direction: selectedSignalForClose.direction,
+            entry_price: selectedSignalForClose.entry_price,
+            stop_loss: selectedSignalForClose.stop_loss,
+            take_profit_1: selectedSignalForClose.take_profit_1,
+            pips_to_sl: selectedSignalForClose.pips_to_sl,
+          }}
+          onTradeClosed={() => {
+            fetchAccounts();
+            fetchTakenTrades();
+          }}
+        />
+      )}
 
       <BottomNav />
     </div>
