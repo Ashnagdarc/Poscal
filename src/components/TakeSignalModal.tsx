@@ -63,18 +63,33 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
     setLoading(true);
 
     try {
-      // Check if already taken
+      // Check if already taken (only check for open trades)
       const { data: existingTrade, error: checkError } = await supabase
         .from('taken_trades')
-        .select('id')
+        .select('id, status')
         .eq('user_id', user.id)
         .eq('signal_id', signal.id)
+        .eq('status', 'open')
         .maybeSingle();
 
       if (existingTrade) {
         toast.error('You have already taken this signal');
         setLoading(false);
         return;
+      }
+
+      // Delete any closed/cancelled taken_trades to avoid unique constraint violation
+      // (database has unique constraint on user_id + signal_id)
+      const { error: deleteError } = await supabase
+        .from('taken_trades')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('signal_id', signal.id)
+        .in('status', ['closed', 'cancelled']);
+
+      if (deleteError) {
+        console.warn('⚠️ Could not delete old taken trades:', deleteError);
+        // Continue anyway - might not have any old trades
       }
 
       console.log('📝 Creating taken trade:', {
