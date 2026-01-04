@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "crons": [
+    {
+      "name": "process-email-queue",
+      "schedule": "0 */4 * * *",
+      "function": "process-email-queue"
+    }
+  ]
+}
