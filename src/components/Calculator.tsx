@@ -6,10 +6,12 @@ import {
   TrendingUp,
   ChevronRight,
   Target,
-  User
+  User,
+  X
 } from "lucide-react";
 import { NumPad } from "./NumPad";
 import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useLivePrices } from "@/hooks/use-live-prices";
@@ -38,8 +40,9 @@ export const Calculator = () => {
   const [selectedPair, setSelectedPair] = useState<CurrencyPair>(CURRENCY_PAIRS[0]);
   
   // UI State
-  const [showNumPad, setShowNumPad] = useState<"balance" | "stopLoss" | "takeProfit" | null>(null);
+  const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
+  const [showStopLossSelector, setShowStopLossSelector] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
 
   const { currency } = useCurrency();
@@ -47,11 +50,37 @@ export const Calculator = () => {
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
 
-  // Fetch live price for the selected pair
+  // Memoize the symbols to fetch to prevent infinite re-renders
+  const symbolsToFetch = useMemo(() => {
+    const [base, quote] = selectedPair.symbol.split('/');
+    const requiredPairs = new Set<string>([selectedPair.symbol]);
+    
+    // If neither base nor quote is USD, we need conversion rates
+    if (base !== 'USD' && quote !== 'USD') {
+      // For cross pairs, we need either base/USD or quote/USD
+      // Example: For GBP/JPY, we need USD/JPY
+      // Example: For EUR/GBP, we need GBP/USD
+      
+      if (quote === 'JPY') {
+        requiredPairs.add('USD/JPY');
+      } else if (quote) {
+        requiredPairs.add(`${quote}/USD`);
+      }
+      
+      // Also add base/USD if available (helps with some conversions)
+      if (base && base !== 'XAU' && base !== 'XAG' && base !== 'BTC' && base !== 'ETH') {
+        requiredPairs.add(`${base}/USD`);
+      }
+    }
+    
+    // For USD-base pairs (USD/XXX), we just need the pair itself
+    return Array.from(requiredPairs);
+  }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
+  
   const { prices, loading: _pricesLoading } = useLivePrices({
-    symbols: [selectedPair.symbol],
+    symbols: symbolsToFetch,
     enabled: true,
-    refreshInterval: 30000 // Refresh every 30 seconds
+    refreshInterval: 10 * 60 * 1000 // 10 minutes - optimized for API limits
   });
   
   const currentLivePrice = prices[selectedPair.symbol];
@@ -86,7 +115,7 @@ export const Calculator = () => {
     );
 
     if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
-      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0 };
+      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: pipVal };
     }
 
     const riskAmount = (balance * risk) / 100;
@@ -95,7 +124,7 @@ export const Calculator = () => {
     const riskReward = tpPips > 0 ? tpPips / slPips : 0;
     const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
 
-    return { riskAmount, positionSize, units, riskReward, potentialProfit };
+    return { riskAmount, positionSize, units, riskReward, potentialProfit, pipValue: pipVal };
   }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, prices]);
 
   const saveToHistory = () => {
@@ -129,15 +158,14 @@ export const Calculator = () => {
     });
   };
 
-  const openNumPad = (type: "balance" | "stopLoss" | "takeProfit") => {
-    const values = { balance: accountBalance, stopLoss: stopLossPips, takeProfit: takeProfitPips };
+  const openNumPad = (type: "balance" | "takeProfit") => {
+    const values = { balance: accountBalance, takeProfit: takeProfitPips };
     setNumPadValue(values[type]);
     setShowNumPad(type);
   };
 
   const handleNumPadDone = () => {
     if (showNumPad === "balance") setAccountBalance(numPadValue);
-    else if (showNumPad === "stopLoss") setStopLossPips(numPadValue);
     else if (showNumPad === "takeProfit") setTakeProfitPips(numPadValue);
     setShowNumPad(null);
     setNumPadValue("");
@@ -260,7 +288,7 @@ export const Calculator = () => {
         {/* Stop Loss & Take Profit */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => openNumPad("stopLoss")}
+            onClick={() => setShowStopLossSelector(true)}
             className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
             style={{ animationDelay: "150ms" }}
           >
@@ -362,8 +390,7 @@ export const Calculator = () => {
           onChange={setNumPadValue}
           onDone={handleNumPadDone}
           label={
-            showNumPad === "balance" ? "Account Balance" :
-            showNumPad === "stopLoss" ? "Stop Loss" : "Take Profit"
+            showNumPad === "balance" ? "Account Balance" : "Take Profit"
           }
           suffix={showNumPad === "balance" ? currency.code : "pips"}
         />
@@ -376,6 +403,44 @@ export const Calculator = () => {
           onSelect={setSelectedPair}
           onBack={() => setShowCurrencyGrid(false)}
         />
+      )}
+
+      {/* Stop Loss Selector Modal */}
+      {showStopLossSelector && (
+        <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
+          {/* Header */}
+          <header className="pt-12 pb-4 px-6 border-b border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <h1 className="text-2xl font-bold text-foreground">Select Stop Loss</h1>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Risk: {currency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} ({riskPercent}%)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowStopLossSelector(false)}
+                className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center transition-all active:scale-95"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </header>
+
+          {/* Stop Loss List */}
+          <div className="flex-1 overflow-hidden">
+            <StopLossSelector
+              selectedStopLoss={parseFloat(stopLossPips) || null}
+              onSelect={(sl) => {
+                setStopLossPips(sl.toString());
+                setShowStopLossSelector(false);
+              }}
+              accountBalance={parseFloat(accountBalance) || 0}
+              riskPercent={riskPercent}
+              pipValue={calculation.pipValue}
+              currency={currency}
+            />
+          </div>
+        </div>
       )}
     </div>
   );

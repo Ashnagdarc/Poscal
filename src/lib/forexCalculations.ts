@@ -105,18 +105,41 @@ export function getPipValueInUSD(
   }
 
   // For cross pairs (XXX/YYY where neither is USD), need conversion rate
-  // Example: EUR/GBP needs GBP/USD rate to convert to USD
+  // Example: GBP/JPY needs GBP/USD rate to convert pip value to USD
+  // Example: EUR/GBP needs GBP/USD rate to convert pip value to USD
   if (config.quoteCurrency !== 'USD' && livePrices) {
-    const conversionPair = `${config.quoteCurrency}/USD`;
-    const conversionRate = livePrices[conversionPair];
+    // For JPY pairs, pip value in JPY is 1000 per standard lot (0.01 × 100,000)
+    // For other pairs, pip value in quote currency is 10 per standard lot (0.0001 × 100,000)
+    const pipValueInQuoteCurrency = STANDARD_LOT_SIZE * pipSize;
     
-    if (conversionRate) {
-      return STANDARD_LOT_SIZE * pipSize * conversionRate;
+    // For JPY as quote currency, we need to divide by USD/JPY rate
+    if (config.quoteCurrency === 'JPY') {
+      const usdJpyRate = livePrices['USD/JPY'];
+      if (usdJpyRate) {
+        // pip value in USD = pip value in JPY / USD/JPY rate
+        return pipValueInQuoteCurrency / usdJpyRate;
+      }
+    } else {
+      // For other quote currencies, we need the quote/USD rate
+      const conversionPair = `${config.quoteCurrency}/USD`;
+      const conversionRate = livePrices[conversionPair];
+      
+      if (conversionRate) {
+        return pipValueInQuoteCurrency * conversionRate;
+      }
     }
   }
 
-  // Fallback: Return approximate value
-  // This is used when live prices aren't available
+  // Fallback: Return approximate value when live prices aren't available
+  // For JPY pairs, calculate using realistic mid-range USD/JPY rate
+  if (config.quoteCurrency === 'JPY') {
+    // Use realistic USD/JPY rate (recent range: 140-160)
+    const fallbackUsdJpyRate = 157;
+    return (STANDARD_LOT_SIZE * pipSize) / fallbackUsdJpyRate;
+  }
+  
+  // For other quote currencies, return a generic pip value
+  // This will be less accurate but better than returning 0
   return config.pipValueBase;
 }
 

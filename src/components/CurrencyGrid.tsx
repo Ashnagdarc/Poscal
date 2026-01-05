@@ -53,13 +53,36 @@ interface CurrencyGridProps {
 export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridProps) => {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSymbol, setCustomSymbol] = useState("");
-  const [customPipDecimal, setCustomPipDecimal] = useState("4");
+
+  // Auto-detect pip decimal based on currency pair
+  const detectPipDecimal = (symbol: string): number => {
+    const upperSymbol = symbol.toUpperCase();
+    
+    // JPY pairs use 2 decimals
+    if (upperSymbol.includes('JPY')) return 2;
+    
+    // Gold uses 2 decimals
+    if (upperSymbol.includes('XAU')) return 2;
+    
+    // Silver uses 3 decimals
+    if (upperSymbol.includes('XAG')) return 3;
+    
+    // Indices typically use 0 decimals
+    if (upperSymbol.includes('US30') || upperSymbol.includes('US100') || 
+        upperSymbol.includes('SPX') || upperSymbol.includes('NAS')) return 0;
+    
+    // Crypto typically uses 2 decimals
+    if (upperSymbol.includes('BTC') || upperSymbol.includes('ETH')) return 2;
+    
+    // Default: standard forex pairs use 4 decimals
+    return 4;
+  };
 
   const handleCustomSubmit = () => {
     if (customSymbol.trim()) {
       const customPair: CurrencyPair = {
         symbol: customSymbol.toUpperCase(),
-        pipDecimal: parseInt(customPipDecimal) || 4,
+        pipDecimal: detectPipDecimal(customSymbol),
       };
       onSelect(customPair);
       onBack();
@@ -88,7 +111,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
           <div className="mb-6 p-4 bg-secondary rounded-2xl space-y-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Symbol (e.g. BTC/USD)
+                Symbol (e.g. EUR/GBP, BTC/USD)
               </label>
               <input
                 type="text"
@@ -98,22 +121,18 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
                 className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
                 autoFocus
               />
-            </div>
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1 block">
-                Pip Decimals (2 for JPY, 4 for most others)
-              </label>
-              <input
-                type="number"
-                value={customPipDecimal}
-                onChange={(e) => setCustomPipDecimal(e.target.value)}
-                placeholder="4"
-                className="w-full h-12 px-4 bg-background text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
-              />
+              {customSymbol && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Pip decimals will be auto-detected: {detectPipDecimal(customSymbol)} decimals
+                </p>
+              )}
             </div>
             <div className="flex gap-3">
               <button
-                onClick={() => setShowCustomInput(false)}
+                onClick={() => {
+                  setShowCustomInput(false);
+                  setCustomSymbol("");
+                }}
                 className="flex-1 h-12 bg-background text-foreground rounded-xl font-semibold transition-all active:scale-95"
               >
                 Cancel

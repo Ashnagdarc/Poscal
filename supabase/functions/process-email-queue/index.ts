@@ -158,13 +158,29 @@ serve(async (req) => {
   }
 
   try {
+    console.log('🚀 Starting email queue processing...');
+    
     const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY');
     const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     const WEBSITE_URL = Deno.env.get('WEBSITE_URL') || 'https://poscalfx.com';
 
-    if (!RESEND_API_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      throw new Error('Missing required environment variables');
+    console.log('🔍 Environment check:');
+    console.log(`  - RESEND_API_KEY: ${RESEND_API_KEY ? '✓ Set' : '✗ Missing'}`);
+    console.log(`  - SUPABASE_URL: ${SUPABASE_URL ? '✓ Set' : '✗ Missing'}`);
+    console.log(`  - SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY ? '✓ Set' : '✗ Missing'}`);
+    console.log(`  - WEBSITE_URL: ${WEBSITE_URL}`);
+
+    if (!RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY environment variable is not set');
+    }
+    
+    if (!SUPABASE_URL) {
+      throw new Error('SUPABASE_URL environment variable is not set');
+    }
+    
+    if (!SUPABASE_SERVICE_ROLE_KEY) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY environment variable is not set');
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);

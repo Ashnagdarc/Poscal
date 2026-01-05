@@ -1,4 +1,5 @@
 import "https://deno.land/std@0.224.0/dotenv/load.ts";
+import webpush from "npm:web-push@3.6.7";
 
 import { edgeLogger } from "../_shared/logger.ts";
 import { checkRateLimit, getClientIdentifier, createRateLimitHeaders, RATE_LIMITS } from "../_shared/rate-limiter.ts";
@@ -7,214 +8,6 @@ const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Base64 URL decode helper (for subscription keys)
-function base64UrlDecode(input: string): Uint8Array {
-  input = input.replace(/-/g, '+').replace(/_/g, '/');
-  const pad = input.length % 4;
-  if (pad) {
-    if (pad === 1) throw new Error('Invalid base64url string');
-    input += new Array(5 - pad).join('=');
-  }
-  const base64 = atob(input);
-  const bytes = new Uint8Array(base64.length);
-  for (let i = 0; i < base64.length; i++) {
-    bytes[i] = base64.charCodeAt(i);
-  }
-  return bytes;
-}
-
-// Regular base64 decode helper (for VAPID keys)
-function base64Decode(input: string): Uint8Array {
-  const base64 = atob(input);
-  const bytes = new Uint8Array(base64.length);
-  for (let i = 0; i < base64.length; i++) {
-    bytes[i] = base64.charCodeAt(i);
-  }
-  return bytes;
-}
-
-// Generate VAPID Authorization header
-async function generateVAPIDHeader(
-  endpoint: string,
-  vapidPublicKey: string,
-  vapidPrivateKey: string
-): Promise<string> {
-  const url = new URL(endpoint);
-  const audience = `${url.protocol}//${url.host}`;
-  
-  const header = btoa(JSON.stringify({ typ: 'JWT', alg: 'ES256' }))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  
-  const exp = Math.floor(Date.now() / 1000) + (12 * 60 * 60); // 12 hours
-  const payload = btoa(JSON.stringify({ aud: audience, exp, sub: 'mailto:admin@poscal.app' }))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  
-  const unsignedToken = `${header}.${payload}`;
-  
-  // Decode the raw private key and public key (VAPID keys are base64url encoded)
-  const privateKeyBytes = base64UrlDecode(vapidPrivateKey);
-  const publicKeyBytes = base64UrlDecode(vapidPublicKey);
-  
-  // Extract x and y coordinates from uncompressed public key (65 bytes: 0x04 + 32 bytes x + 32 bytes y)
-  // Skip first byte (0x04 format indicator)
-  const x = publicKeyBytes.slice(1, 33);
-  const y = publicKeyBytes.slice(33, 65);
-  
-  // Convert raw EC key to JWK format for import
-  const privateKeyJwk = {
-    kty: 'EC',
-    crv: 'P-256',
-    d: btoa(String.fromCharCode(...privateKeyBytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-    x: btoa(String.fromCharCode(...x)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-    y: btoa(String.fromCharCode(...y)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, ''),
-    ext: true
-  };
-  
-  // Import as JWK
-  const key = await crypto.subtle.importKey(
-    'jwk',
-    privateKeyJwk,
-    { name: 'ECDSA', namedCurve: 'P-256' },
-    false,
-    ['sign']
-  );
-  
-  // Sign
-  const signature = await crypto.subtle.sign(
-    { name: 'ECDSA', hash: 'SHA-256' },
-    key,
-    new TextEncoder().encode(unsignedToken)
-  );
-  
-  const signatureBase64 = btoa(String.fromCharCode(...new Uint8Array(signature)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-  
-  return `${unsignedToken}.${signatureBase64}`;
-}
-
-// HKDF-Expand function
-async function hkdfExpand(prk: Uint8Array, info: Uint8Array, length: number): Promise<Uint8Array> {
-  const iterations = Math.ceil(length / 32);
-  const output = new Uint8Array(length);
-  let t = new Uint8Array(0);
-  let offset = 0;
-
-  for (let i = 0; i < iterations; i++) {
-    const combined = new Uint8Array(t.length + info.length + 1);
-    combined.set(t);
-    combined.set(info, t.length);
-    combined[t.length + info.length] = i + 1;
-
-    const key = await crypto.subtle.importKey(
-      'raw',
-      prk.buffer.slice(prk.byteOffset, prk.byteOffset + prk.byteLength) as ArrayBuffer,
-      { name: 'HMAC', hash: 'SHA-256' },
-      false,
-      ['sign']
-    );
-    
-    const signed = await crypto.subtle.sign('HMAC', key, combined);
-    t = new Uint8Array(signed);
-    
-    const copyLength = Math.min(t.length, length - offset);
-    output.set(t.subarray(0, copyLength), offset);
-    offset += copyLength;
-  }
-
-  return output;
-}
-
-// Encrypt payload using aes128gcm
-async function encryptPayload(
-  payload: string,
-  userPublicKey: string,
-  userAuthSecret: string
-): Promise<{ ciphertext: Uint8Array; salt: Uint8Array; publicKey: Uint8Array }> {
-  // Generate local key pair
-  const localKeyPair = await crypto.subtle.generateKey(
-    { name: 'ECDH', namedCurve: 'P-256' },
-    true,
-    ['deriveBits']
-  );
-  
-  // Export local public key
-  const localPublicKeyRaw = await crypto.subtle.exportKey('raw', localKeyPair.publicKey);
-  const localPublicKeyBytes = new Uint8Array(localPublicKeyRaw);
-  
-  // Import user public key
-  const userPublicKeyBytes = base64UrlDecode(userPublicKey);
-  const userPublicKeyCrypto = await crypto.subtle.importKey(
-    'raw',
-    userPublicKeyBytes.buffer.slice(userPublicKeyBytes.byteOffset, userPublicKeyBytes.byteOffset + userPublicKeyBytes.byteLength) as ArrayBuffer,
-    { name: 'ECDH', namedCurve: 'P-256' },
-    false,
-    []
-  );
-  
-  // Derive shared secret
-  const sharedSecret = await crypto.subtle.deriveBits(
-    { name: 'ECDH', public: userPublicKeyCrypto },
-    localKeyPair.privateKey,
-    256
-  );
-  
-  // Generate salt
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  
-  // Decode auth secret
-  const authSecret = base64UrlDecode(userAuthSecret);
-  
-  // HKDF-Extract: derive PRK from auth secret and shared secret
-  const authInfo = new TextEncoder().encode('Content-Encoding: auth\0');
-  const ikmAuth = new Uint8Array(authSecret.length + sharedSecret.byteLength);
-  ikmAuth.set(authSecret);
-  ikmAuth.set(new Uint8Array(sharedSecret), authSecret.length);
-  
-  const authKey = await crypto.subtle.importKey(
-    'raw',
-    salt,
-    { name: 'HMAC', hash: 'SHA-256' },
-    false,
-    ['sign']
-  );
-  const prk = new Uint8Array(await crypto.subtle.sign('HMAC', authKey, ikmAuth));
-  
-  // HKDF-Expand: derive content encryption key
-  const keyInfo = new TextEncoder().encode('Content-Encoding: aes128gcm\0P-256\0');
-  const contentEncryptionKey = await hkdfExpand(prk, keyInfo, 16);
-  
-  // HKDF-Expand: derive nonce
-  const nonceInfo = new TextEncoder().encode('Content-Encoding: nonce\0P-256\0');
-  const nonce = await hkdfExpand(prk, nonceInfo, 12);
-  
-  // Import key for AES-GCM
-  const aesKey = await crypto.subtle.importKey(
-    'raw',
-    contentEncryptionKey.buffer.slice(contentEncryptionKey.byteOffset, contentEncryptionKey.byteOffset + contentEncryptionKey.byteLength) as ArrayBuffer,
-    'AES-GCM',
-    false,
-    ['encrypt']
-  );
-  
-  // Encrypt with padding
-  const payloadBytes = new TextEncoder().encode(payload);
-  const paddedPayload = new Uint8Array(payloadBytes.length + 2);
-  paddedPayload.set(payloadBytes);
-  paddedPayload[payloadBytes.length] = 2; // Padding delimiter
-  
-  const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv: nonce.buffer.slice(nonce.byteOffset, nonce.byteOffset + nonce.byteLength) as ArrayBuffer, tagLength: 128 },
-    aesKey,
-    paddedPayload
-  );
-  
-  return {
-    ciphertext: new Uint8Array(ciphertext),
-    salt,
-    publicKey: localPublicKeyBytes
-  };
-}
 
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
@@ -250,7 +43,14 @@ Deno.serve(async (req) => {
       throw new Error('VAPID keys not configured');
     }
 
-    const { title, body, tag, data } = await req.json();
+    // Configure web-push with VAPID details
+    webpush.setVapidDetails(
+      'mailto:admin@poscal.app',
+      vapidPublicKey,
+      vapidPrivateKey
+    );
+
+    const { title, body, tag, data, user_id } = await req.json();
 
     if (!title) {
       throw new Error('Title is required');
@@ -259,9 +59,15 @@ Deno.serve(async (req) => {
     edgeLogger.log('=== PUSH NOTIFICATION REQUEST ===');
     edgeLogger.log('Title:', title);
     edgeLogger.log('Body:', body);
+    edgeLogger.log('Target user:', user_id || 'all users');
 
-    // Fetch subscriptions
-    const subsResponse = await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?select=*`, {
+    // Fetch subscriptions (optionally filter by user_id)
+    let query = `${supabaseUrl}/rest/v1/push_subscriptions?select=*`;
+    if (user_id) {
+      query += `&user_id=eq.${user_id}`;
+    }
+
+    const subsResponse = await fetch(query, {
       headers: {
         'apikey': supabaseKey!,
         'Authorization': `Bearer ${supabaseKey}`
@@ -289,78 +95,77 @@ Deno.serve(async (req) => {
 
     let successCount = 0;
     let failCount = 0;
+    const failedEndpoints: string[] = [];
 
-    for (const sub of subscriptions) {
-      try {
-        const isApple = sub.endpoint.includes('push.apple.com');
-        const isGoogle = sub.endpoint.includes('fcm.googleapis.com');
-        edgeLogger.log(`\n=== Sending to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'Other'} device ===`);
-        edgeLogger.log(`Endpoint: ${sub.endpoint.substring(0, 60)}...`);
-        
-        // Encrypt payload
-        edgeLogger.log('Encrypting payload...');
-        const { ciphertext, salt, publicKey } = await encryptPayload(
-          payload,
-          sub.p256dh,
-          sub.auth
-        );
-        edgeLogger.log(`Encryption complete: salt=${salt.length}B, publicKey=${publicKey.length}B, ciphertext=${ciphertext.length}B`);
-        
-        // Generate VAPID header
-        edgeLogger.log('Generating VAPID JWT...');
-        const jwt = await generateVAPIDHeader(sub.endpoint, vapidPublicKey, vapidPrivateKey);
-        edgeLogger.log(`VAPID JWT generated (${jwt.length} chars)`);
-        
-        // Prepare body
-        const body = new Uint8Array([
-          ...salt,
-          0, 0, 0x10, 0, // Record size (4096)
-          publicKey.length,
-          ...publicKey,
-          ...ciphertext
-        ]);
-        edgeLogger.log(`Body size: ${body.length} bytes`);
-        
-        // Send push notification
-        edgeLogger.log('Sending HTTP POST...');
-        const response = await fetch(sub.endpoint, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/octet-stream',
-            'Content-Encoding': 'aes128gcm',
-            'Authorization': `vapid t=${jwt}, k=${vapidPublicKey}`,
-            'TTL': '86400',
-          },
-          body
-        });
+    // Send notifications in parallel for better performance
+    const results = await Promise.allSettled(
+      subscriptions.map(async (sub: any) => {
+        const pushSubscription = {
+          endpoint: sub.endpoint,
+          keys: {
+            p256dh: sub.p256dh,
+            auth: sub.auth
+          }
+        };
 
-        edgeLogger.log(`Response status: ${response.status} ${response.statusText}`);
-        edgeLogger.log(`Response headers:`, Object.fromEntries(response.headers.entries()));
-
-        if (response.ok || response.status === 201) {
-          successCount++;
-          edgeLogger.log(`✓ SUCCESS - Notification sent to ${isApple ? 'Apple' : isGoogle ? 'Google' : 'device'}`);
-        } else {
-          failCount++;
-          const errorText = await response.text();
-          edgeLogger.error(`✗ FAILED - Status ${response.status}`);
-          edgeLogger.error(`Error body: ${errorText}`);
-          edgeLogger.error(`Subscription ID: ${sub.id}`);
+        try {
+          await webpush.sendNotification(pushSubscription, payload, {
+            TTL: 86400, // 24 hours
+          });
+          
+          edgeLogger.log(`✓ Sent to: ${sub.endpoint.substring(0, 60)}...`);
+          return { success: true, endpoint: sub.endpoint };
+        } catch (error: any) {
+          edgeLogger.error(`✗ Failed to send to ${sub.endpoint.substring(0, 60)}:`, error);
+          
+          // Check if subscription is expired/invalid (410 Gone or 404)
+          if (error?.statusCode === 410 || error?.statusCode === 404) {
+            edgeLogger.log(`Removing invalid subscription: ${sub.id}`);
+            // Delete invalid subscription
+            await fetch(`${supabaseUrl}/rest/v1/push_subscriptions?id=eq.${sub.id}`, {
+              method: 'DELETE',
+              headers: {
+                'apikey': supabaseKey!,
+                'Authorization': `Bearer ${supabaseKey}`
+              }
+            });
+          }
+          
+          return { success: false, endpoint: sub.endpoint, error };
         }
-      } catch (err) {
+      })
+    );
+
+    // Count results
+    results.forEach((result) => {
+      if (result.status === 'fulfilled' && result.value.success) {
+        successCount++;
+      } else {
         failCount++;
-        edgeLogger.error(`✗ EXCEPTION:`, err);
-        edgeLogger.error(`Subscription ID: ${sub.id}`);
-        if (err instanceof Error) {
-          edgeLogger.error(`Error message: ${err.message}`);
-          edgeLogger.error(`Error stack: ${err.stack}`);
+        if (result.status === 'fulfilled' && result.value.endpoint) {
+          failedEndpoints.push(result.value.endpoint);
         }
       }
-    }
+    });
+
+    edgeLogger.log(`\n=== RESULTS ===`);
+    edgeLogger.log(`Success: ${successCount}`);
+    edgeLogger.log(`Failed: ${failCount}`);
 
     return new Response(
-      JSON.stringify({ success: true, sent: successCount, failed: failCount }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: true, 
+        sent: successCount, 
+        failed: failCount,
+        failedEndpoints: failedEndpoints.length > 0 ? failedEndpoints : undefined
+      }),
+      { 
+        headers: { 
+          ...corsHeaders, 
+          'Content-Type': 'application/json',
+          ...createRateLimitHeaders(rateLimit.remaining, rateLimit.resetTime)
+        } 
+      }
     );
   } catch (err) {
     edgeLogger.error('Error in send-push-notification:', err);
