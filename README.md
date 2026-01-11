@@ -335,6 +335,6 @@ For issues or questions:
 
 **Built with ❤️ by Daniel Samuel**
 
-**Official Sponsor: [ManDFX](https://mandfx.com)**
+**Official Sponsor: [MandeFX](https://mandfx.com)**
 
 </div>
