@@ -82,21 +82,19 @@ const AdminUpdates = () => {
 
       if (error) throw error;
 
-      // Send push notification to all subscribers
+      // Queue push notification for all subscribers
       try {
-        logger.log('📤 Invoking send-push-notification Edge Function...');
-        const pushResult = await supabase.functions.invoke('send-push-notification', {
-          body: {
-            title: `📢 App Update: ${formData.title.trim()}`,
-            body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
-            tag: 'app-update',
-            data: { type: 'update' },
-          },
+        logger.log('📤 Queuing push notification via RPC...');
+        const { data: pushResult, error: pushError } = await supabase.rpc('queue_push_notification', {
+          p_title: `📢 App Update: ${formData.title.trim()}`,
+          p_body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
+          p_tag: 'app-update',
+          p_data: { type: 'update' },
         });
-        logger.log('✅ Push notification response:', pushResult);
-        if (pushResult.error) {
-          logger.error('❌ Push error:', pushResult.error);
-          toast.error('Push notification failed to send');
+        logger.log('✅ Push notification queued:', pushResult);
+        if (pushError) {
+          logger.error('❌ Push error:', pushError);
+          toast.error('Push notification failed to queue');
         } else {
           logger.log('📨 Push sent successfully:', pushResult.data);
         }

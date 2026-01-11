@@ -1,4 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
+import { TYPICAL_SPREADS, spreadPipsToPrice } from '@/lib/forexCalculations';
+
+// Helper functions for spread calculation
+function getTypicalSpread(symbol: string): number {
+  return TYPICAL_SPREADS[symbol] || 2.0; // Default 2 pips if unknown
+}
+
+function getSpreadInPrice(symbol: string, spreadPips: number): number {
+  return spreadPipsToPrice(symbol, spreadPips);
+}
 
 interface UseLivePricesOptions {
   symbols: string[];
@@ -8,6 +18,8 @@ interface UseLivePricesOptions {
 
 interface UseLivePricesResult {
   prices: Record<string, number>;
+  askPrices: Record<string, number>; // Real ask prices from API
+  bidPrices: Record<string, number>; // Real bid prices from API
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
@@ -17,10 +29,14 @@ interface UseLivePricesResult {
 // Global cache to share prices across all components
 const priceCache: {
   data: Record<string, number>;
+  askData: Record<string, number>;
+  bidData: Record<string, number>;
   timestamp: number | null;
-  promise: Promise<Record<string, number>> | null;
+  promise: Promise<{ prices: Record<string, number>; askPrices: Record<string, number>; bidPrices: Record<string, number> }> | null;
 } = {
   data: {},
+  askData: {},
+  bidData: {},
   timestamp: null,
   promise: null
 };
@@ -42,6 +58,8 @@ export const useLivePrices = ({
   refreshInterval = 10 * 60 * 1000 // 10 minutes default (reduced from 60 seconds)
 }: UseLivePricesOptions): UseLivePricesResult => {
   const [prices, setPrices] = useState<Record<string, number>>(priceCache.data);
+  const [askPrices, setAskPrices] = useState<Record<string, number>>(priceCache.askData);
+  const [bidPrices, setBidPrices] = useState<Record<string, number>>(priceCache.bidData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(
@@ -58,6 +76,8 @@ export const useLivePrices = ({
     if (cacheAge < CACHE_DURATION && Object.keys(priceCache.data).length > 0) {
       // Use cached data
       setPrices(priceCache.data);
+      setAskPrices(priceCache.askData);
+      setBidPrices(priceCache.bidData);
       setLastUpdated(new Date(priceCache.timestamp!));
       return;
     }
@@ -66,7 +86,9 @@ export const useLivePrices = ({
     if (priceCache.promise) {
       try {
         const data = await priceCache.promise;
-        setPrices(data);
+        setPrices(data.prices);
+        setAskPrices(data.askPrices);
+        setBidPrices(data.bidPrices);
         setLastUpdated(new Date(priceCache.timestamp!));
         return;
       } catch (err) {
@@ -81,6 +103,8 @@ export const useLivePrices = ({
     priceCache.promise = (async () => {
       try {
         const newPrices: Record<string, number> = {};
+        const newAskPrices: Record<string, number> = {};
+        const newBidPrices: Record<string, number> = {};
         
         // Categorize symbols
         const forexSymbols = symbols.filter(s => !isCrypto(s) && !isMetal(s) && !isIndex(s));
@@ -90,36 +114,49 @@ export const useLivePrices = ({
         
         // Fetch forex rates (ExchangeRate-API)
         if (forexSymbols.length > 0) {
-          const forexPrices = await fetchForexPrices(forexSymbols);
+          const { prices: forexPrices, askPrices: forexAsk, bidPrices: forexBid } = await fetchForexPrices(forexSymbols);
           Object.assign(newPrices, forexPrices);
+          Object.assign(newAskPrices, forexAsk);
+          Object.assign(newBidPrices, forexBid);
         }
         
         // Fetch crypto prices (CoinGecko API)
         if (cryptoSymbols.length > 0) {
-          const cryptoPrices = await fetchCryptoPrices(cryptoSymbols);
+          const { prices: cryptoPrices, askPrices: cryptoAsk, bidPrices: cryptoBid } = await fetchCryptoPrices(cryptoSymbols);
           Object.assign(newPrices, cryptoPrices);
+          Object.assign(newAskPrices, cryptoAsk);
+          Object.assign(newBidPrices, cryptoBid);
         }
         
         // Fetch metal prices (Metals-dev-api)
         if (metalSymbols.length > 0) {
-          const metalPrices = await fetchMetalPrices(metalSymbols);
+          const { prices: metalPrices, askPrices: metalAsk, bidPrices: metalBid } = await fetchMetalPrices(metalSymbols);
           Object.assign(newPrices, metalPrices);
+          Object.assign(newAskPrices, metalAsk);
+          Object.assign(newBidPrices, metalBid);
         }
         
         // Use fallback for indices
         for (const symbol of indexSymbols) {
-          newPrices[symbol] = getStaticFallbackRate(symbol);
+          const fallbackPrice = getStaticFallbackRate(symbol);
+          newPrices[symbol] = fallbackPrice;
+          newAskPrices[symbol] = fallbackPrice;
+          newBidPrices[symbol] = fallbackPrice;
         }
         
         // Update global cache
         priceCache.data = newPrices;
+        priceCache.askData = newAskPrices;
+        priceCache.bidData = newBidPrices;
         priceCache.timestamp = Date.now();
         priceCache.promise = null;
         
         setPrices(newPrices);
+        setAskPrices(newAskPrices);
+        setBidPrices(newBidPrices);
         setLastUpdated(new Date());
         
-        return newPrices;
+        return { prices: newPrices, askPrices: newAskPrices, bidPrices: newBidPrices };
       } catch (err) {
         console.error('Error fetching live prices:', err);
         setError(err instanceof Error ? err.message : 'Failed to fetch prices');
@@ -127,15 +164,20 @@ export const useLivePrices = ({
         // Use fallback rates when APIs fail
         const fallbackPrices: Record<string, number> = {};
         for (const symbol of symbols) {
-          fallbackPrices[symbol] = getStaticFallbackRate(symbol);
+          const fallback = getStaticFallbackRate(symbol);
+          fallbackPrices[symbol] = fallback;
         }
         
         priceCache.data = fallbackPrices;
+        priceCache.askData = fallbackPrices; // Use same fallback
+        priceCache.bidData = fallbackPrices; // Use same fallback
         priceCache.timestamp = Date.now();
         priceCache.promise = null;
         
         setPrices(fallbackPrices);
-        return fallbackPrices;
+        setAskPrices(fallbackPrices);
+        setBidPrices(fallbackPrices);
+        return { prices: fallbackPrices, askPrices: fallbackPrices, bidPrices: fallbackPrices };
       } finally {
         setLoading(false);
       }
@@ -159,6 +201,8 @@ export const useLivePrices = ({
 
   return {
     prices,
+    askPrices,
+    bidPrices,
     loading,
     error,
     lastUpdated,
@@ -183,9 +227,16 @@ function isIndex(symbol: string): boolean {
 /**
  * Fetch forex prices from ExchangeRate-API (open.er-api.com)
  * Updates multiple times per day, more accurate than ECB daily rates
+ * Returns mid-market prices with estimated bid/ask based on typical spreads
  */
-async function fetchForexPrices(symbols: string[]): Promise<Record<string, number>> {
+async function fetchForexPrices(symbols: string[]): Promise<{
+  prices: Record<string, number>;
+  askPrices: Record<string, number>;
+  bidPrices: Record<string, number>;
+}> {
   const prices: Record<string, number> = {};
+  const askPrices: Record<string, number> = {};
+  const bidPrices: Record<string, number> = {};
   
   try {
     // Using ExchangeRate-API.com - more frequent updates than ECB, no key required
@@ -202,39 +253,64 @@ async function fetchForexPrices(symbols: string[]): Promise<Record<string, numbe
     for (const symbol of symbols) {
       const [base, quote] = symbol.split('/');
       
+      let midPrice: number | null = null;
+      
       // Direct USD pairs (e.g., USD/JPY, USD/CHF)
       if (base === 'USD' && rates[quote]) {
-        prices[symbol] = rates[quote];
+        midPrice = rates[quote];
       }
       // Reverse USD pairs (e.g., EUR/USD, GBP/USD)
       else if (quote === 'USD' && rates[base]) {
-        prices[symbol] = 1 / rates[base];
+        midPrice = 1 / rates[base];
       }
       // Cross pairs (e.g., EUR/GBP, GBP/JPY)
       else if (rates[base] && rates[quote]) {
-        prices[symbol] = rates[quote] / rates[base];
+        midPrice = rates[quote] / rates[base];
       }
-      // Fallback
-      else {
-        prices[symbol] = getStaticFallbackRate(symbol);
+      
+      if (midPrice) {
+        prices[symbol] = midPrice;
+        
+        // Estimate bid/ask using typical spreads
+        // Import spread calculation from forexCalculations
+        const typicalSpread = getTypicalSpread(symbol);
+        const halfSpread = getSpreadInPrice(symbol, typicalSpread) / 2;
+        
+        askPrices[symbol] = midPrice + halfSpread;
+        bidPrices[symbol] = midPrice - halfSpread;
+      } else {
+        // Fallback
+        const fallback = getStaticFallbackRate(symbol);
+        prices[symbol] = fallback;
+        askPrices[symbol] = fallback;
+        bidPrices[symbol] = fallback;
       }
     }
   } catch (err) {
     console.warn('Forex API error, using fallbacks:', err);
     // Return fallbacks for all requested symbols
     for (const symbol of symbols) {
-      prices[symbol] = getStaticFallbackRate(symbol);
+      const fallback = getStaticFallbackRate(symbol);
+      prices[symbol] = fallback;
+      askPrices[symbol] = fallback;
+      bidPrices[symbol] = fallback;
     }
   }
   
-  return prices;
+  return { prices, askPrices, bidPrices };
 }
 
 /**
  * Fetch crypto prices from CoinGecko API (free, no key)
  */
-async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, number>> {
+async function fetchCryptoPrices(symbols: string[]): Promise<{
+  prices: Record<string, number>;
+  askPrices: Record<string, number>;
+  bidPrices: Record<string, number>;
+}> {
   const prices: Record<string, number> = {};
+  const askPrices: Record<string, number> = {};
+  const bidPrices: Record<string, number> = {};
   
   try {
     // Map symbols to CoinGecko IDs
@@ -242,7 +318,7 @@ async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, numb
     if (symbols.some(s => s.includes('BTC'))) coinIds.push('bitcoin');
     if (symbols.some(s => s.includes('ETH'))) coinIds.push('ethereum');
     
-    if (coinIds.length === 0) return prices;
+    if (coinIds.length === 0) return { prices, askPrices, bidPrices };
     
     const response = await fetch(
       `https://api.coingecko.com/api/v3/simple/price?ids=${coinIds.join(',')}&vs_currencies=usd`
@@ -255,29 +331,54 @@ async function fetchCryptoPrices(symbols: string[]): Promise<Record<string, numb
     const data = await response.json();
     
     for (const symbol of symbols) {
+      let midPrice: number | null = null;
+      
       if (symbol.includes('BTC') && data.bitcoin) {
-        prices[symbol] = data.bitcoin.usd;
+        midPrice = data.bitcoin.usd;
       } else if (symbol.includes('ETH') && data.ethereum) {
-        prices[symbol] = data.ethereum.usd;
+        midPrice = data.ethereum.usd;
+      }
+      
+      if (midPrice) {
+        prices[symbol] = midPrice;
+        
+        // Estimate bid/ask using typical spreads
+        const typicalSpread = getTypicalSpread(symbol);
+        const halfSpread = getSpreadInPrice(symbol, typicalSpread) / 2;
+        
+        askPrices[symbol] = midPrice + halfSpread;
+        bidPrices[symbol] = midPrice - halfSpread;
       } else {
-        prices[symbol] = getStaticFallbackRate(symbol);
+        const fallback = getStaticFallbackRate(symbol);
+        prices[symbol] = fallback;
+        askPrices[symbol] = fallback;
+        bidPrices[symbol] = fallback;
       }
     }
   } catch (err) {
     console.warn('Crypto API error, using fallbacks:', err);
     for (const symbol of symbols) {
-      prices[symbol] = getStaticFallbackRate(symbol);
+      const fallback = getStaticFallbackRate(symbol);
+      prices[symbol] = fallback;
+      askPrices[symbol] = fallback;
+      bidPrices[symbol] = fallback;
     }
   }
   
-  return prices;
+  return { prices, askPrices, bidPrices };
 }
 
 /**
  * Fetch metal prices (Gold/Silver)
  */
-async function fetchMetalPrices(symbols: string[]): Promise<Record<string, number>> {
+async function fetchMetalPrices(symbols: string[]): Promise<{
+  prices: Record<string, number>;
+  askPrices: Record<string, number>;
+  bidPrices: Record<string, number>;
+}> {
   const prices: Record<string, number> = {};
+  const askPrices: Record<string, number> = {};
+  const bidPrices: Record<string, number> = {};
   
   try {
     // Using metals-api.com free tier (no key for basic usage)
@@ -288,13 +389,29 @@ async function fetchMetalPrices(symbols: string[]): Promise<Record<string, numbe
       
       if (data.rates) {
         for (const symbol of symbols) {
+          let midPrice: number | null = null;
+          
           if (symbol.includes('XAU') && data.rates.XAU) {
             // Metals API returns rates in troy ounces, invert for USD price
-            prices[symbol] = 1 / data.rates.XAU;
+            midPrice = 1 / data.rates.XAU;
           } else if (symbol.includes('XAG') && data.rates.XAG) {
-            prices[symbol] = 1 / data.rates.XAG;
+            midPrice = 1 / data.rates.XAG;
+          }
+          
+          if (midPrice) {
+            prices[symbol] = midPrice;
+            
+            // Estimate bid/ask using typical spreads
+            const typicalSpread = getTypicalSpread(symbol);
+            const halfSpread = getSpreadInPrice(symbol, typicalSpread) / 2;
+            
+            askPrices[symbol] = midPrice + halfSpread;
+            bidPrices[symbol] = midPrice - halfSpread;
           } else {
-            prices[symbol] = getStaticFallbackRate(symbol);
+            const fallback = getStaticFallbackRate(symbol);
+            prices[symbol] = fallback;
+            askPrices[symbol] = fallback;
+            bidPrices[symbol] = fallback;
           }
         }
       }
@@ -305,11 +422,14 @@ async function fetchMetalPrices(symbols: string[]): Promise<Record<string, numbe
     console.warn('Metals API error, using fallbacks:', err);
     // Use fallback rates
     for (const symbol of symbols) {
-      prices[symbol] = getStaticFallbackRate(symbol);
+      const fallback = getStaticFallbackRate(symbol);
+      prices[symbol] = fallback;
+      askPrices[symbol] = fallback;
+      bidPrices[symbol] = fallback;
     }
   }
   
-  return prices;
+  return { prices, askPrices, bidPrices };
 }
 
 /**

@@ -77,13 +77,14 @@ export const Calculator = () => {
     return Array.from(requiredPairs);
   }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
   
-  const { prices, loading: _pricesLoading } = useLivePrices({
+  const { prices, askPrices, bidPrices, loading: _pricesLoading } = useLivePrices({
     symbols: symbolsToFetch,
     enabled: true,
     refreshInterval: 10 * 60 * 1000 // 10 minutes - optimized for API limits
   });
   
   const currentLivePrice = prices[selectedPair.symbol];
+  const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from API
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -105,13 +106,17 @@ export const Calculator = () => {
     const slPips = parseFloat(stopLossPips) || 0;
     const tpPips = parseFloat(takeProfitPips) || 0;
     
-    // Use dynamic pip value calculation with live price
-    // Falls back to static value if live price not available
+    // Use real ask price from API for position sizing (the price you'll actually pay)
+    // This matches professional calculators like Stinu app
+    // Falls back to mid-market if ask price not available
+    const priceForCalculation = currentAskPrice || currentLivePrice;
+    
     const pipVal = getPipValueInUSD(
       selectedPair.symbol,
       'USD',
-      currentLivePrice || undefined,
-      prices // Pass all prices for cross-pair conversion
+      priceForCalculation || undefined,
+      prices, // Pass all prices for cross-pair conversion
+      false // Don't estimate ask price - we're already using real ask price
     );
 
     if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
@@ -125,7 +130,7 @@ export const Calculator = () => {
     const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
 
     return { riskAmount, positionSize, units, riskReward, potentialProfit, pipValue: pipVal };
-  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, prices]);
+  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, currentAskPrice, prices]);
 
   const saveToHistory = () => {
     if (calculation.positionSize <= 0) return;

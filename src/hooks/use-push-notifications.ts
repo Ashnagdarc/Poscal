@@ -130,16 +130,14 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         authLength: subJson.keys?.auth?.length
       });
 
-      // Send subscription to server
-      logger.log('[push] Invoking subscribe-push function...');
-      const { data, error } = await supabase.functions.invoke('subscribe-push', {
-        body: {
-          subscription: subJson,
-          user_id: user?.id ?? null,
-        },
+      // Send subscription to server via RPC
+      logger.log('[push] Calling subscribe_push_notification RPC...');
+      const { data, error } = await supabase.rpc('subscribe_push_notification', {
+        p_subscription: subJson,
+        p_user_id: user?.id ?? null,
       });
 
-      logger.log('[push] subscribe-push response:', { data, error });
+      logger.log('[push] subscribe_push_notification response:', { data, error });
 
       if (error) {
         logger.error('[push] subscribe-push failed:', error);

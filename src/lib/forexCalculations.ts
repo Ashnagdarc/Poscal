@@ -8,12 +8,59 @@ export const STANDARD_LOT_SIZE = 100000; // 1 standard lot = 100,000 units
 export const MINI_LOT_SIZE = 10000;      // 1 mini lot = 10,000 units
 export const MICRO_LOT_SIZE = 1000;      // 1 micro lot = 1,000 units
 
+/**
+ * Typical broker spreads in pips for major currency pairs
+ * These are conservative estimates for retail brokers
+ */
+export const TYPICAL_SPREADS: Record<string, number> = {
+  // Major pairs (lowest spreads)
+  'EUR/USD': 1.0,
+  'GBP/USD': 1.5,
+  'USD/JPY': 1.0,
+  'USD/CHF': 1.5,
+  'AUD/USD': 1.5,
+  'USD/CAD': 1.5,
+  'NZD/USD': 2.0,
+  
+  // Cross pairs (higher spreads)
+  'EUR/GBP': 2.0,
+  'EUR/JPY': 2.0,
+  'GBP/JPY': 3.0,
+  'EUR/AUD': 3.0,
+  'EUR/CHF': 2.0,
+  'GBP/CHF': 3.0,
+  'AUD/JPY': 2.5,
+  'NZD/JPY': 3.0,
+  'GBP/AUD': 3.5,
+  'GBP/NZD': 4.0,
+  'EUR/NZD': 4.0,
+  'AUD/NZD': 3.0,
+  'AUD/CAD': 2.5,
+  'CAD/JPY': 2.5,
+  'CHF/JPY': 3.0,
+  
+  // Exotic pairs (highest spreads)
+  'USD/ZAR': 15.0,
+  'USD/MXN': 10.0,
+  'USD/TRY': 20.0,
+  'EUR/TRY': 25.0,
+  
+  // Commodities
+  'XAU/USD': 3.0, // Gold
+  'XAG/USD': 3.5, // Silver
+  
+  // Crypto (very high spreads)
+  'BTC/USD': 50.0,
+  'ETH/USD': 5.0,
+};
+
 interface PairConfig {
   pipMultiplier: number; // How many to multiply price difference to get pips
   pipValueBase: number; // Base pip value for 1 standard lot
   quoteCurrency: string; // The second currency in the pair
   baseCurrency: string; // The first currency in the pair
   isMetalOrCrypto?: boolean;
+  typicalSpread: number; // Typical spread in pips
 }
 
 /**
@@ -23,6 +70,9 @@ interface PairConfig {
 function getPairConfig(pair: string): PairConfig {
   const [base, quote] = pair.split('/');
   
+  // Get typical spread for this pair (default 2.0 pips if unknown)
+  const typicalSpread = TYPICAL_SPREADS[pair] || 2.0;
+  
   // Handle metals (Gold, Silver)
   if (base === 'XAU' || base === 'XAG') {
     return {
@@ -30,7 +80,8 @@ function getPairConfig(pair: string): PairConfig {
       quoteCurrency: quote,
       pipMultiplier: base === 'XAU' ? 10 : 100,
       pipValueBase: base === 'XAU' ? 10 : 0.5,
-      isMetalOrCrypto: true
+      isMetalOrCrypto: true,
+      typicalSpread
     };
   }
   
@@ -41,7 +92,8 @@ function getPairConfig(pair: string): PairConfig {
       quoteCurrency: quote,
       pipMultiplier: 10,
       pipValueBase: 1,
-      isMetalOrCrypto: true
+      isMetalOrCrypto: true,
+      typicalSpread
     };
   }
   
@@ -51,7 +103,8 @@ function getPairConfig(pair: string): PairConfig {
       baseCurrency: base,
       quoteCurrency: quote,
       pipMultiplier: 100,
-      pipValueBase: 9.09 // Approximate, should use live rate
+      pipValueBase: 9.09, // Approximate, should use live rate
+      typicalSpread
     };
   }
   
@@ -60,7 +113,8 @@ function getPairConfig(pair: string): PairConfig {
     baseCurrency: base,
     quoteCurrency: quote,
     pipMultiplier: 10000,
-    pipValueBase: 10
+    pipValueBase: 10,
+    typicalSpread
   };
 }
 
@@ -74,6 +128,45 @@ export function calculatePips(price1: number, price2: number, pair: string): num
 }
 
 /**
+ * Convert spread in pips to price units for a given pair
+ * @param pair - Currency pair (e.g., 'EUR/USD')
+ * @param spreadPips - Spread in pips
+ * @returns Spread in price units
+ */
+export function spreadPipsToPrice(pair: string, spreadPips: number): number {
+  const config = getPairConfig(pair);
+  return spreadPips / config.pipMultiplier;
+}
+
+/**
+ * Calculate ask price from mid-market price
+ * Ask price = mid price + (spread / 2)
+ * @param midPrice - Mid-market price
+ * @param pair - Currency pair
+ * @param spreadPips - Optional custom spread in pips (uses typical spread if not provided)
+ * @returns Ask price
+ */
+export function getAskPrice(midPrice: number, pair: string, spreadPips?: number): number {
+  const spread = spreadPips ?? getPairConfig(pair).typicalSpread;
+  const halfSpreadInPrice = spreadPipsToPrice(pair, spread) / 2;
+  return midPrice + halfSpreadInPrice;
+}
+
+/**
+ * Calculate bid price from mid-market price
+ * Bid price = mid price - (spread / 2)
+ * @param midPrice - Mid-market price
+ * @param pair - Currency pair
+ * @param spreadPips - Optional custom spread in pips (uses typical spread if not provided)
+ * @returns Bid price
+ */
+export function getBidPrice(midPrice: number, pair: string, spreadPips?: number): number {
+  const spread = spreadPips ?? getPairConfig(pair).typicalSpread;
+  const halfSpreadInPrice = spreadPipsToPrice(pair, spread) / 2;
+  return midPrice - halfSpreadInPrice;
+}
+
+/**
  * Calculate pip value in USD for a given pair with live price support
  * For USD-quote pairs (EUR/USD, GBP/USD): pip value = $10 per standard lot
  * For USD-base pairs (USD/JPY, USD/CHF): pip value varies with current price
@@ -81,14 +174,16 @@ export function calculatePips(price1: number, price2: number, pair: string): num
  * 
  * @param pair - Currency pair (e.g., 'EUR/USD', 'GBP/JPY')
  * @param accountCurrency - Account currency (default 'USD')
- * @param currentPrice - Current market price of the pair
+ * @param currentPrice - Current market price of the pair (mid-market)
  * @param livePrices - Optional map of live exchange rates for cross pair conversion
+ * @param useAskPrice - If true, uses ask price instead of mid for USD-base pairs (more accurate for position sizing)
  */
 export function getPipValueInUSD(
   pair: string, 
   accountCurrency: string = 'USD',
   currentPrice?: number,
-  livePrices?: Record<string, number>
+  livePrices?: Record<string, number>,
+  useAskPrice: boolean = true
 ): number {
   const config = getPairConfig(pair);
   const pipSize = 1 / config.pipMultiplier;
@@ -99,9 +194,11 @@ export function getPipValueInUSD(
   }
 
   // For USD-base pairs (USD/XXX), calculate based on current price
+  // Use ask price for more accurate position sizing (the price you actually pay)
   // Example: USD/JPY at 150.00 → pip value = 100,000 × 0.01 / 150.00 ≈ $6.67
   if (config.baseCurrency === 'USD' && currentPrice) {
-    return (STANDARD_LOT_SIZE * pipSize) / currentPrice;
+    const priceToUse = useAskPrice ? getAskPrice(currentPrice, pair) : currentPrice;
+    return (STANDARD_LOT_SIZE * pipSize) / priceToUse;
   }
 
   // For cross pairs (XXX/YYY where neither is USD), need conversion rate

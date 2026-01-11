@@ -141,15 +141,16 @@ export const UpdateSignalModal = ({
 
   const handleCloseTakenTrades = async (signalId: string, signalResult: string) => {
     try {
-      console.log(`🔄 Calling Edge Function to close taken trades for signal ${signalId} with result: ${signalResult}`);
+      console.log(`🔄 Calling RPC function to close taken trades for signal ${signalId} with result: ${signalResult}`);
       
-      // Call the Edge Function which has service role access
-      const { data, error } = await supabase.functions.invoke('close-signal-trades', {
-        body: { signalId, signalResult }
+      // Call the RPC function which has SECURITY DEFINER
+      const { data, error } = await supabase.rpc('close_signal_trades', {
+        p_signal_id: signalId,
+        p_signal_result: signalResult
       });
 
       if (error) {
-        console.error('❌ Edge Function error:', error);
+        console.error('❌ RPC function error:', error);
         throw error;
       }
 

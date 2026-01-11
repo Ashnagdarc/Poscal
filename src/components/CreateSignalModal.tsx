@@ -167,18 +167,16 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         throw error;
       }
 
-      // Send push notification to all subscribers
+      // Queue push notification to all subscribers
       try {
-        await supabase.functions.invoke('send-push-notification', {
-          body: {
-            title: `📊 New Signal: ${formData.currency_pair}`,
-            body: `${formData.direction.toUpperCase()} at ${entry}`,
-            tag: 'new-signal',
-            data: { type: 'signal' },
-          },
+        await supabase.rpc('queue_push_notification', {
+          p_title: `📊 New Signal: ${formData.currency_pair}`,
+          p_body: `${formData.direction.toUpperCase()} at ${entry}`,
+          p_tag: 'new-signal',
+          p_data: { type: 'signal' },
         });
       } catch (pushError) {
-        console.error('Failed to send push notification:', pushError);
+        console.error('Failed to queue push notification:', pushError);
         // Don't fail the signal creation if push fails
       }
 
