@@ -14,7 +14,7 @@ import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useLivePrices } from "@/hooks/use-live-prices";
+import { useRealtimePrices } from "@/hooks/use-realtime-prices";
 import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
 import { toast } from "sonner";
 
@@ -77,14 +77,15 @@ export const Calculator = () => {
     return Array.from(requiredPairs);
   }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
   
-  const { prices, askPrices, bidPrices, loading: _pricesLoading } = useLivePrices({
+  // Use Realtime prices from backend (push-sender fetches every 10 seconds)
+  // This reduces API calls 1000x while keeping all users in sync
+  const { prices, askPrices, bidPrices, loading: _pricesLoading } = useRealtimePrices({
     symbols: symbolsToFetch,
-    enabled: true,
-    refreshInterval: 10 * 60 * 1000 // 10 minutes - optimized for API limits
+    enabled: true
   });
   
   const currentLivePrice = prices[selectedPair.symbol];
-  const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from API
+  const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from backend
 
   const riskPresets = [0.5, 1, 2, 3];
 

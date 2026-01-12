@@ -7,13 +7,20 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:info@poscalfx.com';
+const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY!;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000'); // 30 seconds default
+const PRICE_FETCH_INTERVAL = parseInt(process.env.PRICE_FETCH_INTERVAL || '10000'); // 10 seconds for prices
 
 // Validate required env vars
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
   console.error('❌ Missing required environment variables');
   console.error('Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY');
   process.exit(1);
+}
+
+// Warn if TWELVE_DATA_API_KEY is missing (prices won't work, but service continues)
+if (!TWELVE_DATA_API_KEY) {
+  console.warn('⚠️  TWELVE_DATA_API_KEY not set - price fetching will be disabled');
 }
 
 // Initialize Supabase client with service role
@@ -210,21 +217,98 @@ async function processPushQueue(): Promise<void> {
 }
 
 /**
+ * Fetch live prices from Twelve Data API and store in price_cache
+ */
+async function fetchAndStorePrices() {
+  if (!TWELVE_DATA_API_KEY) {
+    return; // Skip if API key not configured
+  }
+
+  try {
+    // List of common trading pairs to fetch
+    const symbols = [
+      'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+      'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY',
+      'BTC/USD', 'ETH/USD',
+      'XAU/USD', 'XAG/USD'
+    ];
+
+    const prices: any[] = [];
+
+    for (const symbol of symbols) {
+      try {
+        const [base, quote] = symbol.split('/');
+        
+        // Fetch from Twelve Data API
+        const response = await fetch(
+          `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_API_KEY}`
+        );
+
+        if (!response.ok) {
+          console.warn(`⚠️  Failed to fetch ${symbol}:`, response.status);
+          continue;
+        }
+
+        const data = await response.json();
+
+        if (data.bid && data.ask && data.close) {
+          prices.push({
+            symbol,
+            mid_price: data.close,
+            ask_price: data.ask,
+            bid_price: data.bid,
+            timestamp: new Date().toISOString()
+          });
+        }
+      } catch (error) {
+        console.warn(`⚠️  Error fetching ${symbol}:`, error);
+        continue;
+      }
+    }
+
+    if (prices.length === 0) {
+      console.warn('⚠️  No prices fetched from Twelve Data');
+      return;
+    }
+
+    // Upsert into price_cache table
+    const { error } = await supabase
+      .from('price_cache')
+      .upsert(prices, { onConflict: 'symbol' });
+
+    if (error) {
+      console.error('❌ Error storing prices:', error);
+    } else {
+      console.log(`✅ Stored ${prices.length} prices in cache`);
+    }
+  } catch (error) {
+    console.error('❌ Error in fetchAndStorePrices:', error);
+  }
+}
+
+/**
  * Main loop
  */
 async function main() {
   console.log('🚀 Push Notification Sender started');
-  console.log(`📊 Polling every ${POLL_INTERVAL / 1000} seconds`);
+  console.log(`📊 Polling for notifications every ${POLL_INTERVAL / 1000} seconds`);
+  console.log(`💰 Fetching prices every ${PRICE_FETCH_INTERVAL / 1000} seconds`);
   console.log(`🔗 Connected to: ${SUPABASE_URL}`);
   console.log('');
 
-  // Initial run
+  // Initial runs
   await processPushQueue();
+  await fetchAndStorePrices();
 
-  // Run on interval
+  // Run notification queue on interval
   setInterval(async () => {
     await processPushQueue();
   }, POLL_INTERVAL);
+
+  // Run price fetcher on interval
+  setInterval(async () => {
+    await fetchAndStorePrices();
+  }, PRICE_FETCH_INTERVAL);
 
   // Keep process alive
   process.on('SIGTERM', () => {

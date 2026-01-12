@@ -55,7 +55,7 @@ const CACHE_DURATION = 10 * 60 * 1000; // 10 minutes
 export const useLivePrices = ({ 
   symbols, 
   enabled = true, 
-  refreshInterval = 10 * 60 * 1000 // 10 minutes default (reduced from 60 seconds)
+  refreshInterval = 10 * 1000 // 10 seconds for accurate pricing
 }: UseLivePricesOptions): UseLivePricesResult => {
   const [prices, setPrices] = useState<Record<string, number>>(priceCache.data);
   const [askPrices, setAskPrices] = useState<Record<string, number>>(priceCache.askData);

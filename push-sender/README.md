@@ -1,6 +1,8 @@
 # PosCal Push Notification Sender
 
-A lightweight Docker service that sends push notifications to your PosCal users. Polls the database every 30 seconds for queued notifications and delivers them via FCM (Firebase Cloud Messaging) and APNs (Apple Push Notification service).
+A lightweight Docker service that sends push notifications to your PosCal users. Polls the database every 30 seconds for queued notifications and delivers them via Web Push API with VAPID authentication.
+
+> 📚 **For complete deployment instructions**, see [PUSH_NOTIFICATION_DEPLOYMENT.md](../docs/PUSH_NOTIFICATION_DEPLOYMENT.md)
 
 ## 📦 What's Included
 
@@ -8,6 +10,15 @@ A lightweight Docker service that sends push notifications to your PosCal users.
 - `Dockerfile` - Multi-stage build for ~100MB image
 - `docker-compose.yml` - Ready-to-deploy configuration
 - `.env.example` - Environment variable template
+
+## ✨ Features
+
+- **Automated Polling**: Checks database every 30 seconds for new notifications
+- **Web Push API**: Delivers notifications using standard Web Push protocol
+- **VAPID Authentication**: Secure notification delivery with VAPID keys
+- **Auto Cleanup**: Removes expired push subscriptions automatically
+- **Resource Efficient**: ~50-80MB memory footprint
+- **Docker Ready**: Containerized for easy deployment
 
 ## 🚀 Quick Start (DigitalOcean Droplet)
 

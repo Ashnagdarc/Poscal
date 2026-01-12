@@ -81,12 +81,17 @@
   - `monitor-signals`: Automated signal monitoring
   - `send-push-notification`: Web Push API implementation
   - `subscribe-push`: Manage push subscriptions
+- **Push Notification Service**: Docker-based notification sender (DigitalOcean)
+  - Polls database every 30 seconds for queued notifications
+  - ~50-80MB memory footprint
+  - Handles Web Push delivery with VAPID authentication
 
 ### APIs & Services
 
 - **Twelve Data API**: Real-time forex price data
 - **Web Push API**: Browser push notifications
 - **VAPID Protocol**: Secure push notification authentication
+- **Docker**: Containerized push notification sender service
 
 ---
 
@@ -131,7 +136,10 @@ Run the migrations in your Supabase project to create the required tables:
 - `profiles`
 - `trading_journal`
 - `trading_signals`
+- `trading_accounts`
+- `taken_trades`
 - `push_subscriptions`
+- `push_notification_queue`
 - `app_updates`
 
 #### Edge Functions Setup
@@ -163,7 +171,20 @@ npx supabase functions deploy subscribe-push
 npx web-push generate-vapid-keys
 ```
 
-### 5. Start Development Server
+### 5. Push Notification Service Setup
+
+The app includes a Docker-based push notification sender that runs independently from Supabase Edge Functions. See the [Push Notification Deployment Guide](./PUSH_NOTIFICATION_DEPLOYMENT.md) for complete setup instructions on DigitalOcean.
+
+**Quick setup:**
+
+```bash
+cd push-sender
+cp .env.example .env
+# Edit .env with your credentials
+docker-compose up -d
+```
+
+### 6. Start Development Server
 
 ```bash
 npm run dev
@@ -231,13 +252,22 @@ Poscal/
 │   │   └── ...         # Feature components
 │   ├── contexts/       # React Context providers
 │   ├── hooks/          # Custom React hooks
+│   │   └── queries/    # React Query hooks
 │   ├── integrations/   # Supabase client setup
 │   ├── lib/            # Utility functions
 │   ├── pages/          # Route pages
 │   └── types/          # TypeScript type definitions
 ├── supabase/
 │   ├── functions/      # Edge Functions (Deno)
+│   ├── migrations/     # Database migrations
 │   └── config.toml     # Supabase configuration
+├── push-sender/        # Push notification Docker service
+│   ├── index.ts        # Service logic
+│   ├── Dockerfile      # Container definition
+│   └── docker-compose.yml
+├── docs/               # Documentation
+│   ├── README.md       # Main documentation
+│   └── *.md           # Feature guides
 └── ...
 ```
 
@@ -250,9 +280,21 @@ Poscal/
 #### `profiles`
 
 User profile information
+trading_accounts`
 
-#### `trading_journal`
+Multi-account support for tracking different trading accounts
 
+#### `taken_trades`
+
+Trades taken from signals with detailed tracking
+
+#### `push_subscriptions`
+
+Web push subscription endpoints
+
+#### `push_notification_queue`
+
+Queue for pending push notification
 Individual user trades with P&L tracking
 
 #### `trading_signals`
