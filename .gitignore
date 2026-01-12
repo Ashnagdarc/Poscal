@@ -32,3 +32,12 @@ dist-ssr
 # Supabase
 supabase/.temp/
 *-old.ts
+# Temporary files - keep in temp/ folder only
+temp/
+*.tmp
+*.bak
+
+# Ensure proper folder structure
+# Documentation files must be in docs/
+# SQL files must be in sql/ (except supabase/migrations/)
+# Configuration files must be in config/
