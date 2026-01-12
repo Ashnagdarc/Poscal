@@ -14,7 +14,7 @@ import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { TradingAccountModal } from '@/components/TradingAccountModal';
 import { TakeSignalModal } from '@/components/TakeSignalModal';
-import { useLivePricesQuery } from '@/hooks/queries/use-live-prices-query';
+import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
@@ -100,13 +100,11 @@ const Signals = () => {
   // Get unique active pairs for live price fetching
   const activeSymbols = [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
   
-  const { data: prices = {}, isLoading: pricesLoading, dataUpdatedAt, refetch: refreshPrices } = useLivePricesQuery({
+  // Use Realtime prices from backend (Twelve Data API, 10-second updates)
+  const { prices, loading: pricesLoading, lastUpdated } = useRealtimePrices({
     symbols: activeSymbols,
-    enabled: activeSymbols.length > 0,
-    refetchInterval: 30000 // 30 seconds
+    enabled: activeSymbols.length > 0
   });
-  
-  const lastUpdated = dataUpdatedAt ? new Date(dataUpdatedAt) : null;
 
   // Fetch trading accounts
   const fetchAccounts = async () => {
