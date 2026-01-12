@@ -92,6 +92,15 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated, edit
 
         if (error) throw error;
 
+        // Queue notification for account update
+        await supabase.rpc('queue_user_push_notification', {
+          p_user_id: user.id,
+          p_title: `✏️ Account Updated: ${accountName.trim()}`,
+          p_body: `Your ${platform} account has been updated`,
+          p_tag: 'account-updated',
+          p_data: { type: 'account_updated', account_id: editingAccount.id },
+        });
+
         toast.success('Trading account updated successfully!');
       } else {
         // Create new account
@@ -107,6 +116,15 @@ export const TradingAccountModal = ({ open, onOpenChange, onAccountCreated, edit
           });
 
         if (error) throw error;
+
+        // Queue notification for new account
+        await supabase.rpc('queue_user_push_notification', {
+          p_user_id: user.id,
+          p_title: `💼 New Trading Account: ${accountName.trim()}`,
+          p_body: `${platform} account with ${balanceNum} ${currency} created`,
+          p_tag: 'account-created',
+          p_data: { type: 'account_created', platform, currency },
+        });
 
         toast.success('Trading account created successfully!');
       }

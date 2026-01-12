@@ -107,6 +107,15 @@ export const ManageAccounts = () => {
 
       if (error) throw error;
 
+      // Queue notification for account deletion
+      await supabase.rpc('queue_user_push_notification', {
+        p_user_id: user!.id,
+        p_title: `🗑️ Account Deleted: ${account.account_name}`,
+        p_body: `Your ${account.platform} trading account has been deleted`,
+        p_tag: 'account-deleted',
+        p_data: { type: 'account_deleted', account_name: account.account_name },
+      });
+
       toast.success('Trading account deleted');
       fetchAccounts();
     } catch (error) {
@@ -119,13 +128,23 @@ export const ManageAccounts = () => {
 
   const handleToggleActive = async (account: TradingAccount) => {
     try {
+      const newStatus = !account.is_active;
       const { error } = await supabase
         .from('trading_accounts')
-        .update({ is_active: !account.is_active })
+        .update({ is_active: newStatus })
         .eq('id', account.id)
         .eq('user_id', user!.id);
 
       if (error) throw error;
+
+      // Queue notification for account status change
+      await supabase.rpc('queue_user_push_notification', {
+        p_user_id: user!.id,
+        p_title: newStatus ? `✅ Account Active: ${account.account_name}` : `⏸️ Account Inactive: ${account.account_name}`,
+        p_body: `Your ${account.platform} account is now ${newStatus ? 'active' : 'inactive'}`,
+        p_tag: 'account-status-changed',
+        p_data: { type: 'account_status_changed', is_active: newStatus },
+      });
 
       toast.success(account.is_active ? 'Account deactivated' : 'Account activated');
       fetchAccounts();

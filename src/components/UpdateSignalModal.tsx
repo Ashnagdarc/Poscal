@@ -128,6 +128,25 @@ export const UpdateSignalModal = ({
         await handleCancelTakenTrades(signalId);
       }
 
+      // Queue notification for signal update
+      let notificationTitle = `📊 Signal Updated: ${currencyPair}`;
+      let notificationBody = `Price levels have been updated`;
+      
+      if (status === 'closed' && currentStatus !== 'closed') {
+        notificationTitle = `🏁 Signal Closed: ${currencyPair} - ${result.toUpperCase()}`;
+        notificationBody = `The ${currencyPair} signal has been closed with result: ${result}`;
+      } else if (status === 'cancelled' && currentStatus !== 'cancelled') {
+        notificationTitle = `⛔ Signal Cancelled: ${currencyPair}`;
+        notificationBody = `The ${currencyPair} signal has been cancelled`;
+      }
+
+      await supabase.rpc('queue_push_notification', {
+        p_title: notificationTitle,
+        p_body: notificationBody,
+        p_tag: 'signal-updated',
+        p_data: { type: 'signal_updated', pair: currencyPair, status, result },
+      });
+
       toast.success('Signal updated successfully!');
       setOpen(false);
       onSignalUpdated();
@@ -235,6 +254,14 @@ export const UpdateSignalModal = ({
         .eq('id', signalId);
 
       if (deleteSignalError) throw deleteSignalError;
+
+      // Queue notification that signal was deleted
+      await supabase.rpc('queue_push_notification', {
+        p_title: `🗑️ Signal Deleted: ${currencyPair}`,
+        p_body: `The ${currencyPair} ${direction.toUpperCase()} signal has been deleted by admin`,
+        p_tag: 'signal-deleted',
+        p_data: { type: 'signal_deleted', pair: currencyPair },
+      });
 
       console.log('✅ Signal deleted');
       

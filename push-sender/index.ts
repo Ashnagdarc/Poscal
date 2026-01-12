@@ -37,6 +37,7 @@ interface QueuedNotification {
   tag: string | null;
   data: any;
   created_at: string;
+  user_id?: string | null;
 }
 
 /**
@@ -54,6 +55,27 @@ async function getActiveSubscriptions(): Promise<PushSubscription[]> {
     return data || [];
   } catch (error) {
     console.error('❌ Exception fetching subscriptions:', error);
+    return [];
+  }
+}
+
+/**
+ * Get push subscriptions for a specific user
+ */
+async function getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
+  try {
+    const { data, error } = await supabase.rpc('get_user_push_subscriptions', {
+      p_user_id: userId
+    });
+    
+    if (error) {
+      console.error(`❌ Error fetching subscriptions for user ${userId}:`, error);
+      return [];
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error(`❌ Exception fetching user subscriptions:`, error);
     return [];
   }
 }
@@ -130,13 +152,27 @@ async function processPushQueue(): Promise<void> {
 
     console.log(`📬 Processing ${notifications.length} notification(s)...`);
 
-    // Get all active subscriptions once
-    const subscriptions = await getActiveSubscriptions();
-    
-    if (subscriptions.length === 0) {
-      console.log('⚠️  No active subscriptions found');
-      // Mark notifications as sent anyway (no one to send to)
-      for (const notification of notifications) {
+    // Process each notification
+    for (const notification of notifications) {
+      let successCount = 0;
+      let failCount = 0;
+
+      // Get subscriptions - either user-specific or all subscribers
+      let subscriptions: PushSubscription[] = [];
+      
+      if (notification.user_id) {
+        // User-specific notification
+        subscriptions = await getUserSubscriptions(notification.user_id);
+        console.log(`👤 User-specific notification: ${subscriptions.length} subscription(s) for user ${notification.user_id}`);
+      } else {
+        // Broadcast to all subscribers
+        subscriptions = await getActiveSubscriptions();
+        console.log(`📢 Broadcast notification: ${subscriptions.length} subscriber(s)`);
+      }
+      
+      if (subscriptions.length === 0) {
+        console.log(`⚠️  No subscriptions found for notification ${notification.id}`);
+        // Mark as sent anyway
         await supabase
           .from('push_notification_queue')
           .update({ 
@@ -144,16 +180,8 @@ async function processPushQueue(): Promise<void> {
             processed_at: new Date().toISOString() 
           })
           .eq('id', notification.id);
+        continue;
       }
-      return;
-    }
-
-    console.log(`📤 Sending to ${subscriptions.length} subscriber(s)...`);
-
-    // Process each notification
-    for (const notification of notifications) {
-      let successCount = 0;
-      let failCount = 0;
 
       // Send to all subscriptions
       for (const subscription of subscriptions) {
