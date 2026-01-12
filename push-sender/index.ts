@@ -67,7 +67,7 @@ async function sendToSubscription(
 ): Promise<boolean> {
   try {
     const payload = JSON.stringify({
-      title: notification.title,    scp -r push-sender/* root@your-ip:/opt/poscal-push-sender/
+      title: notification.title,
       body: notification.body,
       tag: notification.tag || 'general',
       icon: '/pwa-192x192.png',
