@@ -35,6 +35,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
           return;
         }
         
+        // Log token refresh errors for debugging
+        if (event === 'TOKEN_REFRESHED') {
+          console.log('[auth] Token refreshed successfully');
+        }
+        
         setSession(session);
         setUser(session?.user ?? null);
         setLoading(false);
@@ -42,9 +47,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('[auth] Error getting session:', error);
+        // Clear potentially corrupted session
+        setSession(null);
+        setUser(null);
+      } else {
+        setSession(session);
+        setUser(session?.user ?? null);
+      }
+      setLoading(false);
+    }).catch((err) => {
+      console.error('[auth] Exception getting session:', err);
       setLoading(false);
     });
 
@@ -77,12 +92,21 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { error: new Error('Supabase is not configured. Please connect Supabase first.') };
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    
-    return { error: error as Error | null };
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      
+      if (error) {
+        console.error('[auth] Sign in error:', error.message, error.status);
+      }
+      
+      return { error: error as Error | null };
+    } catch (err) {
+      console.error('[auth] Sign in exception:', err);
+      return { error: err as Error };
+    }
   };
 
   const resetPassword = async (email: string) => {

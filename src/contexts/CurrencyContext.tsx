@@ -31,10 +31,16 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     const savedCurrency = localStorage.getItem('accountCurrency');
-    if (savedCurrency) {
+    if (!savedCurrency) return;
+
+    try {
       const parsed = JSON.parse(savedCurrency);
       const found = ACCOUNT_CURRENCIES.find(c => c.code === parsed.code);
       if (found) setCurrencyState(found);
+    } catch (error) {
+      // Clear corrupted value so the app can recover gracefully
+      localStorage.removeItem('accountCurrency');
+      console.warn('Invalid accountCurrency in storage, resetting to default:', error);
     }
   }, []);
 

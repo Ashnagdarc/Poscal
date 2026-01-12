@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, X, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { validateTrades, MAX_TRADES_PER_IMPORT } from '@/lib/tradeValidation';
 
 interface ParsedTrade {
   pair: string;
@@ -91,17 +92,23 @@ export const CSVImport = ({ onImport, onClose }: CSVImportProps) => {
         }
       }
 
+      const toNumber = (idx: number) => {
+        if (idx === -1) return undefined;
+        const num = parseFloat(values[idx]);
+        return Number.isFinite(num) ? num : undefined;
+      };
+
       const trade: ParsedTrade = {
         pair,
         direction,
         status,
-        entry_price: entryPriceIndex !== -1 ? parseFloat(values[entryPriceIndex]) || undefined : undefined,
-        exit_price: exitPriceIndex !== -1 ? parseFloat(values[exitPriceIndex]) || undefined : undefined,
-        stop_loss: stopLossIndex !== -1 ? parseFloat(values[stopLossIndex]) || undefined : undefined,
-        take_profit: takeProfitIndex !== -1 ? parseFloat(values[takeProfitIndex]) || undefined : undefined,
-        position_size: positionSizeIndex !== -1 ? parseFloat(values[positionSizeIndex]) || undefined : undefined,
-        risk_percent: riskPercentIndex !== -1 ? parseFloat(values[riskPercentIndex]) || undefined : undefined,
-        pnl: pnlIndex !== -1 ? parseFloat(values[pnlIndex]) || undefined : undefined,
+        entry_price: toNumber(entryPriceIndex),
+        exit_price: toNumber(exitPriceIndex),
+        stop_loss: toNumber(stopLossIndex),
+        take_profit: toNumber(takeProfitIndex),
+        position_size: toNumber(positionSizeIndex),
+        risk_percent: toNumber(riskPercentIndex),
+        pnl: toNumber(pnlIndex),
         notes: notesIndex !== -1 ? values[notesIndex] || undefined : undefined,
         entry_date: dateIndex !== -1 ? values[dateIndex] || undefined : undefined,
       };
@@ -127,8 +134,21 @@ export const CSVImport = ({ onImport, onClose }: CSVImportProps) => {
     reader.onload = (event) => {
       const text = event.target?.result as string;
       const { trades, errors } = parseCSV(text);
-      setParsedTrades(trades);
-      setErrors(errors);
+
+      // Schema validation to catch bad rows and NaN values
+      const { validTrades, errors: schemaErrors, totalRejected } = validateTrades(trades);
+
+      const combinedErrors = [...errors, ...schemaErrors];
+      if (trades.length > MAX_TRADES_PER_IMPORT) {
+        combinedErrors.push(`Cannot import more than ${MAX_TRADES_PER_IMPORT} trades at once.`);
+      }
+
+      setParsedTrades(validTrades);
+      setErrors(combinedErrors);
+
+      if (totalRejected > 0) {
+        toast.warning(`${totalRejected} rows were rejected during validation`);
+      }
     };
     reader.readAsText(selectedFile);
   };
