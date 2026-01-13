@@ -1,8 +1,14 @@
 import { useState, useRef } from 'react';
 import { Upload, FileText, X, Check, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { validateTrades, MAX_TRADES_PER_IMPORT } from '@/lib/tradeValidation';
+import { validateTrades, MAX_TRADES_PER_IMPORT, ValidatedTrade } from '@/lib/tradeValidation';
 
+interface CSVImportProps {
+  onImport: (trades: ValidatedTrade[]) => Promise<void>;
+  onClose: () => void;
+}
+
+// Internal type for CSV parsing before validation
 interface ParsedTrade {
   pair: string;
   direction: 'long' | 'short';
@@ -18,14 +24,9 @@ interface ParsedTrade {
   entry_date?: string;
 }
 
-interface CSVImportProps {
-  onImport: (trades: ParsedTrade[]) => Promise<void>;
-  onClose: () => void;
-}
-
 export const CSVImport = ({ onImport, onClose }: CSVImportProps) => {
   const [file, setFile] = useState<File | null>(null);
-  const [parsedTrades, setParsedTrades] = useState<ParsedTrade[]>([]);
+  const [parsedTrades, setParsedTrades] = useState<ValidatedTrade[]>([]);
   const [errors, setErrors] = useState<string[]>([]);
   const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
