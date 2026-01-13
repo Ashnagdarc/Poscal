@@ -37,6 +37,11 @@ temp/
 *.tmp
 *.bak
 
+# Backups - never commit database backups
+backup-tools/backups/
+*.sql
+*.sql.gz
+
 # Ensure proper folder structure
 # Documentation files must be in docs/
 # SQL files must be in sql/ (except supabase/migrations/)

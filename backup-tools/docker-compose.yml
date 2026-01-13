@@ -1,0 +1,10 @@
+services:
+  backup:
+    image: postgres:17
+    environment:
+      - PGPASSWORD=${SUPABASE_DB_PASSWORD}
+    volumes:
+      - ./backups:/backups
+      - ./scripts:/scripts
+    command: tail -f /dev/null
+    network_mode: host

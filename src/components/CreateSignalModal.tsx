@@ -34,6 +34,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
     take_profit_3: '',
     chart_image_url: '',
     notes: '',
+    market_execution: 'instant' as 'buy-limit' | 'sell-stop' | 'buy-stop' | 'sell-stop-limit' | 'buy-stop-limit' | 'instant',
   });
 
   const validateLevels = (
@@ -192,6 +193,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         take_profit_3: '',
         chart_image_url: '',
         notes: '',
+        market_execution: 'instant',
       });
       onSignalCreated();
     } catch (error) {
@@ -250,6 +252,25 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
                 <SelectContent>
                   <SelectItem value="buy">Buy</SelectItem>
                   <SelectItem value="sell">Sell</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Market Execution</Label>
+              <Select
+                value={formData.market_execution}
+                onValueChange={(v) => setFormData({ ...formData, market_execution: v as any })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="buy-limit">Buy Limit</SelectItem>
+                  <SelectItem value="sell-stop">Sell Stop</SelectItem>
+                  <SelectItem value="buy-stop">Buy Stop</SelectItem>
+                  <SelectItem value="sell-stop-limit">Sell Stop Limit</SelectItem>
+                  <SelectItem value="buy-stop-limit">Buy Stop Limit</SelectItem>
+                  <SelectItem value="instant">Instant Execution</SelectItem>
                 </SelectContent>
               </Select>
             </div>
