@@ -49,9 +49,19 @@ export const TYPICAL_SPREADS: Record<string, number> = {
   'XAU/USD': 3.0, // Gold
   'XAG/USD': 3.5, // Silver
   
+  // Indices (point spreads)
+  'US30': 2.0, // Dow Jones
+  'US100': 1.0, // Nasdaq
+  'SPX': 0.5, // S&P 500
+  'GER30': 2.0, // DAX
+  'UK100': 1.5, // FTSE 100
+  
   // Crypto (very high spreads)
   'BTC/USD': 50.0,
   'ETH/USD': 5.0,
+  'LTC/USD': 10.0,
+  'XRP/USD': 15.0,
+  'ADA/USD': 20.0,
 };
 
 interface PairConfig {
@@ -73,24 +83,36 @@ function getPairConfig(pair: string): PairConfig {
   // Get typical spread for this pair (default 2.0 pips if unknown)
   const typicalSpread = TYPICAL_SPREADS[pair] || 2.0;
   
+  // Handle indices (US30, US100, SPX, NAS100, etc.)
+  if (base === 'US30' || base === 'US100' || base === 'SPX' || base === 'NAS100' || base === 'GER30' || base === 'UK100') {
+    return {
+      baseCurrency: base,
+      quoteCurrency: quote || 'USD', // Indices typically quoted in USD
+      pipMultiplier: 1, // 1 point = 1 pip for indices
+      pipValueBase: 1,
+      isMetalOrCrypto: true, // Use special handling flag
+      typicalSpread
+    };
+  }
+  
   // Handle metals (Gold, Silver)
   if (base === 'XAU' || base === 'XAG') {
     return {
       baseCurrency: base,
       quoteCurrency: quote,
       pipMultiplier: base === 'XAU' ? 10 : 100,
-      pipValueBase: base === 'XAU' ? 10 : 0.5,
+      pipValueBase: base === 'XAU' ? 10 : 50,
       isMetalOrCrypto: true,
       typicalSpread
     };
   }
   
   // Handle crypto
-  if (base === 'BTC' || base === 'ETH') {
+  if (base === 'BTC' || base === 'ETH' || base === 'LTC' || base === 'XRP' || base === 'ADA') {
     return {
       baseCurrency: base,
       quoteCurrency: quote,
-      pipMultiplier: 10,
+      pipMultiplier: base === 'BTC' ? 1 : 10, // BTC uses 1 point, others use 0.1
       pipValueBase: 1,
       isMetalOrCrypto: true,
       typicalSpread
@@ -187,6 +209,47 @@ export function getPipValueInUSD(
 ): number {
   const config = getPairConfig(pair);
   const pipSize = 1 / config.pipMultiplier;
+
+  // Special handling for metals, crypto, and indices
+  if (config.isMetalOrCrypto) {
+    // Indices (US30 = Dow Jones, US100 = Nasdaq, etc.)
+    if (config.baseCurrency === 'US30') {
+      // US30/Dow Jones: 1 contract = $5 per point
+      return 5;
+    }
+    if (config.baseCurrency === 'US100') {
+      // US100/Nasdaq: 1 contract = $2 per point
+      return 2;
+    }
+    if (config.baseCurrency === 'SPX' || config.baseCurrency === 'GER30' || config.baseCurrency === 'UK100') {
+      // Other major indices: typically $10-25 per point, use conservative $10
+      return 10;
+    }
+    
+    // Metals
+    if (config.baseCurrency === 'XAU') {
+      // Gold (XAU/USD): 1 lot = 100 oz, 1 pip = $0.10 move = $10 per lot
+      return 10;
+    }
+    if (config.baseCurrency === 'XAG') {
+      // Silver (XAG/USD): 1 lot = 5,000 oz, 1 pip = $0.01 move = $50 per lot
+      return 50;
+    }
+    
+    // Crypto
+    if (config.baseCurrency === 'BTC') {
+      // Bitcoin: 1 lot = 1 BTC, 1 pip = $1 move = $1 per lot (BTC/USD uses whole dollars)
+      return 1;
+    }
+    if (config.baseCurrency === 'ETH') {
+      // Ethereum: 1 lot = 1 ETH, 1 pip = $0.10 move = $0.10 per lot
+      return 0.10;
+    }
+    if (config.baseCurrency === 'LTC' || config.baseCurrency === 'XRP' || config.baseCurrency === 'ADA') {
+      // Other crypto: 1 lot = 1 unit, 1 pip = $0.10 move = $0.10 per lot
+      return 0.10;
+    }
+  }
 
   // If quote currency is USD, pip value is straightforward
   if (config.quoteCurrency === 'USD') {
