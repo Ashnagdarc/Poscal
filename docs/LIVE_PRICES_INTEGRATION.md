@@ -1,5 +1,25 @@
 # Live Prices Integration - Implementation Summary
 
+> **📅 Updated:** January 13, 2026 - Migrated to WebSocket for real-time prices  
+> **📚 See Also:** [WebSocket Migration Guide](./WEBSOCKET_MIGRATION.md)
+
+## 🚀 Latest Update: WebSocket Integration
+
+**Replaced REST API polling with Finnhub WebSocket for unlimited real-time price updates.**
+
+### Architecture Change
+
+**Before:** Twelve Data REST API (10-second polling, 800 calls/day limit)  
+**After:** Finnhub WebSocket (real-time, unlimited, < 200ms latency)
+
+**Benefits:**
+- ✅ No rate limits
+- ✅ Instant price updates
+- ✅ More accurate position calculations
+- ✅ Lower server costs ($0 vs $49/month)
+
+---
+
 ## ✅ What Was Fixed
 
 ### Before (Issues)

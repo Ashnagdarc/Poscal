@@ -1,24 +1,39 @@
-# PosCal Push Notification Sender
+# PosCal Push Notification Sender & Live Price Service
 
-A lightweight Docker service that sends push notifications to your PosCal users. Polls the database every 30 seconds for queued notifications and delivers them via Web Push API with VAPID authentication.
+A lightweight Docker service that:
+1. **Sends push notifications** to your PosCal users via Web Push API
+2. **Streams real-time forex prices** via Finnhub WebSocket (unlimited, free)
 
-> 📚 **For complete deployment instructions**, see [PUSH_NOTIFICATION_DEPLOYMENT.md](../docs/PUSH_NOTIFICATION_DEPLOYMENT.md)
+> 📚 **For detailed guides:**
+> - [WebSocket Migration](../docs/WEBSOCKET_MIGRATION.md) - NEW: Real-time price updates
+> - [Push Notification Deployment](../docs/PUSH_NOTIFICATION_DEPLOYMENT.md) - Notification setup
 
 ## 📦 What's Included
 
-- `index.ts` - Main service logic (190 lines)
+- `index.ts` - Main service logic with WebSocket integration
 - `Dockerfile` - Multi-stage build for ~100MB image
 - `docker-compose.yml` - Ready-to-deploy configuration
 - `.env.example` - Environment variable template
 
 ## ✨ Features
 
+### Push Notifications
 - **Automated Polling**: Checks database every 30 seconds for new notifications
 - **Web Push API**: Delivers notifications using standard Web Push protocol
 - **VAPID Authentication**: Secure notification delivery with VAPID keys
 - **Auto Cleanup**: Removes expired push subscriptions automatically
-- **Resource Efficient**: ~50-80MB memory footprint
+
+### Real-Time Prices (NEW!)
+- **WebSocket Connection**: Single persistent connection to Finnhub
+- **Live Market Data**: Instant price updates for 15+ forex pairs
+- **Unlimited Updates**: No API rate limits (free tier)
+- **Auto-Reconnect**: Resilient connection with automatic recovery
+- **Supabase Integration**: Streams prices to `price_cache` table
+
+### System
+- **Resource Efficient**: ~60-90MB memory footprint
 - **Docker Ready**: Containerized for easy deployment
+- **Production Grade**: Auto-restart, health checks, graceful shutdown
 
 ## 🚀 Quick Start (DigitalOcean Droplet)
 
@@ -52,6 +67,7 @@ Fill in these **required** values:
 ```env
 SUPABASE_URL=https://xxxxx.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+FINNHUB_API_KEY=your_finnhub_api_key_here
 VAPID_PUBLIC_KEY=BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0
 VAPID_PRIVATE_KEY=your-private-key-here
 ```
@@ -63,11 +79,16 @@ VAPID_PRIVATE_KEY=your-private-key-here
    - Project Settings → API
    - Copy "Project URL" and "service_role" key
 
-2. **VAPID Public Key:**
+2. **Finnhub API Key:** ⭐ NEW
+   - Sign up at [Finnhub.io](https://finnhub.io/register)
+   - Free tier includes unlimited WebSocket connections
+   - Copy API key from dashboard
+
+3. **VAPID Public Key:**
    - Already in your code: [src/hooks/use-push-notifications.ts](../src/hooks/use-push-notifications.ts#L7)
    - Or check your Supabase project (if stored there)
 
-3. **VAPID Private Key:**
+4. **VAPID Private Key:**
    - If you don't have it, generate new keys:
      ```bash
      npx web-push generate-vapid-keys

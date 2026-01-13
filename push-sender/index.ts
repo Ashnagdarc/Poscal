@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import webpush from 'web-push';
+import WebSocket from 'ws';
+import 'dotenv/config';
 
 // Environment variables
 const SUPABASE_URL = process.env.SUPABASE_URL!;
@@ -7,9 +9,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:info@poscalfx.com';
-const TWELVE_DATA_API_KEY = process.env.TWELVE_DATA_API_KEY!;
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY!;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000'); // 30 seconds default
-const PRICE_FETCH_INTERVAL = parseInt(process.env.PRICE_FETCH_INTERVAL || '10000'); // 10 seconds for prices
 
 // Validate required env vars
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
@@ -18,9 +19,9 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !VAPID_PUBLIC_KEY || !VAPID_P
   process.exit(1);
 }
 
-// Warn if TWELVE_DATA_API_KEY is missing (prices won't work, but service continues)
-if (!TWELVE_DATA_API_KEY) {
-  console.warn('⚠️  TWELVE_DATA_API_KEY not set - price fetching will be disabled');
+// Warn if FINNHUB_API_KEY is missing (prices won't work, but service continues)
+if (!FINNHUB_API_KEY) {
+  console.warn('⚠️  FINNHUB_API_KEY not set - price fetching will be disabled');
 }
 
 // Initialize Supabase client with service role
@@ -216,73 +217,112 @@ async function processPushQueue(): Promise<void> {
   }
 }
 
+// WebSocket connection for live price updates
+let priceWebSocket: WebSocket | null = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 10;
+const RECONNECT_DELAY = 5000; // 5 seconds
+
+// Finnhub symbol mappings (OANDA broker format)
+const SYMBOL_MAPPINGS: Record<string, string> = {
+  'EUR/USD': 'OANDA:EUR_USD',
+  'GBP/USD': 'OANDA:GBP_USD',
+  'USD/JPY': 'OANDA:USD_JPY',
+  'USD/CHF': 'OANDA:USD_CHF',
+  'AUD/USD': 'OANDA:AUD_USD',
+  'USD/CAD': 'OANDA:USD_CAD',
+  'NZD/USD': 'OANDA:NZD_USD',
+  'EUR/GBP': 'OANDA:EUR_GBP',
+  'EUR/JPY': 'OANDA:EUR_JPY',
+  'GBP/JPY': 'OANDA:GBP_JPY',
+  'AUD/JPY': 'OANDA:AUD_JPY',
+  'XAU/USD': 'OANDA:XAU_USD', // Gold
+  'XAG/USD': 'OANDA:XAG_USD', // Silver
+  // Crypto uses different format
+  'BTC/USD': 'BINANCE:BTCUSDT',
+  'ETH/USD': 'BINANCE:ETHUSDT'
+};
+
 /**
- * Fetch live prices from Twelve Data API and store in price_cache
+ * Connect to Finnhub WebSocket for real-time forex prices
  */
-async function fetchAndStorePrices() {
-  if (!TWELVE_DATA_API_KEY) {
-    return; // Skip if API key not configured
+function connectPriceWebSocket() {
+  if (!FINNHUB_API_KEY) {
+    console.warn('⚠️  FINNHUB_API_KEY not set - skipping WebSocket connection');
+    return;
   }
 
   try {
-    // List of common trading pairs to fetch
-    const symbols = [
-      'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
-      'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'AUD/JPY',
-      'BTC/USD', 'ETH/USD',
-      'XAU/USD', 'XAG/USD'
-    ];
+    console.log('🔌 Connecting to Finnhub WebSocket...');
+    priceWebSocket = new WebSocket(`wss://ws.finnhub.io?token=${FINNHUB_API_KEY}`);
 
-    const prices: any[] = [];
+    priceWebSocket.on('open', () => {
+      console.log('✅ Connected to Finnhub WebSocket');
+      reconnectAttempts = 0;
 
-    for (const symbol of symbols) {
+      // Subscribe to all currency pairs
+      Object.values(SYMBOL_MAPPINGS).forEach(symbol => {
+        priceWebSocket?.send(JSON.stringify({ type: 'subscribe', symbol }));
+        console.log(`📡 Subscribed to ${symbol}`);
+      });
+    });
+
+    priceWebSocket.on('message', async (data: Buffer) => {
       try {
-        const [base, quote] = symbol.split('/');
+        const message = JSON.parse(data.toString());
         
-        // Fetch from Twelve Data API
-        const response = await fetch(
-          `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_API_KEY}`
-        );
+        // Finnhub sends trade updates with this structure:
+        // { type: 'trade', data: [{ s: 'OANDA:EUR_USD', p: 1.0855, t: timestamp, v: volume }] }
+        if (message.type === 'trade' && message.data) {
+          for (const trade of message.data) {
+            // Find the original symbol (EUR/USD format)
+            const originalSymbol = Object.entries(SYMBOL_MAPPINGS).find(
+              ([_, finnhubSymbol]) => finnhubSymbol === trade.s
+            )?.[0];
 
-        if (!response.ok) {
-          console.warn(`⚠️  Failed to fetch ${symbol}:`, response.status);
-          continue;
-        }
+            if (originalSymbol) {
+              const price = trade.p;
+              const spread = price * 0.0001; // Approximate 1 pip spread for forex
+              
+              await supabase
+                .from('price_cache')
+                .upsert({
+                  symbol: originalSymbol,
+                  mid_price: price,
+                  ask_price: price + spread / 2,
+                  bid_price: price - spread / 2,
+                  timestamp: trade.t,
+                  updated_at: new Date().toISOString()
+                }, { onConflict: 'symbol' });
 
-        const data = await response.json();
-
-        if (data.bid && data.ask && data.close) {
-          prices.push({
-            symbol,
-            mid_price: data.close,
-            ask_price: data.ask,
-            bid_price: data.bid,
-            timestamp: new Date().toISOString()
-          });
+              console.log(`💹 Updated ${originalSymbol}: ${price}`);
+            }
+          }
         }
       } catch (error) {
-        console.warn(`⚠️  Error fetching ${symbol}:`, error);
-        continue;
+        console.error('❌ Error processing WebSocket message:', error);
       }
-    }
+    });
 
-    if (prices.length === 0) {
-      console.warn('⚠️  No prices fetched from Twelve Data');
-      return;
-    }
+    priceWebSocket.on('error', (error) => {
+      console.error('❌ WebSocket error:', error);
+    });
 
-    // Upsert into price_cache table
-    const { error } = await supabase
-      .from('price_cache')
-      .upsert(prices, { onConflict: 'symbol' });
+    priceWebSocket.on('close', () => {
+      console.log('🔌 WebSocket connection closed');
+      
+      // Attempt to reconnect
+      if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        console.log(`🔄 Reconnecting in ${RECONNECT_DELAY / 1000}s (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+        setTimeout(connectPriceWebSocket, RECONNECT_DELAY);
+      } else {
+        console.error('❌ Max reconnection attempts reached. Please restart the service.');
+      }
+    });
 
-    if (error) {
-      console.error('❌ Error storing prices:', error);
-    } else {
-      console.log(`✅ Stored ${prices.length} prices in cache`);
-    }
   } catch (error) {
-    console.error('❌ Error in fetchAndStorePrices:', error);
+    console.error('❌ Error setting up WebSocket:', error);
   }
 }
 
@@ -292,32 +332,34 @@ async function fetchAndStorePrices() {
 async function main() {
   console.log('🚀 Push Notification Sender started');
   console.log(`📊 Polling for notifications every ${POLL_INTERVAL / 1000} seconds`);
-  console.log(`💰 Fetching prices every ${PRICE_FETCH_INTERVAL / 1000} seconds`);
   console.log(`🔗 Connected to: ${SUPABASE_URL}`);
   console.log('');
 
-  // Initial runs
+  // Start WebSocket connection for real-time prices
+  connectPriceWebSocket();
+
+  // Initial notification queue processing
   await processPushQueue();
-  await fetchAndStorePrices();
 
   // Run notification queue on interval
   setInterval(async () => {
     await processPushQueue();
   }, POLL_INTERVAL);
 
-  // Run price fetcher on interval
-  setInterval(async () => {
-    await fetchAndStorePrices();
-  }, PRICE_FETCH_INTERVAL);
-
   // Keep process alive
   process.on('SIGTERM', () => {
     console.log('👋 Shutting down gracefully...');
+    if (priceWebSocket) {
+      priceWebSocket.close();
+    }
     process.exit(0);
   });
 
   process.on('SIGINT', () => {
     console.log('👋 Shutting down gracefully...');
+    if (priceWebSocket) {
+      priceWebSocket.close();
+    }
     process.exit(0);
   });
 }

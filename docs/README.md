@@ -28,7 +28,7 @@
 ### 📡 Trading Signals
 
 - **Real-Time Signals**: Receive forex trading signals with entry, SL, and multiple TP levels
-- **Live Price Tracking**: Monitor signals against live market prices (Twelve Data API)
+- **Live Price Tracking**: Monitor signals against live market prices (Finnhub WebSocket - real-time)
 - **Signal Monitoring**: Automated monitoring with push notifications when targets are hit
 - **Signal History**: View past signals with performance results
 - **Chart Analysis**: View signal charts with technical analysis
@@ -77,7 +77,7 @@
 - **Authentication**: Supabase Auth with JWT
 - **Storage**: Supabase Storage (avatars, screenshots)
 - **Edge Functions**: Deno runtime
-  - `get-live-prices`: Fetch forex prices from Twelve Data API
+  - Real-time WebSocket: Stream live forex prices from Finnhub
   - `monitor-signals`: Automated signal monitoring
   - `send-push-notification`: Web Push API implementation
   - `subscribe-push`: Manage push subscriptions
@@ -88,7 +88,7 @@
 
 ### APIs & Services
 
-- **Twelve Data API**: Real-time forex price data
+- **Finnhub WebSocket**: Unlimited real-time forex price data
 - **Web Push API**: Browser push notifications
 - **VAPID Protocol**: Secure push notification authentication
 - **Docker**: Containerized push notification sender service
@@ -101,7 +101,7 @@
 
 - Node.js 18+ and npm/bun
 - Supabase account
-- Twelve Data API key (optional for live prices)
+- Finnhub API key (for WebSocket live prices)
 
 ### 1. Clone the Repository
 
@@ -368,7 +368,7 @@ For issues or questions:
 
 - [Supabase](https://supabase.com/) - Backend infrastructure
 - [shadcn/ui](https://ui.shadcn.com/) - UI components
-- [Twelve Data](https://twelvedata.com/) - Forex price data
+- [Finnhub](https://finnhub.io/) - Real-time forex WebSocket data
 - [Lovable](https://lovable.dev/) - Initial project scaffolding
 
 ---
