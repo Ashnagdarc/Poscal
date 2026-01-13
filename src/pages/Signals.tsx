@@ -101,7 +101,7 @@ const Signals = () => {
   const activeSymbols = [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
   
   // Use Realtime prices from backend (Twelve Data API, 10-second updates)
-  const { prices, loading: pricesLoading, lastUpdated } = useRealtimePrices({
+  const { prices, loading: pricesLoading, lastUpdated, refreshPrices } = useRealtimePrices({
     symbols: activeSymbols,
     enabled: activeSymbols.length > 0
   });

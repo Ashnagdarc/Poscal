@@ -22,6 +22,7 @@ interface UseRealtimePricesResult {
   loading: boolean;
   error: string | null;
   lastUpdated: Date | null;
+  refreshPrices: () => Promise<void>;
 }
 
 /**
@@ -200,5 +201,6 @@ export const useRealtimePrices = ({
     loading,
     error,
     lastUpdated,
+    refreshPrices: fetchInitialPrices,
   };
 };
