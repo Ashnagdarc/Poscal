@@ -225,6 +225,7 @@ const RECONNECT_DELAY = 5000; // 5 seconds
 
 // Finnhub symbol mappings (OANDA broker format)
 const SYMBOL_MAPPINGS: Record<string, string> = {
+  // Major Pairs
   'EUR/USD': 'OANDA:EUR_USD',
   'GBP/USD': 'OANDA:GBP_USD',
   'USD/JPY': 'OANDA:USD_JPY',
@@ -232,15 +233,73 @@ const SYMBOL_MAPPINGS: Record<string, string> = {
   'AUD/USD': 'OANDA:AUD_USD',
   'USD/CAD': 'OANDA:USD_CAD',
   'NZD/USD': 'OANDA:NZD_USD',
+  
+  // EUR Cross Pairs
   'EUR/GBP': 'OANDA:EUR_GBP',
   'EUR/JPY': 'OANDA:EUR_JPY',
+  'EUR/CHF': 'OANDA:EUR_CHF',
+  'EUR/AUD': 'OANDA:EUR_AUD',
+  'EUR/CAD': 'OANDA:EUR_CAD',
+  'EUR/NZD': 'OANDA:EUR_NZD',
+  
+  // GBP Cross Pairs
   'GBP/JPY': 'OANDA:GBP_JPY',
+  'GBP/CHF': 'OANDA:GBP_CHF',
+  'GBP/AUD': 'OANDA:GBP_AUD',
+  'GBP/CAD': 'OANDA:GBP_CAD',
+  'GBP/NZD': 'OANDA:GBP_NZD',
+  
+  // AUD Cross Pairs
   'AUD/JPY': 'OANDA:AUD_JPY',
+  'AUD/CHF': 'OANDA:AUD_CHF',
+  'AUD/CAD': 'OANDA:AUD_CAD',
+  'AUD/NZD': 'OANDA:AUD_NZD',
+  
+  // CAD Cross Pairs
+  'CAD/JPY': 'OANDA:CAD_JPY',
+  'CAD/CHF': 'OANDA:CAD_CHF',
+  
+  // NZD Cross Pairs
+  'NZD/JPY': 'OANDA:NZD_JPY',
+  'NZD/CHF': 'OANDA:NZD_CHF',
+  'NZD/CAD': 'OANDA:NZD_CAD',
+  
+  // CHF Cross Pairs
+  'CHF/JPY': 'OANDA:CHF_JPY',
+  
+  // Exotic Pairs
+  'USD/MXN': 'OANDA:USD_MXN', // US Dollar / Mexican Peso
+  'USD/ZAR': 'OANDA:USD_ZAR', // US Dollar / South African Rand
+  'USD/TRY': 'OANDA:USD_TRY', // US Dollar / Turkish Lira
+  'USD/CNH': 'OANDA:USD_CNH', // US Dollar / Chinese Yuan
+  'USD/HKD': 'OANDA:USD_HKD', // US Dollar / Hong Kong Dollar
+  'USD/SGD': 'OANDA:USD_SGD', // US Dollar / Singapore Dollar
+  'EUR/TRY': 'OANDA:EUR_TRY', // Euro / Turkish Lira
+  'GBP/ZAR': 'OANDA:GBP_ZAR', // British Pound / South African Rand
+  
+  // Precious Metals
   'XAU/USD': 'OANDA:XAU_USD', // Gold
   'XAG/USD': 'OANDA:XAG_USD', // Silver
-  // Crypto uses different format
+  'XPT/USD': 'OANDA:XPT_USD', // Platinum
+  'XPD/USD': 'OANDA:XPD_USD', // Palladium
+  
+  // Commodities
+  'BCO/USD': 'OANDA:BCO_USD', // Brent Crude Oil
+  'WTI/USD': 'OANDA:WTICO_USD', // WTI Crude Oil
+  'NAS/USD': 'OANDA:NAS100_USD', // Nasdaq 100
+  'SPX/USD': 'OANDA:SPX500_USD', // S&P 500
+  
+  // Cryptocurrencies (BINANCE format)
   'BTC/USD': 'BINANCE:BTCUSDT',
-  'ETH/USD': 'BINANCE:ETHUSDT'
+  'ETH/USD': 'BINANCE:ETHUSDT',
+  'BNB/USD': 'BINANCE:BNBUSDT',
+  'XRP/USD': 'BINANCE:XRPUSDT',
+  'ADA/USD': 'BINANCE:ADAUSDT',
+  'SOL/USD': 'BINANCE:SOLUSDT',
+  'DOGE/USD': 'BINANCE:DOGEUSDT',
+  'DOT/USD': 'BINANCE:DOTUSDT',
+  'MATIC/USD': 'BINANCE:MATICUSDT',
+  'LTC/USD': 'BINANCE:LTCUSDT'
 };
 
 /**
