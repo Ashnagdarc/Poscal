@@ -87,14 +87,18 @@ const Settings = () => {
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header */}
       <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary mb-4"
-        >
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-        </button>
-        <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
-        <p className="text-sm text-muted-foreground mt-1">Manage your preferences and account</p>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => navigate(-1)}
+            className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary"
+          >
+            <ArrowLeft className="w-5 h-5 text-foreground" />
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
+            <p className="text-sm text-muted-foreground">Manage your preferences and account</p>
+          </div>
+        </div>
       </header>
 
       {/* Settings List */}
