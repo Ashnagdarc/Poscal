@@ -102,14 +102,18 @@ export const useRealtimePrices = ({
       return;
     }
 
+    console.log('🔄 Setting up subscription for symbols:', symbols);
     fetchInitialPrices();
 
     let channel: RealtimeChannel | null = null;
 
     try {
+      // Create unique channel name to prevent conflicts between multiple components
+      const channelName = `price-updates-${symbols.sort().join('-')}`;
+      
       // Subscribe to price_cache updates from push-sender
       channel = supabase
-        .channel('price-updates', {
+        .channel(channelName, {
           config: {
             broadcast: { self: true }
           }
@@ -179,7 +183,9 @@ export const useRealtimePrices = ({
             console.log('✅ Subscribed to real-time price updates');
           } else if (status === 'CHANNEL_ERROR') {
             setError('Failed to subscribe to price updates');
-            console.error('❌ Realtime channel error');
+            console.error('❌ Realtime channel error - connection may be unstable');
+          } else if (status === 'CLOSED') {
+            console.warn('⚠️  Realtime channel closed');
           }
         });
     } catch (err) {
@@ -189,10 +195,11 @@ export const useRealtimePrices = ({
 
     return () => {
       if (channel) {
+        console.log('🧹 Cleaning up subscription for:', symbols);
         supabase.removeChannel(channel);
       }
     };
-  }, [enabled, symbols, fetchInitialPrices]);
+  }, [enabled, symbols]);
 
   return {
     prices,

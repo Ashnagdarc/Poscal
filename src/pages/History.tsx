@@ -64,15 +64,18 @@ const History = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header */}
-      <header className="pt-12 pb-4 px-6 flex items-center justify-between animate-fade-in">
+      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 flex items-center justify-between bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
-            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
+            className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary"
           >
             <ArrowLeft className="w-5 h-5 text-foreground" />
           </button>
-          <h1 className="text-2xl font-bold text-foreground">History</h1>
+          <div>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">History</h1>
+            <p className="text-sm text-muted-foreground">Position size calculations</p>
+          </div>
         </div>
         {history.length > 0 && (
           <button

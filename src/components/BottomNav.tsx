@@ -4,9 +4,9 @@ import { useLayoutEffect, useRef, useState, useCallback } from 'react';
 
 const navItems = [
   { path: '/', icon: Calculator, label: 'Calculate' },
-  { path: '/history', icon: History, label: 'History' },
-  { path: '/journal', icon: BookOpen, label: 'Journal' },
   { path: '/signals', icon: Radio, label: 'Signals' },
+  { path: '/journal', icon: BookOpen, label: 'Journal' },
+  { path: '/history', icon: History, label: 'History' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 

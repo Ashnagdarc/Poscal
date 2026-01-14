@@ -26,6 +26,8 @@ const Signals = lazy(() => import("./pages/Signals"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
+const Terms = lazy(() => import("./pages/Terms"));
+const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
@@ -86,6 +88,8 @@ const AppContent = () => {
               </ProtectedRoute>
             } 
           />
+          <Route path="/terms" element={<Terms />} />
+          <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>

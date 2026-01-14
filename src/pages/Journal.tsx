@@ -538,11 +538,11 @@ const Journal = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header */}
-      <header className="pt-12 pb-6 px-6 animate-fade-in">
+      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Trading Journal</h1>
-            <p className="text-muted-foreground">Track your trades</p>
+            <h1 className="text-2xl font-bold text-foreground tracking-tight">Trading Journal</h1>
+            <p className="text-sm text-muted-foreground">Track and analyze your trades</p>
           </div>
           <div className="flex gap-2">
             <button

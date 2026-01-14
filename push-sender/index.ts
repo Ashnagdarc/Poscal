@@ -286,8 +286,22 @@ const SYMBOL_MAPPINGS: Record<string, string> = {
   // Commodities
   'BCO/USD': 'OANDA:BCO_USD', // Brent Crude Oil
   'WTI/USD': 'OANDA:WTICO_USD', // WTI Crude Oil
+  
+  // Indices
   'NAS/USD': 'OANDA:NAS100_USD', // Nasdaq 100
+  'US100': 'OANDA:NAS100_USD', // Nasdaq 100 (alternative symbol)
+  'US100/USD': 'OANDA:NAS100_USD', // Nasdaq 100 (alternative symbol)
   'SPX/USD': 'OANDA:SPX500_USD', // S&P 500
+  'US500': 'OANDA:SPX500_USD', // S&P 500 (alternative symbol)
+  'US500/USD': 'OANDA:SPX500_USD', // S&P 500 (alternative symbol)
+  'US30': 'OANDA:US30_USD', // Dow Jones 30
+  'US30/USD': 'OANDA:US30_USD', // Dow Jones 30
+  'GER30': 'OANDA:DE30_EUR', // DAX 30
+  'GER30/EUR': 'OANDA:DE30_EUR', // DAX 30
+  'UK100': 'OANDA:UK100_GBP', // FTSE 100
+  'UK100/GBP': 'OANDA:UK100_GBP', // FTSE 100
+  'JPN225': 'OANDA:JP225_USD', // Nikkei 225
+  'JPN225/USD': 'OANDA:JP225_USD', // Nikkei 225
   
   // Cryptocurrencies (BINANCE format)
   'BTC/USD': 'BINANCE:BTCUSDT',
@@ -334,27 +348,30 @@ function connectPriceWebSocket() {
         // { type: 'trade', data: [{ s: 'OANDA:EUR_USD', p: 1.0855, t: timestamp, v: volume }] }
         if (message.type === 'trade' && message.data) {
           for (const trade of message.data) {
-            // Find the original symbol (EUR/USD format)
-            const originalSymbol = Object.entries(SYMBOL_MAPPINGS).find(
-              ([_, finnhubSymbol]) => finnhubSymbol === trade.s
-            )?.[0];
+            // Find ALL symbols that map to this Finnhub symbol (handles aliases like US100, NAS/USD)
+            const matchingSymbols = Object.entries(SYMBOL_MAPPINGS)
+              .filter(([_, finnhubSymbol]) => finnhubSymbol === trade.s)
+              .map(([symbol]) => symbol);
 
-            if (originalSymbol) {
+            if (matchingSymbols.length > 0) {
               const price = trade.p;
               const spread = price * 0.0001; // Approximate 1 pip spread for forex
               
-              await supabase
-                .from('price_cache')
-                .upsert({
-                  symbol: originalSymbol,
-                  mid_price: price,
-                  ask_price: price + spread / 2,
-                  bid_price: price - spread / 2,
-                  timestamp: trade.t,
-                  updated_at: new Date().toISOString()
-                }, { onConflict: 'symbol' });
+              // Update ALL matching symbols (e.g., both NAS/USD and US100 get updated)
+              for (const symbol of matchingSymbols) {
+                await supabase
+                  .from('price_cache')
+                  .upsert({
+                    symbol: symbol,
+                    mid_price: price,
+                    ask_price: price + spread / 2,
+                    bid_price: price - spread / 2,
+                    timestamp: trade.t,
+                    updated_at: new Date().toISOString()
+                  }, { onConflict: 'symbol' });
 
-              console.log(`💹 Updated ${originalSymbol}: ${price}`);
+                console.log(`💹 Updated ${symbol}: ${price}`);
+              }
             }
           }
         }

@@ -128,6 +128,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         pips_to_sl: Math.round(calculatePips(entry, sl, formData.currency_pair)),
         pips_to_tp1: Math.round(calculatePips(entry, tp1, formData.currency_pair)),
         status: 'active',
+        market_execution: formData.market_execution,
       };
 
       // Add optional fields only if they have values

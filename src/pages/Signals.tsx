@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target, Settings } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo } from 'react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target, Settings, ChevronDown } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
@@ -46,6 +46,7 @@ interface TradingSignal {
   tp1_hit: boolean;
   tp2_hit: boolean;
   tp3_hit: boolean;
+  market_execution: string | null;
 }
 
 const SIGNALS_PER_PAGE = 5;
@@ -91,14 +92,20 @@ const Signals = () => {
   const [dateFilter, setDateFilter] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   
+  // Date grouping and collapsible sections
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set([new Date().toISOString().split('T')[0]]));
+  const [selectedDateTab, setSelectedDateTab] = useState<string | null>(null);
+  
   // Image modal
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
   // Track previous signal states for notifications
   const prevSignalsRef = useRef<Map<string, TradingSignal>>(new Map());
   
-  // Get unique active pairs for live price fetching
-  const activeSymbols = [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
+  // Get unique active pairs for live price fetching - MEMOIZED to prevent infinite subscriptions
+  const activeSymbols = useMemo(() => {
+    return [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
+  }, [signals]);
   
   // Use Realtime prices from backend (Twelve Data API, 10-second updates)
   const { prices, loading: pricesLoading, lastUpdated, refreshPrices } = useRealtimePrices({
@@ -437,17 +444,52 @@ const Signals = () => {
     return price.toFixed(price >= 100 ? 2 : 5);
   };
 
+  // Group signals by date (most recent first)
+  const groupedSignals = useMemo(() => {
+    const groups: { [key: string]: TradingSignal[] } = {};
+    
+    signals.forEach(signal => {
+      const date = format(parseISO(signal.created_at), 'yyyy-MM-dd');
+      if (!groups[date]) {
+        groups[date] = [];
+      }
+      groups[date].push(signal);
+    });
+
+    // Sort dates in descending order (most recent first)
+    const sortedDates = Object.keys(groups).sort((a, b) => {
+      return new Date(b).getTime() - new Date(a).getTime();
+    });
+
+    return sortedDates.map(date => ({
+      date,
+      displayDate: format(parseISO(date), 'EEEE, MMMM d, yyyy'),
+      isToday: format(new Date(), 'yyyy-MM-dd') === date,
+      signals: groups[date]
+    }));
+  }, [signals]);
+
+  const toggleDateExpanded = (date: string) => {
+    const newExpanded = new Set(expandedDates);
+    if (newExpanded.has(date)) {
+      newExpanded.delete(date);
+    } else {
+      newExpanded.add(date);
+    }
+    setExpandedDates(newExpanded);
+  };
+
   return (
     <div className="min-h-screen bg-background pb-24">
       {/* Header */}
-      <header className="pt-12 pb-4 px-6">
+      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
               <Radio className="w-5 h-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Trading Signals</h1>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">Trading Signals</h1>
               <p className="text-sm text-muted-foreground">
                 {totalCount} signal{totalCount !== 1 ? 's' : ''} available
               </p>
@@ -483,6 +525,27 @@ const Signals = () => {
           </div>
         </div>
       </header>
+
+      {/* Active filter chips */}
+      {hasActiveFilters && (
+        <div className="px-6 pb-2 flex flex-wrap items-center gap-2">
+          {pairFilter !== 'All Pairs' && (
+            <Badge variant="secondary" className="text-xs">Pair: {pairFilter}</Badge>
+          )}
+          {statusFilter !== 'all' && (
+            <Badge variant="secondary" className="text-xs">Status: {statusFilter}</Badge>
+          )}
+          {resultFilter !== 'all' && (
+            <Badge variant="secondary" className="text-xs">Result: {resultFilter}</Badge>
+          )}
+          {dateFilter && (
+            <Badge variant="secondary" className="text-xs">Date: {dateFilter}</Badge>
+          )}
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 text-xs">
+            <X className="w-3 h-3 mr-1" /> Clear
+          </Button>
+        </div>
+      )}
 
       {/* Trading Account Dashboard */}
       {user && (
@@ -560,7 +623,7 @@ const Signals = () => {
       {showFilters && (
         <div className="px-6 pb-4 space-y-3 animate-in slide-in-from-top-2">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-foreground">Filters</span>
+            <span className="text-sm font-semibold text-foreground">Filters</span>
             {hasActiveFilters && (
               <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 text-xs">
                 <X className="w-3 h-3 mr-1" />
@@ -569,9 +632,9 @@ const Signals = () => {
             )}
           </div>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <Select value={pairFilter} onValueChange={setPairFilter}>
-              <SelectTrigger className="bg-secondary border-border">
+              <SelectTrigger className="bg-secondary border-border" aria-label="Currency Pair">
                 <SelectValue placeholder="Currency Pair" />
               </SelectTrigger>
               <SelectContent>
@@ -584,7 +647,7 @@ const Signals = () => {
             </Select>
 
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="bg-secondary border-border">
+              <SelectTrigger className="bg-secondary border-border" aria-label="Status">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -594,11 +657,9 @@ const Signals = () => {
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-          </div>
 
-          <div className="grid grid-cols-2 gap-3">
             <Select value={resultFilter} onValueChange={setResultFilter}>
-              <SelectTrigger className="bg-secondary border-border">
+              <SelectTrigger className="bg-secondary border-border" aria-label="Result">
                 <SelectValue placeholder="Result" />
               </SelectTrigger>
               <SelectContent>
@@ -618,9 +679,12 @@ const Signals = () => {
                 onChange={(e) => setDateFilter(e.target.value)}
                 className="pl-10 bg-secondary border-border"
                 placeholder="Filter by date"
+                aria-label="Filter by date"
               />
             </div>
           </div>
+
+
         </div>
       )}
 
@@ -629,14 +693,29 @@ const Signals = () => {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="bg-secondary rounded-2xl p-4 animate-pulse">
+              <div key={i} className="bg-secondary rounded-2xl p-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div className="h-6 w-24 bg-muted rounded" />
-                  <div className="h-5 w-16 bg-muted rounded" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 bg-muted rounded-lg animate-pulse" />
+                    <div className="h-5 w-28 bg-muted rounded animate-pulse" />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="h-5 w-14 bg-muted rounded animate-pulse" />
+                    <div className="h-5 w-16 bg-muted rounded animate-pulse" />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="h-4 w-32 bg-muted rounded" />
-                  <div className="h-4 w-48 bg-muted rounded" />
+                <div className="grid grid-cols-2 gap-3 mb-3">
+                  <div className="h-10 bg-muted/70 rounded animate-pulse" />
+                  <div className="h-10 bg-muted/70 rounded animate-pulse" />
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-3">
+                  <div className="h-14 bg-muted/60 rounded animate-pulse" />
+                  <div className="h-14 bg-muted/60 rounded animate-pulse" />
+                  <div className="h-14 bg-muted/60 rounded animate-pulse" />
+                </div>
+                <div className="flex items-center justify-end gap-2">
+                  <div className="h-7 w-16 bg-muted rounded animate-pulse" />
+                  <div className="h-7 w-16 bg-muted rounded animate-pulse" />
                 </div>
               </div>
             ))}
@@ -657,14 +736,51 @@ const Signals = () => {
                 ? 'No signals match your filters. Try adjusting them.'
                 : 'No trading signals have been posted yet. Check back later!'}
             </p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              {hasActiveFilters ? (
+                <Button variant="outline" size="sm" onClick={clearFilters}>
+                  <X className="w-3 h-3 mr-1" /> Clear Filters
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" onClick={fetchSignals}>
+                  <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                </Button>
+              )}
+            </div>
           </div>
         ) : (
           <>
-            {signals.map((signal) => (
-              <div
-                key={signal.id}
-                className="bg-secondary rounded-2xl p-4 border border-border/50"
-              >
+            {/* Grouped Signals by Date */}
+            {groupedSignals.map((group) => (
+              <div key={group.date} className="space-y-2">
+                {/* Date Section Header */}
+                <button
+                  onClick={() => toggleDateExpanded(group.date)}
+                  className="w-full px-6 py-3 flex items-center justify-between hover:bg-background/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`${group.isToday ? 'text-primary font-semibold' : 'text-muted-foreground'}`}>
+                      {group.displayDate}
+                    </span>
+                    <Badge variant="outline" className="text-xs">
+                      {group.signals.length} signal{group.signals.length !== 1 ? 's' : ''}
+                    </Badge>
+                  </div>
+                  <ChevronDown
+                    className={`w-5 h-5 text-muted-foreground transition-transform ${
+                      expandedDates.has(group.date) ? 'rotate-180' : ''
+                    }`}
+                  />
+                </button>
+
+                {/* Signals for this date */}
+                {expandedDates.has(group.date) && (
+                  <div className="space-y-3 px-6">
+                    {group.signals.map((signal) => (
+                      <div
+                        key={signal.id}
+                        className="bg-secondary rounded-2xl p-4 border border-border/50 hover:border-foreground/20 transition-colors"
+                      >
                 {/* Header */}
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -681,15 +797,31 @@ const Signals = () => {
                         <TrendingDown className="w-4 h-4 text-red-400" />
                       )}
                     </div>
-                    <div>
-                      <span className="font-bold text-foreground">{signal.currency_pair}</span>
-                      <span
-                        className={`ml-2 text-xs font-semibold uppercase ${
-                          signal.direction === 'buy' ? 'text-emerald-400' : 'text-red-400'
-                        }`}
-                      >
-                        {signal.direction}
-                      </span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="font-semibold text-foreground text-base">{signal.currency_pair}</span>
+                        <span
+                          className={`text-xs font-semibold uppercase ${
+                            signal.direction === 'buy' ? 'text-emerald-400' : 'text-red-400'
+                          }`}
+                        >
+                          {signal.direction}
+                        </span>
+                      </div>
+                      {signal.market_execution && (
+                        <div className="inline-flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-lg border border-primary/20">
+                          <span className="text-xs font-semibold text-primary uppercase tracking-wide">
+                            {signal.market_execution === 'instant' ? 'Market Execution' : 
+                             signal.market_execution === 'buy-limit' ? 'Buy Limit' :
+                             signal.market_execution === 'sell-limit' ? 'Sell Limit' :
+                             signal.market_execution === 'buy-stop' ? 'Buy Stop' :
+                             signal.market_execution === 'sell-stop' ? 'Sell Stop' :
+                             signal.market_execution === 'buy-stop-limit' ? 'Buy Stop Limit' :
+                             signal.market_execution === 'sell-stop-limit' ? 'Sell Stop Limit' :
+                             signal.market_execution}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -784,13 +916,28 @@ const Signals = () => {
                   )}
                 </div>
 
-                {/* Notes & Chart & Admin Actions */}
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="w-3 h-3" />
-                    {format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}
+                {/* Market Execution Time & Notes & Chart & Admin Actions */}
+                <div className="space-y-2 mb-3">
+                  <div className="bg-background/50 rounded-lg p-2 flex items-center justify-between">
+                    <div className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Clock className="w-4 h-4 text-primary" />
+                        <span className="font-semibold">Signal Created:</span>
+                        <span className="text-foreground font-medium">{format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}</span>
+                      </div>
+                      {signal.closed_at && (
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <Clock className="w-4 h-4 text-yellow-500" />
+                          <span className="font-semibold">Closed:</span>
+                          <span className="text-foreground font-medium">{format(parseISO(signal.closed_at), 'MMM d, yyyy h:mm a')}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                </div>
+
+                {/* Chart & Admin Actions */}
+                <div className="flex items-center gap-2 justify-end">
                     {signal.chart_image_url && (
                       <Button
                         variant="ghost"
@@ -843,13 +990,16 @@ const Signals = () => {
                         onSignalUpdated={fetchSignals}
                       />
                     )}
-                  </div>
                 </div>
 
                 {signal.notes && (
-                  <p className="mt-2 text-xs text-muted-foreground bg-background/30 rounded-lg p-2">
+                  <p className="mt-2 text-xs text-muted-foreground bg-background/40 rounded-lg p-2">
                     {signal.notes}
                   </p>
+                )}
+              </div>
+                    ))}
+                  </div>
                 )}
               </div>
             ))}

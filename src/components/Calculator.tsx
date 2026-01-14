@@ -180,20 +180,20 @@ export const Calculator = () => {
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
-      <header className="pt-12 pb-6 px-6 animate-fade-in">
+      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
+            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center shadow-md shadow-foreground/20">
               <CalculatorIcon className="w-5 h-5 text-background" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Position Size</h1>
-              <p className="text-sm text-muted-foreground">Calculator</p>
+              <h1 className="text-2xl font-bold text-foreground tracking-tight">Position Size</h1>
+              <p className="text-xs text-muted-foreground">Calculator</p>
             </div>
           </div>
           <button
             onClick={() => navigate(user ? '/profile' : '/signin')}
-            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all active:scale-95"
+            className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all active:scale-95 hover:bg-secondary"
           >
             <User className="w-5 h-5 text-foreground" />
           </button>
