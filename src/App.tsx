@@ -27,6 +27,16 @@ const Signals = lazy(() => import("./pages/Signals"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
+const AdminPayments = lazy(() => import("./pages/AdminPayments"));
+const AdminWebhookLogs = lazy(() => import("./pages/AdminWebhookLogs"));
+          <Route 
+            path="/admin/webhook-logs" 
+            element={
+              <ProtectedRoute>
+                <AdminWebhookLogs />
+              </ProtectedRoute>
+            } 
+          />
 const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -72,6 +82,14 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <AdminUpdates />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/admin/payments" 
+            element={
+              <ProtectedRoute>
+                <AdminPayments />
               </ProtectedRoute>
             } 
           />

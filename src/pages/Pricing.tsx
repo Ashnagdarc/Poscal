@@ -359,6 +359,7 @@ const Pricing = () => {
           isOpen={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
           tier={selectedTier as 'premium' | 'pro'}
+          redirectPath="/"
         />
       )}
     </div>

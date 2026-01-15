@@ -1,3 +1,4 @@
+// ...existing code...
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield } from "lucide-react";
@@ -174,6 +175,23 @@ const Settings = () => {
                       <Megaphone className="w-4.5 h-4.5 text-primary" />
                     </div>
                     <span className="font-medium text-foreground">App Updates</span>
+                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Admin</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </button>
+              )}
+
+              {/* Admin Payments Dashboard */}
+              {isAdmin && (
+                <button
+                  onClick={() => navigate('/admin/payments')}
+                  className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                      <Wallet className="w-4.5 h-4.5 text-primary" />
+                    </div>
+                    <span className="font-medium text-foreground">Payments Dashboard</span>
                     <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Admin</span>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />

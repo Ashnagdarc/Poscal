@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { PaystackButton } from 'react-paystack';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -18,6 +19,7 @@ interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
   tier: 'premium' | 'pro';
+  redirectPath?: string; // optional path to navigate after success
 }
 
 // Tier pricing configuration
@@ -56,7 +58,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   isOpen,
   onClose,
   tier,
+  redirectPath = '/',
 }) => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { refreshSubscription } = useSubscription();
   const [isProcessing, setIsProcessing] = useState(false);
@@ -125,6 +129,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       setTimeout(() => {
         onClose();
         setPaymentStatus('idle');
+        // Navigate to target page after payment success
+        try {
+          navigate(redirectPath);
+        } catch (e) {
+          // noop: navigation will be skipped if router context isn't available
+        }
       }, 2000);
     } catch (err) {
       const errorMsg =
