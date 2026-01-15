@@ -82,28 +82,52 @@ export default async function handler(req: any, res: any) {
     }
 
     // Insert payment record (best-effort)
-    const { error: paymentError } = await supabase.from('payments').insert({
-      user_id: userId,
-      amount: (paystackData?.data?.amount || 0) / 100, // kobo to naira
-      currency: paystackData?.data?.currency || 'NGN',
-      status: 'success',
-      payment_method: 'paystack',
-      paystack_reference: reference,
-      paystack_customer_code: paystackData?.data?.customer?.customer_code,
-      tier,
-      subscription_start: new Date().toISOString(),
-      subscription_end: expiryDate.toISOString(),
-      metadata: {
-        channel: paystackData?.data?.channel,
-        ip_address: paystackData?.data?.ip_address,
-        fees: paystackData?.data?.fees,
-        authorization: paystackData?.data?.authorization,
-        gateway_response: paystackData?.data?.gateway_response,
-      },
-    });
+    // Insert payment record and fail loudly if it doesn't persist
+    try {
+      const paymentPayload = {
+        user_id: userId,
+        amount: (paystackData?.data?.amount || 0) / 100, // kobo to naira
+        currency: paystackData?.data?.currency || 'NGN',
+        status: 'success',
+        payment_method: 'paystack',
+        paystack_reference: reference,
+        paystack_customer_code: paystackData?.data?.customer?.customer_code,
+        // ensure non-nullable subscription_tier is set to match schema
+        subscription_tier: tier,
+        // keep backward-compatible `tier` if used elsewhere
+        tier,
+        subscription_start: new Date().toISOString(),
+        subscription_end: expiryDate.toISOString(),
+        metadata: {
+          channel: paystackData?.data?.channel,
+          ip_address: paystackData?.data?.ip_address,
+          fees: paystackData?.data?.fees,
+          authorization: paystackData?.data?.authorization,
+          gateway_response: paystackData?.data?.gateway_response,
+        },
+        paid_at: new Date().toISOString(),
+      };
 
-    if (paymentError) {
-      console.error('[verify-payment] payment insert error', paymentError);
+      const { data: paymentData, error: paymentError } = await supabase
+        .from('payments')
+        .insert(paymentPayload)
+        .select('*')
+        .single();
+
+      if (paymentError) {
+        // Log full context to Vercel logs for debugging
+        console.error('[verify-payment] payment insert error', paymentError);
+        console.error('[verify-payment] payload', JSON.stringify(paymentPayload));
+        console.error('[verify-payment] paystackData', JSON.stringify(paystackData));
+        // Return failure so the caller and logs show this
+        return res.status(500).json({ success: false, message: 'Failed to insert payment record', details: paymentError });
+      }
+
+      // Optionally log success
+      console.log('[verify-payment] payment recorded', { id: paymentData?.id, userId });
+    } catch (errInsert: any) {
+      console.error('[verify-payment] unexpected insert error', errInsert);
+      return res.status(500).json({ success: false, message: 'Unexpected error inserting payment', details: errInsert?.message || String(errInsert) });
     }
 
     return res.status(200).json({
