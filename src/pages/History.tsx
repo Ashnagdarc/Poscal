@@ -1,8 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { History as HistoryIcon, Trash2, ArrowLeft } from "lucide-react";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { BottomNav } from "@/components/BottomNav";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export interface HistoryItem {
@@ -19,9 +21,15 @@ export interface HistoryItem {
 
 const History = () => {
   const navigate = useNavigate();
+  const { isPaid } = useSubscription();
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  // Free tier limits
+  const FREE_HISTORY_LIMIT = 10;
+  const displayedHistory = isPaid ? history : history.slice(0, FREE_HISTORY_LIMIT);
+  const isHistoryLimited = !isPaid && history.length > FREE_HISTORY_LIMIT;
 
   useEffect(() => {
     // Simulate loading for better UX
@@ -74,7 +82,14 @@ const History = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">History</h1>
-            <p className="text-sm text-muted-foreground">Position size calculations</p>
+            <p className="text-sm text-muted-foreground">
+              Position size calculations
+              {isHistoryLimited && (
+                <span className="text-orange-500 ml-1">
+                  (Showing {FREE_HISTORY_LIMIT} of {history.length})
+                </span>
+              )}
+            </p>
           </div>
         </div>
         {history.length > 0 && (
@@ -112,8 +127,9 @@ const History = () => {
             <p className="text-sm">Your saved calculations will appear here</p>
           </div>
         ) : (
-          <div className="space-y-3 animate-slide-up">
-            {history.map((item) => (
+          <>
+            <div className="space-y-3 animate-slide-up">
+              {displayedHistory.map((item) => (
               <div
                 key={item.id}
                 className="bg-secondary rounded-2xl p-4"
@@ -153,8 +169,22 @@ const History = () => {
                   </div>
                 </div>
               </div>
-            ))}
-          </div>
+              ))}
+            </div>
+
+            {/* Upgrade Prompt for Free Users */}
+            {isHistoryLimited && (
+              <div className="mt-6">
+                <UpgradePrompt
+                  feature="unlimited calculation history"
+                  title="View Full History"
+                  description={`Free users can view the last ${FREE_HISTORY_LIMIT} calculations. Upgrade to Premium to access your complete calculation history and export data.`}
+                  cta="Upgrade to Premium"
+                  tier="premium"
+                />
+              </div>
+            )}
+          </>
         )}
       </main>
 

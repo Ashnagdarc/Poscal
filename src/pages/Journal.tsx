@@ -19,12 +19,14 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { JournalAnalytics } from "@/components/JournalAnalytics";
 import { CSVImport } from "@/components/CSVImport";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { PnLInputModal } from "@/components/PnLInputModal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
@@ -64,9 +66,16 @@ interface TradingAccount {
 const Journal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { isPaid, subscriptionTier } = useSubscription();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
+  
+  // Free tier limits
+  const FREE_TRADE_LIMIT = 5;
+  const tradeCount = trades.length;
+  const isAtTradeLimit = !isPaid && tradeCount >= FREE_TRADE_LIMIT;
+  const canAddTrade = isPaid || tradeCount < FREE_TRADE_LIMIT;
   
   // Trading accounts
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
@@ -194,6 +203,12 @@ const Journal = () => {
     if (!user) {
       toast.error("Please sign in to add trades");
       navigate("/signin");
+      return;
+    }
+
+    // Check trade limit for free users
+    if (!canAddTrade) {
+      toast.error(`Free plan limited to ${FREE_TRADE_LIMIT} trades. Upgrade to Premium for unlimited trades.`);
       return;
     }
 
@@ -851,19 +866,57 @@ const Journal = () => {
         )}
       </main>
 
+      {/* Trade Limit Banner for Free Users */}
+      {!isPaid && (
+        <div className="fixed bottom-28 left-0 right-0 px-6 z-40">
+          <div className="bg-secondary/80 backdrop-blur-sm border border-border rounded-lg p-3 text-center">
+            <p className="text-sm text-muted-foreground">
+              {tradeCount}/{FREE_TRADE_LIMIT} trades used. 
+              {isAtTradeLimit ? (
+                <span className="text-orange-500 font-semibold"> Upgrade for unlimited trades!</span>
+              ) : (
+                <span> {FREE_TRADE_LIMIT - tradeCount} remaining</span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Add Trade FAB */}
       <button
         onClick={() => {
+          if (!canAddTrade) {
+            toast.error(`Free plan limited to ${FREE_TRADE_LIMIT} trades. Upgrade to Premium!`);
+            return;
+          }
           dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
           resetForm();
           dispatchModals({ type: 'OPEN_ADD_TRADE' });
         }}
         aria-label="Add new trade (Ctrl+N)"
         title="Add new trade (Ctrl+N)"
-        className="fixed bottom-28 right-6 w-14 h-14 bg-foreground text-background rounded-full flex items-center justify-center shadow-lg transition-all duration-200 active:scale-95"
+        disabled={isAtTradeLimit}
+        className={`fixed bottom-28 right-6 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all duration-200 ${
+          isAtTradeLimit 
+            ? 'bg-muted text-muted-foreground cursor-not-allowed opacity-50' 
+            : 'bg-foreground text-background active:scale-95'
+        }`}
       >
         <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
+
+      {/* Upgrade Prompt for Free Users at Limit */}
+      {isAtTradeLimit && (
+        <div className="fixed inset-x-0 bottom-44 px-6 z-50">
+          <UpgradePrompt
+            feature="unlimited journal entries"
+            title="Trade Limit Reached"
+            description={`You've used all ${FREE_TRADE_LIMIT} free trades. Upgrade to Premium for unlimited journal entries and advanced analytics.`}
+            cta="Upgrade to Premium"
+            tier="premium"
+          />
+        </div>
+      )}
 
       {/* Add/Edit Trade Modal */}
       {modals.showAddTrade && (

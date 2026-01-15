@@ -14,10 +14,12 @@ import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { TradingAccountModal } from '@/components/TradingAccountModal';
 import { TakeSignalModal } from '@/components/TakeSignalModal';
+import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import { Tables } from '@/types/database.types';
 import { useNavigate } from 'react-router-dom';
 
@@ -70,6 +72,7 @@ const CURRENCY_PAIRS = [
 const Signals = () => {
   const { isAdmin } = useAdmin();
   const { user } = useAuth();
+  const { isPaid } = useSubscription();
   const navigate = useNavigate();
   const { sendNotification, permission } = useNotifications();
   const [signals, setSignals] = useState<TradingSignal[]>([]);
@@ -77,6 +80,10 @@ const Signals = () => {
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Free tier limits
+  const FREE_SIGNALS_LIMIT = 3;
+  const canTakeSignals = isPaid;
   
   // Trading accounts
   const [accounts, setAccounts] = useState<TradingAccount[]>([]);
@@ -264,7 +271,12 @@ const Signals = () => {
 
       if (fetchError) throw fetchError;
 
-      setSignals(data || []);
+      // Limit signals for free users
+      const signalsToDisplay = (!isPaid && !isAdmin) 
+        ? (data || []).slice(0, FREE_SIGNALS_LIMIT) 
+        : (data || []);
+
+      setSignals(signalsToDisplay);
       setTotalCount(count || 0);
     } catch (error) {
       logger.error('Error fetching signals:', error);
@@ -954,10 +966,16 @@ const Signals = () => {
                         variant="default"
                         size="sm"
                         onClick={() => handleTakeSignal(signal)}
-                        className="h-7 text-xs bg-primary"
+                        disabled={!canTakeSignals}
+                        title={!canTakeSignals ? 'Upgrade to Premium to take signals' : 'Take this signal'}
+                        className={`h-7 text-xs ${
+                          !canTakeSignals 
+                            ? 'bg-muted text-muted-foreground cursor-not-allowed' 
+                            : 'bg-primary'
+                        }`}
                       >
                         <Target className="w-3 h-3 mr-1" />
-                        Take
+                        {!canTakeSignals ? 'Premium' : 'Take'}
                       </Button>
                     )}
                     {signal.status === 'active' && isSignalTaken(signal.id) && (
@@ -1003,6 +1021,19 @@ const Signals = () => {
                 )}
               </div>
             ))}
+
+            {/* Upgrade Prompt for Free Users */}
+            {!isPaid && !isAdmin && signals.length >= FREE_SIGNALS_LIMIT && (
+              <div className="mt-6">
+                <UpgradePrompt
+                  feature="unlimited signals"
+                  title="View All Signals & Trade Live"
+                  description="Free users can view the latest 3 signals only. Upgrade to Premium to view all signals, take signals, and track your trades."
+                  cta="Upgrade to Premium"
+                  tier="premium"
+                />
+              </div>
+            )}
 
             {/* Pagination */}
             {totalPages > 1 && (

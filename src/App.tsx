@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SkipLink } from "@/components/SkipLink";
@@ -23,6 +24,7 @@ const Journal = lazy(() => import("./pages/Journal"));
 const History = lazy(() => import("./pages/History"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Signals = lazy(() => import("./pages/Signals"));
+const Pricing = lazy(() => import("./pages/Pricing"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
@@ -48,6 +50,7 @@ const AppContent = () => {
           <Route path="/journal" element={<Journal />} />
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/pricing" element={<Pricing />} />
           <Route 
             path="/signals" 
             element={
@@ -105,9 +108,11 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <AuthProvider>
-            <CurrencyProvider>
-              <AppContent />
-            </CurrencyProvider>
+            <SubscriptionProvider>
+              <CurrencyProvider>
+                <AppContent />
+              </CurrencyProvider>
+            </SubscriptionProvider>
           </AuthProvider>
         </BrowserRouter>
       </ErrorBoundary>
