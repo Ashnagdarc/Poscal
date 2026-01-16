@@ -13,6 +13,7 @@ import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
+import UpgradeBanner from '@/components/UpgradeBanner';
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -49,6 +50,7 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
+      <UpgradeBanner />
       <AppUpdateModal />
       <PWAInstallPrompt />
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
@@ -58,15 +60,15 @@ const AppContent = () => {
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/journal" element={<Journal />} />
-          <Route path="/history" element={<History />} />
+          <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
+          <Route path="/history" element={<ProtectedRoute requiresPremium>{<History />}</ProtectedRoute>} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/pricing" element={<Pricing />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route 
             path="/signals" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiresPremium>
                 <Signals />
               </ProtectedRoute>
             } 

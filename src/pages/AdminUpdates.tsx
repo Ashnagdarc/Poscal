@@ -27,6 +27,7 @@ const AdminUpdates = () => {
   const { isAdmin, loading: adminLoading } = useAdmin();
   const [updates, setUpdates] = useState<AppUpdate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -62,8 +63,46 @@ const AdminUpdates = () => {
   useEffect(() => {
     if (isAdmin) {
       fetchUpdates();
+      fetchPaidLock();
     }
   }, [isAdmin]);
+
+  const fetchPaidLock = async () => {
+    try {
+      // Read directly from Supabase table for local/dev usage to avoid CORS to production API
+      const { data, error } = await supabase
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'paid_lock_enabled')
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error('fetchPaidLock supabase error', error);
+        return;
+      }
+
+      const enabled = data?.value?.enabled === true;
+      setPaidLockEnabled(!!enabled);
+    } catch (err) {
+      console.error('fetchPaidLock error', err);
+    }
+  };
+
+  const togglePaidLock = async () => {
+    try {
+      // Use Supabase upsert to set the flag directly (avoids CORS during dev)
+      const newVal = !paidLockEnabled;
+      const payload = { key: 'paid_lock_enabled', value: { enabled: newVal } };
+      const { error } = await supabase.from('app_settings').upsert(payload, { onConflict: 'key' });
+      if (error) throw error;
+      setPaidLockEnabled(!!newVal);
+      toast.success(newVal ? 'Paid lock enabled' : 'Paid lock disabled');
+    } catch (err: any) {
+      console.error('togglePaidLock error', err);
+      toast.error(err?.message || 'Failed to toggle paid lock');
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -167,6 +206,12 @@ const AdminUpdates = () => {
           <Button variant="ghost" size="icon" onClick={() => navigate('/settings')}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="text-sm text-muted-foreground">Paid features locked:</div>
+            <Button size="sm" variant={paidLockEnabled ? 'secondary' : 'outline'} onClick={togglePaidLock}>
+              {paidLockEnabled ? 'Enabled' : 'Disabled'}
+            </Button>
+          </div>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
               <Megaphone className="w-5 h-5 text-primary-foreground" />

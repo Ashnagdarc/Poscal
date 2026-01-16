@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
+import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { BottomNav } from "@/components/BottomNav";
@@ -12,11 +13,68 @@ import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
+import { useSubscription } from '@/contexts/SubscriptionContext';
+
+function RestorePurchaseButton() {
+  const { user } = useAuth();
+  const { refreshSubscription } = useSubscription();
+  const [loading, setLoading] = useState(false);
+
+  const handleRestore = async () => {
+    if (!user) return;
+    setLoading(true);
+    try {
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+      const resp = await fetch(`${apiBase}/api/restore-purchase`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.success) {
+        throw new Error(data?.message || 'Restore failed');
+      }
+      toast.success('Purchase restored — your subscription is active');
+      await refreshSubscription();
+    } catch (err: any) {
+      console.error('restore purchase error', err);
+      toast.error(err?.message || 'Failed to restore purchase');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleRestore}
+      disabled={!user || loading}
+      className={`w-full ${loading ? 'bg-secondary/30 cursor-not-allowed opacity-70' : 'bg-secondary/50'} backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]`}
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
+          <CreditCard className="w-4.5 h-4.5 text-foreground" />
+        </div>
+        <div className="text-left flex-1">
+          <p className="font-medium text-foreground">Restore Purchase</p>
+          <p className="text-xs text-muted-foreground">Restore a previous purchase and reactivate premium features</p>
+        </div>
+      </div>
+      <div>
+        {loading ? (
+          <span className="text-xs text-muted-foreground">Restoring…</span>
+        ) : (
+          <ChevronRight className="w-5 h-5 text-muted-foreground" />
+        )}
+      </div>
+    </button>
+  );
+}
 
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
+  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -35,6 +93,42 @@ const Settings = () => {
     const savedHaptics = localStorage.getItem("hapticsEnabled");
     setHapticsEnabled(savedHaptics !== "false");
   }, []);
+
+  useEffect(() => {
+    if (isAdmin) {
+      (async () => {
+        try {
+          const { data, error } = await supabase
+            .from('app_settings')
+            .select('value')
+            .eq('key', 'paid_lock_enabled')
+            .limit(1)
+            .maybeSingle();
+          if (error) {
+            console.warn('Could not load paid lock flag', error);
+            return;
+          }
+          setPaidLockEnabled(!!data?.value?.enabled);
+        } catch (err) {
+          console.error('Could not fetch paid lock flag', err);
+        }
+      })();
+    }
+  }, [isAdmin]);
+
+  const togglePaidLockFromSettings = async () => {
+    try {
+      const newVal = !paidLockEnabled;
+      const payload = { key: 'paid_lock_enabled', value: { enabled: newVal } };
+      const { error } = await supabase.from('app_settings').upsert(payload, { onConflict: 'key' });
+      if (error) throw error;
+      setPaidLockEnabled(!!newVal);
+      toast.success(newVal ? 'Paid lock enabled' : 'Paid lock disabled');
+    } catch (err: any) {
+      console.error('togglePaidLockFromSettings error', err);
+      toast.error(err?.message || 'Failed to toggle paid lock');
+    }
+  };
 
   const toggleNotifications = () => {
     const newValue = !notifications;
@@ -179,6 +273,29 @@ const Settings = () => {
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />
                 </button>
+              )}
+
+              {/* Admin Paid Lock Toggle (shortcut) */}
+              {isAdmin && (
+                <div className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
+                      <CreditCard className="w-4.5 h-4.5 text-foreground" />
+                    </div>
+                    <div className="text-left flex-1">
+                      <p className="font-medium text-foreground">Paid features lock</p>
+                      <p className="text-xs text-muted-foreground">When enabled, non-premium users are restricted from premium pages</p>
+                    </div>
+                  </div>
+                  <div>
+                    <button
+                      onClick={togglePaidLockFromSettings}
+                      className={`px-3 py-1 rounded-md text-sm font-semibold ${paidLockEnabled ? 'bg-primary text-primary-foreground' : 'bg-secondary/20'}`}
+                    >
+                      {paidLockEnabled ? 'Enabled' : 'Disabled'}
+                    </button>
+                  </div>
+                </div>
               )}
 
               {/* Admin Payments Dashboard */}
@@ -408,20 +525,7 @@ const Settings = () => {
             </a>
 
             {/* Restore Purchase */}
-            <button
-              disabled
-              className="w-full bg-secondary/30 rounded-2xl px-5 py-4 flex items-center justify-between border border-border/30 cursor-not-allowed opacity-60"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-foreground/5 rounded-xl flex items-center justify-center">
-                  <CreditCard className="w-4.5 h-4.5 text-muted-foreground" />
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-medium text-foreground">Restore Purchase</p>
-                  <p className="text-xs text-muted-foreground">Coming soon with premium features</p>
-                </div>
-              </div>
-            </button>
+            <RestorePurchaseButton />
 
             {/* Terms and Conditions */}
             <button
