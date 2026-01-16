@@ -1,5 +1,4 @@
 import { createClient } from '@supabase/supabase-js';
-import { Resend } from 'resend';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -11,8 +10,6 @@ export const config = {
   schedule: '0 4 * * *', // 4am UTC daily
 };
 
-const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
-
 async function sendReminderEmail(to: string, name: string | null, expiresAt: string | null) {
   const subject = 'Your Poscal subscription is expiring soon';
   const shortName = name || 'there';
@@ -22,7 +19,7 @@ async function sendReminderEmail(to: string, name: string | null, expiresAt: str
 <p>If you'd like to renew and keep access to Pro features, <a href="https://www.poscalfx.com/upgrade">upgrade now</a>.</p>
 <p>Thanks — the Poscal team</p>`;
 
-  if (!resend) {
+  if (!RESEND_API_KEY) {
     console.log(`[REMINDER][DRY-RUN] to=${to} subject=${subject}`);
     return { success: true, dryRun: true };
   }
@@ -30,15 +27,25 @@ async function sendReminderEmail(to: string, name: string | null, expiresAt: str
   const from = process.env.EMAIL_FROM || 'no-reply@poscalfx.com';
 
   try {
-    const result = await resend.emails.send({
-      from,
-      to,
-      subject,
-      html,
+    const resp = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({ from, to, subject, html }),
     });
-    return { success: true, id: result.id };
+
+    if (!resp.ok) {
+      const txt = await resp.text();
+      console.error('Resend API returned error', resp.status, txt);
+      return { success: false, error: `resend_error_${resp.status}` };
+    }
+
+    const body = await resp.json();
+    return { success: true, id: body.id || null };
   } catch (err: any) {
-    console.error('Failed to send reminder via Resend', err?.message || err);
+    console.error('Failed to send reminder via Resend HTTP', err?.message || err);
     return { success: false, error: err?.message || String(err) };
   }
 }
