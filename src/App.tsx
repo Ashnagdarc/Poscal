@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -25,6 +25,7 @@ const History = lazy(() => import("./pages/History"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Signals = lazy(() => import("./pages/Signals"));
 const Pricing = lazy(() => import("./pages/Pricing"));
+const Upgrade = lazy(() => import("./pages/Upgrade"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
@@ -61,6 +62,7 @@ const AppContent = () => {
           <Route path="/history" element={<History />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/pricing" element={<Pricing />} />
+          <Route path="/upgrade" element={<Upgrade />} />
           <Route 
             path="/signals" 
             element={
