@@ -1,0 +1,13 @@
+{
+  "name": "realtime-proxy",
+  "version": "1.0.0",
+  "description": "WebSocket proxy for real-time price updates from Supabase",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.7",
+    "ws": "^8.13.0"
+  }
+}

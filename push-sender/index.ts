@@ -11,6 +11,7 @@ const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:info@poscalfx.com';
 const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY!;
 const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000'); // 30 seconds default
+const BATCH_INTERVAL = parseInt(process.env.BATCH_INTERVAL || '1000'); // 1 second default for price upserts
 
 // Validate required env vars
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
@@ -340,38 +341,62 @@ function connectPriceWebSocket() {
       });
     });
 
-    priceWebSocket.on('message', async (data: Buffer) => {
+    // --- Batched price upsert logic ---
+    const priceBatch: Record<string, {
+      symbol: string;
+      mid_price: number;
+      ask_price: number;
+      bid_price: number;
+      timestamp: number;
+      updated_at: string;
+    }> = {};
+
+    // Flush batch at configurable interval
+    setInterval(async () => {
+      const batch = Object.values(priceBatch);
+      if (batch.length === 0) return;
+
+      try {
+        await supabase
+          .from('price_cache')
+          .upsert(batch, { onConflict: 'symbol' });
+
+        batch.forEach(item => console.log(`💹 Batched update ${item.symbol}: ${item.mid_price}`));
+      } catch (err) {
+        console.error('❌ Error in batched upsert:', err);
+      }
+
+      // clear batch
+      for (const k of Object.keys(priceBatch)) delete priceBatch[k];
+    }, BATCH_INTERVAL);
+
+    priceWebSocket.on('message', (data: Buffer) => {
       try {
         const message = JSON.parse(data.toString());
-        
         // Finnhub sends trade updates with this structure:
         // { type: 'trade', data: [{ s: 'OANDA:EUR_USD', p: 1.0855, t: timestamp, v: volume }] }
         if (message.type === 'trade' && message.data) {
           for (const trade of message.data) {
-            // Find ALL symbols that map to this Finnhub symbol (handles aliases like US100, NAS/USD)
             const matchingSymbols = Object.entries(SYMBOL_MAPPINGS)
               .filter(([_, finnhubSymbol]) => finnhubSymbol === trade.s)
               .map(([symbol]) => symbol);
 
-            if (matchingSymbols.length > 0) {
-              const price = trade.p;
-              const spread = price * 0.0001; // Approximate 1 pip spread for forex
-              
-              // Update ALL matching symbols (e.g., both NAS/USD and US100 get updated)
-              for (const symbol of matchingSymbols) {
-                await supabase
-                  .from('price_cache')
-                  .upsert({
-                    symbol: symbol,
-                    mid_price: price,
-                    ask_price: price + spread / 2,
-                    bid_price: price - spread / 2,
-                    timestamp: trade.t,
-                    updated_at: new Date().toISOString()
-                  }, { onConflict: 'symbol' });
+            if (matchingSymbols.length === 0) continue;
 
-                console.log(`💹 Updated ${symbol}: ${price}`);
-              }
+            const price = trade.p;
+            const spread = price * 0.0001;
+            const ts = trade.t;
+
+            for (const symbol of matchingSymbols) {
+              // Keep only the latest tick per symbol in the batch
+              priceBatch[symbol] = {
+                symbol,
+                mid_price: price,
+                ask_price: price + spread / 2,
+                bid_price: price - spread / 2,
+                timestamp: ts,
+                updated_at: new Date().toISOString()
+              };
             }
           }
         }
