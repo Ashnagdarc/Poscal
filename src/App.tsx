@@ -14,6 +14,7 @@ import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import UpgradeBanner from '@/components/UpgradeBanner';
+import { Analytics } from "@vercel/analytics/react";
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -137,6 +138,7 @@ const App = () => (
             </SubscriptionProvider>
           </AuthProvider>
         </BrowserRouter>
+        <Analytics />
       </ErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>
