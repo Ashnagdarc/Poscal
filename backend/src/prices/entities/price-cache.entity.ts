@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+﻿import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity('price_cache')
 export class PriceCache {
@@ -8,32 +8,17 @@ export class PriceCache {
   @Column({ type: 'varchar', length: 20, unique: true })
   symbol: string;
 
-  @Column({ type: 'decimal', precision: 15, scale: 5 })
-  price: number;
+  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  bid_price: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
-  bid: number | null;
+  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  ask_price: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
-  ask: number | null;
+  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  mid_price: number;
 
-  @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
-  high_24h: number | null;
-
-  @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
-  low_24h: number | null;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  volume_24h: number | null;
-
-  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: true })
-  change_24h: number | null;
-
-  @Column({ type: 'decimal', precision: 5, scale: 2, nullable: true })
-  change_percent_24h: number | null;
-
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  source: string | null;
+  @Column({ type: 'bigint', nullable: true })
+  timestamp: number | null;
 
   @UpdateDateColumn({ type: 'timestamp with time zone' })
   updated_at: Date;
