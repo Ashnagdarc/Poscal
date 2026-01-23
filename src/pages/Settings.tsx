@@ -24,7 +24,7 @@ function RestorePurchaseButton() {
     if (!user) return;
     setLoading(true);
     try {
-      const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
+      const apiBase = import.meta.env.VITE_API_BASE_URL || '';
       const resp = await fetch(`${apiBase}/api/restore-purchase`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

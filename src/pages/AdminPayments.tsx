@@ -72,7 +72,7 @@ const AdminPayments = () => {
     return computeRange();
   }, [rangePreset, customStart, customEnd]);
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 
   const { data, isLoading, refetch } = useQuery<StatsResponse>({
     queryKey: ['payment-stats', currentRange, statusFilter, tierFilter, page, pageSize, sortBy, sortDir],
