@@ -77,8 +77,8 @@ export default defineConfig(({ mode }) => ({
           ],
           // Charts library
           'charts': ['recharts'],
-          // Supabase and TanStack Query
-          'data-libs': ['@supabase/supabase-js', '@tanstack/react-query'],
+          // TanStack Query
+          'data-libs': ['@tanstack/react-query'],
           // Form libraries
           'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
           // Icons and utilities

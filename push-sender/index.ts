@@ -1,22 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
+import axios from 'axios';
 import webpush from 'web-push';
 import WebSocket from 'ws';
 import 'dotenv/config';
 
 // Environment variables
-const SUPABASE_URL = process.env.SUPABASE_URL!;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
+const NESTJS_API_URL = process.env.NESTJS_API_URL || 'http://localhost:3000';
+const NESTJS_SERVICE_TOKEN = process.env.NESTJS_SERVICE_TOKEN;
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:info@poscalfx.com';
-const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY!;
-const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000'); // 30 seconds default
-const BATCH_INTERVAL = parseInt(process.env.BATCH_INTERVAL || '1000'); // 1 second default for price upserts
+const FINNHUB_API_KEY = process.env.FINNHUB_API_KEY || '';
+const POLL_INTERVAL = parseInt(process.env.POLL_INTERVAL || '30000', 10);
+const BATCH_INTERVAL = parseInt(process.env.BATCH_INTERVAL || '1000', 10);
 
 // Validate required env vars
-if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-  console.error('❌ Missing required environment variables');
-  console.error('Required: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY');
+if (!NESTJS_SERVICE_TOKEN) {
+  console.error('❌ Missing required environment variable: NESTJS_SERVICE_TOKEN');
+  process.exit(1);
+}
+
+if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
+  console.error('❌ Missing VAPID keys. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY');
   process.exit(1);
 }
 
@@ -25,17 +29,24 @@ if (!FINNHUB_API_KEY) {
   console.warn('⚠️  FINNHUB_API_KEY not set - price fetching will be disabled');
 }
 
-// Initialize Supabase client with service role
-const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
 // Configure web-push
 webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+
+// Axios client for NestJS backend
+const nestApi = axios.create({
+  baseURL: NESTJS_API_URL,
+  timeout: 30000,
+  headers: {
+    'X-Service-Token': NESTJS_SERVICE_TOKEN,
+    'Content-Type': 'application/json',
+  },
+});
 
 interface PushSubscription {
   id: string;
   endpoint: string;
-  p256dh: string;
-  auth: string;
+  p256dh_key: string;
+  auth_key: string;
   user_id: string | null;
 }
 
@@ -43,66 +54,82 @@ interface QueuedNotification {
   id: string;
   title: string;
   body: string;
-  tag: string | null;
+  tag?: string | null;
+  icon?: string | null;
+  url?: string | null;
   data: any;
   created_at: string;
   user_id?: string | null;
 }
 
-/**
- * Get all active push subscriptions from database
- */
 async function getActiveSubscriptions(): Promise<PushSubscription[]> {
   try {
-    const { data, error } = await supabase.rpc('get_active_push_subscriptions');
-    
-    if (error) {
-      console.error('❌ Error fetching subscriptions:', error);
-      return [];
-    }
-    
-    return data || [];
+    const res = await nestApi.get('/notifications/push/subscriptions/active');
+    return res.data || [];
   } catch (error) {
-    console.error('❌ Exception fetching subscriptions:', error);
+    console.error('❌ Error fetching active subscriptions:', error);
     return [];
   }
 }
 
-/**
- * Get push subscriptions for a specific user
- */
 async function getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
   try {
-    const { data, error } = await supabase.rpc('get_user_push_subscriptions', {
-      p_user_id: userId
-    });
-    
-    if (error) {
-      console.error(`❌ Error fetching subscriptions for user ${userId}:`, error);
-      return [];
-    }
-    
-    return data || [];
+    const res = await nestApi.get(`/notifications/push/subscriptions/user/${userId}`);
+    return res.data || [];
   } catch (error) {
-    console.error(`❌ Exception fetching user subscriptions:`, error);
+    console.error(`❌ Error fetching subscriptions for user ${userId}:`, error);
     return [];
   }
 }
 
-/**
- * Send push notification to a single subscription
- */
+async function getPendingNotifications(limit: number = 100): Promise<QueuedNotification[]> {
+  try {
+    const res = await nestApi.get('/notifications/push/pending', { params: { limit } });
+    return res.data || [];
+  } catch (error) {
+    console.error('❌ Error fetching pending notifications:', error);
+    return [];
+  }
+}
+
+async function updateNotificationStatus(
+  id: string,
+  status: 'sent' | 'failed',
+  errorMessage?: string,
+): Promise<void> {
+  try {
+    await nestApi.patch(`/notifications/push/${id}/status`, {
+      status,
+      sent_at: new Date().toISOString(),
+      error_message: errorMessage,
+    });
+  } catch (error) {
+    console.error(`❌ Error updating notification ${id} status:`, error);
+  }
+}
+
+async function batchUpdatePrices(
+  prices: Array<{ symbol: string; bid_price?: number; mid_price?: number; ask_price?: number; price?: number }>,
+): Promise<void> {
+  try {
+    await nestApi.post('/prices/batch-update', prices);
+  } catch (error) {
+    console.error('❌ Error batch updating prices:', error);
+  }
+}
+
 async function sendToSubscription(
   subscription: PushSubscription,
-  notification: QueuedNotification
+  notification: QueuedNotification,
 ): Promise<boolean> {
   try {
     const payload = JSON.stringify({
       title: notification.title,
       body: notification.body,
       tag: notification.tag || 'general',
-      icon: '/pwa-192x192.png',
+      icon: notification.icon || '/pwa-192x192.png',
       badge: '/favicon.png',
+      url: notification.url,
       data: notification.data || {},
     });
 
@@ -110,89 +137,56 @@ async function sendToSubscription(
       {
         endpoint: subscription.endpoint,
         keys: {
-          p256dh: subscription.p256dh,
-          auth: subscription.auth,
+          p256dh: subscription.p256dh_key,
+          auth: subscription.auth_key,
         },
       },
-      payload
+      payload,
     );
 
     return true;
   } catch (error: any) {
-    // Handle expired subscriptions
-    if (error.statusCode === 410 || error.statusCode === 404) {
-      console.log(`🗑️  Subscription expired, removing: ${subscription.endpoint.substring(0, 50)}...`);
-      
-      // Delete expired subscription
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('id', subscription.id);
-      
+    if (error?.statusCode === 410 || error?.statusCode === 404) {
+      console.log(`🗑️  Subscription expired: ${subscription.endpoint.slice(0, 60)}...`);
+      // No delete endpoint exposed; log and continue
       return false;
     }
 
-    console.error(`❌ Failed to send to subscription ${subscription.id}:`, error.message);
+    console.error(`❌ Failed to send to subscription ${subscription.id}:`, error?.message || error);
     return false;
   }
 }
 
-/**
- * Process pending notifications from the queue
- */
 async function processPushQueue(): Promise<void> {
   try {
-    // Get pending notifications
-    const { data: notifications, error } = await supabase
-      .from('push_notification_queue')
-      .select('*')
-      .eq('status', 'pending')
-      .order('created_at', { ascending: true })
-      .limit(10); // Process 10 at a time
-
-    if (error) {
-      console.error('❌ Error fetching notifications:', error);
-      return;
-    }
+    const notifications = await getPendingNotifications(100);
 
     if (!notifications || notifications.length === 0) {
-      return; // No notifications to process
+      return;
     }
 
     console.log(`📬 Processing ${notifications.length} notification(s)...`);
 
-    // Process each notification
     for (const notification of notifications) {
       let successCount = 0;
       let failCount = 0;
 
-      // Get subscriptions - either user-specific or all subscribers
       let subscriptions: PushSubscription[] = [];
-      
+
       if (notification.user_id) {
-        // User-specific notification
         subscriptions = await getUserSubscriptions(notification.user_id);
         console.log(`👤 User-specific notification: ${subscriptions.length} subscription(s) for user ${notification.user_id}`);
       } else {
-        // Broadcast to all subscribers
         subscriptions = await getActiveSubscriptions();
         console.log(`📢 Broadcast notification: ${subscriptions.length} subscriber(s)`);
       }
-      
+
       if (subscriptions.length === 0) {
-        console.log(`⚠️  No subscriptions found for notification ${notification.id}`);
-        // Mark as sent anyway
-        await supabase
-          .from('push_notification_queue')
-          .update({ 
-            status: 'sent', 
-            processed_at: new Date().toISOString() 
-          })
-          .eq('id', notification.id);
+        console.log(`⚠️  No subscriptions for notification ${notification.id}`);
+        await updateNotificationStatus(notification.id, 'failed', 'No active subscriptions');
         continue;
       }
 
-      // Send to all subscriptions
       for (const subscription of subscriptions) {
         const success = await sendToSubscription(subscription, notification);
         if (success) {
@@ -204,14 +198,11 @@ async function processPushQueue(): Promise<void> {
 
       console.log(`✅ Notification "${notification.title}": ${successCount} sent, ${failCount} failed`);
 
-      // Mark notification as sent
-      await supabase
-        .from('push_notification_queue')
-        .update({ 
-          status: 'sent', 
-          processed_at: new Date().toISOString() 
-        })
-        .eq('id', notification.id);
+      if (successCount > 0) {
+        await updateNotificationStatus(notification.id, 'sent');
+      } else {
+        await updateNotificationStatus(notification.id, 'failed', 'All sends failed');
+      }
     }
   } catch (error) {
     console.error('❌ Error processing queue:', error);
@@ -357,9 +348,12 @@ function connectPriceWebSocket() {
       if (batch.length === 0) return;
 
       try {
-        await supabase
-          .from('price_cache')
-          .upsert(batch, { onConflict: 'symbol' });
+        await batchUpdatePrices(batch.map((item) => ({
+          symbol: item.symbol,
+          bid_price: item.bid_price,
+          mid_price: item.mid_price,
+          ask_price: item.ask_price,
+        })));
 
         batch.forEach(item => console.log(`💹 Batched update ${item.symbol}: ${item.mid_price}`));
       } catch (err) {
@@ -433,7 +427,7 @@ function connectPriceWebSocket() {
 async function main() {
   console.log('🚀 Push Notification Sender started');
   console.log(`📊 Polling for notifications every ${POLL_INTERVAL / 1000} seconds`);
-  console.log(`🔗 Connected to: ${SUPABASE_URL}`);
+  console.log(`🔗 Backend: ${NESTJS_API_URL}`);
   console.log('');
 
   // Start WebSocket connection for real-time prices

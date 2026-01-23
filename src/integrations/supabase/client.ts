@@ -1,46 +1,69 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+// Temporary stub for Supabase client during migration to NestJS
+// This will be removed once all React components are migrated to use the new API
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const SUPABASE_AUTH_URL = import.meta.env.VITE_SUPABASE_AUTH_URL;
+export const isSupabaseConfigured = false;
 
-export const isSupabaseConfigured = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+export const supabase = {
+  // Auth methods
+  auth: {
+    signUp: () => {
+      throw new Error('Supabase auth is disabled during migration to NestJS backend. Please use the new authentication system.');
+    },
+    signInWithPassword: () => {
+      throw new Error('Supabase auth is disabled during migration to NestJS backend. Please use the new authentication system.');
+    },
+    signOut: () => {
+      throw new Error('Supabase auth is disabled during migration to NestJS backend. Please use the new authentication system.');
+    },
+    getUser: () => {
+      throw new Error('Supabase auth is disabled during migration to NestJS backend. Please use the new authentication system.');
+    },
+    onAuthStateChange: () => {
+      throw new Error('Supabase auth is disabled during migration to NestJS backend. Please use the new authentication system.');
+    }
+  },
 
-// Only create the real client if we have valid credentials
-export const supabase: SupabaseClient = isSupabaseConfigured
-  ? createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY,
-      {
-        auth: {
-          storage: localStorage,
-          persistSession: true,
-          autoRefreshToken: true,
-          detectSessionInUrl: true,
-          flowType: 'pkce',
-          // Use separate auth service for local development
-          ...(SUPABASE_AUTH_URL && { baseUrl: SUPABASE_AUTH_URL }),
-        },
-        // Add CORS headers configuration
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        // Use real-time subscriptions for better performance
-        realtime: {
-          params: {
-            eventsPerSecond: 10,
-          },
-        },
+  // Database methods
+  from: () => ({
+    select: () => {
+      throw new Error('Supabase database is disabled during migration to NestJS backend. Please use the new API endpoints.');
+    },
+    insert: () => {
+      throw new Error('Supabase database is disabled during migration to NestJS backend. Please use the new API endpoints.');
+    },
+    update: () => {
+      throw new Error('Supabase database is disabled during migration to NestJS backend. Please use the new API endpoints.');
+    },
+    delete: () => {
+      throw new Error('Supabase database is disabled during migration to NestJS backend. Please use the new API endpoints.');
+    },
+    rpc: () => {
+      throw new Error('Supabase RPC is disabled during migration to NestJS backend. Please use the new API endpoints.');
+    }
+  }),
+
+  // Storage methods
+  storage: {
+    from: () => ({
+      upload: () => {
+        throw new Error('Supabase storage is disabled during migration to NestJS backend. Please use the new file upload endpoints.');
+      },
+      download: () => {
+        throw new Error('Supabase storage is disabled during migration to NestJS backend. Please use the new file download endpoints.');
+      },
+      remove: () => {
+        throw new Error('Supabase storage is disabled during migration to NestJS backend. Please use the new file management endpoints.');
       }
-    )
-  : createClient(
-      'https://placeholder.supabase.co',
-      'placeholder-key',
-      {
-        auth: {
-          storage: localStorage,
-          persistSession: true,
-          autoRefreshToken: true,
-        },
-      }
-    );
+    })
+  },
+
+  // Realtime methods
+  channel: () => ({
+    on: () => {
+      throw new Error('Supabase realtime is disabled during migration to NestJS backend. Please use the new WebSocket connections.');
+    },
+    subscribe: () => {
+      throw new Error('Supabase realtime is disabled during migration to NestJS backend. Please use the new WebSocket connections.');
+    }
+  })
+};

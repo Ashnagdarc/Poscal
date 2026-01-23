@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+
+// Type definitions (replaces Supabase imports during migration)
+type User = any;
+type Session = any;
 
 interface AuthContextType {
   user: User | null;

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { RealtimeChannel } from '@supabase/supabase-js';
+
+// Type definition for realtime channel (replaces Supabase import)
+type RealtimeChannel = any;
 
 interface PriceData {
   symbol: string;

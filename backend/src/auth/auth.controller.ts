@@ -1,14 +1,18 @@
-import { Controller, Get, Post, Body, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, UseGuards, Request, Param } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
+import { ValidateTokenDto } from './dto/validate-token.dto';
+import { CreateProfileDto } from './dto/create-profile.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { AssignRoleDto } from './dto/assign-role.dto';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
 
   @Post('validate')
-  validateToken(@Body('token') token: string) {
-    const payload = this.authService.validateToken(token);
+  async validateToken(@Body() validateTokenDto: ValidateTokenDto) {
+    const payload = this.authService.validateToken(validateTokenDto.token);
     return {
       valid: true,
       payload,
@@ -17,9 +21,51 @@ export class AuthController {
 
   @Get('me')
   @UseGuards(AuthGuard('jwt'))
-  getCurrentUser(@Request() req: any) {
+  async getCurrentUser(@Request() req: any) {
+    const profile = await this.authService.getProfile(req.user.userId);
+    const roles = await this.authService.getUserRoles(req.user.userId);
     return {
       user: req.user,
+      profile,
+      roles: roles.map(r => r.role),
     };
   }
+
+  @Get('profile/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async getProfile(@Param('id') id: string) {
+    return await this.authService.getProfile(id);
+  }
+
+  @Post('profile')
+  async createProfile(@Body() createProfileDto: CreateProfileDto) {
+    return await this.authService.createProfile(createProfileDto);
+  }
+
+  @Put('profile/:id')
+  @UseGuards(AuthGuard('jwt'))
+  async updateProfile(
+    @Param('id') id: string,
+    @Body() updateProfileDto: UpdateProfileDto,
+  ) {
+    return await this.authService.updateProfile(id, updateProfileDto);
+  }
+
+  @Post('roles')
+  @UseGuards(AuthGuard('jwt'))
+  async assignRole(@Body() assignRoleDto: AssignRoleDto, @Request() req: any) {
+    // Only admins can assign roles
+    const isAdmin = await this.authService.isAdmin(req.user.userId);
+    if (!isAdmin) {
+      throw new Error('Only admins can assign roles');
+    }
+    return await this.authService.assignRole(assignRoleDto);
+  }
+
+  @Get('roles/:userId')
+  @UseGuards(AuthGuard('jwt'))
+  async getUserRoles(@Param('userId') userId: string) {
+    return await this.authService.getUserRoles(userId);
+  }
 }
+

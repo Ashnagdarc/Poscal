@@ -8,18 +8,24 @@ services:
     container_name: poscal-push-sender
     restart: unless-stopped
     environment:
-      # Supabase configuration
-      SUPABASE_URL: ${SUPABASE_URL}
-      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
-      
+      # NestJS backend configuration
+      NESTJS_API_URL: ${NESTJS_API_URL:-http://backend:3000}
+      NESTJS_SERVICE_TOKEN: ${NESTJS_SERVICE_TOKEN}
+
       # VAPID keys for web push
       VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY}
       VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY}
       VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@poscal.app}
-      
+
+      # Finnhub key for real-time prices
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+
       # Polling interval (milliseconds, default 30000 = 30 seconds)
       POLL_INTERVAL: ${POLL_INTERVAL:-30000}
-      
+
+      # Batch interval for price cache flush
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-1000}
+
       # Timezone
       TZ: UTC
     
