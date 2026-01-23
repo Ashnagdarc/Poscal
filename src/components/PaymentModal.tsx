@@ -73,7 +73,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const config = TIER_CONFIG[tier];
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
 
   if (!publicKey) {
     console.error('VITE_PAYSTACK_PUBLIC_KEY is not set in environment');

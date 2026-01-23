@@ -6,7 +6,7 @@ import { BottomNav } from '@/components/BottomNav';
 
 const AdminWebhookLogs = () => {
   const navigate = useNavigate();
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
+  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api';
   const { data, isLoading, refetch } = useQuery({
     queryKey: ['webhook-logs'],
     queryFn: async () => {
