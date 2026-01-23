@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 
-const BACKEND_URL = 'http://62.171.136.178:3001';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://api.poscalfx.com:3001';
 
 export const config = {
   maxDuration: 30,

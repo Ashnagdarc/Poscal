@@ -47,8 +47,8 @@ export const useRealtimePrices = ({
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const pollTimer = useRef<number | null>(null);
-  const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '';
-  const wsUrl = (import.meta as any).env?.VITE_WS_URL || '';
+  // Use relative API path so Vercel proxy handles HTTPS securely
+  const apiBase = '/api';
 
   // Fetch initial prices from backend REST API (NestJS)
   const fetchInitialPrices = useCallback(async () => {
