@@ -1,3 +1,4 @@
+import 'crypto'; // Ensure crypto is available globally for TypeORM
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
