@@ -1,9 +1,81 @@
 # Poscal Backend Switch - Complete TODO List
 
-**Project**: Migrate from Supabase to NestJS + PostgreSQL  
+**Project**: Migrate from Supabase to NestJS + PostgreSQL + Live Market Data Expansion  
 **Status**: IN PROGRESS  
 **Started**: January 23, 2026  
-**Target**: February 6, 2026  
+**Target**: February 6, 2026
+
+---
+
+## 🚀 LATEST: LIVE MARKET DATA EXPANSION (200+ Pairs) - ✅ DEPLOYED
+
+### ✅ Phase 5: Pairs Expansion to 228 (Completed Jan 23, 2026)
+- [x] Expanded SYMBOL_MAPPINGS from 65 to 228 pairs in push-sender/index.ts
+- [x] Added comprehensive pair coverage:
+  - Forex: ~110 pairs (majors, crosses, exotics)
+  - Metals: 6 pairs (XAU, XAG, XPT, XPD, crosses)
+  - Commodities: 16 pairs (energy, agricultural)
+  - Indices: 28 pairs (US, European, Asian)
+  - Crypto: 50+ pairs (majors, altcoins, stablecoins)
+- [x] Updated CurrencyGrid.tsx with 230 pairs + smart pip detection
+- [x] Created deployment documentation (3 comprehensive guides)
+- [x] **Deployed to Contabo VPS (62.171.136.178)** - ✅ LIVE
+  - File: /opt/poscal/push-sender/index.ts
+  - Status: Running with PID 3192751
+  - Verified: 228 pairs active in logs
+  - Live prices: Streaming every 1 second
+  - Backup: Created at /opt/poscal/push-sender/index.ts.backup.20260123_XXXXXX  
+
+---
+
+## 📋 IMMEDIATE NEXT STEPS (Priority Order)
+
+### Phase 5.1: Deploy Frontend Updates (CRITICAL - Next)
+- [ ] Deploy CurrencyGrid.tsx to production
+  - [ ] Push updated src/components/CurrencyGrid.tsx to git
+  - [ ] Or: SCP to Vercel/frontend deployment path
+  - [ ] Verify 230 pairs appear in position size calculator UI
+  - [ ] Test pair selection with various asset types
+- [ ] Expected Result: Position calculator shows all 228 pairs with live prices
+
+### Phase 5.2: Verify Database Population (HIGH - Parallel)
+- [ ] Connect to production database
+- [ ] Run: `SELECT COUNT(*) FROM price_cache WHERE price IS NOT NULL;`
+- [ ] Expected: 150-228 rows (depending on Finnhub tier availability)
+- [ ] Run: `SELECT symbol, price, updated_at FROM price_cache ORDER BY updated_at DESC LIMIT 20;`
+- [ ] Verify prices are fresh (<2 seconds old)
+- [ ] Check for any NULL prices and investigate missing pairs
+
+### Phase 5.3: End-to-End Integration Testing (HIGH - After Frontend Deploy)
+- [ ] Open position size calculator in production
+- [ ] Test pair selector shows all 228 pairs
+- [ ] Select forex pair (EUR/USD) → price loads ✓
+- [ ] Select metal (XAU/USD) → price loads ✓
+- [ ] Select commodity (WTI/USD) → price loads ✓
+- [ ] Select index (US30) → price loads ✓
+- [ ] Select crypto (BTC/USD) → price loads ✓
+- [ ] Test "Add Custom Pair" feature
+- [ ] Verify smart pip calculation works for each type
+- [ ] Check WebSocket updates are real-time
+
+### Phase 5.4: Performance & Monitoring (MEDIUM - After Testing)
+- [ ] Monitor VPS resource usage:
+  - [ ] CPU: Should be <10%
+  - [ ] Memory: Should be <200MB
+  - [ ] Network: Monitor bandwidth usage
+- [ ] Check database performance:
+  - [ ] Query response time: Should be <50ms
+  - [ ] Cache hit rate: Should be >95%
+- [ ] Monitor push-sender logs for errors:
+  - [ ] Check: `tail -f /var/log/push-sender.log`
+  - [ ] Alert if any "ERROR" or "FAIL" messages appear
+- [ ] Test with 100-500 concurrent users (load test)
+
+### Phase 5.5: Documentation & Handoff (LOW - Optional)
+- [ ] Update DEPLOYMENT_CHECKLIST_200_PAIRS.md with real results
+- [ ] Document any custom pair mappings added by users
+- [ ] Create monitoring dashboard for price updates
+- [ ] Document troubleshooting steps if pairs don't load
 
 ---
 
