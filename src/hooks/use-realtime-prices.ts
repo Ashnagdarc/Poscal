@@ -1,5 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/integrations/supabase/client';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 // Type definition for realtime channel (replaces Supabase import)
 type RealtimeChannel = any;
@@ -47,8 +46,11 @@ export const useRealtimePrices = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const pollTimer = useRef<number | null>(null);
+  const apiBase = (import.meta as any).env?.VITE_API_BASE_URL || '';
+  const wsUrl = (import.meta as any).env?.VITE_WS_URL || '';
 
-  // Fetch initial prices from price_cache table
+  // Fetch initial prices from backend REST API (NestJS)
   const fetchInitialPrices = useCallback(async () => {
     if (!enabled || symbols.length === 0) {
       setLoading(false);
@@ -56,20 +58,14 @@ export const useRealtimePrices = ({
     }
 
     try {
-      const { data, error: err } = await supabase
-        .from('price_cache')
-        .select('symbol, mid_price, ask_price, bid_price, timestamp')
-        .in('symbol', symbols);
-
-      if (err) {
-        console.warn('⚠️  Error fetching prices from cache:', err);
-        setError(err.message);
-        setLoading(false);
-        return;
+      const query = encodeURIComponent(symbols.join(','));
+      const res = await fetch(`${apiBase}/prices?symbols=${query}`);
+      if (!res.ok) {
+        throw new Error(`API error ${res.status}`);
       }
-
+      const data = await res.json();
       if (!data || data.length === 0) {
-        console.warn('⚠️  No prices in cache yet - waiting for push-sender to fetch...');
+        console.warn('⚠️  No prices returned yet - waiting for backend updates...');
         setLoading(false);
         return;
       }
@@ -79,15 +75,22 @@ export const useRealtimePrices = ({
       const newBidPrices: Record<string, number> = {};
 
       data.forEach((item: any) => {
-        newPrices[item.symbol] = item.mid_price;
-        newAskPrices[item.symbol] = item.ask_price;
-        newBidPrices[item.symbol] = item.bid_price;
+        // Support both snake_case and camelCase from backend
+        const symbol = item.symbol;
+        const mid = item.mid_price ?? item.midPrice ?? item.price ?? item.last;
+        const ask = item.ask_price ?? item.askPrice ?? item.ask;
+        const bid = item.bid_price ?? item.bidPrice ?? item.bid;
+        const ts = item.timestamp ?? item.updated_at ?? item.updatedAt ?? new Date().toISOString();
+
+        if (typeof mid === 'number') newPrices[symbol] = mid;
+        if (typeof ask === 'number') newAskPrices[symbol] = ask;
+        if (typeof bid === 'number') newBidPrices[symbol] = bid;
+        setLastUpdated(new Date(ts));
       });
 
       setPrices(newPrices);
       setAskPrices(newAskPrices);
       setBidPrices(newBidPrices);
-      setLastUpdated(new Date(data[0].timestamp));
       setError(null);
       setLoading(false);
     } catch (err) {
@@ -97,111 +100,29 @@ export const useRealtimePrices = ({
     }
   }, [enabled, symbols]);
 
-  // Setup Realtime subscription
+  // Setup polling (temporary) and optional WS hookup if available
   useEffect(() => {
     if (!enabled || symbols.length === 0) {
       setLoading(false);
       return;
     }
 
-    console.log('🔄 Setting up subscription for symbols:', symbols);
+    console.log('🔄 Starting price polling for symbols:', symbols);
     fetchInitialPrices();
 
-    let channel: RealtimeChannel | null = null;
-
-    try {
-      // Create unique channel name to prevent conflicts between multiple components
-      const channelName = `price-updates-${symbols.sort().join('-')}`;
-      
-      // Subscribe to price_cache updates from push-sender
-      channel = supabase
-        .channel(channelName, {
-          config: {
-            broadcast: { self: true }
-          }
-        })
-        .on(
-          'postgres_changes',
-          {
-            event: 'UPDATE',
-            schema: 'public',
-            table: 'price_cache',
-            filter: `symbol=in.(${symbols.map((s) => `"${s}"`).join(',')})`
-          },
-          (payload) => {
-            const { symbol, mid_price, ask_price, bid_price, timestamp } = payload.new;
-            
-            setPrices((prev) => ({
-              ...prev,
-              [symbol]: mid_price,
-            }));
-
-            setAskPrices((prev) => ({
-              ...prev,
-              [symbol]: ask_price,
-            }));
-
-            setBidPrices((prev) => ({
-              ...prev,
-              [symbol]: bid_price,
-            }));
-
-            setLastUpdated(new Date(timestamp));
-            setError(null);
-          }
-        )
-        .on(
-          'postgres_changes',
-          {
-            event: 'INSERT',
-            schema: 'public',
-            table: 'price_cache',
-            filter: `symbol=in.(${symbols.map((s) => `"${s}"`).join(',')})`
-          },
-          (payload) => {
-            const { symbol, mid_price, ask_price, bid_price, timestamp } = payload.new;
-            
-            setPrices((prev) => ({
-              ...prev,
-              [symbol]: mid_price,
-            }));
-
-            setAskPrices((prev) => ({
-              ...prev,
-              [symbol]: ask_price,
-            }));
-
-            setBidPrices((prev) => ({
-              ...prev,
-              [symbol]: bid_price,
-            }));
-
-            setLastUpdated(new Date(timestamp));
-            setError(null);
-          }
-        )
-        .subscribe((status) => {
-          if (status === 'SUBSCRIBED') {
-            console.log('✅ Subscribed to real-time price updates');
-          } else if (status === 'CHANNEL_ERROR') {
-            setError('Failed to subscribe to price updates');
-            console.error('❌ Realtime channel error - connection may be unstable');
-          } else if (status === 'CLOSED') {
-            console.warn('⚠️  Realtime channel closed');
-          }
-        });
-    } catch (err) {
-      console.error('❌ Error setting up Realtime subscription:', err);
-      setError(err instanceof Error ? err.message : 'Failed to setup subscription');
-    }
+    // Simple polling every 2s while WebSocket gateway is being migrated
+    pollTimer.current = window.setInterval(() => {
+      fetchInitialPrices();
+    }, 2000);
 
     return () => {
-      if (channel) {
-        console.log('🧹 Cleaning up subscription for:', symbols);
-        supabase.removeChannel(channel);
+      if (pollTimer.current) {
+        window.clearInterval(pollTimer.current);
+        pollTimer.current = null;
+        console.log('🧹 Stopped price polling for:', symbols);
       }
     };
-  }, [enabled, symbols]);
+  }, [enabled, symbols, fetchInitialPrices]);
 
   return {
     prices,
