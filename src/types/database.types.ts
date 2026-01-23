@@ -33,6 +33,201 @@ export type Database = {
         }
         Relationships: []
       }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string | null
+          value: Json | null
+        }
+        Insert: {
+          key: string
+          updated_at?: string | null
+          value?: Json | null
+        }
+        Update: {
+          key?: string
+          updated_at?: string | null
+          value?: Json | null
+        }
+        Relationships: []
+      }
+      email_queue: {
+        Row: {
+          attempts: number | null
+          created_at: string | null
+          email: string
+          email_type: string
+          error_message: string | null
+          id: string
+          max_attempts: number | null
+          name: string | null
+          sent_at: string | null
+          status: string | null
+          user_id: string
+        }
+        Insert: {
+          attempts?: number | null
+          created_at?: string | null
+          email: string
+          email_type: string
+          error_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          name?: string | null
+          sent_at?: string | null
+          status?: string | null
+          user_id: string
+        }
+        Update: {
+          attempts?: number | null
+          created_at?: string | null
+          email?: string
+          email_type?: string
+          error_message?: string | null
+          id?: string
+          max_attempts?: number | null
+          name?: string | null
+          sent_at?: string | null
+          status?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number | null
+          created_at: string | null
+          currency: string | null
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          paid_at: string | null
+          paystack_access_code: string | null
+          paystack_customer_code: string | null
+          paystack_reference: string | null
+          paystack_transaction_id: string | null
+          payment_method: string | null
+          status: string | null
+          subscription_duration: number | null
+          subscription_end: string | null
+          subscription_start: string | null
+          subscription_tier: string | null
+          tier: string | null
+          updated_at: string | null
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          paid_at?: string | null
+          paystack_access_code?: string | null
+          paystack_customer_code?: string | null
+          paystack_reference?: string | null
+          paystack_transaction_id?: string | null
+          payment_method?: string | null
+          status?: string | null
+          subscription_duration?: number | null
+          subscription_end?: string | null
+          subscription_start?: string | null
+          subscription_tier?: string | null
+          tier?: string | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string | null
+          currency?: string | null
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          paid_at?: string | null
+          paystack_access_code?: string | null
+          paystack_customer_code?: string | null
+          paystack_reference?: string | null
+          paystack_transaction_id?: string | null
+          payment_method?: string | null
+          status?: string | null
+          subscription_duration?: number | null
+          subscription_end?: string | null
+          subscription_start?: string | null
+          subscription_tier?: string | null
+          tier?: string | null
+          updated_at?: string | null
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      paystack_webhook_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          event_type: string | null
+          id: string
+          payload: Json | null
+          paystack_reference: string | null
+          processed: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          paystack_reference?: string | null
+          processed?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          event_type?: string | null
+          id?: string
+          payload?: Json | null
+          paystack_reference?: string | null
+          processed?: boolean | null
+        }
+        Relationships: []
+      }
+      price_cache: {
+        Row: {
+          ask_price: number | null
+          bid_price: number | null
+          created_at: string | null
+          id: string
+          mid_price: number | null
+          symbol: string
+          timestamp: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ask_price?: number | null
+          bid_price?: number | null
+          created_at?: string | null
+          id?: string
+          mid_price?: number | null
+          symbol: string
+          timestamp?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ask_price?: number | null
+          bid_price?: number | null
+          created_at?: string | null
+          id?: string
+          mid_price?: number | null
+          symbol?: string
+          timestamp?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -87,6 +282,42 @@ export type Database = {
           p256dh?: string
           updated_at?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      push_notification_queue: {
+        Row: {
+          body: string
+          created_at: string | null
+          data: Json | null
+          id: string
+          processed_at: string | null
+          status: string | null
+          tag: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string | null
+          data?: Json | null
+          id?: string
+          processed_at?: string | null
+          status?: string | null
+          tag?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string | null
+          data?: Json | null
+          id?: string
+          processed_at?: string | null
+          status?: string | null
+          tag?: string | null
+          title?: string
+          user_id?: string
         }
         Relationships: []
       }

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "supabase-poscalfx": {
+      "command": "ssh",
+      "args": [
+        "root@62.171.136.178",
+        "cd /root/supabase-mcp-server && node server.js"
+      ]
+    }
+  }
+}
