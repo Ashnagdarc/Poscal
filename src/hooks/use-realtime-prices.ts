@@ -67,7 +67,7 @@ export const useRealtimePrices = ({
     try {
       pendingRequest.current = true;
       const query = encodeURIComponent(symbols.join(','));
-      const res = await fetch(`${apiBase}/prices?symbols=${query}`);
+      const res = await fetch(`${apiBase}/prices/multiple?symbols=${query}`);
       if (!res.ok) {
         throw new Error(`API error ${res.status}`);
       }
