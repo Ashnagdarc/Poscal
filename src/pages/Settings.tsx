@@ -13,6 +13,7 @@ import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { useSubscription } from '@/contexts/SubscriptionContext';
+import { featureFlagApi } from '@/lib/api';
 
 function RestorePurchaseButton() {
   const { user } = useAuth();
@@ -97,17 +98,8 @@ const Settings = () => {
     if (isAdmin) {
       (async () => {
         try {
-          const { data, error } = await supabase
-            .from('app_settings')
-            .select('value')
-            .eq('key', 'paid_lock_enabled')
-            .limit(1)
-            .maybeSingle();
-          if (error) {
-            console.warn('Could not load paid lock flag', error);
-            return;
-          }
-          setPaidLockEnabled(!!data?.value?.enabled);
+          const enabled = await featureFlagApi.getPaidLock();
+          setPaidLockEnabled(enabled);
         } catch (err) {
           console.error('Could not fetch paid lock flag', err);
         }
@@ -117,12 +109,10 @@ const Settings = () => {
 
   const togglePaidLockFromSettings = async () => {
     try {
-      const newVal = !paidLockEnabled;
-      const payload = { key: 'paid_lock_enabled', value: { enabled: newVal } };
-      const { error } = await supabase.from('app_settings').upsert(payload, { onConflict: 'key' });
-      if (error) throw error;
-      setPaidLockEnabled(!!newVal);
-      toast.success(newVal ? 'Paid lock enabled' : 'Paid lock disabled');
+      const desiredState = !(paidLockEnabled ?? false);
+      const updatedState = await featureFlagApi.setPaidLock(desiredState);
+      setPaidLockEnabled(!!updatedState);
+      toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
     } catch (err: any) {
       console.error('togglePaidLockFromSettings error', err);
       toast.error(err?.message || 'Failed to toggle paid lock');

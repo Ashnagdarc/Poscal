@@ -43,6 +43,45 @@ export interface AuthResponse {
   token: string;
 }
 
+interface FeatureFlagResponse {
+  success: boolean;
+  key: string;
+  enabled: boolean;
+  message?: string;
+}
+
+const parseFeatureFlagError = (err: any) => {
+  const apiMessage = err?.response?.data?.message;
+  const generic = err?.message || 'Failed to reach feature flag API';
+  return apiMessage || generic;
+};
+
+export const featureFlagApi = {
+  getPaidLock: async (): Promise<boolean> => {
+    try {
+      const { data } = await api.get<FeatureFlagResponse>('/feature-flag');
+      if (!data?.success) {
+        throw new Error(data?.message || 'Unable to read paid lock flag');
+      }
+      return !!data.enabled;
+    } catch (err) {
+      throw new Error(parseFeatureFlagError(err));
+    }
+  },
+
+  setPaidLock: async (enabled: boolean): Promise<boolean> => {
+    try {
+      const { data } = await api.post<FeatureFlagResponse>('/feature-flag', { enabled });
+      if (!data?.success) {
+        throw new Error(data?.message || 'Unable to update paid lock flag');
+      }
+      return !!data.enabled;
+    } catch (err) {
+      throw new Error(parseFeatureFlagError(err));
+    }
+  },
+};
+
 export const authApi = {
   signUp: async (email: string, password: string, fullName?: string): Promise<AuthResponse> => {
     const { data } = await api.post<AuthResponse>('/auth/signup', {

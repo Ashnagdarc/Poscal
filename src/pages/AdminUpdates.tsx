@@ -12,6 +12,7 @@ import { useAdmin } from '@/hooks/use-admin';
 import { BottomNav } from '@/components/BottomNav';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
+import { featureFlagApi } from '@/lib/api';
 
 interface AppUpdate {
   id: string;
@@ -68,20 +69,7 @@ const AdminUpdates = () => {
 
   const fetchPaidLock = async () => {
     try {
-      // Read directly from Supabase table for local/dev usage to avoid CORS to production API
-      const { data, error } = await supabase
-        .from('app_settings')
-        .select('value')
-        .eq('key', 'paid_lock_enabled')
-        .limit(1)
-        .maybeSingle();
-
-      if (error) {
-        console.error('fetchPaidLock supabase error', error);
-        return;
-      }
-
-      const enabled = data?.value?.enabled === true;
+      const enabled = await featureFlagApi.getPaidLock();
       setPaidLockEnabled(!!enabled);
     } catch (err) {
       console.error('fetchPaidLock error', err);
@@ -90,13 +78,10 @@ const AdminUpdates = () => {
 
   const togglePaidLock = async () => {
     try {
-      // Use Supabase upsert to set the flag directly (avoids CORS during dev)
-      const newVal = !paidLockEnabled;
-      const payload = { key: 'paid_lock_enabled', value: { enabled: newVal } };
-      const { error } = await supabase.from('app_settings').upsert(payload, { onConflict: 'key' });
-      if (error) throw error;
-      setPaidLockEnabled(!!newVal);
-      toast.success(newVal ? 'Paid lock enabled' : 'Paid lock disabled');
+      const desiredState = !(paidLockEnabled ?? false);
+      const updatedState = await featureFlagApi.setPaidLock(desiredState);
+      setPaidLockEnabled(!!updatedState);
+      toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
     } catch (err: any) {
       console.error('togglePaidLock error', err);
       toast.error(err?.message || 'Failed to toggle paid lock');

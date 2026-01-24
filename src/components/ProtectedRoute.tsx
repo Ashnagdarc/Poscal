@@ -2,6 +2,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useEffect, useState } from 'react';
+import { featureFlagApi } from '@/lib/api';
 
 // Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
 
@@ -20,19 +21,7 @@ export const ProtectedRoute = ({ children, requiresPremium = false }: ProtectedR
     let mounted = true;
     (async () => {
       try {
-        // Read directly from Supabase to avoid CORS when developing locally
-        const { data, error } = await supabase
-          .from('app_settings')
-          .select('value')
-          .eq('key', 'paid_lock_enabled')
-          .limit(1)
-          .maybeSingle();
-        if (error) {
-          console.warn('Could not fetch paid lock flag (supabase)', error);
-          if (mounted) setPaidLockEnabled(false);
-          return;
-        }
-        const enabled = data?.value?.enabled === true;
+        const enabled = await featureFlagApi.getPaidLock();
         if (mounted) setPaidLockEnabled(!!enabled);
       } catch (err) {
         console.warn('Could not fetch paid lock flag', err);
