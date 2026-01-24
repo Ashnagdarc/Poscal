@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "http://62.171.136.178:3001/$1"
+      "destination": "https://api.poscalfx.com/$1"
     },
     {
       "source": "/(.*)",
