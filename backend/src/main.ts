@@ -19,7 +19,9 @@ async function bootstrap() {
     };
   }
 
-  const app = await NestFactory.create(AppModule, httpsOptions ? { httpsOptions } : undefined);
+  const app = await NestFactory.create<any>(AppModule, {
+    ...(httpsOptions && { httpsOptions }),
+  } as any);
   const port = process.env.PORT || 3001;
   
   // Enable CORS for frontend

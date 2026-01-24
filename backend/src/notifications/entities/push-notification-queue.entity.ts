@@ -15,12 +15,6 @@ export class PushNotificationQueue {
   body: string;
 
   @Column({ type: 'text', nullable: true })
-  icon: string | null;
-
-  @Column({ type: 'text', nullable: true })
-  url: string | null;
-
-  @Column({ type: 'jsonb', nullable: true })
   data: any;
 
   @Column({ type: 'varchar', length: 20, default: 'pending' })
