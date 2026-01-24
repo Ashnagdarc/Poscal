@@ -224,8 +224,6 @@ const Signals = () => {
       const data = await signalsApi.getAll(queryParams);
       setSignals(data || []);
       setTotalCount(data?.length || 0);
-          .lte('created_at', endOfDay.toISOString());
-      }
 
       // Pagination
       const from = (currentPage - 1) * SIGNALS_PER_PAGE;
