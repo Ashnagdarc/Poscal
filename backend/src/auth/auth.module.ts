@@ -10,6 +10,8 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { Profile } from './entities/profile.entity';
 import { UserRole } from './entities/user-role.entity';
 import { ServiceTokenGuard } from './guards/service-token.guard';
+import { JwtAuthGuard } from './jwt.guard';
+import { EmulateRLSGuard } from './guards/rls.guard';
 
 @Module({
   imports: [
@@ -27,7 +29,15 @@ import { ServiceTokenGuard } from './guards/service-token.guard';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, ServiceTokenGuard],
-  exports: [AuthService, JwtModule, PassportModule, TypeOrmModule, ServiceTokenGuard],
+  providers: [AuthService, JwtStrategy, ServiceTokenGuard, JwtAuthGuard, EmulateRLSGuard],
+  exports: [
+    AuthService,
+    JwtModule,
+    PassportModule,
+    TypeOrmModule,
+    ServiceTokenGuard,
+    JwtAuthGuard,
+    EmulateRLSGuard,
+  ],
 })
 export class AuthModule {}

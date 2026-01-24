@@ -7,6 +7,7 @@ import { UserRole, AppRole } from './entities/user-role.entity';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { UserPayloadDto } from './dto/auth.dto';
 
 @Injectable()
 export class AuthService {
@@ -41,16 +42,24 @@ export class AuthService {
   }
 
   /**
+   * Alias for decodeToken to match checklist naming
+   */
+  decodeJWT(token: string): any {
+    return this.decodeToken(token);
+  }
+
+  /**
    * Get user info from token
    */
-  getUserFromToken(token: string): any {
+  getUserFromToken(token: string): UserPayloadDto {
     const payload = this.validateToken(token);
     return {
       userId: payload.sub || payload.user_id,
       email: payload.email,
       role: payload.role || 'user',
       aud: payload.aud,
-    };
+      raw: payload,
+    } as UserPayloadDto;
   }
 
   /**

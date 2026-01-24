@@ -317,21 +317,21 @@ backend/
 ## PHASE 4: IMPLEMENT CORE MODULES
 
 ### ⏳ 4.1 AuthModule (JWT + Guards)
-- [ ] Create auth.module.ts
-- [ ] Create jwt.strategy.ts (Passport JWT strategy)
-- [ ] Create jwt.guard.ts (JWT validation guard)
-- [ ] Create RLS guard (EmulateRLS - row-level security emulation)
-- [ ] Create auth.service.ts:
-  - [ ] validateToken(token: string)
-  - [ ] getUserFromToken(token: string)
-  - [ ] decodeJWT(token: string)
-- [ ] Create auth.controller.ts:
-  - [ ] GET /health (health check)
-  - [ ] POST /auth/validate (token validation)
-  - [ ] POST /auth/me (get current user)
-- [ ] Create auth.dto.ts:
-  - [ ] ValidateTokenDto
-  - [ ] UserPayloadDto
+- [x] Create auth.module.ts
+- [x] Create jwt.strategy.ts (Passport JWT strategy)
+- [x] Create jwt.guard.ts (JWT validation guard)
+- [x] Create RLS guard (EmulateRLS - row-level security emulation)
+- [x] Create auth.service.ts:
+  - [x] validateToken(token: string)
+  - [x] getUserFromToken(token: string)
+  - [x] decodeJWT(token: string)
+- [x] Create auth.controller.ts:
+  - [x] GET /health (health check)
+  - [x] POST /auth/validate (token validation)
+  - [x] POST /auth/me (get current user)
+- [x] Create auth.dto.ts:
+  - [x] ValidateTokenDto
+  - [x] UserPayloadDto
 - [ ] Test JWT validation with Supabase tokens OR custom tokens
 - [ ] Document auth flow
 

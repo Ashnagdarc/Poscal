@@ -1,14 +1,20 @@
 import { Controller, Get, Post, Put, Body, UseGuards, Request, Param } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
-import { ValidateTokenDto } from './dto/validate-token.dto';
+import { ValidateTokenDto } from './dto/auth.dto';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { JwtAuthGuard } from './jwt.guard';
+import { EmulateRLSGuard } from './guards/rls.guard';
 
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
+
+  @Get('health')
+  health() {
+    return { status: 'ok' };
+  }
 
   @Post('validate')
   async validateToken(@Body() validateTokenDto: ValidateTokenDto) {
@@ -19,9 +25,9 @@ export class AuthController {
     };
   }
 
-  @Get('me')
-  @UseGuards(AuthGuard('jwt'))
-  async getCurrentUser(@Request() req: any) {
+  @UseGuards(JwtAuthGuard)
+  @Post('me')
+  async currentUser(@Request() req: any) {
     const profile = await this.authService.getProfile(req.user.userId);
     const roles = await this.authService.getUserRoles(req.user.userId);
     return {
@@ -31,8 +37,15 @@ export class AuthController {
     };
   }
 
+  // Keep existing GET /auth/me for backward compatibility
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  async getCurrentUser(@Request() req: any) {
+    return this.currentUser(req);
+  }
+
   @Get('profile/:id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, EmulateRLSGuard)
   async getProfile(@Param('id') id: string) {
     return await this.authService.getProfile(id);
   }
@@ -43,7 +56,7 @@ export class AuthController {
   }
 
   @Put('profile/:id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, EmulateRLSGuard)
   async updateProfile(
     @Param('id') id: string,
     @Body() updateProfileDto: UpdateProfileDto,
@@ -52,7 +65,7 @@ export class AuthController {
   }
 
   @Post('roles')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard)
   async assignRole(@Body() assignRoleDto: AssignRoleDto, @Request() req: any) {
     // Only admins can assign roles
     const isAdmin = await this.authService.isAdmin(req.user.userId);
@@ -63,7 +76,7 @@ export class AuthController {
   }
 
   @Get('roles/:userId')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(JwtAuthGuard, EmulateRLSGuard)
   async getUserRoles(@Param('userId') userId: string) {
     return await this.authService.getUserRoles(userId);
   }
