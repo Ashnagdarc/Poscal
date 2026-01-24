@@ -7,7 +7,6 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { logger } from '@/lib/logger';
 import { useAdmin } from '@/hooks/use-admin';
 import { BottomNav } from '@/components/BottomNav';

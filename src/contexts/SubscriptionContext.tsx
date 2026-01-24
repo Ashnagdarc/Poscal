@@ -1,6 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 
 // Subscription tier types
 export type SubscriptionTier = 'free' | 'premium' | 'pro';

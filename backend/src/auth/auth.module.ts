@@ -9,6 +9,7 @@ import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { Profile } from './entities/profile.entity';
 import { UserRole } from './entities/user-role.entity';
+import { User } from './entities/user.entity';
 import { ServiceTokenGuard } from './guards/service-token.guard';
 import { JwtAuthGuard } from './jwt.guard';
 import { EmulateRLSGuard } from './guards/rls.guard';
@@ -16,7 +17,7 @@ import { EmulateRLSGuard } from './guards/rls.guard';
 @Module({
   imports: [
     ConfigModule,
-    TypeOrmModule.forFeature([Profile, UserRole]),
+    TypeOrmModule.forFeature([Profile, UserRole, User]),
     PassportModule,
     JwtModule.registerAsync({
       inject: [ConfigService],

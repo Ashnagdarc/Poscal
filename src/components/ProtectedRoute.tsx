@@ -2,7 +2,6 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useEffect, useState } from 'react';
-import { supabase } from '@/integrations/supabase/client';
 
 // Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
 

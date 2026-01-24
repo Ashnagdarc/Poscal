@@ -4,6 +4,7 @@ import { ValidateTokenDto } from './dto/auth.dto';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
+import { SignUpDto, SignInDto } from './dto/signup.dto';
 import { JwtAuthGuard } from './jwt.guard';
 import { EmulateRLSGuard } from './guards/rls.guard';
 
@@ -14,6 +15,34 @@ export class AuthController {
   @Get('health')
   health() {
     return { status: 'ok' };
+  }
+
+  @Post('signup')
+  async signup(@Body() signUpDto: SignUpDto) {
+    const { user, token } = await this.authService.signUp(signUpDto);
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        email_verified: user.email_verified,
+      },
+      token,
+    };
+  }
+
+  @Post('signin')
+  async signin(@Body() signInDto: SignInDto) {
+    const { user, token } = await this.authService.signIn(signInDto);
+    return {
+      user: {
+        id: user.id,
+        email: user.email,
+        full_name: user.full_name,
+        email_verified: user.email_verified,
+      },
+      token,
+    };
   }
 
   @Post('validate')

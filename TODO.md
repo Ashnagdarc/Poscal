@@ -316,7 +316,7 @@ backend/
 
 ## PHASE 4: IMPLEMENT CORE MODULES
 
-### ⏳ 4.1 AuthModule (JWT + Guards)
+### ✅ 4.1 AuthModule (JWT + Guards)
 - [x] Create auth.module.ts
 - [x] Create jwt.strategy.ts (Passport JWT strategy)
 - [x] Create jwt.guard.ts (JWT validation guard)
@@ -329,10 +329,19 @@ backend/
   - [x] GET /health (health check)
   - [x] POST /auth/validate (token validation)
   - [x] POST /auth/me (get current user)
+  - [x] POST /auth/signup (user registration with bcrypt)
+  - [x] POST /auth/signin (user login with password validation)
 - [x] Create auth.dto.ts:
   - [x] ValidateTokenDto
   - [x] UserPayloadDto
-- [ ] Test JWT validation with Supabase tokens OR custom tokens
+  - [x] SignUpDto
+  - [x] SignInDto
+- [x] Create auth.service.ts methods:
+  - [x] signUp(SignUpDto): Create user with hashed password
+  - [x] signIn(SignInDto): Validate password and return JWT token
+- [x] Frontend API client (src/lib/api.ts) with axios interceptors
+- [x] AuthContext updated to use backend instead of Supabase
+- [ ] Test JWT validation with custom tokens
 - [ ] Document auth flow
 
 ### ⏳ 4.2 TradingModule (Trades, Signals, Accounts)

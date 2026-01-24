@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Edit, Trash2, AlertTriangle, Wallet, Plus, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { BottomNav } from '@/components/BottomNav';
 import { TradingAccountModal } from '@/components/TradingAccountModal';

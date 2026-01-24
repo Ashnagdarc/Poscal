@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react';
 import { Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
 import { useNotifications } from '@/hooks/use-notifications';
 import { format } from 'date-fns';
 import { toast } from 'sonner';

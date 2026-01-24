@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 interface TradeScreenshotProps {
   tradeId: string;

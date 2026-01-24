@@ -1,13 +1,16 @@
-import { Injectable, UnauthorizedException, NotFoundException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ConflictException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import * as bcrypt from 'bcrypt';
 import { Profile } from './entities/profile.entity';
 import { UserRole, AppRole } from './entities/user-role.entity';
+import { User } from './entities/user.entity';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { UserPayloadDto } from './dto/auth.dto';
+import { SignUpDto, SignInDto } from './dto/signup.dto';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +20,8 @@ export class AuthService {
     private profileRepository: Repository<Profile>,
     @InjectRepository(UserRole)
     private userRoleRepository: Repository<UserRole>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
   ) {}
 
   /**
@@ -148,6 +153,64 @@ export class AuthService {
    */
   async removeRole(userId: string, role: AppRole): Promise<void> {
     await this.userRoleRepository.delete({ user_id: userId, role });
+  }
+
+  /**
+   * Sign up new user
+   */
+  async signUp(signUpDto: SignUpDto): Promise<{ user: User; token: string }> {
+    const existingUser = await this.userRepository.findOne({ where: { email: signUpDto.email } });
+    if (existingUser) {
+      throw new ConflictException('User with this email already exists');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const password_hash = await bcrypt.hash(signUpDto.password, salt);
+
+    const user = this.userRepository.create({
+      email: signUpDto.email,
+      password_hash,
+      full_name: signUpDto.full_name || '',
+      email_verified: false,
+    });
+
+    const savedUser = await this.userRepository.save(user);
+
+    // Create profile
+    await this.profileRepository.save({
+      id: savedUser.id,
+      email: savedUser.email,
+      full_name: savedUser.full_name,
+    });
+
+    // Assign default user role
+    await this.assignRole({ user_id: savedUser.id, role: AppRole.USER });
+
+    const token = this.generateToken(savedUser.id, savedUser.email, AppRole.USER);
+
+    return { user: savedUser, token };
+  }
+
+  /**
+   * Sign in user
+   */
+  async signIn(signInDto: SignInDto): Promise<{ user: User; token: string }> {
+    const user = await this.userRepository.findOne({ where: { email: signInDto.email } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const isPasswordValid = await bcrypt.compare(signInDto.password, user.password_hash);
+    if (!isPasswordValid) {
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    const roles = await this.getUserRoles(user.id);
+    const role = roles.length > 0 ? roles[0].role : AppRole.USER;
+
+    const token = this.generateToken(user.id, user.email, role);
+
+    return { user, token };
   }
 }
 

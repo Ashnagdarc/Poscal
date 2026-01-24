@@ -20,7 +20,6 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { JournalAnalytics } from "@/components/JournalAnalytics";
