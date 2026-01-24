@@ -1,5 +1,7 @@
 import 'crypto'; // Ensure crypto is available globally for TypeORM
 import { Module } from '@nestjs/common';
+import { ServeStaticModule } from '@nestjs/serve-static';
+import { join } from 'path';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -27,6 +29,12 @@ import { getDatabaseConfig } from './config/database.config';
       useFactory: getDatabaseConfig,
     }),
 
+    // Static serving for uploads
+    ServeStaticModule.forRoot({
+      rootPath: join(process.cwd(), 'uploads'),
+      serveRoot: '/uploads',
+    }),
+
     // Scheduling for cron jobs
     ScheduleModule.forRoot(),
 
@@ -37,6 +45,7 @@ import { getDatabaseConfig } from './config/database.config';
     PricesModule,
     NotificationsModule,
     SystemModule,
+    // Storage is a provider-only module; imported where needed
   ],
   controllers: [HealthController],
 })

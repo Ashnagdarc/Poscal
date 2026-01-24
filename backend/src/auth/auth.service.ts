@@ -11,6 +11,7 @@ import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { UserPayloadDto } from './dto/auth.dto';
 import { SignUpDto, SignInDto } from './dto/signup.dto';
+import { RequestResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
@@ -211,6 +212,41 @@ export class AuthService {
     const token = this.generateToken(user.id, user.email, role);
 
     return { user, token };
+  }
+
+  /**
+   * Issue a password reset token (to be emailed to user)
+   */
+  async requestResetPassword(dto: RequestResetDto): Promise<{ token: string }> {
+    const user = await this.userRepository.findOne({ where: { email: dto.email } });
+    if (!user) {
+      // Do not reveal existence
+      return { token: '' };
+    }
+    const token = this.jwtService.sign({ email: user.email, type: 'reset' }, { expiresIn: '30m' });
+    return { token };
+  }
+
+  /**
+   * Reset password using token
+   */
+  async resetPassword(dto: ResetPasswordDto): Promise<{ success: boolean }> {
+    try {
+      const payload = this.jwtService.verify(dto.token);
+      if (payload.type !== 'reset' || payload.email !== dto.email) {
+        throw new UnauthorizedException('Invalid reset token');
+      }
+      const user = await this.userRepository.findOne({ where: { email: dto.email } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      const salt = await bcrypt.genSalt(10);
+      user.password_hash = await bcrypt.hash(dto.new_password, salt);
+      await this.userRepository.save(user);
+      return { success: true };
+    } catch (err) {
+      throw new UnauthorizedException('Invalid or expired token');
+    }
   }
 }
 

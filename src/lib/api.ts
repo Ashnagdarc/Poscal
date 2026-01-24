@@ -118,6 +118,16 @@ export const authApi = {
     const { data } = await api.post('/auth/validate', { token });
     return data;
   },
+
+  requestReset: async (email: string): Promise<{ token: string }> => {
+    const { data } = await api.post('/auth/request-reset', { email });
+    return data;
+  },
+
+  resetPassword: async (email: string, token: string, new_password: string): Promise<{ success: boolean }> => {
+    const { data } = await api.post('/auth/reset-password', { email, token, new_password });
+    return data;
+  },
 };
 
 // Trading Signals API

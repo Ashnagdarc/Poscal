@@ -1,16 +1,19 @@
-import { Controller, Get, Post, Put, Body, UseGuards, Request, Param } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, UseGuards, Request, Param, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { StorageService } from '../storage/storage.service';
 import { AuthService } from './auth.service';
 import { ValidateTokenDto } from './dto/auth.dto';
 import { CreateProfileDto } from './dto/create-profile.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { AssignRoleDto } from './dto/assign-role.dto';
 import { SignUpDto, SignInDto } from './dto/signup.dto';
+import { RequestResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtAuthGuard } from './jwt.guard';
 import { EmulateRLSGuard } from './guards/rls.guard';
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService, private storageService: StorageService) {}
 
   @Get('health')
   health() {
@@ -93,6 +96,31 @@ export class AuthController {
     return await this.authService.updateProfile(id, updateProfileDto);
   }
 
+  // Convenience endpoint to update current user's profile
+  @Put('profile')
+  @UseGuards(JwtAuthGuard)
+  async updateMyProfile(@Request() req: any, @Body() updateProfileDto: UpdateProfileDto) {
+    return await this.authService.updateProfile(req.user.userId, updateProfileDto);
+  }
+
+  // Upload avatar for current user
+  @Post('avatar')
+  @UseGuards(JwtAuthGuard)
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadAvatar(@Request() req: any, @UploadedFile() file: any) {
+    const url = await this.storageService.saveAvatar(req.user.userId, file);
+    await this.authService.updateProfile(req.user.userId, { avatar_url: url } as any);
+    return { url };
+  }
+
+  // Delete avatar reference (optional deletion from storage handled elsewhere)
+  @Delete('avatar')
+  @UseGuards(JwtAuthGuard)
+  async deleteAvatar(@Request() req: any) {
+    await this.authService.updateProfile(req.user.userId, { avatar_url: null } as any);
+    return { success: true };
+  }
+
   @Post('roles')
   @UseGuards(JwtAuthGuard)
   async assignRole(@Body() assignRoleDto: AssignRoleDto, @Request() req: any) {
@@ -108,6 +136,18 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, EmulateRLSGuard)
   async getUserRoles(@Param('userId') userId: string) {
     return await this.authService.getUserRoles(userId);
+  }
+
+  // Request a password reset token
+  @Post('request-reset')
+  async requestReset(@Body() dto: RequestResetDto) {
+    return await this.authService.requestResetPassword(dto);
+  }
+
+  // Perform password reset using token
+  @Post('reset-password')
+  async resetPassword(@Body() dto: ResetPasswordDto) {
+    return await this.authService.resetPassword(dto);
   }
 }
 

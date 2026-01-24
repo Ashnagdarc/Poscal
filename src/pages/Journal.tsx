@@ -167,18 +167,11 @@ const Journal = () => {
     const urls: string[] = [];
     
     for (const file of selectedScreenshots) {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/${tradeId}/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.${fileExt}`;
-      
-      const { error } = await supabase.storage
-        .from('trade-screenshots')
-        .upload(fileName, file);
-      
-      if (!error) {
-        const { data } = supabase.storage
-          .from('trade-screenshots')
-          .getPublicUrl(fileName);
-        urls.push(data.publicUrl);
+      try {
+        const resp = await uploadsApi.uploadTradeScreenshot(tradeId, file);
+        if (resp?.url) urls.push(resp.url);
+      } catch (err) {
+        logger.error('Screenshot upload failed', err);
       }
     }
     

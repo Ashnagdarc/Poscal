@@ -5,7 +5,7 @@ import { logger } from '@/lib/logger';
 import { Tables } from '@/types/database.types';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { format, parseISO } from 'date-fns';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
+import { signalsApi } from '@/lib/api';
 
 type TradingAccount = Tables<'trading_accounts'>;
 type TakenTrade = Tables<'taken_trades'>;
@@ -41,19 +41,15 @@ export const AccountPerformanceDashboard = ({ account }: AccountPerformanceDashb
   }, [user, account]);
 
   const fetchStats = async () => {
-    if (!isSupabaseConfigured || !user) return;
+    if (!user) return;
 
     setLoading(true);
     try {
-      // Fetch all closed trades for this account
-      const { data: trades, error } = await supabase
-        .from('taken_trades')
-        .select('*')
-        .eq('account_id', account.id)
-        .eq('status', 'closed')
-        .order('closed_at', { ascending: true });
-
-      if (error) throw error;
+      // Fetch all taken trades and filter client-side
+      const allTaken = await signalsApi.getUserTakenTrades();
+      const trades = (allTaken || [])
+        .filter((t: any) => t.account_id === account.id && t.status === 'closed')
+        .sort((a: any, b: any) => (a.closed_at ?? '').localeCompare(b.closed_at ?? ''));
 
       if (!trades || trades.length === 0) {
         setStats({

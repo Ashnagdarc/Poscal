@@ -1,4 +1,6 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { StorageService } from '../../storage/storage.service';
 import { AuthGuard } from '@nestjs/passport';
 import { TradesService } from '../services/trades.service';
 import { CreateTradeDto, UpdateTradeDto } from '../dto/trading-journal.dto';
@@ -6,7 +8,7 @@ import { CreateTradeDto, UpdateTradeDto } from '../dto/trading-journal.dto';
 @Controller('trades')
 @UseGuards(AuthGuard('jwt'))
 export class TradesController {
-  constructor(private tradesService: TradesService) {}
+  constructor(private tradesService: TradesService, private storageService: StorageService) {}
 
   @Get()
   async findAll(@Request() req: any, @Query() query: any) {
@@ -42,5 +44,30 @@ export class TradesController {
   async remove(@Param('id') id: string, @Request() req: any) {
     await this.tradesService.remove(id, req.user.userId);
     return { message: 'Trade deleted successfully' };
+  }
+
+  // Upload a trade screenshot (stub storage)
+  @Post(':id/screenshots')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadScreenshot(
+    @Param('id') id: string,
+    @UploadedFile() file: any,
+    @Request() req: any,
+  ) {
+    const url = await this.storageService.saveTradeScreenshot(id, file);
+    return { url };
+  }
+
+  // Delete a trade screenshot (stub)
+  @Delete('screenshots/:screenshotId')
+  async deleteScreenshot(@Param('screenshotId') screenshotId: string, @Request() req: any) {
+    // Expect screenshotId format: tradeId/fileName
+    const parts = screenshotId.split('/');
+    if (parts.length >= 2) {
+      const tradeId = parts[0];
+      const fileName = parts.slice(1).join('/');
+      await this.storageService.deleteTradeScreenshot(tradeId, fileName);
+    }
+    return { success: true };
   }
 }

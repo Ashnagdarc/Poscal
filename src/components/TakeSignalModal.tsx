@@ -88,7 +88,6 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
       });
 
       console.log('✅ Signal taken successfully');
-      }
 
       console.log('✅ Taken trade created:', newTrade);
 

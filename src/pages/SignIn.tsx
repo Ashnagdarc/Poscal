@@ -191,13 +191,12 @@ const SignIn = () => {
         </div>
 
         <div className="flex items-center justify-end">
-          <button
-            type="button"
-            onClick={() => setShowForgotPassword(true)}
+          <Link
+            to="/forgot-password"
             className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
 
         <button

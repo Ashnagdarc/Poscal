@@ -15,7 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
-import { supabase } from "@/lib/supabase-shim";
+import { usersApi, uploadsApi } from "@/lib/api";
 
 interface Profile {
   id: string;
@@ -46,17 +46,20 @@ const Profile = () => {
     if (!user) return;
     
     setIsLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (error) {
+    try {
+      const data = await usersApi.getProfile();
+      if (data) {
+        setProfile({
+          id: data.id,
+          email: data.email || null,
+          full_name: data.full_name || null,
+          avatar_url: data.avatar_url || null,
+          created_at: data.created_at || new Date().toISOString(),
+        });
+        setFullName(data.full_name || "");
+      }
+    } catch (error) {
       logger.error('Error fetching profile:', error);
-    } else if (data) {
-      setProfile(data);
-      setFullName(data.full_name || "");
     }
     setIsLoading(false);
   };
@@ -87,37 +90,15 @@ const Profile = () => {
       const fileExt = file.name.split('.').pop();
       const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
 
-      // Delete old avatar if exists
-      if (profile?.avatar_url) {
-        const oldPath = profile.avatar_url.split('/avatars/')[1];
-        if (oldPath) {
-          await supabase.storage.from('avatars').remove([oldPath]);
-        }
+      // Upload new avatar via backend
+      const resp = await uploadsApi.uploadAvatar(file);
+      // Optionally delete old avatar if backend supports it
+      if (profile?.avatar_url && resp?.previous_id) {
+        try { await uploadsApi.deleteAvatar(resp.previous_id); } catch {}
       }
 
-      // Upload new avatar
-      const { error: uploadError } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file, { upsert: true });
-
-      if (uploadError) {
-        throw uploadError;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('avatars')
-        .getPublicUrl(fileName);
-
-      // Update profile with new avatar URL
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({ avatar_url: urlData.publicUrl })
-        .eq('id', user.id);
-
-      if (updateError) {
-        throw updateError;
-      }
+      // Refresh profile
+      await fetchProfile();
 
       toast.success("Avatar updated!");
       fetchProfile();
@@ -142,17 +123,13 @@ const Profile = () => {
     if (!user) return;
     
     setIsSaving(true);
-    const { error } = await supabase
-      .from('profiles')
-      .update({ full_name: fullName })
-      .eq('id', user.id);
-
-    if (error) {
-      toast.error("Failed to update profile");
-    } else {
+    try {
+      await usersApi.updateProfile({ full_name: fullName });
       toast.success("Profile updated");
       setIsEditing(false);
       fetchProfile();
+    } catch (error) {
+      toast.error("Failed to update profile");
     }
     setIsSaving(false);
   };

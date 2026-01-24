@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/hooks/use-notifications';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
+import { appUpdatesApi } from '@/lib/api';
 
 interface AppUpdate {
   id: string;
@@ -28,32 +28,25 @@ export const AppUpdateModal = () => {
 
   useEffect(() => {
     const checkForUpdates = async () => {
-      if (!isSupabaseConfigured) return;
 
       try {
         // Fetch the latest active update
-        const { data, error } = await supabase
-          .from('app_updates')
-          .select('id, title, description, created_at')
-          .eq('is_active', true)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (error || !data) return;
+        const updates = await appUpdatesApi.getAll();
+        const latestActive = (updates || []).find((u: any) => u.is_active) || updates?.[0];
+        if (!latestActive) return;
 
         // Check view count from localStorage
         const viewsRaw = localStorage.getItem(STORAGE_KEY);
         const views: ViewRecord = viewsRaw ? JSON.parse(viewsRaw) : {};
 
-        const currentViews = views[data.id] || 0;
+        const currentViews = views[latestActive.id] || 0;
 
         if (currentViews < MAX_VIEWS) {
           setUpdate(data);
           setOpen(true);
 
           // Increment view count
-          views[data.id] = currentViews + 1;
+          views[latestActive.id] = currentViews + 1;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(views));
         }
       } catch (err) {
@@ -66,84 +59,7 @@ export const AppUpdateModal = () => {
     return () => clearTimeout(timer);
   }, []);
 
-  // Listen for new updates and update changes in real-time
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-
-    const channel = supabase
-      .channel('app-updates-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'app_updates',
-        },
-        (payload) => {
-          const newUpdate = payload.new as AppUpdate & { is_active: boolean };
-          if (newUpdate.is_active) {
-            // Show toast notification
-            toast.info(`📢 ${newUpdate.title}`, {
-              description: newUpdate.description.slice(0, 100) + (newUpdate.description.length > 100 ? '...' : ''),
-              duration: 5000
-            });
-            
-            // Send push notification
-            if (permission === 'granted') {
-              sendNotification(`📢 App Update: ${newUpdate.title}`, {
-                body: newUpdate.description.slice(0, 100) + (newUpdate.description.length > 100 ? '...' : '')
-              });
-            }
-
-            // Reset view count for this new update and show modal
-            const viewsRaw = localStorage.getItem(STORAGE_KEY);
-            const views: ViewRecord = viewsRaw ? JSON.parse(viewsRaw) : {};
-            views[newUpdate.id] = 1;
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(views));
-            
-            setUpdate(newUpdate);
-            setOpen(true);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'DELETE',
-          schema: 'public',
-          table: 'app_updates',
-        },
-        (payload) => {
-          // If the deleted update is the one being shown, close the modal
-          if (update && payload.old && (payload.old as { id: string }).id === update.id) {
-            setOpen(false);
-            setUpdate(null);
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'app_updates',
-        },
-        (payload) => {
-          // If update is deactivated, close the modal
-          if (update && payload.new && (payload.new as { id: string; is_active: boolean }).id === update.id) {
-            if (!(payload.new as { id: string; is_active: boolean }).is_active) {
-              setOpen(false);
-              setUpdate(null);
-            }
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [update, permission, sendNotification]);
+  // Note: Real-time updates via Supabase channels removed; rely on periodic checks or backend push
 
   if (!update) return null;
 

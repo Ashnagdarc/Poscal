@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/lib/supabase-shim";
+import { authApi } from "@/lib/api";
 
 const ResetPassword = () => {
   const [password, setPassword] = useState("");
@@ -14,25 +14,20 @@ const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [resetEmail, setResetEmail] = useState("");
+  const [resetToken, setResetToken] = useState("");
   const [isValidSession, setIsValidSession] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
-    // Check if we have a valid recovery session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        setIsValidSession(true);
-      } else {
-        toast({
-          title: "Invalid or expired link",
-          description: "Please request a new password reset link.",
-          variant: "destructive",
-        });
-        navigate("/signin");
-      }
-    });
-  }, [navigate, toast]);
+    const params = new URLSearchParams(window.location.search);
+    const email = params.get("email") || "";
+    const token = params.get("token") || "";
+    setResetEmail(email);
+    setResetToken(token);
+    setIsValidSession(!!email && !!token);
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,24 +50,34 @@ const ResetPassword = () => {
       return;
     }
 
-    setLoading(true);
-
-    const { error } = await supabase.auth.updateUser({
-      password: password,
-    });
-
-    if (error) {
+    if (!resetEmail || !resetToken) {
       toast({
-        title: "Error updating password",
-        description: error.message,
+        title: "Invalid reset link",
+        description: "Missing email or token. Please request a new reset link.",
         variant: "destructive",
       });
-    } else {
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const res = await authApi.resetPassword(resetEmail, resetToken, password);
+      if (res?.success) {
+        toast({
+          title: "Password updated!",
+          description: "Your password has been successfully updated. You can now sign in with your new password.",
+        });
+        navigate("/signin");
+      } else {
+        throw new Error('Reset failed');
+      }
+    } catch (err: any) {
       toast({
-        title: "Password updated!",
-        description: "Your password has been successfully updated. You can now sign in with your new password.",
+        title: "Error updating password",
+        description: err?.response?.data?.message || err?.message || 'Failed to update password',
+        variant: "destructive",
       });
-      navigate("/signin");
     }
 
     setLoading(false);
