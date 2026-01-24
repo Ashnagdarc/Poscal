@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { calculatePositionSize, calculatePnL, calculatePips } from '@/lib/forexCalculations';
+import { supabase } from '@/lib/supabase-shim';
 
 interface UpdateSignalModalProps {
   signalId: string;

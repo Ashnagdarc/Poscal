@@ -11,6 +11,8 @@ import { ConfirmDialog } from '@/components/ui/confirm-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tables } from '@/types/database.types';
 import { logger } from '@/lib/logger';
+import { accountsApi, signalsApi, notificationsApi } from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 type TradingAccount = Tables<'trading_accounts'>;
 
@@ -42,34 +44,19 @@ export const ManageAccounts = () => {
 
     setLoading(true);
     try {
-      // Fetch accounts
-      const { data: accountsData, error: accountsError } = await supabase
-        .from('trading_accounts')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
+      // Fetch accounts from new API
+      const accountsData = await accountsApi.getAll();
 
-      if (accountsError) throw accountsError;
+      // Fetch active trades from signalsApi (taken trades)
+      const takenTrades = await signalsApi.getUserTakenTrades();
 
-      // Fetch active trades count for each account
-      const accountsWithTrades: AccountWithTrades[] = [];
-      
-      for (const account of accountsData || []) {
-        const { count, error: countError } = await supabase
-          .from('taken_trades')
-          .select('*', { count: 'exact', head: true })
-          .eq('account_id', account.id)
-          .eq('status', 'open');
-
-        if (countError) {
-          logger.error('Error fetching trades count:', countError);
-        }
-
-        accountsWithTrades.push({
-          ...account,
-          activeTradesCount: count || 0,
-        });
-      }
+      // Count active trades per account
+      const accountsWithTrades: AccountWithTrades[] = accountsData.map(account => ({
+        ...account,
+        activeTradesCount: takenTrades.filter(
+          (trade: any) => trade.account_id === account.id && trade.status === 'open'
+        ).length,
+      }));
 
       setAccounts(accountsWithTrades);
     } catch (error) {
@@ -98,21 +85,15 @@ export const ManageAccounts = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('trading_accounts')
-        .delete()
-        .eq('id', account.id)
-        .eq('user_id', user!.id);
-
-      if (error) throw error;
+      await accountsApi.delete(account.id);
 
       // Queue notification for account deletion
-      await supabase.rpc('queue_user_push_notification', {
-        p_user_id: user!.id,
-        p_title: `🗑️ Account Deleted: ${account.account_name}`,
-        p_body: `Your ${account.platform} trading account has been deleted`,
-        p_tag: 'account-deleted',
-        p_data: { type: 'account_deleted', account_name: account.account_name },
+      await notificationsApi.queueNotification({
+        user_id: user!.id,
+        title: `🗑️ Account Deleted: ${account.account_name}`,
+        body: `Your ${account.platform} trading account has been deleted`,
+        tag: 'account-deleted',
+        data: { type: 'account_deleted', account_name: account.account_name },
       });
 
       toast.success('Trading account deleted');
@@ -128,21 +109,15 @@ export const ManageAccounts = () => {
   const handleToggleActive = async (account: TradingAccount) => {
     try {
       const newStatus = !account.is_active;
-      const { error } = await supabase
-        .from('trading_accounts')
-        .update({ is_active: newStatus })
-        .eq('id', account.id)
-        .eq('user_id', user!.id);
-
-      if (error) throw error;
+      await accountsApi.update(account.id, { is_active: newStatus });
 
       // Queue notification for account status change
-      await supabase.rpc('queue_user_push_notification', {
-        p_user_id: user!.id,
-        p_title: newStatus ? `✅ Account Active: ${account.account_name}` : `⏸️ Account Inactive: ${account.account_name}`,
-        p_body: `Your ${account.platform} account is now ${newStatus ? 'active' : 'inactive'}`,
-        p_tag: 'account-status-changed',
-        p_data: { type: 'account_status_changed', is_active: newStatus },
+      await notificationsApi.queueNotification({
+        user_id: user!.id,
+        title: newStatus ? `✅ Account Active: ${account.account_name}` : `⏸️ Account Inactive: ${account.account_name}`,
+        body: `Your ${account.platform} account is now ${newStatus ? 'active' : 'inactive'}`,
+        tag: 'account-status-changed',
+        data: { type: 'account_status_changed', is_active: newStatus },
       });
 
       toast.success(account.is_active ? 'Account deactivated' : 'Account activated');

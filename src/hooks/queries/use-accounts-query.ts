@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { accountsApi } from '@/lib/api';
 
 interface TradingAccount {
   id: string;
@@ -19,19 +20,13 @@ export const useAccountsQuery = () => {
     queryFn: async (): Promise<TradingAccount[]> => {
       if (!user) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase
-        .from('trading_accounts')
-        .select('id, account_name, platform, is_active')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (error) {
+      try {
+        const data = await accountsApi.getAll();
+        return data || [];
+      } catch (error) {
         logger.error('Error fetching accounts:', error);
         throw error;
       }
-
-      return data || [];
     },
     enabled: !!user,
     staleTime: 1000 * 60 * 2, // Consider fresh for 2 minutes

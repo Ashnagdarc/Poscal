@@ -15,6 +15,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
+import { supabase } from "@/lib/supabase-shim";
 
 interface Profile {
   id: string;

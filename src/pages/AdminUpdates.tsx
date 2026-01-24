@@ -12,7 +12,8 @@ import { useAdmin } from '@/hooks/use-admin';
 import { BottomNav } from '@/components/BottomNav';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { featureFlagApi } from '@/lib/api';
+import { featureFlagApi, appUpdatesApi, notificationsApi } from '@/lib/api';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 interface AppUpdate {
   id: string;
@@ -42,15 +43,8 @@ const AdminUpdates = () => {
   }, [isAdmin, adminLoading, navigate]);
 
   const fetchUpdates = async () => {
-    if (!isSupabaseConfigured) return;
-
     try {
-      const { data, error } = await supabase
-        .from('app_updates')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await appUpdatesApi.getAll();
       setUpdates(data || []);
     } catch (error) {
       logger.error('Error fetching updates:', error);
@@ -97,30 +91,21 @@ const AdminUpdates = () => {
 
     setSubmitting(true);
     try {
-      const { error } = await supabase.from('app_updates').insert({
+      await appUpdatesApi.create({
         title: formData.title.trim(),
         description: formData.description.trim(),
-        is_active: true,
       });
-
-      if (error) throw error;
 
       // Queue push notification for all subscribers
       try {
-        logger.log('📤 Queuing push notification via RPC...');
-        const { data: pushResult, error: pushError } = await supabase.rpc('queue_push_notification', {
-          p_title: `📢 App Update: ${formData.title.trim()}`,
-          p_body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
-          p_tag: 'app-update',
-          p_data: { type: 'update' },
+        logger.log('📤 Queuing push notification...');
+        await notificationsApi.queueNotification({
+          title: `📢 App Update: ${formData.title.trim()}`,
+          body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
+          tag: 'app-update',
+          data: { type: 'update' },
         });
-        logger.log('✅ Push notification queued:', pushResult);
-        if (pushError) {
-          logger.error('❌ Push error:', pushError);
-          toast.error('Push notification failed to queue');
-        } else {
-          logger.log('📨 Push sent successfully:', pushResult.data);
-        }
+        logger.log('✅ Push notification queued successfully');
       } catch (pushError) {
         logger.error('❌ Exception sending push notification:', pushError);
         toast.error('Push notification error: ' + (pushError as Error).message);
@@ -141,10 +126,7 @@ const AdminUpdates = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      const { error } = await supabase.from('app_updates').delete().eq('id', id);
-
-      if (error) throw error;
-
+      await appUpdatesApi.delete(id);
       toast.success('Update deleted');
       setUpdates(updates.filter((u) => u.id !== id));
     } catch (error) {
@@ -155,14 +137,10 @@ const AdminUpdates = () => {
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('app_updates')
-        .update({ is_active: !currentStatus })
-        .eq('id', id);
-
-      if (error) throw error;
-
-      toast.success(currentStatus ? 'Update deactivated' : 'Update activated');
+      // TODO: Backend needs to implement PATCH /system/updates/:id endpoint
+      // await appUpdatesApi.update(id, { is_active: !currentStatus });
+      toast.info('Toggle active not yet implemented in backend');
+      // Temporary: just refetch
       fetchUpdates();
     } catch (error) {
       logger.error('Error toggling update:', error);

@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
+import { subscriptionApi } from '@/lib/api';
 
 // Subscription tier types
 export type SubscriptionTier = 'free' | 'premium' | 'pro';
@@ -74,23 +75,16 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       setIsLoading(true);
       
-      // Call the RPC function to get subscription details
-      const { data, error } = await supabase
-        .rpc('get_subscription_details', { p_user_id: user.id });
+      // Call the subscription API
+      const data = await subscriptionApi.getDetails();
 
-      if (error) {
-        console.error('Error fetching subscription details:', error);
-        return;
-      }
-
-      if (data && data.length > 0) {
-        const details = data[0];
+      if (data) {
         setSubscriptionDetails({
-          paymentStatus: details.payment_status || 'free',
-          subscriptionTier: details.subscription_tier || 'free',
-          expiresAt: details.expires_at ? new Date(details.expires_at) : null,
-          trialEndsAt: details.trial_ends_at ? new Date(details.trial_ends_at) : null,
-          isActive: details.is_active || false,
+          paymentStatus: data.payment_status || 'free',
+          subscriptionTier: data.subscription_tier || 'free',
+          expiresAt: data.expires_at ? new Date(data.expires_at) : null,
+          trialEndsAt: data.trial_ends_at ? new Date(data.trial_ends_at) : null,
+          isActive: data.is_active || false,
         });
       }
     } catch (error) {

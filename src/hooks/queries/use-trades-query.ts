@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { tradesApi } from '@/lib/api';
 
 interface Trade {
   id: string;
@@ -36,8 +37,14 @@ export const useTradesQuery = () => {
     queryFn: async (): Promise<Trade[]> => {
       if (!user) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase
-        .from('trading_journal')
+      try {
+        const data = await tradesApi.getAll();
+        return data || [];
+      } catch (error) {
+        logger.error('Error fetching trades:', error);
+        throw error;
+      }
+    },
         .select(`
           *,
           trading_accounts!left(account_name)
@@ -82,15 +89,14 @@ export const useAddTradeMutation = () => {
     mutationFn: async (newTrade: AddTradeData) => {
       if (!user) throw new Error('User not authenticated');
 
-      const { data, error } = await supabase
-        .from('trading_journal')
-        .insert({
-          user_id: user.id,
-          ...newTrade,
-          status: 'open',
-          entry_date: new Date().toISOString(),
-        })
-        .select()
+      const tradeData = {
+        ...newTrade,
+        status: 'open',
+        entry_date: new Date().toISOString(),
+      };
+
+      const data = await tradesApi.create(tradeData);
+      return data;
         .single();
 
       if (error) throw error;
@@ -124,13 +130,8 @@ export const useUpdateTradeMutation = () => {
     mutationFn: async ({ id, ...updates }: UpdateTradeData) => {
       if (!user) throw new Error('User not authenticated');
 
-      const { error } = await supabase
-        .from('trading_journal')
-        .update(updates)
-        .eq('id', id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      const data = await tradesApi.update(id, updates);
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
@@ -172,13 +173,7 @@ export const useDeleteTradeMutation = () => {
     mutationFn: async (tradeId: string) => {
       if (!user) throw new Error('User not authenticated');
 
-      const { error } = await supabase
-        .from('trading_journal')
-        .delete()
-        .eq('id', tradeId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      await tradesApi.delete(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });

@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { Loader2, TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
 import { Tables } from '@/types/database.types';
+import { signalsApi } from '@/lib/api';
 
 type TradingAccount = Tables<'trading_accounts'>;
 
@@ -62,14 +63,11 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
     setLoading(true);
 
     try {
-      // Check if already taken (only check for open trades)
-      const { data: existingTrade, error: checkError } = await supabase
-        .from('taken_trades')
-        .select('id, status')
-        .eq('user_id', user.id)
-        .eq('signal_id', signal.id)
-        .eq('status', 'open')
-        .maybeSingle();
+      // Check if already taken by fetching user's taken trades
+      const takenTrades = await signalsApi.getUserTakenTrades();
+      const existingTrade = takenTrades.find(
+        (trade: any) => trade.signal_id === signal.id && trade.status === 'open'
+      );
 
       if (existingTrade) {
         toast.error('You have already taken this signal');
@@ -77,46 +75,19 @@ export const TakeSignalModal = ({ open, onOpenChange, signal, accounts, onTradeT
         return;
       }
 
-      // Delete any closed/cancelled taken_trades to avoid unique constraint violation
-      // (database has unique constraint on user_id + signal_id)
-      const { error: deleteError } = await supabase
-        .from('taken_trades')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('signal_id', signal.id)
-        .in('status', ['closed', 'cancelled']);
-
-      if (deleteError) {
-        console.warn('⚠️ Could not delete old taken trades:', deleteError);
-        // Continue anyway - might not have any old trades
-      }
-
-      console.log('📝 Creating taken trade:', {
-        user_id: user.id,
-        account_id: selectedAccountId,
+      console.log('📝 Taking signal:', {
         signal_id: signal.id,
+        account_id: selectedAccountId,
         risk_percent: riskPercentNum,
-        risk_amount: riskAmount,
-        status: 'open',
       });
 
-      // Insert the taken trade
-      const { data: newTrade, error: insertError } = await supabase
-        .from('taken_trades')
-        .insert({
-          user_id: user.id,
-          account_id: selectedAccountId,
-          signal_id: signal.id,
-          risk_percent: riskPercentNum,
-          risk_amount: riskAmount,
-          status: 'open',
-        })
-        .select()
-        .single();
+      // Take the signal using the API
+      await signalsApi.takeSignal(signal.id, {
+        account_id: selectedAccountId,
+        risk_percent: riskPercentNum,
+      });
 
-      if (insertError) {
-        console.error('❌ Failed to create taken trade:', insertError);
-        throw insertError;
+      console.log('✅ Signal taken successfully');
       }
 
       console.log('✅ Taken trade created:', newTrade);

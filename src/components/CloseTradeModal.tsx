@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { calculatePips, calculatePnL, calculatePositionSize } from '@/lib/forexCalculations';
 import { Tables } from '@/types/database.types';
+import { supabase } from '@/lib/supabase-shim';
 
 type TakenTrade = Tables<'taken_trades'>;
 

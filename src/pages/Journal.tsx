@@ -33,6 +33,8 @@ import { filtersReducer, initialFiltersState, modalReducer, initialModalState } 
 import { NewTradeFormSchema } from "@/lib/formValidation";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-shim";
+import { tradesApi, accountsApi } from "@/lib/api";
 
 interface Trade {
   id: string;
@@ -133,26 +135,17 @@ const Journal = () => {
     if (!user) return;
     
     setIsLoading(true);
-    // Fetch with left join to get account name, but exclude trades from deleted accounts
-    const { data, error } = await supabase
-      .from('trading_journal')
-      .select(`
-        *,
-        trading_accounts!left(account_name)
-      `)
-      .eq('user_id', user.id)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      logger.error('Error fetching trades:', error);
-      toast.error("Failed to load trades");
-    } else {
-      // Map the data to include account_name from the join
+    try {
+      const data = await tradesApi.getAll();
+      // Map data to ensure account_name field exists
       const mappedData = (data || []).map(trade => ({
         ...trade,
-        account_name: trade.trading_accounts?.account_name || 'No Account',
+        account_name: trade.account_name || trade.trading_accounts?.account_name || 'No Account',
       }));
       setTrades(mappedData);
+    } catch (error) {
+      logger.error('Error fetching trades:', error);
+      toast.error("Failed to load trades");
     }
     setIsLoading(false);
   };
@@ -160,17 +153,11 @@ const Journal = () => {
   const fetchAccounts = async () => {
     if (!user) return;
     
-    const { data, error } = await supabase
-      .from('trading_accounts')
-      .select('id, account_name, platform, is_active')
-      .eq('user_id', user.id)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
-    
-    if (error) {
-      logger.error('Error fetching accounts:', error);
-    } else {
+    try {
+      const data = await accountsApi.getAll();
       setAccounts(data || []);
+    } catch (error) {
+      logger.error('Error fetching accounts:', error);
     }
   };
 
@@ -219,10 +206,8 @@ const Journal = () => {
       return;
     }
 
-    const { data, error } = await supabase
-      .from('trading_journal')
-      .insert({
-        user_id: user.id,
+    try {
+      const tradeData = {
         pair: newTrade.pair,
         direction: newTrade.direction,
         entry_price: newTrade.entry_price ? parseFloat(newTrade.entry_price) : null,
@@ -234,14 +219,10 @@ const Journal = () => {
         account_id: newTrade.account_id || null,
         status: 'open',
         entry_date: new Date().toISOString(),
-      })
-      .select()
-      .single();
+      };
 
-    if (error) {
-      logger.error('Error adding trade:', error);
-      toast.error("Failed to add trade");
-    } else {
+      const data = await tradesApi.create(tradeData);
+      
       if (selectedScreenshots.length > 0 && data) {
         await uploadScreenshots(data.id);
       }
@@ -250,6 +231,9 @@ const Journal = () => {
       dispatchModals({ type: 'CLOSE_ADD_TRADE' });
       resetForm();
       fetchTrades();
+    } catch (error) {
+      logger.error('Error adding trade:', error);
+      toast.error("Failed to add trade");
     }
   };
 
@@ -264,9 +248,8 @@ const Journal = () => {
       return;
     }
 
-    const { error } = await supabase
-      .from('trading_journal')
-      .update({
+    try {
+      const updates = {
         pair: newTrade.pair,
         direction: newTrade.direction,
         entry_price: newTrade.entry_price ? parseFloat(newTrade.entry_price) : null,
@@ -276,18 +259,16 @@ const Journal = () => {
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
         account_id: newTrade.account_id || null,
-      })
-      .eq('id', modals.editingTrade.id)
-      .eq('user_id', user.id);
+      };
 
-    if (error) {
-      toast.error("Failed to update trade");
-    } else {
+      await tradesApi.update(modals.editingTrade.id, updates);
       toast.success("Trade updated");
       dispatchModals({ type: 'CLOSE_ADD_TRADE' });
       dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
       resetForm();
       fetchTrades();
+    } catch (error) {
+      toast.error("Failed to update trade");
     }
   };
 
@@ -376,38 +357,28 @@ const Journal = () => {
   const handleCloseTrade = async (tradeId: string, pnl: number) => {
     if (!user) return;
     
-    const { error } = await supabase
-      .from('trading_journal')
-      .update({ 
+    try {
+      await tradesApi.update(tradeId, { 
         status: 'closed', 
         pnl,
         exit_date: new Date().toISOString() 
-      })
-      .eq('id', tradeId)
-      .eq('user_id', user.id);
-
-    if (error) {
-      toast.error("Failed to close trade");
-    } else {
+      });
       toast.success("Trade closed");
       fetchTrades();
+    } catch (error) {
+      toast.error("Failed to close trade");
     }
   };
 
   const handleDeleteTrade = async (tradeId: string) => {
     if (!user) return;
     
-    const { error } = await supabase
-      .from('trading_journal')
-      .delete()
-      .eq('id', tradeId)
-      .eq('user_id', user.id);
-
-    if (error) {
-      toast.error("Failed to delete trade");
-    } else {
+    try {
+      await tradesApi.delete(tradeId);
       toast.success("Trade deleted");
       fetchTrades();
+    } catch (error) {
+      toast.error("Failed to delete trade");
     }
   };
 

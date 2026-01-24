@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import { adminApi } from '@/lib/api';
 
 export const useAdmin = () => {
   const { user } = useAuth();
@@ -8,24 +9,15 @@ export const useAdmin = () => {
 
   useEffect(() => {
     const checkAdminStatus = async () => {
-      if (!user || !isSupabaseConfigured) {
+      if (!user) {
         setIsAdmin(false);
         setLoading(false);
         return;
       }
 
       try {
-        const { data, error } = await supabase.rpc('has_role', {
-          _user_id: user.id,
-          _role: 'admin'
-        });
-
-        if (error) {
-          console.error('Error checking admin status:', error);
-          setIsAdmin(false);
-        } else {
-          setIsAdmin(data === true);
-        }
+        const hasAdminRole = await adminApi.hasRole('admin');
+        setIsAdmin(hasAdminRole);
       } catch (err) {
         console.error('Error checking admin status:', err);
         setIsAdmin(false);

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
+import { notificationsApi } from '@/lib/api';
 
 const VAPID_PUBLIC_KEY = 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
 
@@ -58,20 +59,19 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
           if (subscription) {
             logger.log('[push] Browser has subscription:', subscription.endpoint);
             // Verify subscription exists in database
-            const { data, error } = await supabase
-              .from('push_subscriptions')
-              .select('id')
-              .eq('endpoint', subscription.endpoint)
-              .maybeSingle();
-            
-            if (error) {
+            try {
+              const subscriptions = await notificationsApi.getSubscriptions();
+              const found = subscriptions.some(sub => sub.endpoint === subscription.endpoint);
+              
+              if (found) {
+                logger.log('[push] Subscription verified in database');
+                setIsSubscribed(true);
+              } else {
+                logger.warn('[push] Browser has subscription but not found in database. Will re-subscribe.');
+                setIsSubscribed(false);
+              }
+            } catch (error) {
               logger.error('[push] Error checking subscription in database:', error);
-              setIsSubscribed(false);
-            } else if (data) {
-              logger.log('[push] Subscription verified in database:', data.id);
-              setIsSubscribed(true);
-            } else {
-              logger.warn('[push] Browser has subscription but not found in database. Will re-subscribe.');
               setIsSubscribed(false);
             }
           } else {
@@ -129,34 +129,18 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         authLength: subJson.keys?.auth?.length
       });
 
-      // Send subscription to server via RPC
-      logger.log('[push] Calling subscribe_push_notification RPC...');
-      const { data, error } = await supabase.rpc('subscribe_push_notification', {
-        p_subscription: subJson,
-        p_user_id: user?.id ?? null,
+      // Send subscription to server
+      logger.log('[push] Saving subscription to server...');
+      await notificationsApi.subscribe({
+        endpoint: subJson.endpoint!,
+        keys: {
+          p256dh: subJson.keys!.p256dh!,
+          auth: subJson.keys!.auth!,
+        },
+        user_agent: navigator.userAgent,
       });
 
-      logger.log('[push] subscribe_push_notification response:', { data, error });
-
-      if (error) {
-        logger.error('[push] subscribe-push failed:', error);
-        setIsSubscribed(false);
-        throw new Error(error.message || 'Failed to save subscription to server');
-      }
-
-      if (data?.error) {
-        logger.error('[push] subscribe-push returned error:', data.error);
-        setIsSubscribed(false);
-        throw new Error(data.error);
-      }
-
-      if (!data?.success) {
-        logger.error('[push] subscribe-push did not return success:', data);
-        setIsSubscribed(false);
-        throw new Error('Failed to save subscription to database');
-      }
-
-      logger.log('[push] subscribe-push success - subscription saved to database:', data);
+      logger.log('[push] Subscription saved to server successfully');
       setIsSubscribed(true);
       return true;
     } catch (error) {

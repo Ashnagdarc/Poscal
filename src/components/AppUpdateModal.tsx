@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/hooks/use-notifications';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 interface AppUpdate {
   id: string;

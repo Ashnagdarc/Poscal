@@ -9,6 +9,7 @@ import { toast } from 'sonner';
 import { Loader2, Plus, Edit } from 'lucide-react';
 import { Tables } from '@/types/database.types';
 import { AccountFormSchema } from '@/lib/formValidation';
+import { supabase } from '@/lib/supabase-shim';
 
 type TradingAccount = Tables<'trading_accounts'>;
 

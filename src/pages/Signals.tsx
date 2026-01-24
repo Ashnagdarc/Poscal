@@ -21,6 +21,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { Tables } from '@/types/database.types';
 import { useNavigate } from 'react-router-dom';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
+import { signalsApi, accountsApi } from '@/lib/api';
 
 type TradingAccount = Tables<'trading_accounts'>;
 type TakenTrade = Tables<'taken_trades'>;
@@ -121,17 +123,10 @@ const Signals = () => {
 
   // Fetch trading accounts
   const fetchAccounts = async () => {
-    if (!isSupabaseConfigured || !user) return;
+    if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('trading_accounts')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
+      const data = await accountsApi.getAll();
       setAccounts(data || []);
     } catch (error) {
       logger.error('Error fetching accounts:', error);
@@ -140,15 +135,10 @@ const Signals = () => {
 
   // Fetch taken trades
   const fetchTakenTrades = async () => {
-    if (!isSupabaseConfigured || !user) return;
+    if (!user) return;
     
     try {
-      const { data, error } = await supabase
-        .from('taken_trades')
-        .select('*')
-        .eq('user_id', user.id);
-      
-      if (error) throw error;
+      const data = await signalsApi.getUserTakenTrades();
       setTakenTrades(data || []);
     } catch (error) {
       logger.error('Error fetching taken trades:', error);
@@ -191,17 +181,7 @@ const Signals = () => {
     if (!takenTrade) return;
 
     try {
-      const { error } = await supabase
-        .from('taken_trades')
-        .update({ 
-          status: 'cancelled',
-          closed_at: new Date().toISOString()
-        })
-        .eq('id', takenTrade.id)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
-
+      await signalsApi.updateTakenTrade(takenTrade.id, 'cancelled');
       toast.success('Trade cancelled successfully');
       fetchTakenTrades();
       fetchAccounts(); // Refresh in case of balance updates
@@ -218,45 +198,32 @@ const Signals = () => {
   const totalPnLPercent = totalInitialBalance > 0 ? (totalPnL / totalInitialBalance) * 100 : 0;
 
   const fetchSignals = async () => {
-    if (!isSupabaseConfigured) {
-      setError('Supabase not configured');
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError(null);
 
     try {
-      let query = supabase
-        .from('trading_signals')
-        .select('*', { count: 'exact' });
-
-      // Apply filters
+      // Build query params
+      const queryParams: any = {};
+      
       if (pairFilter !== 'All Pairs') {
-        query = query.eq('currency_pair', pairFilter);
+        queryParams.currency_pair = pairFilter;
       }
       
       if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter);
+        queryParams.status = statusFilter;
       }
 
       if (resultFilter !== 'all') {
-        if (resultFilter === 'pending') {
-          query = query.is('result', null);
-        } else {
-          query = query.eq('result', resultFilter);
-        }
+        queryParams.result = resultFilter === 'pending' ? 'null' : resultFilter;
       }
       
       if (dateFilter) {
-        const startOfDay = new Date(dateFilter);
-        startOfDay.setHours(0, 0, 0, 0);
-        const endOfDay = new Date(dateFilter);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        query = query
-          .gte('created_at', startOfDay.toISOString())
+        queryParams.date = dateFilter;
+      }
+
+      const data = await signalsApi.getAll(queryParams);
+      setSignals(data || []);
+      setTotalCount(data?.length || 0);
           .lte('created_at', endOfDay.toISOString());
       }
 

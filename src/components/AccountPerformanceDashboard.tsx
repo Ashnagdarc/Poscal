@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import { Tables } from '@/types/database.types';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { format, parseISO } from 'date-fns';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 type TradingAccount = Tables<'trading_accounts'>;
 type TakenTrade = Tables<'taken_trades'>;

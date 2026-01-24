@@ -10,6 +10,7 @@ import { calculatePips } from '@/lib/forexCalculations';
 import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
 import { SignalFormSchema } from '@/lib/formValidation';
+import { signalsApi, notificationsApi } from '@/lib/api';
 
 const CURRENCY_PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD',
@@ -146,35 +147,18 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
         signalData.notes = formData.notes;
       }
 
-      console.log('📤 Attempting to insert signal with data:', JSON.stringify(signalData, null, 2));
+      console.log('📤 Creating signal with data:', JSON.stringify(signalData, null, 2));
 
-      const { error } = await supabase.from('trading_signals').insert(signalData);
-
-      if (error) {
-        console.error('Database error details:', error);
-        console.error('Error code:', error.code);
-        console.error('Error message:', error.message);
-        console.error('Error details:', error.details);
-        console.error('Error hint:', error.hint);
-        
-        // Try to fetch an existing signal to compare structure
-        const { data: existingSignal } = await supabase
-          .from('trading_signals')
-          .select('*')
-          .limit(1)
-          .single();
-        console.log('📋 Example existing signal structure:', existingSignal);
-        
-        throw error;
-      }
+      await signalsApi.create(signalData);
+      console.log('✅ Signal created successfully');
 
       // Queue push notification to all subscribers
       try {
-        await supabase.rpc('queue_push_notification', {
-          p_title: `📊 New Signal: ${formData.currency_pair}`,
-          p_body: `${formData.direction.toUpperCase()} at ${entry}`,
-          p_tag: 'new-signal',
-          p_data: { type: 'signal' },
+        await notificationsApi.queueNotification({
+          title: `📊 New Signal: ${formData.currency_pair}`,
+          body: `${formData.direction.toUpperCase()} at ${entry}`,
+          tag: 'new-signal',
+          data: { type: 'signal' },
         });
       } catch (pushError) {
         console.error('Failed to queue push notification:', pushError);
