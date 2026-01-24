@@ -229,7 +229,7 @@ const Signals = () => {
       const from = (currentPage - 1) * SIGNALS_PER_PAGE;
       const to = from + SIGNALS_PER_PAGE - 1;
 
-      const { data, error: fetchError, count } = await query
+      const { data: paginatedData, error: fetchError, count } = await query
         .order('created_at', { ascending: false })
         .range(from, to);
 
@@ -237,8 +237,8 @@ const Signals = () => {
 
       // Limit signals for free users
       const signalsToDisplay = (!isPaid && !isAdmin) 
-        ? (data || []).slice(0, FREE_SIGNALS_LIMIT) 
-        : (data || []);
+        ? (paginatedData || []).slice(0, FREE_SIGNALS_LIMIT) 
+        : (paginatedData || []);
 
       setSignals(signalsToDisplay);
       setTotalCount(count || 0);

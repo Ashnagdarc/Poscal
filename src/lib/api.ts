@@ -314,6 +314,11 @@ export const appUpdatesApi = {
   delete: async (id: string): Promise<void> => {
     await api.delete(`/system/updates/${id}`);
   },
+
+  update: async (id: string, updates: { is_active?: boolean; title?: string; description?: string }): Promise<any> => {
+    const { data } = await api.patch(`/system/updates/${id}`, updates);
+    return data;
+  },
 };
 
 // Admin API
@@ -326,6 +331,48 @@ export const adminApi = {
     } catch (error) {
       return false;
     }
+  },
+};
+
+// Users API
+export const usersApi = {
+  getProfile: async (): Promise<any> => {
+    const { data } = await api.get('/auth/me');
+    return data;
+  },
+
+  updateProfile: async (updates: any): Promise<any> => {
+    const { data } = await api.put('/auth/profile', updates);
+    return data;
+  },
+};
+
+// Uploads API (avatars, trade screenshots)
+export const uploadsApi = {
+  uploadAvatar: async (file: File): Promise<any> => {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await api.post('/auth/avatar', form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
+  deleteAvatar: async (pathOrId: string): Promise<void> => {
+    await api.delete('/auth/avatar', { params: { id: pathOrId } });
+  },
+
+  uploadTradeScreenshot: async (tradeId: string, file: File): Promise<any> => {
+    const form = new FormData();
+    form.append('file', file);
+    const { data } = await api.post(`/trades/${tradeId}/screenshots`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return data;
+  },
+
+  deleteTradeScreenshot: async (screenshotId: string): Promise<void> => {
+    await api.delete(`/trades/screenshots/${screenshotId}`);
   },
 };
 

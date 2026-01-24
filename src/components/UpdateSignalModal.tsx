@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { calculatePositionSize, calculatePnL, calculatePips } from '@/lib/forexCalculations';
-import { supabase } from '@/lib/supabase-shim';
+import { signalsApi, notificationsApi } from '@/lib/api';
 
 interface UpdateSignalModalProps {
   signalId: string;
@@ -111,12 +111,7 @@ export const UpdateSignalModal = ({
         updateData.closed_at = new Date().toISOString();
       }
 
-      const { error } = await supabase
-        .from('trading_signals')
-        .update(updateData)
-        .eq('id', signalId);
-
-      if (error) throw error;
+      await signalsApi.update(signalId, updateData);
 
       // If signal is being closed, update all taken trades
       if (status === 'closed' && currentStatus !== 'closed' && updateData.result) {
@@ -140,11 +135,11 @@ export const UpdateSignalModal = ({
         notificationBody = `The ${currencyPair} signal has been cancelled`;
       }
 
-      await supabase.rpc('queue_push_notification', {
-        p_title: notificationTitle,
-        p_body: notificationBody,
-        p_tag: 'signal-updated',
-        p_data: { type: 'signal_updated', pair: currencyPair, status, result },
+      await notificationsApi.queueNotification({
+        title: notificationTitle,
+        body: notificationBody,
+        tag: 'signal-updated',
+        data: { type: 'signal_updated', pair: currencyPair, status, result },
       });
 
       toast.success('Signal updated successfully!');
@@ -162,21 +157,16 @@ export const UpdateSignalModal = ({
     try {
       console.log(`🔄 Calling RPC function to close taken trades for signal ${signalId} with result: ${signalResult}`);
       
-      // Call the RPC function which has SECURITY DEFINER
-      const { data, error } = await supabase.rpc('close_signal_trades', {
-        p_signal_id: signalId,
-        p_signal_result: signalResult
-      });
-
-      if (error) {
-        console.error('❌ RPC function error:', error);
-        throw error;
+      // Close open taken trades for this signal using signalsApi
+      const takenTrades = await signalsApi.getUserTakenTrades();
+      const openTrades = takenTrades.filter((t: any) => t.signal_id === signalId && t.status === 'open');
+      let processed = 0;
+      for (const t of openTrades) {
+        await signalsApi.updateTakenTrade(t.id, 'closed', undefined);
+        processed++;
       }
-
-      console.log('✅ Edge Function response:', data);
-      
-      if (data.count > 0) {
-        toast.success(`Processed ${data.count} trade(s). Check your journal!`);
+      if (processed > 0) {
+        toast.success(`Processed ${processed} trade(s). Check your journal!`);
       } else {
         toast.info('No open trades found for this signal');
       }
@@ -191,18 +181,10 @@ export const UpdateSignalModal = ({
       console.log(`🔄 Cancelling all open taken trades for signal ${signalId}`);
       
       // Simply close taken trades as cancelled with no P/L impact
-      const { error } = await supabase
-        .from('taken_trades')
-        .update({ 
-          status: 'cancelled',
-          closed_at: new Date().toISOString()
-        })
-        .eq('signal_id', signalId)
-        .eq('status', 'open');
-
-      if (error) {
-        console.error('❌ Error cancelling taken trades:', error);
-        throw error;
+      const takenTrades = await signalsApi.getUserTakenTrades();
+      const openTrades = takenTrades.filter((t: any) => t.signal_id === signalId && t.status === 'open');
+      for (const t of openTrades) {
+        await signalsApi.updateTakenTrade(t.id, 'cancelled');
       }
 
       console.log('✅ Cancelled taken trades');
@@ -219,48 +201,26 @@ export const UpdateSignalModal = ({
       console.log(`🗑️ Deleting signal ${signalId}`);
       
       // First, delete or cancel all taken trades for this signal
-      const { data: takenTrades, error: fetchError } = await supabase
-        .from('taken_trades')
-        .select('id')
-        .eq('signal_id', signalId);
-
-      if (fetchError) throw fetchError;
-
-      const takenTradeCount = takenTrades?.length || 0;
+      const allTakenTrades = await signalsApi.getUserTakenTrades();
+      const signalTakenTrades = allTakenTrades.filter((t: any) => t.signal_id === signalId);
+      const takenTradeCount = signalTakenTrades.length;
 
       // Delete all taken trades (admin can delete via RLS or we cancel them)
       if (takenTradeCount > 0) {
-        const { error: deleteTakenTradesError } = await supabase
-          .from('taken_trades')
-          .delete()
-          .eq('signal_id', signalId);
-
-        // If delete fails due to RLS, try updating to cancelled instead
-        if (deleteTakenTradesError) {
-          console.log('Could not delete taken trades, marking as cancelled instead');
-          const { error: cancelError } = await supabase
-            .from('taken_trades')
-            .update({ status: 'cancelled', closed_at: new Date().toISOString() })
-            .eq('signal_id', signalId);
-          
-          if (cancelError) throw cancelError;
+        for (const t of signalTakenTrades) {
+          await signalsApi.updateTakenTrade(t.id, 'cancelled');
         }
       }
 
       // Now delete the signal
-      const { error: deleteSignalError } = await supabase
-        .from('trading_signals')
-        .delete()
-        .eq('id', signalId);
-
-      if (deleteSignalError) throw deleteSignalError;
+      await signalsApi.delete(signalId);
 
       // Queue notification that signal was deleted
-      await supabase.rpc('queue_push_notification', {
-        p_title: `🗑️ Signal Deleted: ${currencyPair}`,
-        p_body: `The ${currencyPair} ${direction.toUpperCase()} signal has been deleted by admin`,
-        p_tag: 'signal-deleted',
-        p_data: { type: 'signal_deleted', pair: currencyPair },
+      await notificationsApi.queueNotification({
+        title: `🗑️ Signal Deleted: ${currencyPair}`,
+        body: `The ${currencyPair} ${direction.toUpperCase()} signal has been deleted by admin`,
+        tag: 'signal-deleted',
+        data: { type: 'signal_deleted', pair: currencyPair },
       });
 
       console.log('✅ Signal deleted');
