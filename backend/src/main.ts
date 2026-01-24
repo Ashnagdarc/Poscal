@@ -1,27 +1,12 @@
 import 'crypto'; // Ensure crypto is available globally for TypeORM
-import * as fs from 'fs';
-import * as https from 'https';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  // Determine if we should use HTTPS
-  const useHttps = process.env.NODE_ENV === 'production' || process.env.USE_HTTPS === 'true';
-  const certPath = process.env.SSL_CERT_PATH || '/etc/letsencrypt/live/api.poscalfx.com/fullchain.pem';
-  const keyPath = process.env.SSL_KEY_PATH || '/etc/letsencrypt/live/api.poscalfx.com/privkey.pem';
-
-  let httpsOptions: https.ServerOptions | undefined = undefined;
-  if (useHttps && fs.existsSync(certPath) && fs.existsSync(keyPath)) {
-    httpsOptions = {
-      cert: fs.readFileSync(certPath),
-      key: fs.readFileSync(keyPath),
-    };
-  }
-
-  const app = await NestFactory.create<any>(AppModule, {
-    ...(httpsOptions && { httpsOptions }),
-  } as any);
+  // Note: HTTPS is handled by nginx reverse proxy on VPS
+  // Backend runs on HTTP locally and nginx terminates TLS
+  const app = await NestFactory.create<any>(AppModule);
   const port = process.env.PORT || 3001;
   
   // Enable CORS for frontend
@@ -37,9 +22,9 @@ async function bootstrap() {
     transform: true,
   }));
 
-  const protocol = httpsOptions ? 'https' : 'http';
+  const protocol = 'http';
   await app.listen(port, () => {
-    const host = httpsOptions ? 'api.poscalfx.com' : 'localhost';
+    const host = 'localhost';
     Logger.log(`🚀 NestJS backend running on ${protocol}://${host}:${port}`, 'Bootstrap');
     Logger.log(`📚 API docs available at ${protocol}://${host}:${port}/api/docs`, 'Bootstrap');
   });

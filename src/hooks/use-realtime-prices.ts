@@ -47,6 +47,7 @@ export const useRealtimePrices = ({
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const pollTimer = useRef<number | null>(null);
+  const pendingRequest = useRef<boolean>(false); // Prevent duplicate requests
   // Use relative API path so Vercel proxy handles HTTPS securely
   const apiBase = '/api';
 
@@ -57,7 +58,14 @@ export const useRealtimePrices = ({
       return;
     }
 
+    // Prevent duplicate simultaneous requests
+    if (pendingRequest.current) {
+      console.log('⏭️  Skipping fetch - request already in progress');
+      return;
+    }
+
     try {
+      pendingRequest.current = true;
       const query = encodeURIComponent(symbols.join(','));
       const res = await fetch(`${apiBase}/prices?symbols=${query}`);
       if (!res.ok) {
@@ -97,6 +105,8 @@ export const useRealtimePrices = ({
       console.error('❌ Error in fetchInitialPrices:', err);
       setError(err instanceof Error ? err.message : 'Failed to fetch prices');
       setLoading(false);
+    } finally {
+      pendingRequest.current = false; // Always release the lock
     }
   }, [enabled, symbols]);
 
@@ -110,10 +120,10 @@ export const useRealtimePrices = ({
     console.log('🔄 Starting price polling for symbols:', symbols);
     fetchInitialPrices();
 
-    // Simple polling every 2s while WebSocket gateway is being migrated
+    // Poll every 30 seconds to match backend cache duration and reduce load
     pollTimer.current = window.setInterval(() => {
       fetchInitialPrices();
-    }, 2000);
+    }, 30000); // 30 seconds
 
     return () => {
       if (pollTimer.current) {
