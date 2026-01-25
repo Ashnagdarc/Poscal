@@ -1,0 +1,31 @@
+[Unit]
+Description=PosCal Push-Sender Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/poscal/push-sender
+Environment="NODE_ENV=production"
+EnvironmentFile=/opt/poscal/push-sender/.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=poscal-push-sender
+
+# Resource limits
+LimitNOFILE=65536
+LimitNPROC=4096
+
+# Security
+PrivateTmp=true
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/poscal/push-sender /var/log/poscal-push-sender.log
+
+[Install]
+WantedBy=multi-user.target

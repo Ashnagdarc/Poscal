@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Delete, Body, Param, UseGuards, Request, Patch, Query } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Body, Param, UseGuards, Request, Patch, Query, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { NotificationsService } from './notifications.service';
 import { CreatePushSubscriptionDto, CreatePushNotificationDto, CreateEmailDto } from './dto/notifications.dto';
@@ -7,6 +7,8 @@ import { ServiceTokenGuard } from '../auth/guards/service-token.guard';
 
 @Controller('notifications')
 export class NotificationsController {
+  private readonly logger = new Logger(NotificationsController.name);
+
   constructor(private notificationsService: NotificationsService) {}
 
   @Get('push/subscriptions')
@@ -65,7 +67,18 @@ export class NotificationsController {
   @UseGuards(ServiceTokenGuard)
   async getPendingPushNotifications(@Query('limit') limit?: string) {
     const take = limit ? parseInt(limit, 10) : 100;
-    return await this.notificationsService.getPendingPushNotifications(take);
+    const pending = await this.notificationsService.getPendingPushNotifications(take);
+
+    const now = Date.now();
+    const oldestCreatedAt = pending[0]?.created_at ? new Date(pending[0].created_at).getTime() : undefined;
+    const oldestAgeMs = oldestCreatedAt ? now - oldestCreatedAt : undefined;
+    const targetedCount = pending.reduce((count, notification) => (notification.user_id ? count + 1 : count), 0);
+
+    this.logger.log(
+      `notifications/push/pending :: ${JSON.stringify({ limit: take, returned: pending.length, targeted: targetedCount, oldestAgeMs })}`,
+    );
+
+    return pending;
   }
 
   @Get('email/pending')

@@ -1,304 +1,147 @@
-# PosCal Push Notification Sender & Live Price Service
+# PosCal Push Sender Services (Notification Worker + Price Ingestor)
 
-A lightweight Docker service that:
-1. **Sends push notifications** to your PosCal users via Web Push API
-2. **Streams real-time forex prices** via Finnhub WebSocket (unlimited, free)
+This package now ships **two focused Node.js workers** that talk to the NestJS backend only:
 
-> 📚 **For detailed guides:**
-> - [WebSocket Migration](../docs/WEBSOCKET_MIGRATION.md) - NEW: Real-time price updates
-> - [Push Notification Deployment](../docs/PUSH_NOTIFICATION_DEPLOYMENT.md) - Notification setup
+1. **Notification Worker** – polls `/notifications/push/pending`, delivers Web Push messages, and updates queue status.
+2. **Price Ingestor** – holds a single Finnhub WebSocket connection, batches ticks, and POSTs to `/prices/batch-update`.
 
-## 📦 What's Included
-
-- `index.ts` - Main service logic with WebSocket integration
-- `Dockerfile` - Multi-stage build for ~100MB image
-- `docker-compose.yml` - Ready-to-deploy configuration
-- `.env.example` - Environment variable template
-
-## ✨ Features
-
-### Push Notifications
-- **Automated Polling**: Checks database every 30 seconds for new notifications
-- **Web Push API**: Delivers notifications using standard Web Push protocol
-- **VAPID Authentication**: Secure notification delivery with VAPID keys
-- **Auto Cleanup**: Removes expired push subscriptions automatically
-
-### Real-Time Prices (NEW!)
-- **WebSocket Connection**: Single persistent connection to Finnhub
-- **Live Market Data**: Instant price updates for 15+ forex pairs
-- **Unlimited Updates**: No API rate limits (free tier)
-- **Auto-Reconnect**: Resilient connection with automatic recovery
-- **Supabase Integration**: Streams prices to `price_cache` table
-
-### System
-- **Resource Efficient**: ~60-90MB memory footprint
-- **Docker Ready**: Containerized for easy deployment
-- **Production Grade**: Auto-restart, health checks, graceful shutdown
-
-## 🚀 Quick Start (DigitalOcean Droplet)
-
-### 1. Copy Files to Your Droplet
-
-```bash
-# On your local machine
-cd push-sender
-scp -r * root@your-droplet-ip:/opt/poscal-push-sender/
-```
-
-Or clone your repo and navigate to the folder:
-
-```bash
-# On your droplet
-cd /opt
-git clone <your-repo> poscal-push-sender
-cd poscal-push-sender/push-sender
-```
-
-### 2. Create Environment File
-
-```bash
-# Copy example and edit
-cp .env.example .env
-nano .env
-```
-
-Fill in these **required** values:
-
-```env
-SUPABASE_URL=https://xxxxx.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-FINNHUB_API_KEY=your_finnhub_api_key_here
-VAPID_PUBLIC_KEY=BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0
-VAPID_PRIVATE_KEY=your-private-key-here
-```
-
-**How to get these values:**
-
-1. **Supabase URL & Service Role Key:**
-   - Go to your [Supabase dashboard](https://supabase.com/dashboard)
-   - Project Settings → API
-   - Copy "Project URL" and "service_role" key
-
-2. **Finnhub API Key:** ⭐ NEW
-   - Sign up at [Finnhub.io](https://finnhub.io/register)
-   - Free tier includes unlimited WebSocket connections
-   - Copy API key from dashboard
-
-3. **VAPID Public Key:**
-   - Already in your code: [src/hooks/use-push-notifications.ts](../src/hooks/use-push-notifications.ts#L7)
-   - Or check your Supabase project (if stored there)
-
-4. **VAPID Private Key:**
-   - If you don't have it, generate new keys:
-     ```bash
-     npx web-push generate-vapid-keys
-     ```
-   - ⚠️ **Warning:** If you generate new keys, update the public key in your frontend code!
-
-### 3. Deploy
-
-**Option A: Standalone Docker**
-
-```bash
-# Build and run
-docker build -t poscal-push-sender .
-docker run -d \
-  --name poscal-push-sender \
-  --restart unless-stopped \
-  --env-file .env \
-  poscal-push-sender
-
-# Check logs
-docker logs -f poscal-push-sender
-```
-
-**Option B: Add to Existing docker-compose.yml**
-
-```bash
-# If you have other services running with docker-compose,
-# add this service to your existing docker-compose.yml:
-
-services:
-  # ... your existing services ...
-  
-  poscal-push-sender:
-    build:
-      context: ./push-sender
-      dockerfile: Dockerfile
-    container_name: poscal-push-sender
-    restart: unless-stopped
-    env_file: ./push-sender/.env
-    deploy:
-      resources:
-        limits:
-          memory: 128M
-
-# Then restart
-docker-compose up -d
-```
-
-### 4. Verify It's Working
-
-```bash
-# Check logs
-docker logs -f poscal-push-sender
-
-# You should see:
-# 🚀 Push Notification Sender started
-# 📊 Polling every 30 seconds
-# 🔗 Connected to: https://xxxxx.supabase.co
-```
-
-### 5. Test Push Notifications
-
-1. **Subscribe to push** in your app (bell icon)
-2. **Create a test notification** (e.g., create a new signal or app update)
-3. **Check service logs:**
-   ```bash
-   docker logs poscal-push-sender
-   ```
-4. **You should see within 30 seconds:**
-   ```
-   📬 Processing 1 notification(s)...
-   📤 Sending to 1 subscriber(s)...
-   ✅ Notification "Test": 1 sent, 0 failed
-   ```
-
-## 📊 Resource Usage
-
-- **Memory:** ~50-80MB (128MB limit set)
-- **CPU:** <1% (mostly idle)
-- **Network:** ~2MB/day for 1000 notifications
-- **Disk:** ~100MB (Docker image)
-
-Perfect for adding to your existing droplet!
-
-## 🔧 Configuration
-
-### Environment Variables
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `SUPABASE_URL` | ✅ | - | Your Supabase project URL |
-| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | - | Service role key (has admin access) |
-| `VAPID_PUBLIC_KEY` | ✅ | - | Web Push public key |
-| `VAPID_PRIVATE_KEY` | ✅ | - | Web Push private key |
-| `VAPID_SUBJECT` | ❌ | `mailto:admin@poscal.app` | Contact email |
-| `POLL_INTERVAL` | ❌ | `30000` | Check interval (ms) |
-
-### Adjusting Poll Interval
-
-```env
-# Faster delivery (every 10 seconds)
-POLL_INTERVAL=10000
-
-# Less frequent (every 2 minutes)
-POLL_INTERVAL=120000
-```
-
-## 🐛 Troubleshooting
-
-### Service won't start
-
-```bash
-# Check logs for errors
-docker logs poscal-push-sender
-
-# Common issues:
-# - Missing environment variables
-# - Invalid Supabase credentials
-# - Network issues
-```
-
-### Notifications not sending
-
-```bash
-# 1. Check if notifications are queued
-# In your Supabase SQL editor:
-SELECT * FROM push_notification_queue WHERE status = 'pending';
-
-# 2. Check if subscriptions exist
-SELECT * FROM push_subscriptions;
-
-# 3. Check service logs
-docker logs -f poscal-push-sender
-```
-
-### Expired subscriptions
-
-The service automatically removes expired subscriptions (HTTP 410/404 responses).
-
-### Generate new VAPID keys
-
-```bash
-npx web-push generate-vapid-keys
-
-# Then update:
-# 1. .env file (VAPID_PRIVATE_KEY)
-# 2. src/hooks/use-push-notifications.ts (VAPID_PUBLIC_KEY)
-# 3. Ask users to re-subscribe
-```
-
-## 🔄 Updates
-
-```bash
-# Pull latest code
-cd /opt/poscal-push-sender
-git pull
-
-# Rebuild and restart
-docker-compose build
-docker-compose up -d
-
-# Or standalone:
-docker build -t poscal-push-sender .
-docker stop poscal-push-sender
-docker rm poscal-push-sender
-docker run -d --name poscal-push-sender --restart unless-stopped --env-file .env poscal-push-sender
-```
-
-## 📝 Monitoring
-
-### Check service status
-
-```bash
-docker ps | grep poscal-push-sender
-```
-
-### View live logs
-
-```bash
-docker logs -f poscal-push-sender
-```
-
-### Restart service
-
-```bash
-docker restart poscal-push-sender
-```
-
-### Check resource usage
-
-```bash
-docker stats poscal-push-sender
-```
-
-## 🔒 Security Notes
-
-- **Service role key:** Has admin access to your database. Keep it secret!
-- **VAPID private key:** Required for push notifications. Keep it secret!
-- **Non-root user:** Service runs as `nodejs` user (UID 1001) for security
-- **Resource limits:** 128MB memory limit prevents runaway processes
-
-## 📞 Support
-
-If you encounter issues:
-
-1. Check logs: `docker logs poscal-push-sender`
-2. Verify environment variables: `docker exec poscal-push-sender env | grep SUPABASE`
-3. Test database connection: Check Supabase dashboard for active connections
-4. Verify VAPID keys: Use `npx web-push generate-vapid-keys` to generate new ones if needed
+Both workers share common config/logging/retry helpers in `src/lib` and can be run independently on the same host.
 
 ---
 
-**Ready to deploy?** Follow the Quick Start steps above! 🚀
+## 📁 Repository Layout
+
+| Path | Purpose |
+|------|---------|
+| `src/notification-worker.ts` | Entry point for queue processing service |
+| `src/price-ingestor.ts` | Entry point for Finnhub → backend bridge |
+| `src/workers/*` | Worker implementations |
+| `src/lib/*` | Shared config, logger, NestJS Axios client, retry helper, symbol map |
+| `ecosystem.config.js` | PM2 definition for running both workers |
+| `.env.example` | Environment template referencing NestJS + VAPID secrets |
+
+---
+
+## 🔐 Environment Variables
+
+The workers rely on the NestJS internal API rather than talking to the database directly. Copy `.env.example` to `.env` and customize these values:
+
+| Name | Required | Default | Notes |
+|------|----------|---------|-------|
+| `NESTJS_API_URL` | ✅ | `http://localhost:3000` | Base URL for the backend |
+| `NESTJS_SERVICE_TOKEN` | ✅ | – | Must match `SERVICE_TOKEN` configured in the backend |
+| `FINNHUB_API_KEY` | ✅ (prices) | – | Required only when running the price ingestor |
+| `VAPID_PUBLIC_KEY` | ✅ (notifications) | – | Already embedded in the frontend; keep in sync |
+| `VAPID_PRIVATE_KEY` | ✅ (notifications) | – | Private VAPID key used to sign pushes |
+| `VAPID_SUBJECT` | ❌ | `mailto:info@poscalfx.com` | Contact email advertised in VAPID headers |
+| `POLL_INTERVAL` | ❌ | `30000` | Notification polling interval in ms |
+| `BATCH_INTERVAL` | ❌ | `1000` | Price flush interval in ms |
+
+`dotenv` is loaded automatically by the shared config helper, so placing the `.env` file in the `push-sender/` directory is enough for both workers.
+
+---
+
+## 🧪 Local Development
+
+```bash
+cd push-sender
+npm install
+cp .env.example .env   # update the secrets mentioned above
+
+# Type-check & build once
+npm run build
+
+# Run the workers (in two terminals)
+npm run dev:notification
+npm run dev:prices
+
+# Alternatively run one-off
+npm start            # notification worker (alias of start:notification)
+npm run start:prices # price ingestor
+```
+
+- The dev scripts use `tsx watch` so code changes hot-reload.
+- Each worker can be started/stopped independently, which is handy when you only need notifications on a staging box.
+
+---
+
+## 🚀 Production Deployment with PM2
+
+The repo ships with `ecosystem.config.js` to keep both workers alive via PM2:
+
+```bash
+cd /opt/poscal/push-sender
+npm ci
+npm run build
+
+# Start both apps via ecosystem config
+pm2 start ecosystem.config.js
+
+# Persist across reboots
+pm2 startup
+pm2 save
+
+# Inspect
+pm2 ls
+pm2 logs poscal-notification-worker
+pm2 logs poscal-price-ingestor
+```
+
+The config ensures:
+- Processes run from the repo root so `.env` is discovered.
+- Each worker is limited to ~250 MB and auto restarts on failure.
+
+> Prefer Systemd? You can still wrap the same `node dist/<worker>.js` commands in unit files, but PM2 keeps the Node-specific ergonomics (logs, restarts, env inheritance) simple.
+
+---
+
+## 🧱 Build & Release Artifacts
+
+`npm run build` compiles both entry points to `dist/notification-worker.js` and `dist/price-ingestor.js`. Any process manager (PM2, Systemd, Docker) should execute those files rather than the TypeScript sources in production.
+
+Existing Dockerfiles or deployment scripts that previously ran `index.ts` need to be updated to run both workers (or just the one you require). For a minimal Docker multi-process setup you can use two containers referencing the same image or supervise them via a process manager inside the container.
+
+---
+
+## 🛠 Common Tasks
+
+### Regenerate VAPID Keys
+
+```bash
+npx web-push generate-vapid-keys
+# update VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY in .env and the frontend
+```
+
+### Verify Notification Flow
+
+1. Queue a notification through the product (or manually via `/notifications/push` endpoints).
+2. Tail logs: `pm2 logs poscal-notification-worker`.
+3. Confirm the queue row transitions from `pending` → `sent`.
+
+### Verify Price Flow
+
+1. Check that `FINNHUB_API_KEY` is present and correct.
+2. Tail logs: `pm2 logs poscal-price-ingestor`.
+3. Ensure `/prices/batch-update` responds 2xx and price cache rows update.
+
+---
+
+## 🔍 Troubleshooting
+
+| Symptom | Likely Cause | Fix |
+|---------|--------------|-----|
+| `Missing required environment variable` on boot | `.env` not present or wrong working dir | Ensure PM2/Systemd `cwd` is `push-sender/` |
+| HTTP 401 from backend | `NESTJS_SERVICE_TOKEN` mismatch | Update `.env` to match the backend token |
+| Finnhub reconnect loop | Invalid / rate-limited API key | Double-check key or reduce subscribed symbols |
+| Pushes never send | Missing VAPID keys or queue empty | Validate `.env` keys and inspect `/notifications/push/pending` |
+
+Use `npm run build` before redeploying so the latest TypeScript changes are in `dist/`.
+
+---
+
+## 📚 Related Docs
+
+- [docs/PUSH_NOTIFICATION_DEPLOYMENT.md](../docs/PUSH_NOTIFICATION_DEPLOYMENT.md)
+- [docs/WEBSOCKET_MIGRATION.md](../docs/WEBSOCKET_MIGRATION.md)
+
+These still contain historical context; this README is now the source of truth for the split-worker implementation.

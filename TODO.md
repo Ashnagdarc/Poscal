@@ -35,9 +35,10 @@
   - Status: ✅ RECEIVING PRICES
 
 ### 🎯 **What's Next (Prioritized)**
-1. **Phase 5.3** - Test frontend in production (5 min after Vercel build)
-2. **Phase 5.4** - Monitor performance (ongoing)
-3. **Phase 2-4** - Start NestJS backend migration (after pairs validation)
+1. **Push-Sender Worker Follow-ups** - Refresh `.env.example`, add backend instrumentation for `/prices/batch-update`, and dry-run the new PM2 ecosystem config before redeploying the workers.
+2. **Phase 5.3** - Test frontend in production (5 min after Vercel build)
+3. **Phase 5.4** - Monitor performance (ongoing)
+4. **Phase 2-4** - Start NestJS backend migration (after pairs validation)
 
 ---
 
@@ -63,6 +64,11 @@
 ---
 
 ## 📋 IMMEDIATE NEXT STEPS (Priority Order)
+
+### 🚧 Push-Sender Worker Follow-Ups (NEW)
+- [ ] Refresh `.env.example` with the new `NESTJS_API_URL`, `NESTJS_SERVICE_TOKEN`, Finnhub, and VAPID settings so both workers load the right config by default.
+- [ ] Add backend instrumentation/logging for `/prices/batch-update` and `/notifications/push/pending` to track worker throughput, failures, and latency.
+- [ ] Smoke-test `ecosystem.config.js` on Contabo (or staging) to verify both workers boot from `dist/` with the shared `.env` before redeploying.
 
 ### ✅ Phase 5.1: Deploy Frontend Updates (COMPLETED - Jan 23, 2026)
 - [x] Deploy CurrencyGrid.tsx to production
@@ -112,6 +118,20 @@
 - [ ] Document any custom pair mappings added by users
 - [ ] Create monitoring dashboard for price updates
 - [ ] Document troubleshooting steps if pairs don't load
+
+---
+
+## ♻ Push-Sender Worker Refactor (Jan 25, 2026)
+
+### ✅ Completed
+- [x] Split the monolithic push-sender into `notification-worker` and `price-ingestor` entry points sharing config, logger, NestJS API client, retry helper, symbol map, and type definitions.
+- [x] Added `ecosystem.config.js` so PM2 can supervise both workers with consistent environments, memory limits, and restarts.
+- [x] Updated push-sender/README.md with architecture notes, local dev commands, and PM2 deployment guidance.
+
+### ⏳ Follow-Ups (tracked in Immediate Next Steps below)
+- Refresh `.env.example` to include `NESTJS_API_URL`, `NESTJS_SERVICE_TOKEN`, Finnhub requirements, and worker-specific knobs.
+- Add backend instrumentation/logging for `/prices/batch-update` and `/notifications/push/pending` so worker health data is visible.
+- Smoke-test the PM2 ecosystem config on Contabo (or staging) after the next build to confirm both workers boot from `dist/`.
 
 ---
 
