@@ -41,22 +41,30 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
 
   useEffect(() => {
     const checkSupport = async () => {
-      const supported = 'serviceWorker' in navigator &&
-        'PushManager' in window &&
-        'Notification' in window;
-      setIsSupported(supported);
+      try {
+        const supported = 'serviceWorker' in navigator &&
+          'PushManager' in window &&
+          'Notification' in window;
+        setIsSupported(supported);
 
-      if (supported) {
-        setPermission(Notification.permission);
+        if (supported) {
+          setPermission(Notification.permission);
 
-        try {
           // If SW is disabled or not yet registered, skip to avoid hangs/reloads
           if (!navigator.serviceWorker.controller) {
             logger.warn('[push] Service Worker controller missing; push setup skipped');
             return;
           }
 
-          const registration = await navigator.serviceWorker.ready;
+          // Add a 2-second timeout to prevent app freeze if SW hangs
+          const registrationPromise = Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('SW ready timeout')), 2000)
+            )
+          ]) as Promise<ServiceWorkerRegistration>;
+
+          const registration = await registrationPromise;
           logger.log('[push] Service Worker ready:', registration);
           setSwRegistration(registration);
 
@@ -83,9 +91,10 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
             logger.log('[push] No browser subscription found');
             setIsSubscribed(false);
           }
-        } catch (error) {
-          logger.error('[push] Service Worker ready wait failed:', error);
         }
+      } catch (error) {
+        logger.error('[push] Setup failed; continuing without push:', error);
+        setIsSupported(false);
       }
     };
 

@@ -9,12 +9,21 @@ import "./index.css";
 const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
 if (ENABLE_SW && import.meta.env.PROD && "serviceWorker" in navigator) {
   const registerOnce = () => {
-    if (navigator.serviceWorker.controller) {
-      return; // Already controlling; avoid duplicate registration
+    try {
+      if (navigator.serviceWorker.controller) {
+        return; // Already controlling; avoid duplicate registration
+      }
+      // Add timeout to prevent SW registration from hanging the app
+      const registerPromise = Promise.race([
+        navigator.serviceWorker.register("/sw.js", { scope: "/" }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error("SW register timeout")), 3000)
+        )
+      ]);
+      registerPromise.catch((err) => console.error("[sw] register failed", err));
+    } catch (error) {
+      console.error("[sw] register error", error);
     }
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .catch((err) => console.error("[sw] register failed", err));
   };
 
   if (document.readyState === "complete") {
