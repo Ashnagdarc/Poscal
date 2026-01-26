@@ -16,6 +16,8 @@ export default defineConfig(({ mode }) => ({
       strategies: "injectManifest",
       srcDir: "public",
       filename: "sw.js",
+      // We'll register the service worker manually to avoid the auto-injected registerSW.js script being fetched repeatedly
+      injectRegister: null,
       includeAssets: ["favicon.png", "apple-touch-icon.png", "pwa-192x192.png", "pwa-512x512.png"],
       manifest: {
         name: "Position Size Calculator",
