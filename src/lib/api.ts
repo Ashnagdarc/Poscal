@@ -51,32 +51,40 @@ interface FeatureFlagResponse {
 }
 
 const parseFeatureFlagError = (err: any) => {
+  const status = err?.response?.status;
   const apiMessage = err?.response?.data?.message;
   const generic = err?.message || 'Failed to reach feature flag API';
-  return apiMessage || generic;
+  const statusText = status ? ` (${status})` : '';
+  return apiMessage || `${generic}${statusText}`;
 };
 
 export const featureFlagApi = {
   getPaidLock: async (): Promise<boolean> => {
     try {
+      console.debug('[feature-flag] Fetching paid lock status...');
       const { data } = await api.get<FeatureFlagResponse>('/feature-flag');
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to read paid lock flag');
       }
+      console.debug('[feature-flag] Paid lock status:', data.enabled);
       return !!data.enabled;
     } catch (err) {
+      console.error('[feature-flag] Error:', err);
       throw new Error(parseFeatureFlagError(err));
     }
   },
 
   setPaidLock: async (enabled: boolean): Promise<boolean> => {
     try {
+      console.debug('[feature-flag] Setting paid lock to:', enabled);
       const { data } = await api.post<FeatureFlagResponse>('/feature-flag', { enabled });
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to update paid lock flag');
       }
+      console.debug('[feature-flag] Update success');
       return !!data.enabled;
     } catch (err) {
+      console.error('[feature-flag] Update error:', err);
       throw new Error(parseFeatureFlagError(err));
     }
   },

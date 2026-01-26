@@ -19,6 +19,8 @@ export const ProtectedRoute = ({ children, requiresPremium = false }: ProtectedR
 
   useEffect(() => {
     let mounted = true;
+    let timeoutId: NodeJS.Timeout;
+
     (async () => {
       try {
         const enabled = await featureFlagApi.getPaidLock();
@@ -28,7 +30,19 @@ export const ProtectedRoute = ({ children, requiresPremium = false }: ProtectedR
         if (mounted) setPaidLockEnabled(false);
       }
     })();
-    return () => { mounted = false; };
+
+    // Fallback: if API doesn't respond within 5 seconds, default to false
+    timeoutId = setTimeout(() => {
+      if (mounted && paidLockEnabled === null) {
+        console.warn('Paid lock API timeout, defaulting to false');
+        setPaidLockEnabled(false);
+      }
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+    };
   }, [location.pathname]);
 
   // Show loading spinner while checking auth or subscription
