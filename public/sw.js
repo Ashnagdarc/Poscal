@@ -1,7 +1,8 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v18-production';
+// Bump version to force clients to fetch the latest assets (fixes stale routing bundles)
+const SW_VERSION = 'v19-production';
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
