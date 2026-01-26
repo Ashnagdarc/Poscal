@@ -7,12 +7,6 @@ import { UpdatesService } from './updates.service';
 
 @Module({
   imports: [TypeOrmModule.forFeature([AppSetting, AppUpdate])],
-  exports: [TypeOrmModule],
-})
-export class SystemModule {}
-
-@Module({
-  imports: [TypeOrmModule.forFeature([AppSetting, AppUpdate])],
   controllers: [UpdatesController],
   providers: [UpdatesService],
   exports: [TypeOrmModule],

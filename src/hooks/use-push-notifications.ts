@@ -133,10 +133,8 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       logger.log('[push] Saving subscription to server...');
       await notificationsApi.subscribe({
         endpoint: subJson.endpoint!,
-        keys: {
-          p256dh: subJson.keys!.p256dh!,
-          auth: subJson.keys!.auth!,
-        },
+        p256dh_key: subJson.keys!.p256dh!,
+        auth_key: subJson.keys!.auth!,
         user_agent: navigator.userAgent,
       });
 

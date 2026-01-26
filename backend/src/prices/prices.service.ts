@@ -50,18 +50,26 @@ export class PricesService {
   async batchUpsert(
     prices: Array<{ symbol: string; bid_price?: number; mid_price?: number; ask_price?: number; price?: number; source?: string }>,
   ): Promise<void> {
-    const rows = prices.map((p) => {
-      const midPrice = p.mid_price ?? p.price ?? p.ask_price ?? p.bid_price;
-      return {
-        symbol: p.symbol,
-        mid_price: midPrice ?? 0,
-        bid_price: p.bid_price ?? null,
-        ask_price: p.ask_price ?? null,
-        updated_at: new Date(),
-      } as Partial<PriceCache>;
-    });
+    if (prices.length === 0) return;
 
-    await this.priceCacheRepository.upsert(rows, ['symbol']);
+    // Use raw SQL INSERT ON CONFLICT instead of TypeORM upsert (which is broken)
+    const values = prices.map((p) => {
+      const midPrice = p.mid_price ?? p.price ?? p.ask_price ?? p.bid_price ?? 0;
+      return `('${p.symbol.replace(/'/g, "''")}', ${p.bid_price ?? 'NULL'}, ${p.ask_price ?? 'NULL'}, ${midPrice}, NOW(), NOW())`;
+    }).join(',');
+
+    const sql = `
+      INSERT INTO price_cache (symbol, bid_price, ask_price, mid_price, created_at, updated_at)
+      VALUES ${values}
+      ON CONFLICT (symbol)
+      DO UPDATE SET
+        bid_price = EXCLUDED.bid_price,
+        ask_price = EXCLUDED.ask_price,
+        mid_price = EXCLUDED.mid_price,
+        updated_at = EXCLUDED.updated_at
+    `;
+
+    await this.priceCacheRepository.query(sql);
   }
 
   async deletePrice(symbol: string): Promise<void> {

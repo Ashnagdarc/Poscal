@@ -52,7 +52,6 @@ export class TradesController {
   async uploadScreenshot(
     @Param('id') id: string,
     @UploadedFile() file: any,
-    @Request() req: any,
   ) {
     const url = await this.storageService.saveTradeScreenshot(id, file);
     return { url };
@@ -60,7 +59,7 @@ export class TradesController {
 
   // Delete a trade screenshot (stub)
   @Delete('screenshots/:screenshotId')
-  async deleteScreenshot(@Param('screenshotId') screenshotId: string, @Request() req: any) {
+  async deleteScreenshot(@Param('screenshotId') screenshotId: string) {
     // Expect screenshotId format: tradeId/fileName
     const parts = screenshotId.split('/');
     if (parts.length >= 2) {

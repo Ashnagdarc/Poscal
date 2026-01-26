@@ -24,16 +24,6 @@ export class PricesController {
     return await this.pricesService.getPrice(symbol);
   }
 
-  @Post(':symbol')
-  async updatePrice(@Param('symbol') symbol: string, @Body() priceData: any) {
-    return await this.pricesService.updatePrice(symbol, priceData);
-  }
-
-  @Post('batch')
-  async updatePrices(@Body() body: { prices: Array<{ symbol: string; data: any }> }) {
-    return await this.pricesService.updatePrices(body.prices);
-  }
-
   @Post('batch-update')
   @UseGuards(ServiceTokenGuard)
   async batchUpdatePrices(
@@ -69,6 +59,16 @@ export class PricesController {
     this.logger.log(`prices/batch-update persisted :: ${JSON.stringify(persistedMeta)}`);
 
     return { updated: prices.length, uniqueSymbols, durationMs, ingestionDelayMs };
+  }
+
+  @Post('batch')
+  async updatePrices(@Body() body: { prices: Array<{ symbol: string; data: any }> }) {
+    return await this.pricesService.updatePrices(body.prices);
+  }
+
+  @Post(':symbol')
+  async updatePrice(@Param('symbol') symbol: string, @Body() priceData: any) {
+    return await this.pricesService.updatePrice(symbol, priceData);
   }
 
   @Delete(':symbol')

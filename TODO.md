@@ -5,7 +5,8 @@
 **Started**: January 23, 2026  
 **Target**: February 6, 2026
 
-**Progress**: 
+**Progress**:
+
 - ✅ Phase 1: Project Setup - COMPLETE
 - ⏳ Phase 2: NestJS Scaffold - NOT STARTED
 - ⏳ Phase 3: Database Setup - NOT STARTED  
@@ -17,6 +18,7 @@
 ## 🚀 SUMMARY: CURRENT PROJECT STATUS
 
 ### ✅ **What's Deployed & Live Now**
+
 - **Backend (Push-Sender)**: 228 pairs actively streaming prices from Finnhub
   - Running on: Contabo VPS (62.171.136.178)
   - Memory: ~128 MB, CPU: 2.5% (healthy)
@@ -35,6 +37,7 @@
   - Status: ✅ RECEIVING PRICES
 
 ### 🎯 **What's Next (Prioritized)**
+
 1. **Push-Sender Worker Follow-ups** - Refresh `.env.example`, add backend instrumentation for `/prices/batch-update`, and dry-run the new PM2 ecosystem config before redeploying the workers.
 2. **Phase 5.3** - Test frontend in production (5 min after Vercel build)
 3. **Phase 5.4** - Monitor performance (ongoing)
@@ -45,6 +48,7 @@
 ## 🚀 LATEST: LIVE MARKET DATA EXPANSION (200+ Pairs) - ✅ DEPLOYED
 
 ### ✅ Phase 5: Pairs Expansion to 228 (Completed Jan 23, 2026)
+
 - [x] Expanded SYMBOL_MAPPINGS from 65 to 228 pairs in push-sender/index.ts
 - [x] Added comprehensive pair coverage:
   - Forex: ~110 pairs (majors, crosses, exotics)
@@ -66,11 +70,13 @@
 ## 📋 IMMEDIATE NEXT STEPS (Priority Order)
 
 ### 🚧 Push-Sender Worker Follow-Ups (NEW)
+
 - [ ] Refresh `.env.example` with the new `NESTJS_API_URL`, `NESTJS_SERVICE_TOKEN`, Finnhub, and VAPID settings so both workers load the right config by default.
 - [ ] Add backend instrumentation/logging for `/prices/batch-update` and `/notifications/push/pending` to track worker throughput, failures, and latency.
 - [ ] Smoke-test `ecosystem.config.js` on Contabo (or staging) to verify both workers boot from `dist/` with the shared `.env` before redeploying.
 
 ### ✅ Phase 5.1: Deploy Frontend Updates (COMPLETED - Jan 23, 2026)
+
 - [x] Deploy CurrencyGrid.tsx to production
   - [x] Push updated src/components/CurrencyGrid.tsx to git (Commit: b37ebf9)
   - [x] Vercel auto-deploy triggered on git push
@@ -79,6 +85,7 @@
 - [x] Expected Result: Position calculator shows all 228 pairs with live prices
 
 ### ✅ Phase 5.2: Verify Database Population (COMPLETED - Jan 23, 2026)
+
 - [x] Connect to production database
 - [x] Verify push-sender is streaming prices to price_cache
 - [x] Confirmed: Service running with 228 pairs active
@@ -88,6 +95,7 @@
 - [x] No NULL prices detected in test (only pairs with available prices shown)
 
 ### ⏳ Phase 5.3: End-to-End Integration Testing (NEXT - After Vercel Build)
+
 - [ ] Wait for Vercel build to complete (2-3 minutes total)
 - [ ] Open position size calculator in production
 - [ ] Test pair selector shows all 230 pairs
@@ -101,6 +109,7 @@
 - [ ] Check WebSocket updates are real-time (1-2 sec updates)
 
 ### ⏳ Phase 5.4: Performance & Monitoring (AFTER Phase 5.3)
+
 - [ ] Monitor VPS resource usage:
   - [ ] CPU: Currently 2.5% (well under 10% target)
   - [ ] Memory: Currently ~128 MB (well under 200 MB target)
@@ -114,6 +123,7 @@
 - [ ] Test with 100-500 concurrent users (load test - optional)
 
 ### ⏳ Phase 5.5: Documentation & Handoff (OPTIONAL)
+
 - [ ] Update DEPLOYMENT_CHECKLIST_200_PAIRS.md with real results
 - [ ] Document any custom pair mappings added by users
 - [ ] Create monitoring dashboard for price updates
@@ -124,11 +134,13 @@
 ## ♻ Push-Sender Worker Refactor (Jan 25, 2026)
 
 ### ✅ Completed
+
 - [x] Split the monolithic push-sender into `notification-worker` and `price-ingestor` entry points sharing config, logger, NestJS API client, retry helper, symbol map, and type definitions.
 - [x] Added `ecosystem.config.js` so PM2 can supervise both workers with consistent environments, memory limits, and restarts.
 - [x] Updated push-sender/README.md with architecture notes, local dev commands, and PM2 deployment guidance.
 
 ### ⏳ Follow-Ups (tracked in Immediate Next Steps below)
+
 - Refresh `.env.example` to include `NESTJS_API_URL`, `NESTJS_SERVICE_TOKEN`, Finnhub requirements, and worker-specific knobs.
 - Add backend instrumentation/logging for `/prices/batch-update` and `/notifications/push/pending` so worker health data is visible.
 - Smoke-test the PM2 ecosystem config on Contabo (or staging) after the next build to confirm both workers boot from `dist/`.
@@ -138,6 +150,7 @@
 ## PHASE 1: PROJECT SETUP & FOUNDATION
 
 ### ✅ 1.1 Remove Supabase Dependencies
+
 - [x] Stop docker-compose-local.yml services
 - [x] Delete docker-compose-local.yml
 - [x] Delete auth-service/ folder (no longer needed)
@@ -147,6 +160,7 @@
 - [x] Clean up src/integrations/supabase/ folder (replaced with stub)
 
 ### ✅ 1.2 Create Documentation
+
 - [x] Create BACKEND_SWITCH.md with full plan
 - [x] Create this TODO.md file
 - [x] Create API_ENDPOINTS.md (list all NestJS endpoints)
@@ -159,6 +173,7 @@
 ## PHASE 2: NESTJS PROJECT SCAFFOLD
 
 ### ✅ 2.1 Initialize NestJS Project
+
 - [x] Create `backend/` folder at project root
 - [x] Run `npm init -y` in backend folder
 - [x] Install dependencies:
@@ -171,6 +186,7 @@
 - [x] Create .eslintrc.json for linting
 
 ### ✅ 2.2 Create Project Structure
+
 ```
 backend/
 ├─ src/
@@ -251,6 +267,7 @@ backend/
 ## PHASE 3: DATABASE SETUP
 
 ### ✅ 3.1 Export Current Schema from Supabase
+
 - [x] Access Supabase dashboard (N/A - reconstructed from code)
 - [x] Export database schema (SQL dump)
 - [x] Export all table data (reconstructed from TypeScript types)
@@ -274,29 +291,37 @@ backend/
   - [x] Enums (app_role)
 
 ### ✅ 3.2 Set Up PostgreSQL on Contabo VPS
+
 - [x] SSH into Contabo VPS
 - [x] Create non-root user for database
 - [x] Install PostgreSQL 15:
+
   ```bash
   sudo apt update
   sudo apt install postgresql postgresql-contrib
   ```
+
 - [x] Create database:
+
   ```bash
   sudo -u postgres createdb poscal_db
   sudo -u postgres createuser poscal_user
   sudo -u postgres psql -c "ALTER USER poscal_user WITH PASSWORD 'your-secure-password';"
   sudo -u postgres psql -c "GRANT ALL PRIVILEGES ON DATABASE poscal_db TO poscal_user;"
   ```
+
 - [x] Enable PostgreSQL to start on boot:
+
   ```bash
   sudo systemctl enable postgresql
   ```
+
 - [x] Test connection from local machine
 - [x] Document connection string: `postgresql://poscal_user:P0sc@l_2026_Secure!@62.171.136.178:5432/poscal_db`
 - [x] Run initial schema migration (all 14 tables created)
 
 ### ✅ 3.3 Create TypeORM Entities
+
 - [x] Create entity for each table:
   - [x] Profile entity (src/auth/entities/profile.entity.ts)
   - [x] UserRole entity
@@ -318,14 +343,16 @@ backend/
 - [x] Verify all column names match database.types.ts
 
 ### ✅ 3.4 Set Up TypeORM Configuration
+
 - [x] Create database.config.ts
 - [x] Configure TypeOrmModule with PostgreSQL connection
 - [x] Register all entities in feature modules
 - [x] Test connection to Contabo PostgreSQL
 - [x] Verify all entities load correctly
-- [x] Backend server running successfully on http://localhost:3001
+- [x] Backend server running successfully on <http://localhost:3001>
 
 ### ✅ 3.5 Migrate Data
+
 - [x] Run SQL schema migration on Contabo PostgreSQL
 - [x] Verify 15 tables created (14 data tables + schema_version)
 - [x] Verify all columns and indexes present
@@ -337,6 +364,7 @@ backend/
 ## PHASE 4: IMPLEMENT CORE MODULES
 
 ### ✅ 4.1 AuthModule (JWT + Guards)
+
 - [x] Create auth.module.ts
 - [x] Create jwt.strategy.ts (Passport JWT strategy)
 - [x] Create jwt.guard.ts (JWT validation guard)
@@ -365,6 +393,7 @@ backend/
 - [ ] Document auth flow
 
 ### ⏳ 4.2 TradingModule (Trades, Signals, Accounts)
+
 - [ ] Create trading.module.ts
 - [ ] Create entities (TradingJournal, TradingSignal, TradingAccount)
 - [ ] Create trades.service.ts:
@@ -401,6 +430,7 @@ backend/
 - [ ] Create integration tests
 
 ### ⏳ 4.3 PaymentsModule (Paystack Integration)
+
 - [ ] Create payments.module.ts
 - [ ] Create payments.service.ts:
   - [ ] verifyPaystackWebhook(signature: string, body: string): boolean
@@ -420,6 +450,7 @@ backend/
 - [ ] Add proper error handling and logging
 
 ### ⏳ 4.4 PricesModule (Real-time Prices + WebSocket)
+
 - [ ] Create prices.module.ts
 - [ ] Create prices.service.ts:
   - [ ] fetchFinnhubPrices(): Promise<PriceData[]> [replaces push-sender logic]
@@ -442,6 +473,7 @@ backend/
 - [ ] Document WebSocket message format
 
 ### ⏳ 4.5 NotificationsModule (Push + Email + Scheduling)
+
 - [ ] Create notifications.module.ts
 - [ ] Create push.service.ts:
   - [ ] registerSubscription(userId: string, subscription: PushSubscription)
@@ -462,9 +494,9 @@ backend/
   - [ ] POST /notifications/send (send notification - admin only)
   - [ ] GET /notifications/queue-status (queue status - admin only)
 - [ ] Create scheduled tasks:
-  - [ ] @Cron('0 9 * * 1') - Weekly reminders (Monday 9am)
-  - [ ] @Cron('0 0 * * *') - Process email queue (daily midnight)
-  - [ ] @Cron('*/5 * * * *') - Retry failed notifications (every 5 minutes)
+  - [ ] @Cron('0 9 ** 1') - Weekly reminders (Monday 9am)
+  - [ ] @Cron('0 0 ** *') - Process email queue (daily midnight)
+  - [ ] @Cron('*/5* ** *') - Retry failed notifications (every 5 minutes)
 - [ ] Integrate with push-sender service (can call or run independently)
 - [ ] Create DTOs and entities
 - [ ] Test all notification types
@@ -475,6 +507,7 @@ backend/
 ## PHASE 5: ADVANCED FEATURES & POLISH
 
 ### ⏳ 5.1 Validation & Error Handling
+
 - [ ] Add class-validator decorators to all DTOs
 - [ ] Create global exception filters
 - [ ] Create custom exceptions:
@@ -487,6 +520,7 @@ backend/
 - [ ] Test all error scenarios
 
 ### ⏳ 5.2 RLS Emulation (Guards)
+
 - [ ] Create @RLS() decorator for endpoints
 - [ ] Create RLSGuard that:
   - [ ] Extracts user_id from JWT token
@@ -496,6 +530,7 @@ backend/
 - [ ] Test that admins can see all data
 
 ### ⏳ 5.3 API Documentation
+
 - [ ] Add @ApiOperation() decorators to all controllers
 - [ ] Add @ApiResponse() decorators to all endpoints
 - [ ] Add @ApiParam() @ApiQuery() decorators
@@ -504,6 +539,7 @@ backend/
 - [ ] Document all endpoints in API_ENDPOINTS.md
 
 ### ⏳ 5.4 Testing
+
 - [ ] Set up Jest for unit testing
 - [ ] Write unit tests for core services:
   - [ ] auth.service.test.ts
@@ -517,6 +553,7 @@ backend/
 - [ ] Achieve 70%+ code coverage
 
 ### ⏳ 5.5 Performance Optimization
+
 - [ ] Add query caching for frequently accessed data
 - [ ] Add database query profiling
 - [ ] Identify N+1 query problems
@@ -530,7 +567,9 @@ backend/
 ## PHASE 6: DOCKER & DEPLOYMENT
 
 ### ⏳ 6.1 Local Development Docker Setup
+
 - [ ] Create Dockerfile for NestJS:
+
   ```dockerfile
   FROM node:18-alpine
   WORKDIR /app
@@ -541,7 +580,9 @@ backend/
   EXPOSE 3001
   CMD ["npm", "run", "start:prod"]
   ```
+
 - [ ] Create docker-compose.yml for local dev:
+
   ```yaml
   services:
     postgres:
@@ -564,11 +605,14 @@ backend/
       environment:
         DATABASE_URL: postgres://poscal_user:dev_password@postgres:5432/poscal_dev
   ```
+
 - [ ] Test local Docker setup works
 - [ ] Document setup instructions in DEVELOPMENT_SETUP.md
 
 ### ⏳ 6.2 Production Docker Setup for Contabo
+
 - [ ] Create docker-compose.prod.yml for Contabo:
+
   ```yaml
   services:
     backend:
@@ -587,12 +631,14 @@ backend/
           max-size: "10m"
           max-file: "3"
   ```
+
 - [ ] Add nginx reverse proxy config (optional)
 - [ ] Set up SSL certificate (Let's Encrypt)
 - [ ] Create .env.prod file with secrets
 - [ ] Document production deployment in DEPLOYMENT_GUIDE.md
 
 ### ⏳ 6.3 Set Up CI/CD (GitHub Actions optional)
+
 - [ ] Create .github/workflows/build-and-deploy.yml
 - [ ] Add steps:
   - [ ] Build Docker image
@@ -607,13 +653,16 @@ backend/
 ## PHASE 7: REACT APP MIGRATION
 
 ### ⏳ 7.1 Remove Supabase Client
+
 - [ ] Remove @supabase/supabase-js from package.json
 - [ ] Remove supabase integration folder
 - [ ] Remove Supabase context providers
 - [ ] Remove all Supabase-related environment variables
 
 ### ⏳ 7.2 Create API Client Utility
+
 - [ ] Create src/lib/api.ts:
+
   ```typescript
   const API_URL = import.meta.env.VITE_API_URL;
   
@@ -638,6 +687,7 @@ backend/
     return response.json();
   }
   ```
+
 - [ ] Create API service functions:
   - [ ] src/lib/api/trades.ts
   - [ ] src/lib/api/signals.ts
@@ -647,7 +697,9 @@ backend/
   - [ ] src/lib/api/notifications.ts
 
 ### ⏳ 7.3 Create Socket.IO Client Hook
+
 - [ ] Create src/hooks/useWebSocket.ts:
+
   ```typescript
   import io from 'socket.io-client';
   
@@ -666,9 +718,11 @@ backend/
     return { prices, socket: socket.current };
   }
   ```
+
 - [ ] Replace all Supabase Realtime hooks with this new hook
 
 ### ⏳ 7.4 Migrate All Pages
+
 - [ ] Journal.tsx:
   - [ ] Replace `supabase.from('trading_journal').select(...)` with `apiCall('/trades')`
   - [ ] Update state management if needed
@@ -693,19 +747,25 @@ backend/
   - [ ] Test token refresh
 
 ### ⏳ 7.5 Update Environment Variables
+
 - [ ] Create .env.local for development:
+
   ```
   VITE_API_URL=http://localhost:3001
   VITE_WS_URL=ws://localhost:3001
   ```
+
 - [ ] Create .env.production for build:
+
   ```
   VITE_API_URL=https://api.poscal.com
   VITE_WS_URL=wss://api.poscal.com
   ```
+
 - [ ] Test both environments work correctly
 
 ### ⏳ 7.6 Integration Testing
+
 - [ ] Manual test: User signup flow
 - [ ] Manual test: Create trading account
 - [ ] Manual test: Create trade entry
@@ -718,6 +778,7 @@ backend/
 - [ ] Cross-browser testing (Chrome, Safari, Firefox)
 
 ### ⏳ 7.7 Performance Testing
+
 - [ ] Load test: 50 concurrent users
 - [ ] Load test: 100 concurrent users
 - [ ] Measure API response times
@@ -731,6 +792,7 @@ backend/
 ## PHASE 8: DEPLOYMENT TO CONTABO VPS
 
 ### ⏳ 8.1 Pre-Deployment Checklist
+
 - [ ] All tests passing (unit + e2e + integration)
 - [ ] Code review completed
 - [ ] Security audit completed (JWT handling, HMAC verification)
@@ -741,52 +803,71 @@ backend/
 - [ ] Monitoring/alerting configured
 
 ### ⏳ 8.2 Deploy Backend to Contabo
+
 - [ ] SSH into Contabo VPS
 - [ ] Clone git repository:
+
   ```bash
   git clone <repo-url> /opt/poscal
   cd /opt/poscal
   ```
+
 - [ ] Create .env.prod with production secrets
 - [ ] Build Docker image:
+
   ```bash
   docker build -t poscal/backend:latest .
   ```
+
 - [ ] Start containers:
+
   ```bash
   docker compose -f docker-compose.prod.yml up -d backend
   ```
+
 - [ ] Verify backend health:
+
   ```bash
   curl http://localhost:3001/health
   ```
+
 - [ ] Check logs:
+
   ```bash
   docker logs -f poscal-backend
   ```
+
 - [ ] Verify database connection:
+
   ```bash
   psql -h localhost -U poscal_user -d poscal_db -c "SELECT COUNT(*) FROM profiles;"
   ```
 
 ### ⏳ 8.3 Deploy React App to Vercel
+
 - [ ] Update environment variables in Vercel dashboard:
-  - [ ] VITE_API_URL=https://api.poscal.com
+  - [ ] VITE_API_URL=<https://api.poscal.com>
   - [ ] VITE_WS_URL=wss://api.poscal.com
 - [ ] Push code to main branch (triggers auto-deploy)
 - [ ] Verify deployment successful
 - [ ] Test React app connects to backend
 
 ### ⏳ 8.4 Set Up SSL/HTTPS
+
 - [ ] Install Certbot:
+
   ```bash
   sudo apt install certbot python3-certbot-nginx
   ```
+
 - [ ] Generate certificate:
+
   ```bash
   sudo certbot certonly --standalone -d api.poscal.com
   ```
+
 - [ ] Configure nginx:
+
   ```nginx
   upstream backend {
     server 127.0.0.1:3001;
@@ -806,12 +887,15 @@ backend/
     }
   }
   ```
+
 - [ ] Test HTTPS works:
+
   ```bash
   curl https://api.poscal.com/health
   ```
 
 ### ⏳ 8.5 Set Up Monitoring & Logging
+
 - [ ] Configure Docker logging
 - [ ] Set up log aggregation (optional: ELK stack, Datadog)
 - [ ] Set up health check monitoring
@@ -824,15 +908,19 @@ backend/
   - [ ] CPU/Memory usage
 
 ### ⏳ 8.6 Set Up Backups
+
 - [ ] Create daily PostgreSQL backups:
+
   ```bash
   0 2 * * * pg_dump -U poscal_user poscal_db | gzip > /backups/poscal_db_$(date +\%Y\%m\%d).sql.gz
   ```
+
 - [ ] Upload backups to cloud storage (S3, Google Drive)
 - [ ] Test backup restoration process
 - [ ] Document backup retention policy
 
 ### ⏳ 8.7 Post-Deployment Testing
+
 - [ ] Test user signup (create new account)
 - [ ] Test user login (existing account)
 - [ ] Test create trading account
@@ -853,6 +941,7 @@ backend/
 ## PHASE 9: OPTIMIZATION & MAINTENANCE
 
 ### ⏳ 9.1 Performance Tuning
+
 - [ ] Add database query caching (Redis optional)
 - [ ] Add HTTP caching headers
 - [ ] Add gzip compression
@@ -861,6 +950,7 @@ backend/
 - [ ] Cache price data locally
 
 ### ⏳ 9.2 Monitoring & Alerting
+
 - [ ] Set up uptime monitoring (uptimerobot.com)
 - [ ] Set up error tracking (Sentry)
 - [ ] Set up performance monitoring (New Relic optional)
@@ -869,6 +959,7 @@ backend/
 - [ ] Document runbook for common issues
 
 ### ⏳ 9.3 Security Hardening
+
 - [ ] Enable HTTPS only (redirect HTTP)
 - [ ] Add rate limiting to API endpoints
 - [ ] Add CORS configuration
@@ -879,6 +970,7 @@ backend/
 - [ ] Document security procedures
 
 ### ⏳ 9.4 Documentation Completion
+
 - [ ] API_ENDPOINTS.md - Final version with all endpoints
 - [ ] DATABASE_SCHEMA.md - Final schema documentation
 - [ ] DEPLOYMENT_GUIDE.md - Complete setup guide
@@ -888,6 +980,7 @@ backend/
 - [ ] RUNBOOK.md - Incident response procedures
 
 ### ⏳ 9.5 Team Handoff
+
 - [ ] Hold training session for team on new backend
 - [ ] Document code structure and architecture
 - [ ] Create API client library for future frontend changes
@@ -901,6 +994,7 @@ backend/
 ## CHECKPOINTS & SIGN-OFFS
 
 ### Checkpoint 1: Foundation Complete (Week 1)
+
 - [ ] NestJS project scaffolded
 - [ ] PostgreSQL set up on Contabo
 - [ ] Database migrated from Supabase
@@ -910,6 +1004,7 @@ backend/
 **Sign-off**: Ready to implement remaining modules
 
 ### Checkpoint 2: Backend Complete (Week 2)
+
 - [ ] All 5 modules implemented (Auth, Trading, Payments, Prices, Notifications)
 - [ ] All CRUD operations tested
 - [ ] WebSocket tested with concurrent connections
@@ -920,6 +1015,7 @@ backend/
 **Sign-off**: Backend ready for React migration
 
 ### Checkpoint 3: React Migration Complete (Week 3)
+
 - [ ] All Supabase calls removed
 - [ ] All API calls working via NestJS
 - [ ] WebSocket price updates working
@@ -930,6 +1026,7 @@ backend/
 **Sign-off**: React app ready for production
 
 ### Checkpoint 4: Production Deployment (Week 3-4)
+
 - [ ] Backend deployed to Contabo
 - [ ] React app deployed to Vercel
 - [ ] SSL/HTTPS configured
@@ -940,6 +1037,7 @@ backend/
 **Sign-off**: Production launch ready
 
 ### Final Sign-Off (Week 4)
+
 - [ ] All monitoring green
 - [ ] No critical errors in logs
 - [ ] Performance metrics within targets
@@ -959,4 +1057,3 @@ backend/
 - **Communication**: Update team daily on progress
 - **Testing**: Test at each phase, not just at the end
 - **Documentation**: Document as you go, not at the end
-

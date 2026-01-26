@@ -260,7 +260,8 @@ export const notificationsApi = {
   // Create a new push subscription
   subscribe: async (subscriptionData: {
     endpoint: string;
-    keys: { p256dh: string; auth: string };
+    p256dh_key: string;
+    auth_key: string;
     user_agent?: string;
   }): Promise<any> => {
     const { data } = await api.post('/notifications/push/subscribe', subscriptionData);
