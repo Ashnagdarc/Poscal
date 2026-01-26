@@ -1,9 +1,13 @@
-import 'crypto'; // Ensure crypto is available globally for TypeORM
+import * as nodeCrypto from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
-import { AppModule } from './app.module';
 
 async function bootstrap() {
+  // Ensure the Node crypto API is available as a global before loading any modules that expect it
+  (global as any).crypto = nodeCrypto;
+
+  // Dynamically import AppModule after crypto is set on global
+  const { AppModule } = await import('./app.module');
   // Note: HTTPS is handled by nginx reverse proxy on VPS
   // Backend runs on HTTP locally and nginx terminates TLS
   const app = await NestFactory.create<any>(AppModule);

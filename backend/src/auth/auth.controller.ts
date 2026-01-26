@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, UseGuards, Request, Param, UploadedFile, UseInterceptors, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, UseGuards, Request, Param, UploadedFile, UseInterceptors, Logger, Query } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from '../storage/storage.service';
 import { AuthService } from './auth.service';
@@ -144,6 +144,14 @@ export class AuthController {
   @UseGuards(JwtAuthGuard, EmulateRLSGuard)
   async getUserRoles(@Param('userId') userId: string) {
     return await this.authService.getUserRoles(userId);
+  }
+
+  // Lightweight role check used by the frontend to gate admin UI
+  @Get('role')
+  @UseGuards(JwtAuthGuard)
+  async hasRole(@Request() req: any, @Query('role') role = 'admin') {
+    const hasRole = await this.authService.hasRole(req.user.userId, role as any);
+    return { hasRole };
   }
 
   // Request a password reset token
