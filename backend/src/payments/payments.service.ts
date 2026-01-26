@@ -76,14 +76,41 @@ export class PaymentsService {
     });
   }
 
-  async getActiveSubscription(userId: string): Promise<Payment | null> {
+  async getActiveSubscription(userId: string): Promise<any> {
     const now = new Date();
-    return await this.paymentRepository
+    const payment = await this.paymentRepository
       .createQueryBuilder('payment')
       .where('payment.user_id = :userId', { userId })
       .andWhere('payment.status = :status', { status: 'success' })
       .andWhere('payment.subscription_end > :now', { now })
       .orderBy('payment.subscription_end', 'DESC')
       .getOne();
+
+    // Transform Payment entity to subscription response format
+    if (!payment) {
+      return {
+        payment_status: 'free',
+        subscription_tier: 'free',
+        expires_at: null,
+        trial_ends_at: null,
+        is_active: false,
+      };
+    }
+
+    // Determine subscription tier from subscription_plan
+    let tier: 'free' | 'premium' | 'pro' = 'free';
+    if (payment.subscription_plan === 'pro') {
+      tier = 'pro';
+    } else if (payment.subscription_plan === 'premium') {
+      tier = 'premium';
+    }
+
+    return {
+      payment_status: 'paid',
+      subscription_tier: tier,
+      expires_at: payment.subscription_end,
+      trial_ends_at: null,
+      is_active: payment.subscription_end ? payment.subscription_end > now : false,
+    };
   }
 }

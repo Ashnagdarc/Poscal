@@ -37,7 +37,8 @@ const addErrorInterceptor = (axiosInstance: typeof axios) => {
       if (error.response?.status === 401) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
-        window.location.href = '/auth';
+        // Redirect to signin page, not auth
+        window.location.href = '/signin';
       }
       return Promise.reject(error);
     }

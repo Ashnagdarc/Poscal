@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Body, Param, UseGuards, Request, Query } fr
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentsService } from './payments.service';
 import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentDto } from './dto/payment.dto';
+import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 
 @Controller('payments')
 export class PaymentsController {
@@ -15,7 +16,7 @@ export class PaymentsController {
 
   @Get('subscription')
   @UseGuards(AuthGuard('jwt'))
-  async getActiveSubscription(@Request() req: any) {
+  async getActiveSubscription(@Request() req: any): Promise<SubscriptionResponseDto> {
     return await this.paymentsService.getActiveSubscription(req.user.userId);
   }
 
