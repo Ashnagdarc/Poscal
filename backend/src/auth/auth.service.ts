@@ -160,36 +160,43 @@ export class AuthService {
    * Sign up new user
    */
   async signUp(signUpDto: SignUpDto): Promise<{ user: User; token: string }> {
-    const existingUser = await this.userRepository.findOne({ where: { email: signUpDto.email } });
-    if (existingUser) {
-      throw new ConflictException('User with this email already exists');
+    try {
+      const existingUser = await this.userRepository.findOne({ where: { email: signUpDto.email } });
+      if (existingUser) {
+        throw new ConflictException('User with this email already exists');
+      }
+
+      const salt = await bcrypt.genSalt(10);
+      const password_hash = await bcrypt.hash(signUpDto.password, salt);
+
+      const user = this.userRepository.create({
+        email: signUpDto.email,
+        password_hash,
+        full_name: signUpDto.full_name || '',
+        email_verified: false,
+      });
+
+      const savedUser = await this.userRepository.save(user);
+
+      // Create profile
+      await this.profileRepository.save({
+        id: savedUser.id,
+        email: savedUser.email,
+        full_name: savedUser.full_name,
+      });
+
+      // Assign default user role
+      await this.assignRole({ user_id: savedUser.id, role: AppRole.USER });
+
+      const token = this.generateToken(savedUser.id, savedUser.email, AppRole.USER);
+
+      return { user: savedUser, token };
+    } catch (err) {
+      // Surface the underlying error for diagnostics while preserving HTTP error handling
+      // eslint-disable-next-line no-console
+      console.error('[auth-signup-service-error]', (err as any)?.message || err, (err as any)?.stack || '');
+      throw err;
     }
-
-    const salt = await bcrypt.genSalt(10);
-    const password_hash = await bcrypt.hash(signUpDto.password, salt);
-
-    const user = this.userRepository.create({
-      email: signUpDto.email,
-      password_hash,
-      full_name: signUpDto.full_name || '',
-      email_verified: false,
-    });
-
-    const savedUser = await this.userRepository.save(user);
-
-    // Create profile
-    await this.profileRepository.save({
-      id: savedUser.id,
-      email: savedUser.email,
-      full_name: savedUser.full_name,
-    });
-
-    // Assign default user role
-    await this.assignRole({ user_id: savedUser.id, role: AppRole.USER });
-
-    const token = this.generateToken(savedUser.id, savedUser.email, AppRole.USER);
-
-    return { user: savedUser, token };
   }
 
   /**

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Delete, Body, UseGuards, Request, Param, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, UseGuards, Request, Param, UploadedFile, UseInterceptors, Logger } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { StorageService } from '../storage/storage.service';
 import { AuthService } from './auth.service';
@@ -13,6 +13,8 @@ import { EmulateRLSGuard } from './guards/rls.guard';
 
 @Controller('auth')
 export class AuthController {
+  private readonly logger = new Logger(AuthController.name);
+
   constructor(private authService: AuthService, private storageService: StorageService) {}
 
   @Get('health')
@@ -22,16 +24,22 @@ export class AuthController {
 
   @Post('signup')
   async signup(@Body() signUpDto: SignUpDto) {
-    const { user, token } = await this.authService.signUp(signUpDto);
-    return {
-      user: {
-        id: user.id,
-        email: user.email,
-        full_name: user.full_name,
-        email_verified: user.email_verified,
-      },
-      token,
-    };
+    try {
+      const { user, token } = await this.authService.signUp(signUpDto);
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          full_name: user.full_name,
+          email_verified: user.email_verified,
+        },
+        token,
+      };
+    } catch (error) {
+      this.logger.error('[auth-signup-error]', (error as any)?.stack || (error as any)?.message || JSON.stringify(error));
+      console.error('[auth-signup-error]', (error as any)?.message || error, (error as any)?.stack || '');
+      throw error;
+    }
   }
 
   @Post('signin')
