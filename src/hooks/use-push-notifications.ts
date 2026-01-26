@@ -50,9 +50,9 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         setPermission(Notification.permission);
 
         try {
-          const registration = await navigator.serviceWorker.register('/sw.js');
-          await navigator.serviceWorker.ready;
-          logger.log('[push] Service Worker registered:', registration);
+          // Rely on the app-level registration (main.tsx) to avoid duplicate SW registrations.
+          const registration = await navigator.serviceWorker.ready;
+          logger.log('[push] Service Worker ready:', registration);
           setSwRegistration(registration);
 
           const subscription = await registration.pushManager.getSubscription();
@@ -79,7 +79,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
             setIsSubscribed(false);
           }
         } catch (error) {
-          logger.error('[push] Service Worker registration failed:', error);
+          logger.error('[push] Service Worker ready wait failed:', error);
         }
       }
     };
