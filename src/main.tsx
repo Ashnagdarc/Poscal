@@ -9,8 +9,7 @@ import "./index.css";
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   const registerOnce = () => {
     if (navigator.serviceWorker.controller) {
-      console.info("[sw] Existing controller detected; skipping re-register");
-      return;
+      return; // Already controlling; avoid duplicate registration
     }
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
