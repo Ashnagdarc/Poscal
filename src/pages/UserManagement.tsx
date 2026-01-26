@@ -19,6 +19,7 @@ import {
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { BottomNav } from "@/components/BottomNav";
+import { supabase, isSupabaseConfigured } from "@/lib/supabase-shim";
 
 interface UserWithRole {
   id: string;
