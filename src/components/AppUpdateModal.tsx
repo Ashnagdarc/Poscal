@@ -30,7 +30,7 @@ export const AppUpdateModal = () => {
     const checkForUpdates = async () => {
 
       try {
-        // Fetch the latest active update
+        // Fetch the latest active update (ignore unauthorized in prod builds)
         const updates = await appUpdatesApi.getAll();
         const latestActive = (updates || []).find((u: any) => u.is_active) || updates?.[0];
         if (!latestActive) return;
@@ -49,7 +49,12 @@ export const AppUpdateModal = () => {
           views[latestActive.id] = currentViews + 1;
           localStorage.setItem(STORAGE_KEY, JSON.stringify(views));
         }
-      } catch (err) {
+      } catch (err: any) {
+        // Quietly ignore expected 401s until the endpoint is wired in prod
+        if (err?.response?.status === 401) {
+          console.info('[app-updates] Skipping update modal: unauthorized');
+          return;
+        }
         console.error('Error checking for updates:', err);
       }
     };
