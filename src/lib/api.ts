@@ -80,7 +80,7 @@ export const featureFlagApi = {
   getPaidLock: async (): Promise<boolean> => {
     try {
       console.debug('[feature-flag] Fetching paid lock status...');
-      const { data } = await serverlessApi.get<FeatureFlagResponse>('/api/feature-flag');
+      const { data } = await api.get<FeatureFlagResponse>('/admin/feature-flag');
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to read paid lock flag');
       }
@@ -95,7 +95,7 @@ export const featureFlagApi = {
   setPaidLock: async (enabled: boolean): Promise<boolean> => {
     try {
       console.debug('[feature-flag] Setting paid lock to:', enabled);
-      const { data } = await serverlessApi.post<FeatureFlagResponse>('/api/feature-flag', { enabled });
+      const { data } = await api.post<FeatureFlagResponse>('/admin/feature-flag', { enabled });
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to update paid lock flag');
       }
