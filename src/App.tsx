@@ -33,14 +33,6 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 const AdminWebhookLogs = lazy(() => import("./pages/AdminWebhookLogs"));
-          <Route 
-            path="/admin/webhook-logs" 
-            element={
-              <ProtectedRoute>
-                <AdminWebhookLogs />
-              </ProtectedRoute>
-            } 
-          />
 const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -52,9 +44,10 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
-      <UpgradeBanner />
-      <AppUpdateModal />
-      <PWAInstallPrompt />
+      {/* Temporarily disable non-essential overlays to minimize startup issues */}
+      {/* <UpgradeBanner /> */}
+      {/* <AppUpdateModal /> */}
+      {/* <PWAInstallPrompt /> */}
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
         <Routes>
           <Route path="/" element={<Index />} />

@@ -42,7 +42,7 @@ export const AppUpdateModal = () => {
         const currentViews = views[latestActive.id] || 0;
 
         if (currentViews < MAX_VIEWS) {
-          setUpdate(data);
+          setUpdate(latestActive);
           setOpen(true);
 
           // Increment view count
