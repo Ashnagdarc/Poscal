@@ -48,7 +48,6 @@ addAuthInterceptor(api);
 addAuthInterceptor(serverlessApi);
 addErrorInterceptor(api);
 addErrorInterceptor(serverlessApi);
-);
 
 export interface User {
   id: string;
