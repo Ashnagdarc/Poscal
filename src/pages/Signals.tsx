@@ -202,7 +202,7 @@ const Signals = () => {
     setError(null);
 
     try {
-      // Build query params
+      // Build query params for backend filtering
       const queryParams: any = {};
       
       if (pairFilter !== 'All Pairs') {
@@ -222,26 +222,21 @@ const Signals = () => {
       }
 
       const data = await signalsApi.getAll(queryParams);
-      setSignals(data || []);
-      setTotalCount(data?.length || 0);
+      const allSignals = data || [];
+      const total = allSignals.length;
 
-      // Pagination
+      // Client-side pagination to align with backend response
       const from = (currentPage - 1) * SIGNALS_PER_PAGE;
-      const to = from + SIGNALS_PER_PAGE - 1;
-
-      const { data: paginatedData, error: fetchError, count } = await query
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-      if (fetchError) throw fetchError;
+      const to = from + SIGNALS_PER_PAGE;
+      const paginatedData = allSignals.slice(from, to);
 
       // Limit signals for free users
-      const signalsToDisplay = (!isPaid && !isAdmin) 
-        ? (paginatedData || []).slice(0, FREE_SIGNALS_LIMIT) 
-        : (paginatedData || []);
+      const signalsToDisplay = (!isPaid && !isAdmin)
+        ? paginatedData.slice(0, FREE_SIGNALS_LIMIT)
+        : paginatedData;
 
       setSignals(signalsToDisplay);
-      setTotalCount(count || 0);
+      setTotalCount(total);
     } catch (error) {
       logger.error('Error fetching signals:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch signals');
