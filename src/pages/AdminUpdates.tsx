@@ -13,7 +13,6 @@ import { BottomNav } from '@/components/BottomNav';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { featureFlagApi, appUpdatesApi, notificationsApi } from '@/lib/api';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 interface AppUpdate {
   id: string;

@@ -33,7 +33,6 @@ import { filtersReducer, initialFiltersState, modalReducer, initialModalState } 
 import { NewTradeFormSchema } from "@/lib/formValidation";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase-shim";
 import { tradesApi, accountsApi } from "@/lib/api";
 
 interface Trade {

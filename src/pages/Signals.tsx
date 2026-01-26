@@ -21,7 +21,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { Tables } from '@/types/database.types';
 import { useNavigate } from 'react-router-dom';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 import { signalsApi, accountsApi } from '@/lib/api';
 
 type TradingAccount = Tables<'trading_accounts'>;

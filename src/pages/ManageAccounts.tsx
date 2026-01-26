@@ -12,7 +12,6 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Tables } from '@/types/database.types';
 import { logger } from '@/lib/logger';
 import { accountsApi, signalsApi, notificationsApi } from '@/lib/api';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 
 type TradingAccount = Tables<'trading_accounts'>;
 

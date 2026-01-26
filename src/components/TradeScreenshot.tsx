@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { Camera, X, Image as ImageIcon } from 'lucide-react';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase-shim';
+import { uploadsApi } from '@/lib/api';
 
 interface TradeScreenshotProps {
   tradeId: string;
@@ -28,29 +28,25 @@ export const TradeScreenshot = ({ tradeId, userId, existingUrls, onUpdate }: Tra
 
     setUploading(true);
     
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${userId}/${tradeId}/${Date.now()}.${fileExt}`;
+    try {
+      const response = await uploadsApi.uploadTradeScreenshot(tradeId, file);
+      
+      if (!response?.url) {
+        toast.error('Failed to upload image');
+        setUploading(false);
+        return;
+      }
 
-    const { error: uploadError } = await supabase.storage
-      .from('trade-screenshots')
-      .upload(fileName, file);
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
+      const newUrls = [...urls, response.url];
+      setUrls(newUrls);
+      onUpdate(newUrls);
+      toast.success('Screenshot uploaded');
+    } catch (error) {
+      console.error('Upload error:', error);
       toast.error('Failed to upload image');
+    } finally {
       setUploading(false);
-      return;
     }
-
-    const { data } = supabase.storage
-      .from('trade-screenshots')
-      .getPublicUrl(fileName);
-
-    const newUrls = [...urls, data.publicUrl];
-    setUrls(newUrls);
-    onUpdate(newUrls);
-    toast.success('Screenshot uploaded');
-    setUploading(false);
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -61,15 +57,19 @@ export const TradeScreenshot = ({ tradeId, userId, existingUrls, onUpdate }: Tra
   };
 
   const removeImage = async (url: string) => {
-    const path = url.split('/trade-screenshots/')[1];
-    if (path) {
-      await supabase.storage.from('trade-screenshots').remove([path]);
+    try {
+      // Extract screenshot ID from URL or use the full URL as ID
+      const screenshotId = url.split('/').pop() || url;
+      await uploadsApi.deleteTradeScreenshot(screenshotId);
+      
+      const newUrls = urls.filter(u => u !== url);
+      setUrls(newUrls);
+      onUpdate(newUrls);
+      toast.success('Screenshot removed');
+    } catch (error) {
+      console.error('Delete error:', error);
+      toast.error('Failed to remove screenshot');
     }
-    
-    const newUrls = urls.filter(u => u !== url);
-    setUrls(newUrls);
-    onUpdate(newUrls);
-    toast.success('Screenshot removed');
   };
 
   return (

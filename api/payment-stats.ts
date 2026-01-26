@@ -1,7 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const BACKEND_URL = process.env.VITE_API_URL || 'https://api.poscalfx.com';
+const BACKEND_SERVICE_TOKEN = process.env.BACKEND_SERVICE_TOKEN;
 
 export default async function handler(req: any, res: any) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -16,15 +14,11 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ success: false, message: 'Server not configured (missing env vars)' });
+  if (!BACKEND_URL) {
+    return res.status(500).json({ success: false, message: 'Backend not configured' });
   }
 
   try {
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
     const url = new URL(req.url, 'http://localhost');
     const startDateParam = url.searchParams.get('startDate');
     const endDateParam = url.searchParams.get('endDate');

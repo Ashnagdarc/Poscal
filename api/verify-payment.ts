@@ -1,8 +1,6 @@
-import { createClient } from '@supabase/supabase-js';
-
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const BACKEND_URL = process.env.VITE_API_URL || 'https://api.poscalfx.com';
+const BACKEND_SERVICE_TOKEN = process.env.BACKEND_SERVICE_TOKEN;
 
 export default async function handler(req: any, res: any) {
   // Basic CORS support for local testing / cross-origin usage
@@ -18,7 +16,7 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
 
-  if (!PAYSTACK_SECRET_KEY || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!PAYSTACK_SECRET_KEY || !BACKEND_URL) {
     return res.status(500).json({ success: false, message: 'Server not configured (missing env vars)' });
   }
 
@@ -44,7 +42,6 @@ export default async function handler(req: any, res: any) {
     }
 
     const paystackData = await verifyResponse.json();
-
     if (!paystackData?.status || paystackData?.data?.status !== 'success') {
       return res.status(400).json({
         success: false,
@@ -52,52 +49,30 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    // Initialize Supabase admin client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    });
-
     // Calculate subscription expiry (30 days)
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + 30);
 
-    // Update profile
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({
-        payment_status: 'paid',
-        subscription_tier: tier,
-        subscription_expires_at: expiryDate.toISOString(),
-        payment_reference: reference,
-        payment_date: new Date().toISOString(),
-        paystack_customer_code: paystackData?.data?.customer?.customer_code,
-      })
-      .eq('id', userId);
+    // Call backend to update subscription
+    const backendHeaders: any = {
+      'Content-Type': 'application/json',
+    };
 
-    if (updateError) {
-      return res.status(500).json({ success: false, message: 'Failed to update user subscription' });
+    if (BACKEND_SERVICE_TOKEN) {
+      backendHeaders['Authorization'] = `Bearer ${BACKEND_SERVICE_TOKEN}`;
     }
 
-    // Insert payment record (best-effort)
-    // Insert payment record and fail loudly if it doesn't persist
-    try {
-      const paymentPayload = {
-        user_id: userId,
+    const updateResponse = await fetch(`${BACKEND_URL}/payments/verify`, {
+      method: 'POST',
+      headers: backendHeaders,
+      body: JSON.stringify({
+        userId,
+        reference,
+        tier,
         amount: (paystackData?.data?.amount || 0) / 100, // kobo to naira
         currency: paystackData?.data?.currency || 'NGN',
-        status: 'success',
-        payment_method: 'paystack',
-        paystack_reference: reference,
         paystack_customer_code: paystackData?.data?.customer?.customer_code,
-        // ensure non-nullable subscription_tier is set to match schema
-        subscription_tier: tier,
-        // keep backward-compatible `tier` if used elsewhere
-        tier,
-        subscription_start: new Date().toISOString(),
-        subscription_end: expiryDate.toISOString(),
+        expiresAt: expiryDate.toISOString(),
         metadata: {
           channel: paystackData?.data?.channel,
           ip_address: paystackData?.data?.ip_address,
@@ -105,30 +80,21 @@ export default async function handler(req: any, res: any) {
           authorization: paystackData?.data?.authorization,
           gateway_response: paystackData?.data?.gateway_response,
         },
-        paid_at: new Date().toISOString(),
-      };
+      }),
+    });
 
-      const { data: paymentData, error: paymentError } = await supabase
-        .from('payments')
-        .insert(paymentPayload)
-        .select('*')
-        .single();
-
-      if (paymentError) {
-        // Log full context to Vercel logs for debugging
-        console.error('[verify-payment] payment insert error', paymentError);
-        console.error('[verify-payment] payload', JSON.stringify(paymentPayload));
-        console.error('[verify-payment] paystackData', JSON.stringify(paystackData));
-        // Return failure so the caller and logs show this
-        return res.status(500).json({ success: false, message: 'Failed to insert payment record', details: paymentError });
-      }
-
-      // Optionally log success
-      console.log('[verify-payment] payment recorded', { id: paymentData?.id, userId });
-    } catch (errInsert: any) {
-      console.error('[verify-payment] unexpected insert error', errInsert);
-      return res.status(500).json({ success: false, message: 'Unexpected error inserting payment', details: errInsert?.message || String(errInsert) });
+    if (!updateResponse.ok) {
+      const errorData = await updateResponse.json();
+      console.error('[verify-payment] backend error', errorData);
+      return res.status(updateResponse.status).json({ 
+        success: false, 
+        message: 'Failed to update subscription',
+        details: errorData 
+      });
     }
+
+    const updateData = await updateResponse.json();
+    console.log('[verify-payment] subscription updated', { userId, tier });
 
     return res.status(200).json({
       success: true,
