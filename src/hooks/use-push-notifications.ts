@@ -50,7 +50,12 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         setPermission(Notification.permission);
 
         try {
-          // Rely on the app-level registration (main.tsx) to avoid duplicate SW registrations.
+          // If SW is disabled or not yet registered, skip to avoid hangs/reloads
+          if (!navigator.serviceWorker.controller) {
+            logger.warn('[push] Service Worker controller missing; push setup skipped');
+            return;
+          }
+
           const registration = await navigator.serviceWorker.ready;
           logger.log('[push] Service Worker ready:', registration);
           setSwRegistration(registration);

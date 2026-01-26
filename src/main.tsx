@@ -4,9 +4,10 @@ import "@/lib/supabase-shim";
 import App from "./App.tsx";
 import "./index.css";
 
-// Manually register the service worker in production to avoid repeated fetches of the auto-injected registerSW.js helper.
-// Skip registration if a controller already exists to prevent duplicate installs/restarts.
-if (import.meta.env.PROD && "serviceWorker" in navigator) {
+// Temporary: disable automatic service worker registration to stop refresh loops.
+// Re-enable by setting VITE_ENABLE_SW to "true" and redeploy.
+const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
+if (ENABLE_SW && import.meta.env.PROD && "serviceWorker" in navigator) {
   const registerOnce = () => {
     if (navigator.serviceWorker.controller) {
       return; // Already controlling; avoid duplicate registration
