@@ -21,12 +21,24 @@ export class NotificationsService {
   // Push Subscriptions
   async createSubscription(dto: CreatePushSubscriptionDto): Promise<PushSubscription> {
     try {
+      // Upsert by endpoint to avoid unique constraint violations
+      const existing = await this.pushSubscriptionRepository.findOne({ where: { endpoint: dto.endpoint } });
+
+      if (existing) {
+        existing.user_id = dto.user_id ?? existing.user_id;
+        existing.p256dh_key = dto.p256dh_key;
+        existing.auth_key = dto.auth_key;
+        existing.user_agent = dto.user_agent ?? existing.user_agent;
+        existing.is_active = true;
+        return await this.pushSubscriptionRepository.save(existing);
+      }
+
       const subscription = this.pushSubscriptionRepository.create(dto);
-      const saved = await this.pushSubscriptionRepository.save(subscription);
-      return saved;
+      return await this.pushSubscriptionRepository.save(subscription);
     } catch (error) {
-      console.error('[push] Error creating subscription:', error);
-      throw error;
+      const err: any = error;
+      console.error('[push] Error creating subscription:', err?.message || err);
+      throw err;
     }
   }
 

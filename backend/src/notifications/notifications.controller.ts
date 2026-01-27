@@ -43,7 +43,8 @@ export class NotificationsController {
       this.logger.log(`[push/subscribe] Successfully saved subscription: ${result.id}`);
       return result;
     } catch (error) {
-      this.logger.error(`[push/subscribe] Error saving subscription:`, error.stack || error);
+      const err: any = error;
+      this.logger.error(`[push/subscribe] Error saving subscription:`, err?.stack || err);
       throw error;
     }
   }
