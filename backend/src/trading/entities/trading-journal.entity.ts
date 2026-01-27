@@ -8,26 +8,26 @@ export class TradingJournal {
   @Column('uuid')
   user_id: string;
 
-  @Column('uuid')
-  account_id: string;
+  @Column({ type: 'uuid', nullable: true })
+  account_id: string | null;
 
   @Column({ type: 'date' })
   trade_date: string;
 
-  @Column({ type: 'varchar', length: 20 })
-  symbol: string;
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  symbol: string | null;
 
-  @Column({ type: 'varchar', length: 10 })
-  direction: string;
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  direction: string | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 5 })
-  entry_price: number;
+  @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
+  entry_price: number | null;
 
   @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
   exit_price: number | null;
 
-  @Column({ type: 'decimal', precision: 15, scale: 2 })
-  position_size: number;
+  @Column({ type: 'decimal', precision: 15, scale: 2, nullable: true })
+  position_size: number | null;
 
   @Column({ type: 'decimal', precision: 15, scale: 5, nullable: true })
   stop_loss: number | null;
