@@ -161,13 +161,18 @@ self.addEventListener('pushsubscriptionchange', async (event) => {
           applicationServerKey: 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0'
         });
         
-        // Send new subscription to backend
-        await fetch('/api/update-push-subscription', {
+        const subJson = newSubscription.toJSON();
+        
+        // Send new subscription to backend API (public endpoint - no JWT needed)
+        await fetch('https://api.poscalfx.com/notifications/push/update-subscription', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
-            oldSubscription: event.oldSubscription?.toJSON(),
-            newSubscription: newSubscription.toJSON()
+            endpoint: subJson.endpoint,
+            p256dh_key: subJson.keys.p256dh,
+            auth_key: subJson.keys.auth
           })
         });
         

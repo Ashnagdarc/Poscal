@@ -49,6 +49,22 @@ export class NotificationsController {
     }
   }
 
+  @Post('push/update-subscription')
+  async updateSubscription(@Body() dto: CreatePushSubscriptionDto) {
+    // Public endpoint for service worker to update subscriptions (no JWT)
+    // Uses endpoint as identifier to update existing subscription keys
+    try {
+      this.logger.log(`[push/update-subscription] Updating subscription for endpoint: ${dto.endpoint?.substring(0, 50)}...`);
+      const result = await this.notificationsService.createSubscription(dto);
+      this.logger.log(`[push/update-subscription] Updated subscription: ${result.id}`);
+      return result;
+    } catch (error) {
+      const err: any = error;
+      this.logger.error(`[push/update-subscription] Error:`, err?.stack || err);
+      throw error;
+    }
+  }
+
   @Delete('push/subscriptions/:id')
   @UseGuards(AuthGuard('jwt'))
   async deleteSubscription(@Param('id') id: string) {
