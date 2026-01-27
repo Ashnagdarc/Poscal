@@ -14,7 +14,6 @@ import {
   Download,
   Moon,
   Sun,
-  BarChart3,
   Zap,
   Eye,
   EyeOff,
@@ -36,13 +35,6 @@ interface Profile {
   created_at: string;
 }
 
-interface ProfileStats {
-  totalTrades: number;
-  winRate: number;
-  totalPnL: number;
-  averageROI: number;
-}
-
 const Profile = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -52,7 +44,6 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [stats, setStats] = useState<ProfileStats>({ totalTrades: 0, winRate: 0, totalPnL: 0, averageROI: 0 });
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
@@ -70,7 +61,6 @@ const Profile = () => {
   useEffect(() => {
     if (user) {
       fetchProfile();
-      fetchStats();
       loadPreferences();
     }
   }, [user]);
@@ -103,22 +93,6 @@ const Profile = () => {
       logger.error('Error fetching profile:', error);
     }
     setIsLoading(false);
-  };
-
-  const fetchStats = async () => {
-    // Simulate fetching stats from backend
-    // In production, call: await statsApi.getUserStats()
-    try {
-      // TODO: Replace with actual API call
-      setStats({
-        totalTrades: 42,
-        winRate: 58,
-        totalPnL: 1250.50,
-        averageROI: 3.2,
-      });
-    } catch (error) {
-      logger.error('Error fetching stats:', error);
-    }
   };
 
   const loadPreferences = () => {
@@ -331,36 +305,6 @@ const Profile = () => {
             </div>
           )}
         </div>
-
-        {/* Trading Statistics Card */}
-        {stats.totalTrades > 0 && (
-          <div className="bg-gradient-to-br from-secondary/50 to-secondary rounded-2xl p-4 space-y-3">
-            <div className="flex items-center gap-2 mb-2">
-              <BarChart3 className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground font-medium">Trading Stats</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-background rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Total Trades</p>
-                <p className="text-lg font-bold text-foreground">{stats.totalTrades}</p>
-              </div>
-              <div className="bg-background rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Win Rate</p>
-                <p className="text-lg font-bold text-green-500">{stats.winRate}%</p>
-              </div>
-              <div className="bg-background rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Total P&L</p>
-                <p className={`text-lg font-bold ${stats.totalPnL >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  ₦{stats.totalPnL.toLocaleString()}
-                </p>
-              </div>
-              <div className="bg-background rounded-xl p-3">
-                <p className="text-xs text-muted-foreground">Avg ROI</p>
-                <p className="text-lg font-bold text-foreground">{stats.averageROI}%</p>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Profile Info */}
         <div className="space-y-3">
