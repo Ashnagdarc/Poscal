@@ -737,11 +737,12 @@ const Journal = () => {
           filteredTrades.map((trade) => (
             <div
               key={trade.id}
-              className="bg-secondary rounded-2xl p-4 animate-fade-in"
+              className="bg-secondary rounded-2xl p-4 animate-fade-in cursor-pointer hover:bg-secondary/80 transition-colors"
+              onClick={() => dispatchModals({ type: 'OPEN_VIEW_TRADE', payload: trade })}
             >
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-2">
-                  {trade.direction === 'long' ? (
+                  {trade.direction === 'buy' ? (
                     <TrendingUp className="w-5 h-5 text-foreground" />
                   ) : (
                     <TrendingDown className="w-5 h-5 text-destructive" />
@@ -757,58 +758,26 @@ const Journal = () => {
                     {trade.status}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-1">
-                    <Calendar className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      {formatDate(trade.entry_date || trade.created_at)}
-                    </span>
-                  </div>
-                  {trade.status === 'open' && (
-                    <button
-                      onClick={() => openEditModal(trade)}
-                      className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                  )}
+                <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                  <Calendar className="w-4 h-4" />
+                  <span>{formatDate(trade.entry_date || trade.created_at)}</span>
                 </div>
               </div>
 
-              <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                {trade.entry_price && (
-                  <div>
-                    <p className="text-muted-foreground">Entry</p>
-                    <p className="font-medium text-foreground">{trade.entry_price}</p>
-                  </div>
-                )}
-                {trade.stop_loss && (
-                  <div>
-                    <p className="text-muted-foreground">SL</p>
-                    <p className="font-medium text-foreground">{trade.stop_loss}</p>
-                  </div>
-                )}
-                {trade.take_profit && (
-                  <div>
-                    <p className="text-muted-foreground">TP</p>
-                    <p className="font-medium text-foreground">{trade.take_profit}</p>
-                  </div>
-                )}
-              </div>
-
+              {/* Preview Content */}
               {trade.notes && (
-                <p className="text-sm text-muted-foreground mb-3">{trade.notes}</p>
+                <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{trade.notes}</p>
+              )}
+              
+              {trade.journal_type === 'notes' && trade.rich_content && (
+                <p className="text-sm text-muted-foreground italic">Rich journal entry...</p>
               )}
 
-              {trade.status === 'closed' && trade.pnl !== null && (
-                <div className={`text-center py-2 rounded-xl ${
-                  trade.pnl >= 0 ? 'bg-foreground/5' : 'bg-destructive/10'
-                }`}>
-                  <span className={`font-bold ${
-                    trade.pnl >= 0 ? 'text-foreground' : 'text-destructive'
-                  }`}>
-                    P&L: {trade.pnl >= 0 ? '+' : ''}{trade.pnl.toFixed(2)}
-                  </span>
+              {/* Entry Price Preview */}
+              {trade.entry_price && (
+                <div className="mt-2 text-xs">
+                  <span className="text-muted-foreground">Entry: </span>
+                  <span className="font-medium text-foreground">{trade.entry_price}</span>
                 </div>
               )}
             </div>
@@ -1216,6 +1185,156 @@ const Journal = () => {
         }}
         pair={modals.closeTradeModal.trade?.pair || ""}
       />
+
+      {/* View Trade Modal */}
+      {modals.viewTradeModal.isOpen && modals.viewTradeModal.trade && (
+        <div className="fixed inset-0 bg-background/95 backdrop-blur-sm z-50 overflow-y-auto">
+          <div className="min-h-screen px-6 py-8">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-6">
+              <button
+                onClick={() => dispatchModals({ type: 'CLOSE_VIEW_TRADE' })}
+                className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <h2 className="text-lg font-bold text-foreground">Journal Entry</h2>
+              <button
+                onClick={() => {
+                  openEditModal(modals.viewTradeModal.trade!);
+                  dispatchModals({ type: 'CLOSE_VIEW_TRADE' });
+                }}
+                className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <Edit2 className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="space-y-4 max-w-2xl mx-auto">
+              {/* Trade Info Card */}
+              <div className="bg-secondary rounded-2xl p-4">
+                <div className="flex items-center gap-2 mb-4">
+                  {modals.viewTradeModal.trade.direction === 'buy' ? (
+                    <TrendingUp className="w-6 h-6 text-foreground" />
+                  ) : (
+                    <TrendingDown className="w-6 h-6 text-destructive" />
+                  )}
+                  <span className="text-xl font-bold text-foreground">
+                    {modals.viewTradeModal.trade.pair}
+                  </span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    modals.viewTradeModal.trade.status === 'open' 
+                      ? 'bg-foreground/10 text-foreground' 
+                      : modals.viewTradeModal.trade.status === 'closed'
+                      ? 'bg-muted text-muted-foreground'
+                      : 'bg-destructive/10 text-destructive'
+                  }`}>
+                    {modals.viewTradeModal.trade.status}
+                  </span>
+                </div>
+
+                {/* Trade Details Grid */}
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  {modals.viewTradeModal.trade.entry_price && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Entry Price</p>
+                      <p className="font-medium text-foreground">{modals.viewTradeModal.trade.entry_price}</p>
+                    </div>
+                  )}
+                  {modals.viewTradeModal.trade.position_size && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Position Size</p>
+                      <p className="font-medium text-foreground">{modals.viewTradeModal.trade.position_size}</p>
+                    </div>
+                  )}
+                  {modals.viewTradeModal.trade.stop_loss && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Stop Loss</p>
+                      <p className="font-medium text-foreground">{modals.viewTradeModal.trade.stop_loss}</p>
+                    </div>
+                  )}
+                  {modals.viewTradeModal.trade.take_profit && (
+                    <div>
+                      <p className="text-muted-foreground mb-1">Take Profit</p>
+                      <p className="font-medium text-foreground">{modals.viewTradeModal.trade.take_profit}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-muted-foreground mb-1">Date</p>
+                    <p className="font-medium text-foreground">
+                      {formatDate(modals.viewTradeModal.trade.entry_date || modals.viewTradeModal.trade.created_at)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground mb-1">Type</p>
+                    <p className="font-medium text-foreground capitalize">
+                      {modals.viewTradeModal.trade.journal_type || 'structured'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes/Rich Content */}
+              {modals.viewTradeModal.trade.notes && (
+                <div className="bg-secondary rounded-2xl p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-2">Notes</h3>
+                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {modals.viewTradeModal.trade.notes}
+                  </p>
+                </div>
+              )}
+
+              {modals.viewTradeModal.trade.rich_content && (
+                <div className="bg-secondary rounded-2xl p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Journal Entry</h3>
+                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">
+                    {typeof modals.viewTradeModal.trade.rich_content === 'string' 
+                      ? modals.viewTradeModal.trade.rich_content
+                      : JSON.stringify(modals.viewTradeModal.trade.rich_content, null, 2)
+                    }
+                  </div>
+                </div>
+              )}
+
+              {/* Metadata */}
+              {(modals.viewTradeModal.trade.market_condition || modals.viewTradeModal.trade.tags) && (
+                <div className="bg-secondary rounded-2xl p-4">
+                  <h3 className="text-sm font-semibold text-foreground mb-3">Metadata</h3>
+                  <div className="space-y-2 text-sm">
+                    {modals.viewTradeModal.trade.market_condition && (
+                      <div>
+                        <span className="text-muted-foreground">Market Condition: </span>
+                        <span className="text-foreground capitalize">{modals.viewTradeModal.trade.market_condition}</span>
+                      </div>
+                    )}
+                    {modals.viewTradeModal.trade.tags && (
+                      <div>
+                        <span className="text-muted-foreground">Tags: </span>
+                        <span className="text-foreground">{modals.viewTradeModal.trade.tags}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* P&L for closed trades */}
+              {modals.viewTradeModal.trade.status === 'closed' && modals.viewTradeModal.trade.pnl !== null && (
+                <div className={`rounded-2xl p-4 text-center ${
+                  modals.viewTradeModal.trade.pnl >= 0 ? 'bg-foreground/5' : 'bg-destructive/10'
+                }`}>
+                  <p className="text-sm text-muted-foreground mb-1">Profit & Loss</p>
+                  <p className={`text-2xl font-bold ${
+                    modals.viewTradeModal.trade.pnl >= 0 ? 'text-foreground' : 'text-destructive'
+                  }`}>
+                    {modals.viewTradeModal.trade.pnl >= 0 ? '+' : ''}{modals.viewTradeModal.trade.pnl.toFixed(2)}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>

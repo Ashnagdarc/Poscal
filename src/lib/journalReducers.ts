@@ -85,6 +85,10 @@ export interface ModalState {
     isOpen: boolean;
     trade: Trade | null;
   };
+  viewTradeModal: {
+    isOpen: boolean;
+    trade: Trade | null;
+  };
 }
 
 export type ModalAction =
@@ -101,6 +105,8 @@ export type ModalAction =
   | { type: 'CLOSE_DELETE_CONFIRM' }
   | { type: 'OPEN_CLOSE_TRADE'; payload: Trade }
   | { type: 'CLOSE_CLOSE_TRADE' }
+  | { type: 'OPEN_VIEW_TRADE'; payload: Trade }
+  | { type: 'CLOSE_VIEW_TRADE' }
   | { type: 'RESET_MODALS' };
 
 export const initialModalState: ModalState = {
@@ -114,6 +120,10 @@ export const initialModalState: ModalState = {
     tradeId: null,
   },
   closeTradeModal: {
+    isOpen: false,
+    trade: null,
+  },
+  viewTradeModal: {
     isOpen: false,
     trade: null,
   },
@@ -147,6 +157,10 @@ export const modalReducer: Reducer<ModalState, ModalAction> = (state, action) =>
       return { ...state, closeTradeModal: { isOpen: true, trade: action.payload } };
     case 'CLOSE_CLOSE_TRADE':
       return { ...state, closeTradeModal: { isOpen: false, trade: null } };
+    case 'OPEN_VIEW_TRADE':
+      return { ...state, viewTradeModal: { isOpen: true, trade: action.payload } };
+    case 'CLOSE_VIEW_TRADE':
+      return { ...state, viewTradeModal: { isOpen: false, trade: null } };
     case 'RESET_MODALS':
       return initialModalState;
     default:
