@@ -176,8 +176,8 @@ const Journal = () => {
       ...newTrade,
       pair: newTrade.pair || 'JOURNAL',
       direction: newTrade.direction || 'long',
-      entry_price: newTrade.entry_price || '0',
-      position_size: newTrade.position_size || '0',
+      entry_price: newTrade.entry_price || '0.1',
+      position_size: newTrade.position_size || '1',
     } : newTrade;
 
     // Validate form data
@@ -230,8 +230,8 @@ const Journal = () => {
       ...newTrade,
       pair: newTrade.pair || 'JOURNAL',
       direction: newTrade.direction || 'long',
-      entry_price: newTrade.entry_price || '0',
-      position_size: newTrade.position_size || '0',
+      entry_price: newTrade.entry_price || '0.1',
+      position_size: newTrade.position_size || '1',
     } : newTrade;
 
     // Validate form data
