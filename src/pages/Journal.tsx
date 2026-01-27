@@ -800,24 +800,6 @@ const Journal = () => {
                 <p className="text-sm text-muted-foreground mb-3">{trade.notes}</p>
               )}
 
-              {trade.status === 'open' && (
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => dispatchModals({ type: 'OPEN_CLOSE_TRADE', payload: trade })}
-                    className="flex-1 h-10 bg-background text-foreground text-sm font-medium rounded-xl flex items-center justify-center gap-1"
-                  >
-                    <Check className="w-4 h-4" />
-                    Close Trade
-                  </button>
-                  <button
-                    onClick={() => dispatchModals({ type: 'OPEN_DELETE_CONFIRM', payload: trade.id })}
-                    className="h-10 w-10 bg-destructive/10 text-destructive rounded-xl flex items-center justify-center"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              )}
-
               {trade.status === 'closed' && trade.pnl !== null && (
                 <div className={`text-center py-2 rounded-xl ${
                   trade.pnl >= 0 ? 'bg-foreground/5' : 'bg-destructive/10'
