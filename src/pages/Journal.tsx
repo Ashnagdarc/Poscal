@@ -193,20 +193,21 @@ const Journal = () => {
 
     try {
       const tradeData = {
-        pair: tradeToValidate.pair,
+        user_id: user.id,
+        account_id: tradeToValidate.account_id || 'default',
+        symbol: tradeToValidate.pair,
         direction: tradeToValidate.direction,
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : null,
-        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : null,
-        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : null,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : null,
-        risk_percent: tradeToValidate.risk_percent ? parseFloat(tradeToValidate.risk_percent) : null,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : 0,
+        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
+        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : 0,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
         rich_content: tradeToValidate.rich_content,
         images: tradeToValidate.images,
         links: tradeToValidate.links,
         status: 'open',
-        entry_date: new Date().toISOString(),
+        trade_date: new Date().toISOString(),
       };
 
       const data = await tradesApi.create(tradeData);
@@ -250,13 +251,12 @@ const Journal = () => {
 
     try {
       const updates = {
-        pair: tradeToValidate.pair,
+        symbol: tradeToValidate.pair,
         direction: tradeToValidate.direction,
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : null,
-        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : null,
-        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : null,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : null,
-        risk_percent: tradeToValidate.risk_percent ? parseFloat(tradeToValidate.risk_percent) : null,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : 0,
+        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
+        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : 0,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
         rich_content: tradeToValidate.rich_content,
