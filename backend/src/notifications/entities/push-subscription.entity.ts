@@ -17,12 +17,9 @@ export class PushSubscription {
   @Column({ type: 'text', name: 'auth' })
   auth_key: string;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  user_agent: string | null;
-
-  @Column({ type: 'boolean', default: true })
-  is_active: boolean;
-
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  updated_at: Date;
 }

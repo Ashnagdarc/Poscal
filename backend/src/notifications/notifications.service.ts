@@ -28,8 +28,6 @@ export class NotificationsService {
         existing.user_id = dto.user_id ?? existing.user_id;
         existing.p256dh_key = dto.p256dh_key;
         existing.auth_key = dto.auth_key;
-        existing.user_agent = dto.user_agent ?? existing.user_agent;
-        existing.is_active = true;
         return await this.pushSubscriptionRepository.save(existing);
       }
 
@@ -44,14 +42,12 @@ export class NotificationsService {
 
   async getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
     return await this.pushSubscriptionRepository.find({
-      where: { user_id: userId, is_active: true },
+      where: { user_id: userId },
     });
   }
 
   async getAllActiveSubscriptions(): Promise<PushSubscription[]> {
-    return await this.pushSubscriptionRepository.find({
-      where: { is_active: true },
-    });
+    return await this.pushSubscriptionRepository.find();
   }
 
   async deleteSubscription(id: string): Promise<void> {

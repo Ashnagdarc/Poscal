@@ -16,10 +16,6 @@ export class CreatePushSubscriptionDto {
   @IsString()
   @IsNotEmpty()
   auth_key: string;
-
-  @IsString()
-  @IsOptional()
-  user_agent?: string;
 }
 
 export class CreatePushNotificationDto {
