@@ -1,7 +1,7 @@
 // ...existing code...
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield, X } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
@@ -15,58 +15,165 @@ import { toast } from "sonner";
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { featureFlagApi } from '@/lib/api';
 
+interface PaymentDetails {
+  name: string;
+  paymentDate: string;
+  expiryDate: string;
+  tier: string;
+  amount?: number;
+  reference?: string;
+}
+
+function PaymentDetailsModal({ isOpen, details, onClose }: { isOpen: boolean; details: PaymentDetails | null; onClose: () => void }) {
+  if (!isOpen || !details) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-end z-50 animate-fade-in">
+      <div className="w-full bg-background rounded-t-3xl p-6 space-y-6 pb-24 animate-slide-up">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-foreground">Payment Details</h2>
+          <button
+            onClick={onClose}
+            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <div className="bg-secondary rounded-2xl p-4">
+            <p className="text-sm text-muted-foreground mb-1">Account Holder</p>
+            <p className="text-lg font-semibold text-foreground">{details.name}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="bg-secondary rounded-2xl p-4">
+              <p className="text-sm text-muted-foreground mb-1">Subscription Tier</p>
+              <p className="text-lg font-semibold text-foreground capitalize">{details.tier}</p>
+            </div>
+            <div className="bg-secondary rounded-2xl p-4">
+              <p className="text-sm text-muted-foreground mb-1">Status</p>
+              <p className="text-lg font-semibold text-green-500">Active</p>
+            </div>
+          </div>
+
+          <div className="bg-secondary rounded-2xl p-4">
+            <p className="text-sm text-muted-foreground mb-1">Payment Date</p>
+            <p className="text-lg font-semibold text-foreground">{new Date(details.paymentDate).toLocaleDateString()}</p>
+          </div>
+
+          <div className="bg-secondary rounded-2xl p-4">
+            <p className="text-sm text-muted-foreground mb-1">Expiry Date</p>
+            <p className="text-lg font-semibold text-foreground">{new Date(details.expiryDate).toLocaleDateString()}</p>
+            <p className="text-xs text-muted-foreground mt-2">
+              {new Date(details.expiryDate) > new Date()
+                ? `Renews in ${Math.ceil((new Date(details.expiryDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} days`
+                : 'Subscription expired'}
+            </p>
+          </div>
+
+          {details.reference && (
+            <div className="bg-secondary rounded-2xl p-4">
+              <p className="text-sm text-muted-foreground mb-1">Reference ID</p>
+              <p className="text-xs font-mono text-foreground break-all">{details.reference}</p>
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={onClose}
+          className="w-full h-12 bg-foreground text-background font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RestorePurchaseButton() {
   const { user } = useAuth();
-  const { refreshSubscription } = useSubscription();
+  const { refreshSubscription, subscription } = useSubscription();
   const [loading, setLoading] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
 
   const handleRestore = async () => {
     if (!user) return;
     setLoading(true);
     try {
       const apiBase = import.meta.env.VITE_API_BASE_URL || '';
-      const resp = await fetch(`${apiBase}/api/restore-purchase`, {
+      const token = localStorage.getItem('auth_token');
+      const resp = await fetch(`${apiBase}/payments/restore`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
       });
       const data = await resp.json();
       if (!resp.ok || !data?.success) {
         throw new Error(data?.message || 'Restore failed');
       }
+
+      // Check subscription tier
+      if (data.data?.tier === 'free') {
+        // Redirect to payment gateway
+        window.location.href = '/pricing';
+        return;
+      }
+
+      // Show payment details modal for paid users
+      setPaymentDetails({
+        name: user.email?.split('@')[0] || 'User',
+        paymentDate: data.data?.paymentDate || new Date().toISOString(),
+        expiryDate: data.data?.expiryDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+        tier: data.data?.tier || 'premium',
+        amount: data.data?.amount,
+        reference: data.data?.reference,
+      });
+      setShowModal(true);
       toast.success('Purchase restored — your subscription is active');
       await refreshSubscription();
     } catch (err: any) {
       console.error('restore purchase error', err);
-      toast.error(err?.message || 'Failed to restore purchase');
+      if (err?.message?.includes('No successful purchases')) {
+        toast.info('No previous purchases found. Start your free trial or upgrade now.');
+        setTimeout(() => window.location.href = '/pricing', 1500);
+      } else {
+        toast.error(err?.message || 'Failed to restore purchase');
+      }
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <button
-      onClick={handleRestore}
-      disabled={!user || loading}
-      className={`w-full ${loading ? 'bg-secondary/30 cursor-not-allowed opacity-70' : 'bg-secondary/50'} backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]`}
-    >
-      <div className="flex items-center gap-3">
-        <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
-          <CreditCard className="w-4.5 h-4.5 text-foreground" />
+    <>
+      <button
+        onClick={handleRestore}
+        disabled={!user || loading}
+        className={`w-full ${loading ? 'bg-secondary/30 cursor-not-allowed opacity-70' : 'bg-secondary/50'} backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]`}
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
+            <CreditCard className="w-4.5 h-4.5 text-foreground" />
+          </div>
+          <div className="text-left flex-1">
+            <p className="font-medium text-foreground">Restore Purchase</p>
+            <p className="text-xs text-muted-foreground">Restore a previous purchase and reactivate premium features</p>
+          </div>
         </div>
-        <div className="text-left flex-1">
-          <p className="font-medium text-foreground">Restore Purchase</p>
-          <p className="text-xs text-muted-foreground">Restore a previous purchase and reactivate premium features</p>
+        <div>
+          {loading ? (
+            <span className="text-xs text-muted-foreground">Restoring…</span>
+          ) : (
+            <ChevronRight className="w-5 h-5 text-muted-foreground" />
+          )}
         </div>
-      </div>
-      <div>
-        {loading ? (
-          <span className="text-xs text-muted-foreground">Restoring…</span>
-        ) : (
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        )}
-      </div>
-    </button>
+      </button>
+      <PaymentDetailsModal isOpen={showModal} details={paymentDetails} onClose={() => setShowModal(false)} />
+    </>
   );
 }
 

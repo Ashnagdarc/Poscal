@@ -113,4 +113,50 @@ export class PaymentsService {
       is_active: payment.subscription_end ? payment.subscription_end > now : false,
     };
   }
+
+  async restorePurchase(userId: string): Promise<any> {
+    // Find latest successful payment for this user
+    const payment = await this.paymentRepository
+      .createQueryBuilder('payment')
+      .where('payment.user_id = :userId', { userId })
+      .andWhere('payment.status = :status', { status: 'success' })
+      .orderBy('payment.paid_at', 'DESC')
+      .getOne();
+
+    if (!payment) {
+      return {
+        success: false,
+        message: 'No successful purchases found for this account',
+        data: {
+          tier: 'free',
+        },
+      };
+    }
+
+    // Determine subscription tier
+    let tier: 'free' | 'premium' | 'pro' = 'premium';
+    if (payment.subscription_plan === 'pro') {
+      tier = 'pro';
+    } else if (payment.subscription_plan === 'free') {
+      tier = 'free';
+    }
+
+    // Calculate expiry date
+    let expiryDate = payment.subscription_end || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+    if (typeof expiryDate === 'string') {
+      expiryDate = new Date(expiryDate);
+    }
+
+    return {
+      success: true,
+      message: 'Purchase restored successfully',
+      data: {
+        tier,
+        paymentDate: payment.created_at || new Date(),
+        expiryDate,
+        amount: payment.amount,
+        reference: payment.reference,
+      },
+    };
+  }
 }

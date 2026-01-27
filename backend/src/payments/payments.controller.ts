@@ -46,6 +46,12 @@ export class PaymentsController {
     return await this.paymentsService.verifyPayment(verifyPaymentDto.reference);
   }
 
+  @Post('restore')
+  @UseGuards(AuthGuard('jwt'))
+  async restorePurchase(@Request() req: any) {
+    return await this.paymentsService.restorePurchase(req.user.userId);
+  }
+
   @Put(':id')
   @UseGuards(AuthGuard('jwt'))
   async update(@Param('id') id: string, @Body() updatePaymentDto: UpdatePaymentDto) {
