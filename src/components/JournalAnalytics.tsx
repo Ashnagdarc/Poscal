@@ -64,16 +64,16 @@ export const JournalAnalytics = ({ trades, onClose }: JournalAnalyticsProps) => 
 
   // Journal-specific stats
   const journalStats = useMemo(() => {
-    const totalLogs = trades.length;
-    const structuredLogs = trades.filter(t => t.journal_type === 'structured' || !t.journal_type).length;
-    const notesLogs = trades.filter(t => t.journal_type === 'notes').length;
-    const withRichContent = trades.filter(t => t.rich_content).length;
-    const withNotes = trades.filter(t => t.notes && t.notes.trim() !== '').length;
-    const withTags = trades.filter(t => t.tags && t.tags.trim() !== '').length;
+    const totalLogs = filteredTrades.length;
+    const structuredLogs = filteredTrades.filter(t => t.journal_type === 'structured' || !t.journal_type).length;
+    const notesLogs = filteredTrades.filter(t => t.journal_type === 'notes').length;
+    const withRichContent = filteredTrades.filter(t => t.rich_content).length;
+    const withNotes = filteredTrades.filter(t => t.notes && t.notes.trim() !== '').length;
+    const withTags = filteredTrades.filter(t => t.tags && t.tags.trim() !== '').length;
     
     // Activity by day of week
     const dayActivity: Record<string, number> = { Mon: 0, Tue: 0, Wed: 0, Thu: 0, Fri: 0, Sat: 0, Sun: 0 };
-    trades.forEach(t => {
+    filteredTrades.forEach(t => {
       const date = new Date(t.entry_date || t.created_at);
       const dayName = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][date.getDay()];
       dayActivity[dayName]++;
@@ -88,7 +88,17 @@ export const JournalAnalytics = ({ trades, onClose }: JournalAnalyticsProps) => 
       withTags,
       dayActivity: Object.entries(dayActivity).map(([day, count]) => ({ day, count }))
     };
-  }, [trades]);
+  }, [filteredTrades]);
+
+  // Direction breakdown (updated for buy/sell)
+  const directionData = useMemo(() => {
+    const buy = filteredTrades.filter(t => t.direction === 'buy').length;
+    const sell = filteredTrades.filter(t => t.direction === 'sell').length;
+    return [
+      { name: 'Buy', value: buy },
+      { name: 'Sell', value: sell },
+    ].filter(d => d.value > 0);
+  }, [filteredTrades]);
 
   // Win/Loss Streaks
   const streakData = useMemo(() => {
