@@ -176,7 +176,7 @@ const Journal = () => {
     const tradeToValidate = journalView === 'notes' ? {
       ...newTrade,
       pair: newTrade.pair || 'JOURNAL',
-      direction: newTrade.direction || 'long',
+      direction: newTrade.direction || 'buy',
       entry_price: newTrade.entry_price || '0.1',
       stop_loss: newTrade.stop_loss || undefined,
       take_profit: newTrade.take_profit || undefined,
@@ -196,19 +196,19 @@ const Journal = () => {
       const tradeData = {
         user_id: user.id,
         account_id: tradeToValidate.account_id || undefined,
-        symbol: tradeToValidate.pair || undefined,
-        direction: tradeToValidate.direction || undefined,
+        symbol: tradeToValidate.pair || 'JOURNAL',
+        direction: tradeToValidate.direction === 'long' ? 'buy' : (tradeToValidate.direction === 'short' ? 'sell' : tradeToValidate.direction) || 'buy',
         entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
         stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
         take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
         position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
-        rich_content: tradeToValidate.rich_content,
-        images: tradeToValidate.images,
-        links: tradeToValidate.links,
+        rich_content: tradeToValidate.rich_content || null,
+        images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
+        links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
         status: 'open',
-        trade_date: new Date().toISOString(),
+        trade_date: new Date().toISOString().split('T')[0],
       };
 
       const data = await tradesApi.create(tradeData);
@@ -234,7 +234,7 @@ const Journal = () => {
     const tradeToValidate = journalView === 'notes' ? {
       ...newTrade,
       pair: newTrade.pair || 'JOURNAL',
-      direction: newTrade.direction || 'long',
+      direction: newTrade.direction || 'buy',
       entry_price: newTrade.entry_price || '0.1',
       stop_loss: newTrade.stop_loss || undefined,
       take_profit: newTrade.take_profit || undefined,
@@ -252,17 +252,17 @@ const Journal = () => {
 
     try {
       const updates = {
-        symbol: tradeToValidate.pair || undefined,
-        direction: tradeToValidate.direction || undefined,
+        symbol: tradeToValidate.pair || 'JOURNAL',
+        direction: tradeToValidate.direction === 'long' ? 'buy' : (tradeToValidate.direction === 'short' ? 'sell' : tradeToValidate.direction) || 'buy',
         entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
         stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
         take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
         position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
-        rich_content: tradeToValidate.rich_content,
-        images: tradeToValidate.images,
-        links: tradeToValidate.links,
+        rich_content: tradeToValidate.rich_content || null,
+        images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
+        links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
       };
 
       await tradesApi.update(modals.editingTrade.id, updates);
