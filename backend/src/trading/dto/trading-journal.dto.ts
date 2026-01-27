@@ -7,8 +7,8 @@ export class CreateTradeDto {
   user_id: string;
 
   @IsUUID()
-  @IsNotEmpty()
-  account_id: string;
+  @IsOptional()
+  account_id?: string;
 
   @IsDateString()
   @IsNotEmpty()

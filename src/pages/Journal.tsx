@@ -194,7 +194,7 @@ const Journal = () => {
     try {
       const tradeData = {
         user_id: user.id,
-        account_id: tradeToValidate.account_id || 'default',
+        account_id: tradeToValidate.account_id || undefined,
         symbol: tradeToValidate.pair,
         direction: tradeToValidate.direction,
         entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : 0,
