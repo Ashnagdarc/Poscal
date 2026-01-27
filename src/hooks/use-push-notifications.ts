@@ -110,11 +110,16 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     }
 
     setLoading(true);
+    logger.log('[push] Subscribe button clicked, starting flow...');
     try {
+      logger.log('[push] Getting SW registration...');
       const registration = swRegistration ?? await navigator.serviceWorker.ready;
+      logger.log('[push] SW registration obtained:', registration);
 
       // Request notification permission
+      logger.log('[push] Requesting notification permission...');
       const permissionResult = await Notification.requestPermission();
+      logger.log('[push] Permission result:', permissionResult);
       setPermission(permissionResult);
 
       if (permissionResult !== 'granted') {
@@ -123,16 +128,21 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       }
 
       // Reuse existing subscription if present (Android can fail if we try to re-subscribe)
+      logger.log('[push] Getting existing subscription...');
       let subscription = await registration.pushManager.getSubscription();
+      logger.log('[push] Existing subscription:', subscription?.endpoint ? 'found' : 'not found');
       if (!subscription) {
+        logger.log('[push] Creating new subscription...');
         const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
         subscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: applicationServerKey as BufferSource,
         });
+        logger.log('[push] New subscription created:', subscription.endpoint);
       }
 
       const subJson = subscription.toJSON();
+      logger.log('[push] Subscription serialized, about to send to server...');
       logger.log('[push] Push subscription obtained:', JSON.stringify(subJson));
       logger.log('[push] User ID:', user?.id ?? 'anonymous');
       logger.log('[push] Endpoint:', subJson.endpoint);
@@ -145,14 +155,18 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
 
       // Send subscription to server
       logger.log('[push] Saving subscription to server...');
-      await notificationsApi.subscribe({
+      logger.log('[push] Calling notificationsApi.subscribe with:', {
+        endpoint: subJson.endpoint,
+        p256dh_key_length: subJson.keys?.p256dh?.length,
+        auth_key_length: subJson.keys?.auth?.length,
+      });
+      const response = await notificationsApi.subscribe({
         endpoint: subJson.endpoint!,
         p256dh_key: subJson.keys!.p256dh!,
         auth_key: subJson.keys!.auth!,
         user_agent: navigator.userAgent,
       });
-
-      logger.log('[push] Subscription saved to server successfully');
+      logger.log('[push] Subscription saved to server successfully:', response);
       setIsSubscribed(true);
       return true;
     } catch (error) {

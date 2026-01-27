@@ -32,8 +32,16 @@ export class NotificationsController {
   @Post('push/subscribe')
   @UseGuards(AuthGuard('jwt'))
   async createSubscription(@Body() dto: CreatePushSubscriptionDto, @Request() req: any) {
+    this.logger.log(`[push/subscribe] Received request from user: ${req.user.userId}`, JSON.stringify(dto));
     dto.user_id = req.user.userId;
-    return await this.notificationsService.createSubscription(dto);
+    try {
+      const result = await this.notificationsService.createSubscription(dto);
+      this.logger.log(`[push/subscribe] Successfully saved subscription: ${result.id}`);
+      return result;
+    } catch (error) {
+      this.logger.error(`[push/subscribe] Error saving subscription:`, error);
+      throw error;
+    }
   }
 
   @Delete('push/subscriptions/:id')

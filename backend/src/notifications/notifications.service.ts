@@ -20,8 +20,14 @@ export class NotificationsService {
 
   // Push Subscriptions
   async createSubscription(dto: CreatePushSubscriptionDto): Promise<PushSubscription> {
-    const subscription = this.pushSubscriptionRepository.create(dto);
-    return await this.pushSubscriptionRepository.save(subscription);
+    try {
+      const subscription = this.pushSubscriptionRepository.create(dto);
+      const saved = await this.pushSubscriptionRepository.save(subscription);
+      return saved;
+    } catch (error) {
+      console.error('[push] Error creating subscription:', error);
+      throw error;
+    }
   }
 
   async getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
