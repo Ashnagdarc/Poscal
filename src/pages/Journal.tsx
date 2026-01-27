@@ -65,6 +65,7 @@ const Journal = () => {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
+  const [showLimitBanner, setShowLimitBanner] = useState(true);
   
   // Free tier limits
   const FREE_TRADE_LIMIT = 5;
@@ -821,10 +822,10 @@ const Journal = () => {
       </main>
 
       {/* Trade Limit Banner for Free Users */}
-      {!isPaid && (
+      {!isPaid && showLimitBanner && (
         <div className="fixed bottom-24 left-0 right-0 px-6 z-40">
-          <div className="bg-secondary/80 backdrop-blur-sm border border-border rounded-lg p-3 text-center">
-            <p className="text-sm text-muted-foreground">
+          <div className="bg-secondary/80 backdrop-blur-sm border border-border rounded-lg p-3 text-center flex items-center justify-between gap-3">
+            <p className="text-sm text-muted-foreground flex-1">
               {tradeCount}/{FREE_TRADE_LIMIT} trades used. 
               {isAtTradeLimit ? (
                 <span className="text-orange-500 font-semibold"> Upgrade for unlimited trades!</span>
@@ -832,6 +833,13 @@ const Journal = () => {
                 <span> {FREE_TRADE_LIMIT - tradeCount} remaining</span>
               )}
             </p>
+            <button
+              onClick={() => setShowLimitBanner(false)}
+              className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Dismiss limit banner"
+            >
+              <X size={16} />
+            </button>
           </div>
         </div>
       )}
