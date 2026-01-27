@@ -923,101 +923,105 @@ const Journal = () => {
           </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">Currency Pair</label>
-              <input
-                type="text"
-                value={newTrade.pair}
-                onChange={(e) => setNewTrade({ ...newTrade, pair: e.target.value.toUpperCase() })}
-                className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                placeholder="EUR/USD"
-              />
-            </div>
+            {journalView === 'structured' && (
+              <>
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Currency Pair</label>
+                  <input
+                    type="text"
+                    value={newTrade.pair}
+                    onChange={(e) => setNewTrade({ ...newTrade, pair: e.target.value.toUpperCase() })}
+                    className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                    placeholder="EUR/USD"
+                  />
+                </div>
 
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">Direction</label>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setNewTrade({ ...newTrade, direction: 'long' })}
-                  className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
-                    newTrade.direction === 'long' 
-                      ? 'bg-foreground text-background' 
-                      : 'bg-secondary text-foreground'
-                  }`}
-                >
-                  <TrendingUp className="w-5 h-5" />
-                  Long
-                </button>
-                <button
-                  onClick={() => setNewTrade({ ...newTrade, direction: 'short' })}
-                  className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
-                    newTrade.direction === 'short' 
-                      ? 'bg-destructive text-background' 
-                      : 'bg-secondary text-foreground'
-                  }`}
-                >
-                  <TrendingDown className="w-5 h-5" />
-                  Short
-                </button>
-              </div>
-            </div>
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Direction</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setNewTrade({ ...newTrade, direction: 'long' })}
+                      className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
+                        newTrade.direction === 'long' 
+                          ? 'bg-foreground text-background' 
+                          : 'bg-secondary text-foreground'
+                      }`}
+                    >
+                      <TrendingUp className="w-5 h-5" />
+                      Long
+                    </button>
+                    <button
+                      onClick={() => setNewTrade({ ...newTrade, direction: 'short' })}
+                      className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
+                        newTrade.direction === 'short' 
+                          ? 'bg-destructive text-background' 
+                          : 'bg-secondary text-foreground'
+                      }`}
+                    >
+                      <TrendingDown className="w-5 h-5" />
+                      Short
+                    </button>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Entry Price</label>
-                <input
-                  type="number"
-                  value={newTrade.entry_price}
-                  onChange={(e) => setNewTrade({ ...newTrade, entry_price: e.target.value })}
-                  className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                  placeholder="1.0850"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Position Size</label>
-                <input
-                  type="number"
-                  value={newTrade.position_size}
-                  onChange={(e) => setNewTrade({ ...newTrade, position_size: e.target.value })}
-                  className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                  placeholder="0.10"
-                />
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Entry Price</label>
+                    <input
+                      type="number"
+                      value={newTrade.entry_price}
+                      onChange={(e) => setNewTrade({ ...newTrade, entry_price: e.target.value })}
+                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                      placeholder="1.0850"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Position Size</label>
+                    <input
+                      type="number"
+                      value={newTrade.position_size}
+                      onChange={(e) => setNewTrade({ ...newTrade, position_size: e.target.value })}
+                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                      placeholder="0.10"
+                    />
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Stop Loss</label>
-                <input
-                  type="number"
-                  value={newTrade.stop_loss}
-                  onChange={(e) => setNewTrade({ ...newTrade, stop_loss: e.target.value })}
-                  className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                  placeholder="1.0800"
-                />
-              </div>
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Take Profit</label>
-                <input
-                  type="number"
-                  value={newTrade.take_profit}
-                  onChange={(e) => setNewTrade({ ...newTrade, take_profit: e.target.value })}
-                  className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                  placeholder="1.0950"
-                />
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Stop Loss</label>
+                    <input
+                      type="number"
+                      value={newTrade.stop_loss}
+                      onChange={(e) => setNewTrade({ ...newTrade, stop_loss: e.target.value })}
+                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                      placeholder="1.0800"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Take Profit</label>
+                    <input
+                      type="number"
+                      value={newTrade.take_profit}
+                      onChange={(e) => setNewTrade({ ...newTrade, take_profit: e.target.value })}
+                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                      placeholder="1.0950"
+                    />
+                  </div>
+                </div>
 
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">Risk %</label>
-              <input
-                type="number"
-                value={newTrade.risk_percent}
-                onChange={(e) => setNewTrade({ ...newTrade, risk_percent: e.target.value })}
-                className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                placeholder="1"
-              />
-            </div>
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Risk %</label>
+                  <input
+                    type="number"
+                    value={newTrade.risk_percent}
+                    onChange={(e) => setNewTrade({ ...newTrade, risk_percent: e.target.value })}
+                    className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
+                    placeholder="1"
+                  />
+                </div>
+              </>
+            )}
 
             {journalView === 'structured' && (
               <div>
@@ -1042,8 +1046,8 @@ const Journal = () => {
               </div>
             )}
 
-            {/* Screenshots Section */}
-            {!modals.editingTrade && (
+            {/* Screenshots Section - Only for Notes View */}
+            {!modals.editingTrade && journalView === 'notes' && (
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
                 <div className="space-y-2">
