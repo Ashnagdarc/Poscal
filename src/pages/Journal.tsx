@@ -23,6 +23,7 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useNotifications } from "@/hooks/use-notifications";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { JournalAnalytics } from "@/components/JournalAnalytics";
@@ -66,6 +67,7 @@ const Journal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isPaid, subscriptionTier } = useSubscription();
+  const { sendNotification, permission } = useNotifications();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
@@ -242,6 +244,25 @@ const Journal = () => {
       }
       
       toast.success("Trade added");
+      
+      // Send push notification for new log entry
+      sendNotification('📝 Journal Entry Added', {
+        body: `${journalView === 'notes' ? 'New journal note' : `${tradeToValidate.pair} ${tradeToValidate.direction.toUpperCase()}`} added successfully`,
+        tag: 'journal-add',
+        icon: '/pwa-192x192.png'
+      });
+      
+      // Check if free tier user just hit their limit
+      const newTradeCount = tradeCount + 1;
+      if (!isPaid && newTradeCount >= FREE_TRADE_LIMIT) {
+        sendNotification('⚠️ Journal Limit Reached', {
+          body: `You've reached your ${FREE_TRADE_LIMIT} free journal entries. Upgrade to add unlimited entries!`,
+          tag: 'journal-limit',
+          icon: '/pwa-192x192.png',
+          requireInteraction: true
+        });
+      }
+      
       dispatchModals({ type: 'CLOSE_ADD_TRADE' });
       resetForm();
       fetchTrades();
@@ -293,6 +314,14 @@ const Journal = () => {
 
       await tradesApi.update(modals.editingTrade.id, updates);
       toast.success("Trade updated");
+      
+      // Send push notification for updated log entry
+      sendNotification('✏️ Journal Entry Updated', {
+        body: `${journalView === 'notes' ? 'Journal note' : `${tradeToValidate.pair} ${tradeToValidate.direction.toUpperCase()}`} updated successfully`,
+        tag: 'journal-update',
+        icon: '/pwa-192x192.png'
+      });
+      
       dispatchModals({ type: 'CLOSE_ADD_TRADE' });
       dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
       resetForm();
@@ -420,6 +449,14 @@ const Journal = () => {
     try {
       await tradesApi.delete(tradeId);
       toast.success("Trade deleted");
+      
+      // Send push notification for deleted log entry
+      sendNotification('🗑️ Journal Entry Deleted', {
+        body: 'Journal entry has been permanently deleted',
+        tag: 'journal-delete',
+        icon: '/pwa-192x192.png'
+      });
+      
       fetchTrades();
     } catch (error) {
       toast.error("Failed to delete trade");
