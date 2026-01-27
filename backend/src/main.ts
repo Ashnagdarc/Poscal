@@ -1,6 +1,7 @@
 import * as nodeCrypto from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
+import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 
 async function bootstrap() {
   // Ensure the Node crypto API is available as a global before loading any modules that expect it
@@ -43,6 +44,24 @@ async function bootstrap() {
     forbidNonWhitelisted: true,
     transform: true,
   }));
+
+  // Setup Swagger/OpenAPI documentation
+  const config = new DocumentBuilder()
+    .setTitle('Poscal Trading Platform API')
+    .setDescription('REST API for Poscal Trading Platform')
+    .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
+      'bearer',
+    )
+    .build();
+  
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+  });
 
   const protocol = 'http';
   await app.listen(port, () => {
