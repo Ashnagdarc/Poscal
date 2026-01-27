@@ -134,26 +134,26 @@ const Profile = () => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
 
-    // Validate file
+    // Validate file type
     if (!file.type.startsWith('image/')) {
-      toast.error("Please select an image file");
+      toast.error("Please select an image file (PNG, JPG, etc.)");
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Image must be less than 2MB");
+    // Strict file size validation (1MB limit for better compatibility)
+    const maxSize = 1 * 1024 * 1024; // 1MB
+    if (file.size > maxSize) {
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      toast.error(`Image is too large (${sizeMB}MB). Please choose an image under 1MB.`);
       return;
     }
 
     setIsUploadingAvatar(true);
 
     try {
-      // Create unique filename
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${user.id}/avatar-${Date.now()}.${fileExt}`;
-
       // Upload new avatar via backend
       const resp = await uploadsApi.uploadAvatar(file);
+      
       // Optionally delete old avatar if backend supports it
       if (profile?.avatar_url && resp?.previous_id) {
         try { await uploadsApi.deleteAvatar(resp.previous_id); } catch {}
@@ -162,15 +162,21 @@ const Profile = () => {
       // Refresh profile
       await fetchProfile();
 
-      toast.success("Avatar updated!");
-      fetchProfile();
-    } catch (error) {
+      toast.success("Avatar updated successfully!");
+    } catch (error: any) {
       logger.error('Avatar upload error:', error);
-      const message = error instanceof Error ? error.message : '';
-      if (message.includes('bucket') || message.includes('not found')) {
-        toast.error("Storage not configured. Please run the SQL migration.");
+      
+      // Handle specific error cases
+      if (error?.response?.status === 413) {
+        toast.error("Image file is too large. Please use an image under 1MB.");
+      } else if (error?.response?.status === 401) {
+        toast.error("Session expired. Please sign in again.");
+      } else if (error?.message?.includes('CORS') || error?.message?.includes('Network')) {
+        toast.error("Network error. Please check your connection and try again.");
+      } else if (error?.message?.includes('bucket') || error?.message?.includes('not found')) {
+        toast.error("Storage not configured. Please contact support.");
       } else {
-        toast.error("Failed to upload avatar");
+        toast.error("Failed to upload avatar. Please try again.");
       }
     } finally {
       setIsUploadingAvatar(false);
