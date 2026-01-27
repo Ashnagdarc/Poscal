@@ -18,7 +18,7 @@ export class CreateTradeDto {
   @IsOptional()
   symbol?: string;
 
-  @IsIn(['long', 'short', 'buy', 'sell'])
+  @IsIn(['buy', 'sell'])
   @IsOptional()
   direction?: string;
 
@@ -113,7 +113,7 @@ export class UpdateTradeDto {
   @IsOptional()
   symbol?: string;
 
-  @IsIn(['long', 'short', 'buy', 'sell'])
+  @IsIn(['buy', 'sell'])
   @IsOptional()
   direction?: string;
 

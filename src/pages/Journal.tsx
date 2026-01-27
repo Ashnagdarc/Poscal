@@ -38,7 +38,7 @@ import { tradesApi } from "@/lib/api";
 interface Trade {
   id: string;
   pair: string;
-  direction: 'long' | 'short';
+  direction: 'buy' | 'sell';
   entry_price: number | null;
   exit_price: number | null;
   stop_loss: number | null;
@@ -82,7 +82,7 @@ const Journal = () => {
   // New trade form
   const [newTrade, setNewTrade] = useState({
     pair: "EUR/USD",
-    direction: "long" as 'long' | 'short',
+    direction: "buy" as 'buy' | 'sell',
     entry_price: "",
     stop_loss: "",
     take_profit: "",
