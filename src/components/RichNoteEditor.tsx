@@ -18,7 +18,9 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
       Link.configure({
         openOnClick: false,
       }),
-      Image,
+      Image.configure({
+        allowBase64: true,
+      }),
       Placeholder.configure({
         placeholder,
       }),
