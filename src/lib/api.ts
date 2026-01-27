@@ -289,7 +289,6 @@ export const notificationsApi = {
     endpoint: string;
     p256dh_key: string;
     auth_key: string;
-    user_agent?: string;
   }): Promise<any> => {
     const { data } = await api.post('/notifications/push/subscribe', subscriptionData);
     return data;

@@ -210,7 +210,6 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
             endpoint: subJson.endpoint,
             p256dh_key: subJson.keys.p256dh,
             auth_key: subJson.keys.auth,
-            user_agent: navigator.userAgent,
           }),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Server request timeout')), 15000)
