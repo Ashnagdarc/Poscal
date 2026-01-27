@@ -11,10 +11,10 @@ export class PushSubscription {
   @Column({ type: 'text' })
   endpoint: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', name: 'p256dh' })
   p256dh_key: string;
 
-  @Column({ type: 'text' })
+  @Column({ type: 'text', name: 'auth' })
   auth_key: string;
 
   @Column({ type: 'varchar', length: 50, nullable: true })
