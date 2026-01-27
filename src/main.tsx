@@ -3,32 +3,37 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// Temporary: disable automatic service worker registration to stop refresh loops.
-// Re-enable by setting VITE_ENABLE_SW to "true" and redeploy.
+// Register service worker for push notifications if enabled
 const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
-if (ENABLE_SW && import.meta.env.PROD && "serviceWorker" in navigator) {
-  const registerOnce = () => {
+if (ENABLE_SW && "serviceWorker" in navigator) {
+  const registerServiceWorker = async () => {
     try {
-      if (navigator.serviceWorker.controller) {
-        return; // Already controlling; avoid duplicate registration
+      // Check if already registered
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      if (registrations.length > 0) {
+        console.log("[sw] Service worker already registered");
+        return;
       }
-      // Add timeout to prevent SW registration from hanging the app
-      const registerPromise = Promise.race([
-        navigator.serviceWorker.register("/sw.js", { scope: "/" }),
-        new Promise((_, reject) => 
-          setTimeout(() => reject(new Error("SW register timeout")), 3000)
-        )
-      ]);
-      registerPromise.catch((err) => console.error("[sw] register failed", err));
+
+      // Register with a simple timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("SW registration timeout")), 5000)
+      );
+
+      const registrationPromise = navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      
+      const registration = await Promise.race([registrationPromise, timeoutPromise]);
+      console.log("[sw] Service worker registered successfully:", registration);
     } catch (error) {
-      console.error("[sw] register error", error);
+      console.error("[sw] Failed to register service worker:", error);
     }
   };
 
+  // Register after DOM is ready
   if (document.readyState === "complete") {
-    registerOnce();
+    registerServiceWorker();
   } else {
-    window.addEventListener("load", registerOnce, { once: true });
+    window.addEventListener("load", registerServiceWorker, { once: true });
   }
 }
 

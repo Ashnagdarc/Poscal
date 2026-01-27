@@ -111,71 +111,128 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
 
     setLoading(true);
     logger.log('[push] Subscribe button clicked, starting flow...');
+    
     try {
-      logger.log('[push] Getting SW registration...');
-      const registration = swRegistration ?? await navigator.serviceWorker.ready;
-      logger.log('[push] SW registration obtained:', registration);
-
-      // Request notification permission
-      logger.log('[push] Requesting notification permission...');
-      const permissionResult = await Notification.requestPermission();
-      logger.log('[push] Permission result:', permissionResult);
-      setPermission(permissionResult);
-
-      if (permissionResult !== 'granted') {
-        setLastError('Notification permission was not granted.');
+      // Step 1: Request permission with timeout
+      logger.log('[push] Step 1: Requesting notification permission...');
+      let permissionResult: NotificationPermission;
+      
+      try {
+        const permPromise = Notification.requestPermission();
+        // Timeout after 10 seconds if permission dialog doesn't respond
+        permissionResult = await Promise.race([
+          permPromise,
+          new Promise<NotificationPermission>((_, reject) => 
+            setTimeout(() => reject(new Error('Permission request timeout - took too long')), 10000)
+          )
+        ]);
+      } catch (error) {
+        logger.error('[push] Permission request timed out or failed:', error);
+        setLastError('Permission request timeout. Please try again.');
+        setLoading(false);
         return false;
       }
 
-      // Reuse existing subscription if present (Android can fail if we try to re-subscribe)
-      logger.log('[push] Getting existing subscription...');
-      let subscription = await registration.pushManager.getSubscription();
-      logger.log('[push] Existing subscription:', subscription?.endpoint ? 'found' : 'not found');
-      if (!subscription) {
-        logger.log('[push] Creating new subscription...');
-        const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
-        subscription = await registration.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: applicationServerKey as BufferSource,
-        });
-        logger.log('[push] New subscription created:', subscription.endpoint);
+      logger.log('[push] Step 1 complete: Permission result =', permissionResult);
+      setPermission(permissionResult);
+
+      if (permissionResult !== 'granted') {
+        setLastError(`Notification permission was not granted (${permissionResult}). Check browser settings.`);
+        setLoading(false);
+        return false;
       }
 
-      const subJson = subscription.toJSON();
-      logger.log('[push] Subscription serialized, about to send to server...');
-      logger.log('[push] Push subscription obtained:', JSON.stringify(subJson));
-      logger.log('[push] User ID:', user?.id ?? 'anonymous');
-      logger.log('[push] Endpoint:', subJson.endpoint);
-      logger.log('[push] Keys present:', { 
-        p256dh: !!subJson.keys?.p256dh, 
-        auth: !!subJson.keys?.auth,
-        p256dhLength: subJson.keys?.p256dh?.length,
-        authLength: subJson.keys?.auth?.length
-      });
+      // Step 2: Get or create browser subscription
+      logger.log('[push] Step 2: Getting service worker registration...');
+      let registration: ServiceWorkerRegistration;
+      
+      try {
+        // Try to get cached registration first
+        if (swRegistration) {
+          registration = swRegistration;
+          logger.log('[push] Using cached SW registration');
+        } else {
+          // Timeout after 5 seconds for SW ready
+          registration = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise<ServiceWorkerRegistration>((_, reject) => 
+              setTimeout(() => reject(new Error('Service Worker ready timeout')), 5000)
+            )
+          ]);
+          logger.log('[push] Got SW registration');
+          setSwRegistration(registration);
+        }
+      } catch (error) {
+        logger.error('[push] Failed to get SW registration:', error);
+        setLastError('Service Worker not ready. Please refresh the page.');
+        setLoading(false);
+        return false;
+      }
 
-      // Send subscription to server
-      logger.log('[push] Saving subscription to server...');
-      logger.log('[push] Calling notificationsApi.subscribe with:', {
-        endpoint: subJson.endpoint,
-        p256dh_key_length: subJson.keys?.p256dh?.length,
-        auth_key_length: subJson.keys?.auth?.length,
-      });
-      const response = await notificationsApi.subscribe({
-        endpoint: subJson.endpoint!,
-        p256dh_key: subJson.keys!.p256dh!,
-        auth_key: subJson.keys!.auth!,
-        user_agent: navigator.userAgent,
-      });
-      logger.log('[push] Subscription saved to server successfully:', response);
-      setIsSubscribed(true);
-      return true;
+      // Step 3: Get or create push subscription
+      logger.log('[push] Step 3: Creating push subscription...');
+      let subscription: PushSubscription;
+      
+      try {
+        // Check if already subscribed
+        subscription = await registration.pushManager.getSubscription();
+        
+        if (!subscription) {
+          logger.log('[push] No existing subscription, creating new one...');
+          const applicationServerKey = urlBase64ToUint8Array(VAPID_PUBLIC_KEY);
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: applicationServerKey as BufferSource,
+          });
+          logger.log('[push] New subscription created');
+        } else {
+          logger.log('[push] Using existing browser subscription');
+        }
+      } catch (error) {
+        logger.error('[push] Failed to create/get subscription:', error);
+        setLastError('Failed to create push subscription. Check browser support.');
+        setLoading(false);
+        return false;
+      }
+
+      // Step 4: Send to backend
+      logger.log('[push] Step 4: Sending subscription to backend...');
+      const subJson = subscription.toJSON();
+      
+      if (!subJson.endpoint || !subJson.keys?.p256dh || !subJson.keys?.auth) {
+        throw new Error('Invalid subscription data: missing endpoint or keys');
+      }
+
+      try {
+        // Timeout after 15 seconds for server response
+        const response = await Promise.race([
+          notificationsApi.subscribe({
+            endpoint: subJson.endpoint,
+            p256dh_key: subJson.keys.p256dh,
+            auth_key: subJson.keys.auth,
+            user_agent: navigator.userAgent,
+          }),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Server request timeout')), 15000)
+          )
+        ]);
+        
+        logger.log('[push] Subscription saved to server:', response);
+        setIsSubscribed(true);
+        setLoading(false);
+        return true;
+      } catch (error) {
+        logger.error('[push] Failed to send subscription to server:', error);
+        setLastError('Failed to save subscription to server. Check your connection.');
+        setLoading(false);
+        return false;
+      }
     } catch (error) {
-      logger.error('[push] Error subscribing to push:', error);
-      const message = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('[push] Unexpected error during subscription:', error);
+      const message = error instanceof Error ? error.message : 'Unknown error occurred';
       setLastError(message);
-      return false;
-    } finally {
       setLoading(false);
+      return false;
     }
   }, [isSupported, swRegistration, user?.id]);
 
