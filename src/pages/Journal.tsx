@@ -1,5 +1,9 @@
 import { useState, useEffect, useMemo, useReducer } from "react";
 import { useNavigate } from "react-router-dom";
+import { generateHTML } from '@tiptap/html';
+import StarterKit from '@tiptap/starter-kit';
+import Link from '@tiptap/extension-link';
+import Image from '@tiptap/extension-image';
 import { 
   Plus, 
   TrendingUp, 
@@ -98,6 +102,21 @@ const Journal = () => {
     sentiment: "" as 'bullish' | 'neutral' | 'bearish' | '',
     tags: "" as string,
   });
+
+  // Helper to convert TipTap JSON to HTML
+  const convertRichContentToHTML = (content: any): string => {
+    if (!content) return '';
+    try {
+      return generateHTML(content, [
+        StarterKit,
+        Link,
+        Image,
+      ]);
+    } catch (error) {
+      console.error('Error converting rich content:', error);
+      return '';
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -1288,11 +1307,14 @@ const Journal = () => {
               {modals.viewTradeModal.trade.rich_content && (
                 <div className="bg-secondary rounded-2xl p-4">
                   <h3 className="text-sm font-semibold text-foreground mb-3">Journal Entry</h3>
-                  <div className="text-sm text-muted-foreground whitespace-pre-wrap">
-                    {typeof modals.viewTradeModal.trade.rich_content === 'string' 
-                      ? modals.viewTradeModal.trade.rich_content
-                      : JSON.stringify(modals.viewTradeModal.trade.rich_content, null, 2)
-                    }
+                  <div className="prose prose-invert max-w-none text-foreground
+                    prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground
+                    prose-em:text-foreground prose-a:text-primary prose-code:text-foreground
+                    prose-li:text-foreground prose-blockquote:text-muted-foreground prose-blockquote:border-l-primary
+                    prose-img:rounded-lg">
+                    <div dangerouslySetInnerHTML={{ 
+                      __html: convertRichContentToHTML(modals.viewTradeModal.trade.rich_content)
+                    }} />
                   </div>
                 </div>
               )}
