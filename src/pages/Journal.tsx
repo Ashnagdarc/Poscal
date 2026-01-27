@@ -171,8 +171,17 @@ const Journal = () => {
       return;
     }
 
+    // For Notes view, set default values for required structured fields
+    const tradeToValidate = journalView === 'notes' ? {
+      ...newTrade,
+      pair: newTrade.pair || 'JOURNAL',
+      direction: newTrade.direction || 'long',
+      entry_price: newTrade.entry_price || '0',
+      position_size: newTrade.position_size || '0',
+    } : newTrade;
+
     // Validate form data
-    const validation = NewTradeFormSchema.safeParse(newTrade);
+    const validation = NewTradeFormSchema.safeParse(tradeToValidate);
     if (!validation.success) {
       const firstError = validation.error.errors[0];
       toast.error(firstError.message);
@@ -181,14 +190,18 @@ const Journal = () => {
 
     try {
       const tradeData = {
-        pair: newTrade.pair,
-        direction: newTrade.direction,
-        entry_price: newTrade.entry_price ? parseFloat(newTrade.entry_price) : null,
-        stop_loss: newTrade.stop_loss ? parseFloat(newTrade.stop_loss) : null,
-        take_profit: newTrade.take_profit ? parseFloat(newTrade.take_profit) : null,
-        position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
-        risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
-        notes: newTrade.notes || null,
+        pair: tradeToValidate.pair,
+        direction: tradeToValidate.direction,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : null,
+        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : null,
+        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : null,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : null,
+        risk_percent: tradeToValidate.risk_percent ? parseFloat(tradeToValidate.risk_percent) : null,
+        notes: tradeToValidate.notes || null,
+        journal_type: journalView,
+        rich_content: tradeToValidate.rich_content,
+        images: tradeToValidate.images,
+        links: tradeToValidate.links,
         status: 'open',
         entry_date: new Date().toISOString(),
       };
@@ -212,8 +225,17 @@ const Journal = () => {
   const handleEditTrade = async () => {
     if (!user || !modals.editingTrade) return;
 
+    // For Notes view, set default values for required structured fields
+    const tradeToValidate = journalView === 'notes' ? {
+      ...newTrade,
+      pair: newTrade.pair || 'JOURNAL',
+      direction: newTrade.direction || 'long',
+      entry_price: newTrade.entry_price || '0',
+      position_size: newTrade.position_size || '0',
+    } : newTrade;
+
     // Validate form data
-    const validation = NewTradeFormSchema.safeParse(newTrade);
+    const validation = NewTradeFormSchema.safeParse(tradeToValidate);
     if (!validation.success) {
       const firstError = validation.error.errors[0];
       toast.error(firstError.message);
@@ -222,14 +244,18 @@ const Journal = () => {
 
     try {
       const updates = {
-        pair: newTrade.pair,
-        direction: newTrade.direction,
-        entry_price: newTrade.entry_price ? parseFloat(newTrade.entry_price) : null,
-        stop_loss: newTrade.stop_loss ? parseFloat(newTrade.stop_loss) : null,
-        take_profit: newTrade.take_profit ? parseFloat(newTrade.take_profit) : null,
-        position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
-        risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
-        notes: newTrade.notes || null,
+        pair: tradeToValidate.pair,
+        direction: tradeToValidate.direction,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : null,
+        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : null,
+        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : null,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : null,
+        risk_percent: tradeToValidate.risk_percent ? parseFloat(tradeToValidate.risk_percent) : null,
+        notes: tradeToValidate.notes || null,
+        journal_type: journalView,
+        rich_content: tradeToValidate.rich_content,
+        images: tradeToValidate.images,
+        links: tradeToValidate.links,
       };
 
       await tradesApi.update(modals.editingTrade.id, updates);
