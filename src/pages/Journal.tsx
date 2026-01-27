@@ -195,12 +195,12 @@ const Journal = () => {
       const tradeData = {
         user_id: user.id,
         account_id: tradeToValidate.account_id || undefined,
-        symbol: tradeToValidate.pair,
-        direction: tradeToValidate.direction,
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : 0,
+        symbol: tradeToValidate.pair || undefined,
+        direction: tradeToValidate.direction || undefined,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
         stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
         take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : 0,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
         rich_content: tradeToValidate.rich_content,
@@ -251,12 +251,12 @@ const Journal = () => {
 
     try {
       const updates = {
-        symbol: tradeToValidate.pair,
-        direction: tradeToValidate.direction,
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : 0,
+        symbol: tradeToValidate.pair || undefined,
+        direction: tradeToValidate.direction || undefined,
+        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
         stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
         take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : 0,
+        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
         notes: tradeToValidate.notes || null,
         journal_type: journalView,
         rich_content: tradeToValidate.rich_content,

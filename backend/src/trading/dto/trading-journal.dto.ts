@@ -15,24 +15,24 @@ export class CreateTradeDto {
   trade_date: string;
 
   @IsString()
-  @IsNotEmpty()
-  symbol: string;
+  @IsOptional()
+  symbol?: string;
 
   @IsIn(['long', 'short', 'buy', 'sell'])
-  @IsNotEmpty()
-  direction: string;
+  @IsOptional()
+  direction?: string;
 
   @Type(() => Number)
-  @IsNotEmpty()
-  entry_price: number;
+  @IsOptional()
+  entry_price?: number;
 
   @Type(() => Number)
   @IsOptional()
   exit_price?: number;
 
   @Type(() => Number)
-  @IsNotEmpty()
-  position_size: number;
+  @IsOptional()
+  position_size?: number;
 
   @Type(() => Number)
   @IsOptional()
