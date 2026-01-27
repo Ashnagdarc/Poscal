@@ -94,6 +94,9 @@ const Journal = () => {
     rich_content: null,
     images: [],
     links: [],
+    market_condition: "" as 'bullish' | 'bearish' | 'sideways' | '',
+    sentiment: "" as 'bullish' | 'neutral' | 'bearish' | '',
+    tags: "" as string,
   });
 
   useEffect(() => {
@@ -207,6 +210,8 @@ const Journal = () => {
         rich_content: tradeToValidate.rich_content || null,
         images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
         links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
+        market_condition: tradeToValidate.market_condition || null,
+        tags: tradeToValidate.tags || null,
         status: 'open',
         trade_date: new Date().toISOString().split('T')[0],
       };
@@ -263,6 +268,8 @@ const Journal = () => {
         rich_content: tradeToValidate.rich_content || null,
         images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
         links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
+        market_condition: tradeToValidate.market_condition || null,
+        tags: tradeToValidate.tags || null,
       };
 
       await tradesApi.update(modals.editingTrade.id, updates);
@@ -290,6 +297,9 @@ const Journal = () => {
       rich_content: null,
       images: [],
       links: [],
+      market_condition: "",
+      sentiment: "",
+      tags: "",
     });
     setSelectedScreenshots([]);
   };
@@ -311,6 +321,9 @@ const Journal = () => {
       rich_content: trade.rich_content || null,
       images: trade.images || [],
       links: trade.links || [],
+      market_condition: trade.market_condition || "",
+      sentiment: "",
+      tags: trade.tags || "",
     });
     dispatchModals({ type: 'OPEN_ADD_TRADE' });
   };
@@ -1076,13 +1089,60 @@ const Journal = () => {
             )}
 
             {journalView === 'notes' && (
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Journal Entry</label>
-                <RichNoteEditor
-                  content={newTrade.rich_content}
-                  onChange={(content) => setNewTrade({ ...newTrade, rich_content: content })}
-                  placeholder="Write your trade journal entry..."
-                />
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm text-muted-foreground mb-2">Journal Entry</label>
+                  <RichNoteEditor
+                    content={newTrade.rich_content}
+                    onChange={(content) => setNewTrade({ ...newTrade, rich_content: content })}
+                    placeholder="Write your trade journal entry..."
+                  />
+                </div>
+
+                {/* Metadata for Notes */}
+                <div className="grid grid-cols-3 gap-3">
+                  {/* Market Condition */}
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Market Condition</label>
+                    <select
+                      value={newTrade.market_condition}
+                      onChange={(e) => setNewTrade({ ...newTrade, market_condition: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                    >
+                      <option value="">Select...</option>
+                      <option value="bullish">📈 Bullish</option>
+                      <option value="bearish">📉 Bearish</option>
+                      <option value="sideways">↔️ Sideways</option>
+                    </select>
+                  </div>
+
+                  {/* Sentiment */}
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Sentiment</label>
+                    <select
+                      value={newTrade.sentiment}
+                      onChange={(e) => setNewTrade({ ...newTrade, sentiment: e.target.value as any })}
+                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                    >
+                      <option value="">Select...</option>
+                      <option value="bullish">😊 Bullish</option>
+                      <option value="neutral">😐 Neutral</option>
+                      <option value="bearish">😟 Bearish</option>
+                    </select>
+                  </div>
+
+                  {/* Tags */}
+                  <div>
+                    <label className="block text-sm text-muted-foreground mb-2">Tags</label>
+                    <input
+                      type="text"
+                      value={newTrade.tags}
+                      onChange={(e) => setNewTrade({ ...newTrade, tags: e.target.value })}
+                      placeholder="e.g., breakout, support"
+                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                    />
+                  </div>
+                </div>
               </div>
             )}
 
