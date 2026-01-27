@@ -177,7 +177,10 @@ const Journal = () => {
       pair: newTrade.pair || 'JOURNAL',
       direction: newTrade.direction || 'long',
       entry_price: newTrade.entry_price || '0.1',
+      stop_loss: newTrade.stop_loss || undefined,
+      take_profit: newTrade.take_profit || undefined,
       position_size: newTrade.position_size || '1',
+      risk_percent: newTrade.risk_percent || undefined,
     } : newTrade;
 
     // Validate form data
@@ -231,7 +234,10 @@ const Journal = () => {
       pair: newTrade.pair || 'JOURNAL',
       direction: newTrade.direction || 'long',
       entry_price: newTrade.entry_price || '0.1',
+      stop_loss: newTrade.stop_loss || undefined,
+      take_profit: newTrade.take_profit || undefined,
       position_size: newTrade.position_size || '1',
+      risk_percent: newTrade.risk_percent || undefined,
     } : newTrade;
 
     // Validate form data
