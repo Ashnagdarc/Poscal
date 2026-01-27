@@ -14,8 +14,7 @@ import {
   Search,
   Download,
   Edit2,
-  Filter,
-  Wallet
+  Filter
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,7 +32,7 @@ import { filtersReducer, initialFiltersState, modalReducer, initialModalState } 
 import { NewTradeFormSchema } from "@/lib/formValidation";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { tradesApi, accountsApi } from "@/lib/api";
+import { tradesApi } from "@/lib/api";
 
 interface Trade {
   id: string;
@@ -52,15 +51,6 @@ interface Trade {
   entry_date: string | null;
   created_at: string;
   screenshot_urls?: string[];
-  account_id: string | null;
-  account_name?: string;
-}
-
-interface TradingAccount {
-  id: string;
-  account_name: string;
-  platform: string;
-  is_active: boolean;
 }
 
 const Journal = () => {
@@ -77,9 +67,6 @@ const Journal = () => {
   const isAtTradeLimit = !isPaid && tradeCount >= FREE_TRADE_LIMIT;
   const canAddTrade = isPaid || tradeCount < FREE_TRADE_LIMIT;
   
-  // Trading accounts
-  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
-  
   // Use reducers for filters and modals (performance optimization)
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialFiltersState);
   const [modals, dispatchModals] = useReducer(modalReducer, initialModalState);
@@ -94,13 +81,11 @@ const Journal = () => {
     position_size: "",
     risk_percent: "",
     notes: "",
-    account_id: "",
   });
 
   useEffect(() => {
     if (user) {
       fetchTrades();
-      fetchAccounts();
     } else {
       setIsLoading(false);
     }
@@ -136,28 +121,12 @@ const Journal = () => {
     setIsLoading(true);
     try {
       const data = await tradesApi.getAll();
-      // Map data to ensure account_name field exists
-      const mappedData = (data || []).map(trade => ({
-        ...trade,
-        account_name: trade.account_name || trade.trading_accounts?.account_name || 'No Account',
-      }));
-      setTrades(mappedData);
+      setTrades(data || []);
     } catch (error) {
       logger.error('Error fetching trades:', error);
       toast.error("Failed to load trades");
     }
     setIsLoading(false);
-  };
-  
-  const fetchAccounts = async () => {
-    if (!user) return;
-    
-    try {
-      const data = await accountsApi.getAll();
-      setAccounts(data || []);
-    } catch (error) {
-      logger.error('Error fetching accounts:', error);
-    }
   };
 
   const uploadScreenshots = async (tradeId: string): Promise<string[]> => {
@@ -208,7 +177,6 @@ const Journal = () => {
         position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
-        account_id: newTrade.account_id || null,
         status: 'open',
         entry_date: new Date().toISOString(),
       };
@@ -250,7 +218,6 @@ const Journal = () => {
         position_size: newTrade.position_size ? parseFloat(newTrade.position_size) : null,
         risk_percent: newTrade.risk_percent ? parseFloat(newTrade.risk_percent) : null,
         notes: newTrade.notes || null,
-        account_id: newTrade.account_id || null,
       };
 
       await tradesApi.update(modals.editingTrade.id, updates);
@@ -274,7 +241,6 @@ const Journal = () => {
       position_size: "",
       risk_percent: "",
       notes: "",
-      account_id: "",
     });
     setSelectedScreenshots([]);
   };
@@ -290,7 +256,6 @@ const Journal = () => {
       position_size: trade.position_size?.toString() || "",
       risk_percent: trade.risk_percent?.toString() || "",
       notes: trade.notes || "",
-      account_id: trade.account_id || "",
     });
     dispatchModals({ type: 'OPEN_ADD_TRADE' });
   };
@@ -434,9 +399,6 @@ const Journal = () => {
         trade.pair.toLowerCase().includes(filters.searchQuery.toLowerCase()) ||
         trade.notes?.toLowerCase().includes(filters.searchQuery.toLowerCase());
       
-      // Account filter
-      const matchesAccount = filters.selectedAccountId === 'all' || trade.account_id === filters.selectedAccountId;
-      
       // Date filters
       const tradeDate = new Date(trade.entry_date || trade.created_at);
       const matchesMonth = filters.selectedMonth === 'all' || 
@@ -444,7 +406,7 @@ const Journal = () => {
       const matchesYear = filters.selectedYear === 'all' || 
         tradeDate.getFullYear().toString() === filters.selectedYear;
       
-      return matchesFilter && matchesSearch && matchesAccount && matchesMonth && matchesYear;
+      return matchesFilter && matchesSearch && matchesMonth && matchesYear;
     });
   }, [trades, filters]);
   
@@ -469,7 +431,7 @@ const Journal = () => {
   
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   
-  const hasActiveFilters = filters.selectedAccountId !== 'all' || filters.selectedMonth !== 'all' || filters.selectedYear !== 'all';
+  const hasActiveFilters = filters.selectedMonth !== 'all' || filters.selectedYear !== 'all';
   
   const clearFilters = () => {
     dispatchFilters({ type: 'RESET_FILTERS' });
@@ -643,23 +605,6 @@ const Journal = () => {
               )}
             </div>
             
-            {/* Account Filter */}
-            <div>
-              <label className="block text-xs text-muted-foreground mb-2">Trading Account</label>
-              <select
-                value={filters.selectedAccountId}
-                onChange={(e) => dispatchFilters({ type: 'SET_ACCOUNT_ID', payload: e.target.value })}
-                className="w-full h-10 px-3 bg-background text-foreground rounded-lg outline-none text-sm"
-              >
-                <option value="all">All Accounts</option>
-                {accounts.map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.account_name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            
             {/* Month Filter */}
             <div>
               <label className="block text-xs text-muted-foreground mb-2">Month</label>
@@ -783,13 +728,6 @@ const Journal = () => {
                 )}
               </div>
 
-              {trade.account_name && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
-                  <Wallet className="w-3 h-3" />
-                  <span>{trade.account_name}</span>
-                </div>
-              )}
-
               {trade.notes && (
                 <p className="text-sm text-muted-foreground mb-3">{trade.notes}</p>
               )}
@@ -907,31 +845,6 @@ const Journal = () => {
           </header>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {/* Trading Account Selection */}
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">
-                <Wallet className="w-4 h-4 inline mr-1" />
-                Trading Account (Optional)
-              </label>
-              <select
-                value={newTrade.account_id}
-                onChange={(e) => setNewTrade({ ...newTrade, account_id: e.target.value })}
-                className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-              >
-                <option value="">No Account</option>
-                {accounts.map(account => (
-                  <option key={account.id} value={account.id}>
-                    {account.account_name} ({account.platform})
-                  </option>
-                ))}
-              </select>
-              {accounts.length === 0 && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  No trading accounts yet. Add one in Settings to link trades.
-                </p>
-              )}
-            </div>
-            
             <div>
               <label className="block text-sm text-muted-foreground mb-2">Currency Pair</label>
               <input

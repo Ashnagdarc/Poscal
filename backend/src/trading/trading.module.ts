@@ -1,21 +1,17 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageModule } from '../storage/storage.module';
-import { TradingAccount } from './entities/trading-account.entity';
 import { TradingJournal } from './entities/trading-journal.entity';
 import { TradingSignal } from './entities/trading-signal.entity';
-import { TakenTrade } from './entities/taken-trade.entity';
-import { AccountsService } from './services/accounts.service';
 import { TradesService } from './services/trades.service';
 import { SignalsService } from './services/signals.service';
-import { AccountsController } from './controllers/accounts.controller';
 import { TradesController } from './controllers/trades.controller';
 import { SignalsController } from './controllers/signals.controller';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([TradingAccount, TradingJournal, TradingSignal, TakenTrade]), StorageModule],
-  controllers: [AccountsController, TradesController, SignalsController],
-  providers: [AccountsService, TradesService, SignalsService],
-  exports: [TypeOrmModule, AccountsService, TradesService, SignalsService],
+  imports: [TypeOrmModule.forFeature([TradingJournal, TradingSignal]), StorageModule],
+  controllers: [TradesController, SignalsController],
+  providers: [TradesService, SignalsService],
+  exports: [TypeOrmModule, TradesService, SignalsService],
 })
 export class TradingModule {}

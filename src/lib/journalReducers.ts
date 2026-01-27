@@ -8,7 +8,6 @@ import { Reducer } from 'react';
 // Filter State
 export interface FiltersState {
   filter: 'all' | 'open' | 'closed';
-  selectedAccountId: string;
   selectedMonth: string;
   selectedYear: string;
   searchQuery: string;
@@ -17,7 +16,6 @@ export interface FiltersState {
 
 export type FiltersAction =
   | { type: 'SET_FILTER'; payload: 'all' | 'open' | 'closed' }
-  | { type: 'SET_ACCOUNT_ID'; payload: string }
   | { type: 'SET_MONTH'; payload: string }
   | { type: 'SET_YEAR'; payload: string }
   | { type: 'SET_SEARCH_QUERY'; payload: string }
@@ -26,7 +24,6 @@ export type FiltersAction =
 
 export const initialFiltersState: FiltersState = {
   filter: 'all',
-  selectedAccountId: 'all',
   selectedMonth: 'all',
   selectedYear: 'all',
   searchQuery: '',
@@ -37,8 +34,6 @@ export const filtersReducer: Reducer<FiltersState, FiltersAction> = (state, acti
   switch (action.type) {
     case 'SET_FILTER':
       return { ...state, filter: action.payload };
-    case 'SET_ACCOUNT_ID':
-      return { ...state, selectedAccountId: action.payload };
     case 'SET_MONTH':
       return { ...state, selectedMonth: action.payload };
     case 'SET_YEAR':

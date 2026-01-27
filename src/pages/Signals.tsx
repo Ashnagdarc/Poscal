@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi, Wallet, Plus, Target, Settings, ChevronDown } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
@@ -11,21 +11,15 @@ import { format, parseISO } from 'date-fns';
 import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
-import { TradingAccountModal } from '@/components/TradingAccountModal';
-import { TakeSignalModal } from '@/components/TakeSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { Tables } from '@/types/database.types';
 import { useNavigate } from 'react-router-dom';
-import { signalsApi, accountsApi } from '@/lib/api';
+import { signalsApi } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
-
-type TradingAccount = Tables<'trading_accounts'>;
-type TakenTrade = Tables<'taken_trades'>;
 
 interface TradingSignal {
   id: string;
@@ -84,14 +78,6 @@ const Signals = () => {
   
   // Free tier limits
   const FREE_SIGNALS_LIMIT = 3;
-  const canTakeSignals = isPaid;
-  
-  // Trading accounts
-  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
-  const [takenTrades, setTakenTrades] = useState<TakenTrade[]>([]);
-  const [showAccountModal, setShowAccountModal] = useState(false);
-  const [showTakeSignalModal, setShowTakeSignalModal] = useState(false);
-  const [selectedSignalForTake, setSelectedSignalForTake] = useState<TradingSignal | null>(null);
   
   // Filters
   const [pairFilter, setPairFilter] = useState('All Pairs');
@@ -120,82 +106,6 @@ const Signals = () => {
     symbols: activeSymbols,
     enabled: activeSymbols.length > 0
   });
-
-  // Fetch trading accounts
-  const fetchAccounts = async () => {
-    if (!user) return;
-    
-    try {
-      const data = await accountsApi.getAll();
-      setAccounts(data || []);
-    } catch (error) {
-      logger.error('Error fetching accounts:', error);
-    }
-  };
-
-  // Fetch taken trades
-  const fetchTakenTrades = async () => {
-    if (!user) return;
-    
-    try {
-      const data = await signalsApi.getUserTakenTrades();
-      setTakenTrades(data || []);
-    } catch (error) {
-      logger.error('Error fetching taken trades:', error);
-    }
-  };
-
-  useEffect(() => {
-    if (user) {
-      fetchAccounts();
-      fetchTakenTrades();
-    }
-  }, [user]);
-
-  const handleTakeSignal = (signal: TradingSignal) => {
-    if (!user) {
-      toast.error('Please sign in to take signals');
-      return;
-    }
-    if (accounts.length === 0) {
-      toast.error('Please create a trading account first');
-      setShowAccountModal(true);
-      return;
-    }
-    setSelectedSignalForTake(signal);
-    setShowTakeSignalModal(true);
-  };
-
-  const isSignalTaken = (signalId: string) => {
-    return takenTrades.some(t => t.signal_id === signalId && t.status === 'open');
-  };
-
-  const getTakenTrade = (signalId: string) => {
-    return takenTrades.find(t => t.signal_id === signalId && t.status === 'open');
-  };
-
-  const handleCancelTakenTrade = async (signalId: string) => {
-    if (!user) return;
-    
-    const takenTrade = getTakenTrade(signalId);
-    if (!takenTrade) return;
-
-    try {
-      await signalsApi.updateTakenTrade(takenTrade.id, 'cancelled');
-      toast.success('Trade cancelled successfully');
-      fetchTakenTrades();
-      fetchAccounts(); // Refresh in case of balance updates
-    } catch (error) {
-      logger.error('Error cancelling taken trade:', error);
-      toast.error('Failed to cancel trade');
-    }
-  };
-
-  // Calculate total balance across all accounts
-  const totalBalance = accounts.reduce((sum, acc) => sum + acc.current_balance, 0);
-  const totalInitialBalance = accounts.reduce((sum, acc) => sum + acc.initial_balance, 0);
-  const totalPnL = totalBalance - totalInitialBalance;
-  const totalPnLPercent = totalInitialBalance > 0 ? (totalPnL / totalInitialBalance) * 100 : 0;
 
   const fetchSignals = async () => {
     setLoading(true);
@@ -920,35 +830,6 @@ const Signals = () => {
                         Chart
                       </Button>
                     )}
-                    {signal.status === 'active' && !isSignalTaken(signal.id) && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleTakeSignal(signal)}
-                        disabled={!canTakeSignals}
-                        title={!canTakeSignals ? 'Upgrade to Premium to take signals' : 'Take this signal'}
-                        className={`h-7 text-xs ${
-                          !canTakeSignals 
-                            ? 'bg-muted text-muted-foreground cursor-not-allowed' 
-                            : 'bg-primary'
-                        }`}
-                      >
-                        <Target className="w-3 h-3 mr-1" />
-                        {!canTakeSignals ? 'Premium' : 'Take'}
-                      </Button>
-                    )}
-                    {signal.status === 'active' && isSignalTaken(signal.id) && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleCancelTakenTrade(signal.id)}
-                        className="h-7 text-xs border-primary/30 text-primary hover:bg-red-500/10 hover:text-red-500 hover:border-red-500/30"
-                      >
-                        <Check className="w-3 h-3 mr-1" />
-                        Taken
-                        <XCircle className="w-3 h-3 ml-1" />
-                      </Button>
-                    )}
                     {isAdmin && (
                       <UpdateSignalModal
                         signalId={signal.id}
@@ -1042,27 +923,6 @@ const Signals = () => {
 
       {/* Admin Create Button */}
       {isAdmin && <CreateSignalModal onSignalCreated={fetchSignals} />}
-
-      {/* Trading Account Modal */}
-      <TradingAccountModal
-        open={showAccountModal}
-        onOpenChange={setShowAccountModal}
-        onAccountCreated={() => {
-          fetchAccounts();
-        }}
-      />
-
-      {/* Take Signal Modal */}
-      <TakeSignalModal
-        open={showTakeSignalModal}
-        onOpenChange={setShowTakeSignalModal}
-        signal={selectedSignalForTake}
-        accounts={accounts}
-        onTradeTaken={() => {
-          fetchAccounts();
-          fetchTakenTrades();
-        }}
-      />
 
       <BottomNav />
     </div>

@@ -81,16 +81,3 @@ export class UpdateSignalDto {
   confidence_score?: number;
 }
 
-export class TakeSignalDto {
-  @Type(() => Number)
-  @IsOptional()
-  actual_entry?: number;
-
-  @Type(() => Number)
-  @IsOptional()
-  position_size?: number;
-
-  @IsString()
-  @IsOptional()
-  notes?: string;
-}

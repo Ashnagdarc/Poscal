@@ -169,11 +169,6 @@ export const signalsApi = {
     return data;
   },
 
-  getUserTakenTrades: async (): Promise<any[]> => {
-    const { data } = await api.get('/signals/taken');
-    return data;
-  },
-
   create: async (signalData: any): Promise<any> => {
     const { data } = await api.post('/signals', signalData);
     return data;
@@ -186,48 +181,6 @@ export const signalsApi = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/signals/${id}`);
-  },
-
-  takeSignal: async (id: string, takeData: { account_id: string; risk_percent: number }): Promise<any> => {
-    const { data } = await api.post(`/signals/${id}/take`, takeData);
-    return data;
-  },
-
-  updateTakenTrade: async (id: string, status: string, result_pnl?: number): Promise<any> => {
-    const { data } = await api.put(`/signals/taken/${id}`, { status, result_pnl });
-    return data;
-  },
-};
-
-// Trading Accounts API
-export const accountsApi = {
-  getAll: async (): Promise<any[]> => {
-    const { data } = await api.get('/accounts');
-    return data;
-  },
-
-  getOne: async (id: string): Promise<any> => {
-    const { data } = await api.get(`/accounts/${id}`);
-    return data;
-  },
-
-  create: async (accountData: any): Promise<any> => {
-    const { data } = await api.post('/accounts', accountData);
-    return data;
-  },
-
-  update: async (id: string, updates: any): Promise<any> => {
-    const { data } = await api.put(`/accounts/${id}`, updates);
-    return data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/accounts/${id}`);
-  },
-
-  updateBalance: async (id: string, balance: number): Promise<any> => {
-    const { data } = await api.put(`/accounts/${id}/balance`, { balance });
-    return data;
   },
 };
 

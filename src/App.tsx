@@ -33,7 +33,6 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 const AdminWebhookLogs = lazy(() => import("./pages/AdminWebhookLogs"));
-const ManageAccounts = lazy(() => import("./pages/ManageAccounts"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -90,14 +89,6 @@ const AppContent = () => {
             element={
               <ProtectedRoute>
                 <AdminPayments />
-              </ProtectedRoute>
-            } 
-          />
-          <Route 
-            path="/manage-accounts" 
-            element={
-              <ProtectedRoute>
-                <ManageAccounts />
               </ProtectedRoute>
             } 
           />
