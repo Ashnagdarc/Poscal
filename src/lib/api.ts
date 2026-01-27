@@ -328,11 +328,13 @@ export const adminApi = {
 export const usersApi = {
   getProfile: async (): Promise<any> => {
     const { data } = await api.get('/auth/me');
-    return data;
+    // /auth/me returns { user, profile, roles } so extract profile
+    return data.profile || data;
   },
 
   updateProfile: async (updates: any): Promise<any> => {
     const { data } = await api.put('/auth/profile', updates);
+    // Response is the updated profile directly
     return data;
   },
 };
