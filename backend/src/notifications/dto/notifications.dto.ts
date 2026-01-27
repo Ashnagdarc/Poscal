@@ -2,8 +2,8 @@ import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
 
 export class CreatePushSubscriptionDto {
   @IsUUID()
-  @IsNotEmpty()
-  user_id: string;
+  @IsOptional()
+  user_id?: string;
 
   @IsString()
   @IsNotEmpty()
