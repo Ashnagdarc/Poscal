@@ -60,6 +60,19 @@ export class CreateTradeDto {
 
   @IsString()
   @IsOptional()
+  journal_type?: string;
+
+  @IsOptional()
+  rich_content?: any;
+
+  @IsOptional()
+  images?: any;
+
+  @IsOptional()
+  links?: any;
+
+  @IsString()
+  @IsOptional()
   strategy?: string;
 
   @IsString()
@@ -139,6 +152,19 @@ export class UpdateTradeDto {
   @IsString()
   @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  journal_type?: string;
+
+  @IsOptional()
+  rich_content?: any;
+
+  @IsOptional()
+  images?: any;
+
+  @IsOptional()
+  links?: any;
 
   @IsString()
   @IsOptional()

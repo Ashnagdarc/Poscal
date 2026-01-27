@@ -26,6 +26,7 @@ import { CSVImport } from "@/components/CSVImport";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { PnLInputModal } from "@/components/PnLInputModal";
+import { RichNoteEditor } from "@/components/RichNoteEditor";
 import { Skeleton } from "@/components/ui/skeleton";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
@@ -51,6 +52,10 @@ interface Trade {
   entry_date: string | null;
   created_at: string;
   screenshot_urls?: string[];
+  journal_type?: 'structured' | 'notes';
+  rich_content?: any;
+  images?: Array<{ url: string; caption?: string }>;
+  links?: Array<{ url: string; title?: string }>;
 }
 
 const Journal = () => {
@@ -71,6 +76,9 @@ const Journal = () => {
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialFiltersState);
   const [modals, dispatchModals] = useReducer(modalReducer, initialModalState);
 
+  // Journal view toggle
+  const [journalView, setJournalView] = useState<'structured' | 'notes'>('structured');
+
   // New trade form
   const [newTrade, setNewTrade] = useState({
     pair: "EUR/USD",
@@ -81,6 +89,10 @@ const Journal = () => {
     position_size: "",
     risk_percent: "",
     notes: "",
+    journal_type: "structured" as 'structured' | 'notes',
+    rich_content: null,
+    images: [],
+    links: [],
   });
 
   useEffect(() => {
@@ -155,7 +167,7 @@ const Journal = () => {
 
     // Check trade limit for free users
     if (!canAddTrade) {
-      toast.error(`Free plan limited to ${FREE_TRADE_LIMIT} trades. Upgrade to Premium for unlimited trades.`);
+      dispatchModals({ type: 'SHOW_UPGRADE_MODAL' });
       return;
     }
 
@@ -241,12 +253,18 @@ const Journal = () => {
       position_size: "",
       risk_percent: "",
       notes: "",
+      journal_type: journalView,
+      rich_content: null,
+      images: [],
+      links: [],
     });
     setSelectedScreenshots([]);
   };
 
   const openEditModal = (trade: Trade) => {
     dispatchModals({ type: 'SET_EDITING_TRADE', payload: trade });
+    const tradeJournalType = (trade.journal_type || 'structured') as 'structured' | 'notes';
+    setJournalView(tradeJournalType);
     setNewTrade({
       pair: trade.pair,
       direction: trade.direction,
@@ -256,6 +274,10 @@ const Journal = () => {
       position_size: trade.position_size?.toString() || "",
       risk_percent: trade.risk_percent?.toString() || "",
       notes: trade.notes || "",
+      journal_type: tradeJournalType,
+      rich_content: trade.rich_content || null,
+      images: trade.images || [],
+      links: trade.links || [],
     });
     dispatchModals({ type: 'OPEN_ADD_TRADE' });
   };
@@ -768,7 +790,7 @@ const Journal = () => {
 
       {/* Trade Limit Banner for Free Users */}
       {!isPaid && (
-        <div className="fixed bottom-28 left-0 right-0 px-6 z-40">
+        <div className="fixed bottom-24 left-0 right-0 px-6 z-40">
           <div className="bg-secondary/80 backdrop-blur-sm border border-border rounded-lg p-3 text-center">
             <p className="text-sm text-muted-foreground">
               {tradeCount}/{FREE_TRADE_LIMIT} trades used. 
@@ -786,7 +808,7 @@ const Journal = () => {
       <button
         onClick={() => {
           if (!canAddTrade) {
-            toast.error(`Free plan limited to ${FREE_TRADE_LIMIT} trades. Upgrade to Premium!`);
+            dispatchModals({ type: 'SHOW_UPGRADE_MODAL' });
             return;
           }
           dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
@@ -805,9 +827,35 @@ const Journal = () => {
         <Plus className="w-6 h-6" aria-hidden="true" />
       </button>
 
+      {/* Upgrade Modal - When User Tries to Add Trade at Limit */}
+      {modals.showUpgradeModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-secondary rounded-2xl max-w-sm w-full p-6 border border-border">
+            <h2 className="text-xl font-bold text-foreground mb-2">Trade Limit Reached</h2>
+            <p className="text-muted-foreground mb-6">
+              You've used all {FREE_TRADE_LIMIT} free trades. Upgrade to Premium for unlimited journal entries and advanced analytics.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => dispatchModals({ type: 'CLOSE_UPGRADE_MODAL' })}
+                className="flex-1 px-4 py-2 rounded-lg bg-background text-foreground font-medium hover:bg-background/80 transition-colors"
+              >
+                Maybe Later
+              </button>
+              <button
+                onClick={() => navigate('/upgrade')}
+                className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
+              >
+                Upgrade Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Upgrade Prompt for Free Users at Limit */}
       {isAtTradeLimit && (
-        <div className="fixed inset-x-0 bottom-44 px-6 z-50">
+        <div className="fixed inset-x-0 bottom-44 px-6 z-40">
           <UpgradePrompt
             feature="unlimited journal entries"
             title="Trade Limit Reached"
@@ -843,6 +891,36 @@ const Journal = () => {
               <X className="w-5 h-5 text-foreground" aria-hidden="true" />
             </button>
           </header>
+
+          {/* Journal Type Toggle */}
+          <div className="px-6 pb-4 flex gap-2">
+            <button
+              onClick={() => {
+                setJournalView('structured');
+                setNewTrade({ ...newTrade, journal_type: 'structured' });
+              }}
+              className={`flex-1 h-10 rounded-lg font-medium transition-colors ${
+                journalView === 'structured'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Structured
+            </button>
+            <button
+              onClick={() => {
+                setJournalView('notes');
+                setNewTrade({ ...newTrade, journal_type: 'notes' });
+              }}
+              className={`flex-1 h-10 rounded-lg font-medium transition-colors ${
+                journalView === 'notes'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-secondary text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              Notes
+            </button>
+          </div>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
             <div>
@@ -941,15 +1019,28 @@ const Journal = () => {
               />
             </div>
 
-            <div>
-              <label className="block text-sm text-muted-foreground mb-2">Notes</label>
-              <textarea
-                value={newTrade.notes}
-                onChange={(e) => setNewTrade({ ...newTrade, notes: e.target.value })}
-                className="w-full h-24 px-4 py-3 bg-secondary text-foreground rounded-xl outline-none resize-none"
-                placeholder="Trade setup notes..."
-              />
-            </div>
+            {journalView === 'structured' && (
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Notes</label>
+                <textarea
+                  value={newTrade.notes}
+                  onChange={(e) => setNewTrade({ ...newTrade, notes: e.target.value })}
+                  className="w-full h-24 px-4 py-3 bg-secondary text-foreground rounded-xl outline-none resize-none"
+                  placeholder="Trade setup notes..."
+                />
+              </div>
+            )}
+
+            {journalView === 'notes' && (
+              <div>
+                <label className="block text-sm text-muted-foreground mb-2">Journal Entry</label>
+                <RichNoteEditor
+                  content={newTrade.rich_content}
+                  onChange={(content) => setNewTrade({ ...newTrade, rich_content: content })}
+                  placeholder="Write your trade journal entry..."
+                />
+              </div>
+            )}
 
             {/* Screenshots Section */}
             {!modals.editingTrade && (

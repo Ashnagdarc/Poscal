@@ -47,6 +47,18 @@ export class TradingJournal {
   @Column({ type: 'text', nullable: true })
   notes: string | null;
 
+  @Column({ type: 'varchar', length: 20, default: 'structured' })
+  journal_type: string;
+
+  @Column({ type: 'jsonb', nullable: true })
+  rich_content: any;
+
+  @Column({ type: 'jsonb', nullable: true })
+  images: any;
+
+  @Column({ type: 'jsonb', nullable: true })
+  links: any;
+
   @Column({ type: 'varchar', length: 100, nullable: true })
   strategy: string | null;
 

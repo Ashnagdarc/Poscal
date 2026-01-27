@@ -75,6 +75,7 @@ export interface ModalState {
   showAddTrade: boolean;
   showAnalytics: boolean;
   showCSVImport: boolean;
+  showUpgradeModal: boolean;
   editingTrade: Trade | null;
   deleteConfirm: {
     isOpen: boolean;
@@ -93,6 +94,8 @@ export type ModalAction =
   | { type: 'CLOSE_ANALYTICS' }
   | { type: 'OPEN_CSV_IMPORT' }
   | { type: 'CLOSE_CSV_IMPORT' }
+  | { type: 'SHOW_UPGRADE_MODAL' }
+  | { type: 'CLOSE_UPGRADE_MODAL' }
   | { type: 'SET_EDITING_TRADE'; payload: Trade | null }
   | { type: 'OPEN_DELETE_CONFIRM'; payload: string }
   | { type: 'CLOSE_DELETE_CONFIRM' }
@@ -104,6 +107,7 @@ export const initialModalState: ModalState = {
   showAddTrade: false,
   showAnalytics: false,
   showCSVImport: false,
+  showUpgradeModal: false,
   editingTrade: null,
   deleteConfirm: {
     isOpen: false,
@@ -129,6 +133,10 @@ export const modalReducer: Reducer<ModalState, ModalAction> = (state, action) =>
       return { ...state, showCSVImport: true };
     case 'CLOSE_CSV_IMPORT':
       return { ...state, showCSVImport: false };
+    case 'SHOW_UPGRADE_MODAL':
+      return { ...state, showUpgradeModal: true };
+    case 'CLOSE_UPGRADE_MODAL':
+      return { ...state, showUpgradeModal: false };
     case 'SET_EDITING_TRADE':
       return { ...state, editingTrade: action.payload, showAddTrade: !!action.payload };
     case 'OPEN_DELETE_CONFIRM':
