@@ -11,31 +11,37 @@ export class UpdatesService {
   ) {}
 
   async findAll(): Promise<any[]> {
-    const items = await this.updatesRepo.find({ order: { created_at: 'DESC' } });
-    // Map to frontend expected shape
-    return items.map((u) => ({
-      id: u.id,
-      title: u.version,
-      description: u.release_notes,
-      is_active: !!u.published_at,
-      created_at: u.created_at,
-    }));
+    try {
+      const items = await this.updatesRepo.find({ order: { created_at: 'DESC' } });
+      return items.map((u) => ({
+        id: u.id,
+        title: u.title,
+        description: u.description,
+        is_active: u.is_active,
+        created_at: u.created_at,
+      }));
+    } catch (error: any) {
+      console.error('Error fetching app updates:', error?.message || error);
+      // Return empty array if table doesn't exist (migration not run yet)
+      if (error?.code === 'ER_NO_SUCH_TABLE' || error?.message?.includes('does not exist')) {
+        return [];
+      }
+      throw error;
+    }
   }
 
   async create(payload: { title: string; description: string }): Promise<any> {
     const entity = this.updatesRepo.create({
-      version: payload.title,
-      release_notes: payload.description,
-      platform: 'web',
-      is_mandatory: false,
-      published_at: new Date(),
+      title: payload.title,
+      description: payload.description,
+      is_active: true,
     });
     const saved = await this.updatesRepo.save(entity);
     return {
       id: saved.id,
-      title: saved.version,
-      description: saved.release_notes,
-      is_active: !!saved.published_at,
+      title: saved.title,
+      description: saved.description,
+      is_active: saved.is_active,
       created_at: saved.created_at,
     };
   }
@@ -44,16 +50,16 @@ export class UpdatesService {
     const entity = await this.updatesRepo.findOne({ where: { id } });
     if (!entity) return null;
     if (typeof updates.is_active === 'boolean') {
-      entity.published_at = updates.is_active ? new Date() : null;
+      entity.is_active = updates.is_active;
     }
-    if (updates.title) entity.version = updates.title;
-    if (updates.description) entity.release_notes = updates.description;
+    if (updates.title) entity.title = updates.title;
+    if (updates.description) entity.description = updates.description;
     const saved = await this.updatesRepo.save(entity);
     return {
       id: saved.id,
-      title: saved.version,
-      description: saved.release_notes,
-      is_active: !!saved.published_at,
+      title: saved.title,
+      description: saved.description,
+      is_active: saved.is_active,
       created_at: saved.created_at,
     };
   }

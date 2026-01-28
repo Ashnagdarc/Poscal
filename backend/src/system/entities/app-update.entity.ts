@@ -5,23 +5,14 @@ export class AppUpdate {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Column({ type: 'varchar', length: 20 })
-  version: string;
+  @Column({ type: 'varchar', length: 255 })
+  title: string;
 
   @Column({ type: 'text' })
-  release_notes: string;
+  description: string;
 
-  @Column({ type: 'varchar', length: 20 })
-  platform: string;
-
-  @Column({ type: 'text', nullable: true })
-  download_url: string | null;
-
-  @Column({ type: 'boolean', default: false })
-  is_mandatory: boolean;
-
-  @Column({ type: 'timestamp with time zone', nullable: true })
-  published_at: Date | null;
+  @Column({ type: 'boolean', default: true })
+  is_active: boolean;
 
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
