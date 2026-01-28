@@ -25,15 +25,15 @@ interface TradingSignal {
   id: string;
   currency_pair: string;
   direction: 'buy' | 'sell';
-  entry_price: number;
-  stop_loss: number;
-  take_profit_1: number;
-  take_profit_2: number | null;
-  take_profit_3: number | null;
-  pips_to_sl: number;
-  pips_to_tp1: number;
-  pips_to_tp2: number | null;
-  pips_to_tp3: number | null;
+  entry_price: number | string;
+  stop_loss: number | string;
+  take_profit_1: number | string;
+  take_profit_2: number | string | null;
+  take_profit_3: number | string | null;
+  pips_to_sl: number | string;
+  pips_to_tp1: number | string;
+  pips_to_tp2: number | string | null;
+  pips_to_tp3: number | string | null;
   status: 'active' | 'closed' | 'cancelled';
   result: 'win' | 'loss' | 'breakeven' | null;
   chart_image_url: string | null;
@@ -99,26 +99,32 @@ const Signals = () => {
   // Track previous signal states for notifications
   const prevSignalsRef = useRef<Map<string, TradingSignal>>(new Map());
   
+  // Helper: Convert price to number
+  const toNumber = (price: number | string | null | undefined): number => {
+    if (!price && price !== 0) return 0;
+    return typeof price === 'string' ? parseFloat(price) : price;
+  };
+
   // Helper: Check if price is in entry range
   const isPriceNearEntry = (signal: TradingSignal, tolerance: number = 50): boolean => {
-    const priceDiff = Math.abs(signal.entry_price - (prices[signal.currency_pair] || signal.entry_price));
+    const priceDiff = Math.abs(toNumber(signal.entry_price) - (prices[signal.currency_pair] || toNumber(signal.entry_price)));
     return priceDiff <= tolerance;
   };
 
   // Helper: Check if price is in warning range (near SL)
   const isNearStopLoss = (signal: TradingSignal, percentThreshold: number = 0.8): boolean => {
-    const slDistance = Math.abs(signal.entry_price - signal.stop_loss);
-    const currentDistance = Math.abs(signal.entry_price - (prices[signal.currency_pair] || signal.entry_price));
+    const slDistance = Math.abs(toNumber(signal.entry_price) - toNumber(signal.stop_loss));
+    const currentDistance = Math.abs(toNumber(signal.entry_price) - (prices[signal.currency_pair] || toNumber(signal.entry_price)));
     return currentDistance >= (slDistance * percentThreshold);
   };
 
   // Helper: Calculate profit potential at current price
   const getCurrentProfit = (signal: TradingSignal): number => {
-    const currentPrice = prices[signal.currency_pair] || signal.entry_price;
+    const currentPrice = prices[signal.currency_pair] || toNumber(signal.entry_price);
     if (signal.direction === 'buy') {
-      return currentPrice - signal.entry_price;
+      return currentPrice - toNumber(signal.entry_price);
     } else {
-      return signal.entry_price - currentPrice;
+      return toNumber(signal.entry_price) - currentPrice;
     }
   };
 
@@ -466,8 +472,11 @@ const Signals = () => {
     }
   };
 
-  const formatPrice = (price: number) => {
-    return price.toFixed(price >= 100 ? 2 : 5);
+  const formatPrice = (price: number | string | null | undefined): string => {
+    if (!price && price !== 0) return '—';
+    const numPrice = typeof price === 'string' ? parseFloat(price) : price;
+    if (isNaN(numPrice)) return '—';
+    return numPrice.toFixed(numPrice >= 100 ? 2 : 5);
   };
 
   // Group signals by date (most recent first)
@@ -814,8 +823,8 @@ const Signals = () => {
                     </div>
                     <span className={`text-sm font-bold ${
                       signal.direction === 'buy'
-                        ? prices[signal.currency_pair] > signal.entry_price ? 'text-emerald-400' : 'text-red-400'
-                        : prices[signal.currency_pair] < signal.entry_price ? 'text-emerald-400' : 'text-red-400'
+                        ? prices[signal.currency_pair] > toNumber(signal.entry_price) ? 'text-emerald-400' : 'text-red-400'
+                        : prices[signal.currency_pair] < toNumber(signal.entry_price) ? 'text-emerald-400' : 'text-red-400'
                     }`}>
                       {formatPrice(prices[signal.currency_pair])}
                     </span>
