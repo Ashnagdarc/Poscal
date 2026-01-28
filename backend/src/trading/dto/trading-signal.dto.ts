@@ -14,6 +14,10 @@ export class CreateSignalDto {
   @IsNotEmpty()
   direction: string;
 
+  @IsString()
+  @IsOptional()
+  market_execution?: string;
+
   @IsIn(['active', 'closed', 'cancelled'])
   @IsOptional()
   status?: string;
@@ -91,6 +95,10 @@ export class UpdateSignalDto {
   @IsIn(['buy', 'sell'])
   @IsOptional()
   direction?: string;
+
+  @IsString()
+  @IsOptional()
+  market_execution?: string;
 
   @Type(() => Number)
   @IsOptional()

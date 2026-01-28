@@ -14,6 +14,9 @@ export class TradingSignal {
   @Column({ type: 'varchar', length: 10 })
   direction: string;
 
+  @Column({ type: 'varchar', length: 30, nullable: true })
+  market_execution: string | null;
+
   @Column({ type: 'decimal', precision: 10, scale: 5 })
   entry_price: number;
 
