@@ -2,6 +2,7 @@ import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Query } fro
 import { AuthGuard } from '@nestjs/passport';
 import { SignalsService } from '../services/signals.service';
 import { CreateSignalDto, UpdateSignalDto } from '../dto/trading-signal.dto';
+import { AdminGuard } from '../../auth/guards/admin.guard';
 
 @Controller('signals')
 export class SignalsController {
@@ -18,23 +19,20 @@ export class SignalsController {
   }
 
   @Post()
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
   async create(@Body() createSignalDto: CreateSignalDto) {
-    // TODO: Add admin check
     return await this.signalsService.create(createSignalDto);
   }
 
   @Put(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
   async update(@Param('id') id: string, @Body() updateSignalDto: UpdateSignalDto) {
-    // TODO: Add admin check
     return await this.signalsService.update(id, updateSignalDto);
   }
 
   @Delete(':id')
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(AuthGuard('jwt'), AdminGuard)
   async remove(@Param('id') id: string) {
-    // TODO: Add admin check
     await this.signalsService.remove(id);
     return { message: 'Signal deleted successfully' };
   }

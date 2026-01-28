@@ -20,6 +20,10 @@ export class SignalsService {
       where.status = 'active';
     }
 
+    if (filters?.currency_pair) {
+      where.currency_pair = filters.currency_pair;
+    }
+
     if (filters?.symbol) {
       where.symbol = filters.symbol;
     }

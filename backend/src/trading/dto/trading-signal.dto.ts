@@ -1,12 +1,16 @@
-import { IsIn, IsNotEmpty, IsOptional, IsString, IsDateString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsOptional, IsString, IsDateString, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateSignalDto {
   @IsString()
   @IsNotEmpty()
-  symbol: string;
+  currency_pair: string;
 
-  @IsIn(['long', 'short', 'buy', 'sell'])
+  @IsString()
+  @IsOptional()
+  symbol?: string;
+
+  @IsIn(['buy', 'sell'])
   @IsNotEmpty()
   direction: string;
 
@@ -20,7 +24,31 @@ export class CreateSignalDto {
 
   @Type(() => Number)
   @IsNotEmpty()
-  take_profit: number;
+  take_profit_1: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  take_profit_2?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  take_profit_3?: number;
+
+  @Type(() => Number)
+  @IsNotEmpty()
+  pips_to_sl: number;
+
+  @Type(() => Number)
+  @IsNotEmpty()
+  pips_to_tp1: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_tp2?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_tp3?: number;
 
   @IsString()
   @IsOptional()
@@ -37,14 +65,26 @@ export class CreateSignalDto {
   @Type(() => Number)
   @IsOptional()
   confidence_score?: number;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsString()
+  @IsOptional()
+  chart_image_url?: string;
 }
 
 export class UpdateSignalDto {
   @IsString()
   @IsOptional()
+  currency_pair?: string;
+
+  @IsString()
+  @IsOptional()
   symbol?: string;
 
-  @IsIn(['long', 'short', 'buy', 'sell'])
+  @IsIn(['buy', 'sell'])
   @IsOptional()
   direction?: string;
 
@@ -58,7 +98,31 @@ export class UpdateSignalDto {
 
   @Type(() => Number)
   @IsOptional()
-  take_profit?: number;
+  take_profit_1?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  take_profit_2?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  take_profit_3?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_sl?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_tp1?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_tp2?: number;
+
+  @Type(() => Number)
+  @IsOptional()
+  pips_to_tp3?: number;
 
   @IsString()
   @IsOptional()
@@ -72,12 +136,40 @@ export class UpdateSignalDto {
   @IsOptional()
   expires_at?: string;
 
-  @IsIn(['active', 'closed', 'expired', 'cancelled'])
+  @IsIn(['active', 'closed', 'cancelled'])
   @IsOptional()
   status?: string;
+
+  @IsIn(['win', 'loss', 'breakeven'])
+  @IsOptional()
+  result?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  tp1_hit?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  tp2_hit?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  tp3_hit?: boolean;
 
   @Type(() => Number)
   @IsOptional()
   confidence_score?: number;
+
+  @IsString()
+  @IsOptional()
+  notes?: string;
+
+  @IsString()
+  @IsOptional()
+  chart_image_url?: string;
+
+  @IsDateString()
+  @IsOptional()
+  closed_at?: string;
 }
 
