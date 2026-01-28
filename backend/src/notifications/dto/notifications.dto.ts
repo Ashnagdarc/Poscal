@@ -1,7 +1,7 @@
-import { IsNotEmpty, IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class CreatePushSubscriptionDto {
-  @IsUUID()
+  @IsString()
   @IsOptional()
   user_id?: string;
 
@@ -19,9 +19,9 @@ export class CreatePushSubscriptionDto {
 }
 
 export class CreatePushNotificationDto {
-  @IsUUID()
-  @IsNotEmpty()
-  user_id: string;
+  @IsString()
+  @IsOptional()
+  user_id?: string; // Optional: if not provided, broadcast to all users
 
   @IsString()
   @IsNotEmpty()
@@ -44,6 +44,10 @@ export class CreatePushNotificationDto {
 
   @IsOptional()
   scheduled_for?: Date;
+
+  @IsString()
+  @IsOptional()
+  tag?: string; // For grouping/deduplication
 }
 
 export class CreateEmailDto {

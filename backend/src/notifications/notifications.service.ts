@@ -55,9 +55,35 @@ export class NotificationsService {
   }
 
   // Push Notifications
-  async queuePushNotification(dto: CreatePushNotificationDto): Promise<PushNotificationQueue> {
-    const notification = this.pushQueueRepository.create(dto);
-    return await this.pushQueueRepository.save(notification);
+  async queuePushNotification(dto: CreatePushNotificationDto): Promise<any> {
+    // If user_id is provided, queue for that specific user
+    if (dto.user_id) {
+      const notification = this.pushQueueRepository.create(dto);
+      return await this.pushQueueRepository.save(notification);
+    }
+
+    // Broadcast: queue for all subscribed users
+    const allSubscriptions = await this.pushSubscriptionRepository.find();
+    const uniqueUserIds = [...new Set(allSubscriptions.map(s => s.user_id).filter(Boolean))];
+
+    if (uniqueUserIds.length === 0) {
+      return { message: 'No subscribed users to notify', queued: 0 };
+    }
+
+    // Create one notification entry per unique user
+    const notifications = uniqueUserIds.map(userId =>
+      this.pushQueueRepository.create({
+        ...dto,
+        user_id: userId,
+      })
+    );
+
+    const saved = await this.pushQueueRepository.save(notifications);
+    return {
+      message: `Broadcast notification queued for ${saved.length} users`,
+      queued: saved.length,
+      notificationIds: saved.map(n => n.id),
+    };
   }
 
   async getPendingPushNotifications(limit: number = 100): Promise<PushNotificationQueue[]> {

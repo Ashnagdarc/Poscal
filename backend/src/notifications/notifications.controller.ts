@@ -81,6 +81,7 @@ export class NotificationsController {
   @Post('push')
   @UseGuards(AuthGuard('jwt'))
   async queuePushNotification(@Body() dto: CreatePushNotificationDto) {
+    this.logger.log(`[POST /notifications/push] Received DTO: ${JSON.stringify(dto)}`);
     // TODO: Add admin check for sending to other users
     return await this.notificationsService.queuePushNotification(dto);
   }
