@@ -11,7 +11,7 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
       // Check if already registered
       const registrations = await navigator.serviceWorker.getRegistrations();
       if (registrations.length > 0) {
-        console.log("[sw] Service worker already registered");
+        // Service worker already registered (normal on app reload)
         return;
       }
 

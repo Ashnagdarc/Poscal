@@ -14,6 +14,10 @@ export class CreateSignalDto {
   @IsNotEmpty()
   direction: string;
 
+  @IsIn(['active', 'closed', 'cancelled'])
+  @IsOptional()
+  status?: string;
+
   @Type(() => Number)
   @IsNotEmpty()
   entry_price: number;
