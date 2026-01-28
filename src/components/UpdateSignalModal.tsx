@@ -15,11 +15,11 @@ interface UpdateSignalModalProps {
   signalId: string;
   currentStatus: string;
   currentResult: string | null;
-  currentStopLoss: number;
-  currentTakeProfit1: number;
-  currentTakeProfit2: number | null;
-  currentTakeProfit3: number | null;
-  currentEntryPrice: number;
+  currentStopLoss: number | string;
+  currentTakeProfit1: number | string;
+  currentTakeProfit2: number | string | null;
+  currentTakeProfit3: number | string | null;
+  currentEntryPrice: number | string;
   currencyPair: string;
   direction: 'buy' | 'sell';
   tp1Hit: boolean;
@@ -51,11 +51,23 @@ export const UpdateSignalModal = ({
   const [status, setStatus] = useState(currentStatus);
   const [result, setResult] = useState(currentResult || 'pending');
   
+  // Helper to convert to string for input fields
+  const toStr = (val: number | string | null | undefined): string => {
+    if (!val && val !== 0) return '';
+    return typeof val === 'string' ? val : val.toString();
+  };
+
+  // Helper to convert to number for calculations
+  const toNum = (val: number | string | null | undefined): number => {
+    if (!val && val !== 0) return 0;
+    return typeof val === 'string' ? parseFloat(val) : val;
+  };
+  
   // Price levels
-  const [stopLoss, setStopLoss] = useState(currentStopLoss.toString());
-  const [takeProfit1, setTakeProfit1] = useState(currentTakeProfit1.toString());
-  const [takeProfit2, setTakeProfit2] = useState(currentTakeProfit2?.toString() || '');
-  const [takeProfit3, setTakeProfit3] = useState(currentTakeProfit3?.toString() || '');
+  const [stopLoss, setStopLoss] = useState(toStr(currentStopLoss));
+  const [takeProfit1, setTakeProfit1] = useState(toStr(currentTakeProfit1));
+  const [takeProfit2, setTakeProfit2] = useState(toStr(currentTakeProfit2));
+  const [takeProfit3, setTakeProfit3] = useState(toStr(currentTakeProfit3));
   
   // TP hit toggles
   const [tp1HitState, setTp1HitState] = useState(tp1Hit);
@@ -67,10 +79,10 @@ export const UpdateSignalModal = ({
     if (open) {
       setStatus(currentStatus);
       setResult(currentResult || 'pending');
-      setStopLoss(currentStopLoss.toString());
-      setTakeProfit1(currentTakeProfit1.toString());
-      setTakeProfit2(currentTakeProfit2?.toString() || '');
-      setTakeProfit3(currentTakeProfit3?.toString() || '');
+      setStopLoss(toStr(currentStopLoss));
+      setTakeProfit1(toStr(currentTakeProfit1));
+      setTakeProfit2(toStr(currentTakeProfit2));
+      setTakeProfit3(toStr(currentTakeProfit3));
       setTp1HitState(tp1Hit);
       setTp2HitState(tp2Hit);
       setTp3HitState(tp3Hit);
@@ -98,10 +110,10 @@ export const UpdateSignalModal = ({
         take_profit_1: tp1,
         take_profit_2: tp2,
         take_profit_3: tp3,
-        pips_to_sl: Math.round(calculatePips(currentEntryPrice, sl, currencyPair)),
-        pips_to_tp1: Math.round(calculatePips(currentEntryPrice, tp1, currencyPair)),
-        pips_to_tp2: tp2 ? Math.round(calculatePips(currentEntryPrice, tp2, currencyPair)) : null,
-        pips_to_tp3: tp3 ? Math.round(calculatePips(currentEntryPrice, tp3, currencyPair)) : null,
+        pips_to_sl: Math.round(calculatePips(toNum(currentEntryPrice), sl, currencyPair)),
+        pips_to_tp1: Math.round(calculatePips(toNum(currentEntryPrice), tp1, currencyPair)),
+        pips_to_tp2: tp2 ? Math.round(calculatePips(toNum(currentEntryPrice), tp2, currencyPair)) : null,
+        pips_to_tp3: tp3 ? Math.round(calculatePips(toNum(currentEntryPrice), tp3, currencyPair)) : null,
         tp1_hit: tp1HitState,
         tp2_hit: tp2HitState,
         tp3_hit: tp3HitState,
