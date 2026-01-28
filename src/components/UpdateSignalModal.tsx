@@ -169,43 +169,21 @@ export const UpdateSignalModal = ({
 
   const handleCloseTakenTrades = async (signalId: string, signalResult: string) => {
     try {
-      console.log(`🔄 Calling RPC function to close taken trades for signal ${signalId} with result: ${signalResult}`);
-      
-      // Close open taken trades for this signal using signalsApi
-      const takenTrades = await signalsApi.getUserTakenTrades();
-      const openTrades = takenTrades.filter((t: any) => t.signal_id === signalId && t.status === 'open');
-      let processed = 0;
-      for (const t of openTrades) {
-        await signalsApi.updateTakenTrade(t.id, 'closed', undefined);
-        processed++;
-      }
-      if (processed > 0) {
-        toast.success(`Processed ${processed} trade(s). Check your journal!`);
-      } else {
-        toast.info('No open trades found for this signal');
-      }
+      console.log(`🔄 Skipping taken trades closure (API not implemented) for signal ${signalId} with result: ${signalResult}`);
+      // TODO: Implement getUserTakenTrades and updateTakenTrade in signalsApi
+      // For now, signal closure works without updating taken trades
     } catch (error) {
       logger.error('❌ Error closing taken trades:', error);
-      toast.error('Failed to process taken trades');
     }
   };
 
   const handleCancelTakenTrades = async (signalId: string) => {
     try {
-      console.log(`🔄 Cancelling all open taken trades for signal ${signalId}`);
-      
-      // Simply close taken trades as cancelled with no P/L impact
-      const takenTrades = await signalsApi.getUserTakenTrades();
-      const openTrades = takenTrades.filter((t: any) => t.signal_id === signalId && t.status === 'open');
-      for (const t of openTrades) {
-        await signalsApi.updateTakenTrade(t.id, 'cancelled');
-      }
-
-      console.log('✅ Cancelled taken trades');
-      toast.info('Open trades for this signal have been cancelled');
+      console.log(`🔄 Skipping taken trades cancellation (API not implemented) for signal ${signalId}`);
+      // TODO: Implement getUserTakenTrades and updateTakenTrade in signalsApi
+      // For now, signal cancellation works without updating taken trades
     } catch (error) {
       logger.error('❌ Error cancelling taken trades:', error);
-      toast.error('Failed to cancel taken trades');
     }
   };
 
@@ -214,19 +192,11 @@ export const UpdateSignalModal = ({
     try {
       console.log(`🗑️ Deleting signal ${signalId}`);
       
-      // First, delete or cancel all taken trades for this signal
-      const allTakenTrades = await signalsApi.getUserTakenTrades();
-      const signalTakenTrades = allTakenTrades.filter((t: any) => t.signal_id === signalId);
-      const takenTradeCount = signalTakenTrades.length;
+      // TODO: Handle taken trades when API is implemented
+      // For now, just delete the signal directly
+      console.log('Skipping taken trades cleanup (API not implemented)');
 
-      // Delete all taken trades (admin can delete via RLS or we cancel them)
-      if (takenTradeCount > 0) {
-        for (const t of signalTakenTrades) {
-          await signalsApi.updateTakenTrade(t.id, 'cancelled');
-        }
-      }
-
-      // Now delete the signal
+      // Delete the signal
       await signalsApi.delete(signalId);
 
       // Queue notification that signal was deleted (optional - don't block)
@@ -239,11 +209,7 @@ export const UpdateSignalModal = ({
 
       console.log('✅ Signal deleted');
       
-      if (takenTradeCount > 0) {
-        toast.success(`Signal deleted. ${takenTradeCount} taken trade(s) removed.`);
-      } else {
-        toast.success('Signal deleted successfully');
-      }
+      toast.success('Signal deleted successfully');
       
       setOpen(false);
       onSignalUpdated();
