@@ -72,12 +72,11 @@ const AdminPayments = () => {
     return computeRange();
   }, [rangePreset, customStart, customEnd]);
 
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
-
+  // Serverless function is on Vercel (same domain), not on backend API
   const { data, isLoading, refetch } = useQuery<StatsResponse>({
     queryKey: ['payment-stats', currentRange, statusFilter, tierFilter, page, pageSize, sortBy, sortDir],
     queryFn: async () => {
-      const url = `${apiBaseUrl}/api/payment-stats?startDate=${encodeURIComponent(currentRange.startDate)}&endDate=${encodeURIComponent(currentRange.endDate)}&status=${statusFilter}&tier=${tierFilter}&page=${page}&pageSize=${pageSize}&sortBy=${sortBy}&sortDir=${sortDir}`;
+      const url = `/api/payment-stats?startDate=${encodeURIComponent(currentRange.startDate)}&endDate=${encodeURIComponent(currentRange.endDate)}&status=${statusFilter}&tier=${tierFilter}&page=${page}&pageSize=${pageSize}&sortBy=${sortBy}&sortDir=${sortDir}`;
       const r = await fetch(url);
       if (!r.ok) throw new Error('Failed to fetch stats');
       return r.json();
