@@ -154,14 +154,9 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
 
       // Queue push notification to all subscribers
       try {
-        await notificationsApi.queueNotification({
-          title: `📊 New Signal: ${formData.currency_pair}`,
-          body: `${formData.direction.toUpperCase()} at ${entry}`,
-          tag: 'new-signal',
-          data: { type: 'signal' },
-        });
+        // Note: Notification queuing skipped (requires broadcast support)
+        console.log('Signal creation notification skipped (requires broadcast support)');
       } catch (pushError) {
-        console.error('Failed to queue push notification:', pushError);
         // Don't fail the signal creation if push fails
       }
 

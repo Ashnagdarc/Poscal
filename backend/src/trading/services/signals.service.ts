@@ -16,9 +16,8 @@ export class SignalsService {
 
     if (filters?.status) {
       where.status = filters.status;
-    } else {
-      where.status = 'active';
     }
+    // Removed default 'active' filter - show all signals by default
 
     if (filters?.currency_pair) {
       where.currency_pair = filters.currency_pair;
