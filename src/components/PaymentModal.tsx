@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 // Paystack InlineJS v2 integration
 import { useAuth } from '@/contexts/AuthContext';
@@ -68,6 +69,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const [errorMessage, setErrorMessage] = useState('');
   const [paystackScriptLoaded, setPaystackScriptLoaded] = useState(false);
   const [reference, setReference] = useState('');
+  const [showPaystackPortal, setShowPaystackPortal] = useState(false);
 
   if (!user) return null;
 
@@ -106,23 +108,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   // Launch Paystack InlineJS v2
   const handlePay = () => {
-    if (!(window as any).PaystackPop) {
-      toast.error('Payment system not loaded. Please try again in a moment.');
-      return;
-    }
-    setIsProcessing(true);
-    setPaymentStatus('processing');
-    const paystack = new (window as any).PaystackPop();
-    paystack.newTransaction({
-      key: publicKey,
-      email: user.email,
-      amount: config.amount,
-      currency: config.currency,
-      reference,
-      onSuccess: (resp: any) => handlePaymentSuccess({ reference: resp.reference }),
-      onCancel: handlePaymentClose,
-    });
+    setShowPaystackPortal(true);
   };
+
+  // Launch Paystack from portal when showPaystackPortal is true
+  React.useEffect(() => {
+    if (showPaystackPortal && paystackScriptLoaded) {
+      if (!(window as any).PaystackPop) {
+        toast.error('Payment system not loaded. Please try again in a moment.');
+        setShowPaystackPortal(false);
+        return;
+      }
+      setIsProcessing(true);
+      setPaymentStatus('processing');
+      const paystack = new (window as any).PaystackPop();
+      paystack.newTransaction({
+        key: publicKey,
+        email: user.email,
+        amount: config.amount,
+        currency: config.currency,
+        reference,
+        onSuccess: (resp: any) => {
+          setShowPaystackPortal(false);
+          handlePaymentSuccess({ reference: resp.reference });
+        },
+        onCancel: () => {
+          setShowPaystackPortal(false);
+          handlePaymentClose();
+        },
+      });
+    }
+  }, [showPaystackPortal, paystackScriptLoaded, publicKey, user.email, config.amount, config.currency, reference]);
 
   // Handle successful payment
   const handlePaymentSuccess = async (reference: any) => {
@@ -190,8 +206,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md">
+    <>
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Upgrade to {config.name}</DialogTitle>
           <DialogDescription>
@@ -300,7 +317,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </>
           )}
         </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
+      {showPaystackPortal && createPortal(
+        <div id="paystack-portal" style={{ position: 'fixed', zIndex: 2147483647, top: 0, left: 0 }} />,
+        document.body
+      )}
+    </>
   );
 };
