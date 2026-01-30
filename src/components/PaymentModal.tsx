@@ -1,3 +1,10 @@
+// Utility to add/remove a class from body
+function setBodyClass(className: string, add: boolean) {
+  if (typeof document !== 'undefined') {
+    if (add) document.body.classList.add(className);
+    else document.body.classList.remove(className);
+  }
+}
 import React, { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
@@ -95,6 +102,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   // Launch Paystack InlineJS v2
   const handlePay = () => {
     setShowPaystackPortal(true);
+    setBodyClass('paystack-active', true);
   };
 
   // Launch Paystack from portal when showPaystackPortal is true
@@ -103,6 +111,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       if (!(window as any).PaystackPop) {
         toast.error('Payment system not loaded. Please try again in a moment.');
         setShowPaystackPortal(false);
+        setBodyClass('paystack-active', false);
         return;
       }
       setIsProcessing(true);
@@ -116,15 +125,33 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         reference,
         onSuccess: (resp: any) => {
           setShowPaystackPortal(false);
+          setBodyClass('paystack-active', false);
           handlePaymentSuccess({ reference: resp.reference });
         },
         onCancel: () => {
           setShowPaystackPortal(false);
+          setBodyClass('paystack-active', false);
           handlePaymentClose();
         },
       });
+    } else if (!showPaystackPortal) {
+      setBodyClass('paystack-active', false);
     }
   }, [showPaystackPortal, paystackScriptLoaded, publicKey, user.email, config.amount, config.currency, reference]);
+// Add this style globally (in your main CSS file or here for demo)
+if (typeof document !== 'undefined') {
+  const style = document.createElement('style');
+  style.innerHTML = `
+    body.paystack-active .DialogOverlay,
+    body.paystack-active .dialog-backdrop,
+    body.paystack-active .modal-backdrop,
+    body.paystack-active .MuiBackdrop-root {
+      pointer-events: none !important;
+      opacity: 0.01 !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
   // Handle successful payment
   const handlePaymentSuccess = async (reference: any) => {
