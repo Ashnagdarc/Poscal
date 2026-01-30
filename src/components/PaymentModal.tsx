@@ -39,20 +39,6 @@ const TIER_CONFIG = {
       'Email support',
     ],
   },
-  pro: {
-    name: 'Pro',
-    amount: 150000, // 1500 NGN in kobo
-    currency: 'NGN',
-    displayPrice: '₦1,500',
-    duration: '30 days',
-    features: [
-      'Everything in Premium',
-      'MT5 broker integration',
-      'API access',
-      'Custom reports',
-      'Priority support',
-    ],
-  },
 };
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
