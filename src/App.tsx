@@ -45,7 +45,7 @@ const AppContent = () => {
       <SkipLink />
       {/* Temporarily disable non-essential overlays to minimize startup issues */}
       {/* <UpgradeBanner /> */}
-      {/* <AppUpdateModal /> */}
+      <AppUpdateModal />
       {/* <PWAInstallPrompt /> */}
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
         <Routes>
