@@ -6,8 +6,8 @@ import { UpdatesService } from './updates.service';
 export class UpdatesController {
   constructor(private updatesService: UpdatesService) {}
 
+  // GET is public - all users can view app updates
   @Get()
-  @UseGuards(AuthGuard('jwt'))
   async findAll() {
     return await this.updatesService.findAll();
   }
