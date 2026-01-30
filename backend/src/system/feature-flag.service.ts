@@ -22,19 +22,20 @@ export class FeatureFlagService {
       return false;
     }
 
-    return setting.value === 'true';
+    // Handle both jsonb boolean and string values
+    const val = setting.value;
+    if (typeof val === 'boolean') return val;
+    if (typeof val === 'string') return val === 'true';
+    return !!val;
   }
 
   async setPaidLockStatus(enabled: boolean): Promise<boolean> {
-    const value = enabled ? 'true' : 'false';
-
-    await this.appSettingRepository.upsert(
-      {
-        key: PAID_LOCK_KEY,
-        value,
-        description: 'Controls whether signals require paid subscription',
-      },
-      ['key'],
+    // Use raw query to properly handle jsonb boolean value
+    await this.appSettingRepository.query(
+      `INSERT INTO app_settings (key, value, description)
+       VALUES ($1, $2::jsonb, $3)
+       ON CONFLICT (key) DO UPDATE SET value = $2::jsonb, updated_at = NOW()`,
+      [PAID_LOCK_KEY, JSON.stringify(enabled), 'Controls whether signals require paid subscription'],
     );
 
     return enabled;

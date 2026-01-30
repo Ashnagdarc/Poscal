@@ -5,8 +5,8 @@ export class AppSetting {
   @PrimaryColumn({ type: 'varchar', length: 100 })
   key: string;
 
-  @Column({ type: 'text' })
-  value: string;
+  @Column({ type: 'jsonb', nullable: true })
+  value: any;
 
   @Column({ type: 'text', nullable: true })
   description: string | null;
