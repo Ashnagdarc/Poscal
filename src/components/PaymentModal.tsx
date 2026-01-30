@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PaystackButton } from 'react-paystack';
+// Paystack InlineJS v2 integration
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import {
@@ -26,9 +26,9 @@ interface PaymentModalProps {
 const TIER_CONFIG = {
   premium: {
     name: 'Premium',
-    amount: 50000, // 500 NGN in kobo
+    amount: 299900, // 2999 NGN in kobo
     currency: 'NGN',
-    displayPrice: '₦500',
+    displayPrice: '₦2,999',
     duration: '30 days',
     features: [
       'Unlimited journal entries',
@@ -64,10 +64,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const { user } = useAuth();
   const { refreshSubscription } = useSubscription();
   const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<
-    'idle' | 'processing' | 'success' | 'error'
-  >('idle');
+  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [paystackScriptLoaded, setPaystackScriptLoaded] = useState(false);
+  const [reference, setReference] = useState('');
 
   if (!user) return null;
 
@@ -75,22 +75,53 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
   const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 
+  // Load Paystack script once
+  React.useEffect(() => {
+    if (!paystackScriptLoaded && typeof window !== 'undefined') {
+      if (document.getElementById('paystack-inline-js')) {
+        setPaystackScriptLoaded(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.id = 'paystack-inline-js';
+      script.src = 'https://js.paystack.co/v2/inline.js';
+      script.async = true;
+      script.onload = () => setPaystackScriptLoaded(true);
+      document.body.appendChild(script);
+    }
+  }, [paystackScriptLoaded]);
+
+  React.useEffect(() => {
+    if (isOpen) {
+      setReference(`poscal_${user.id}_${tier}_${Date.now()}`);
+      setPaymentStatus('idle');
+      setErrorMessage('');
+    }
+  }, [isOpen, user.id, tier]);
+
   if (!publicKey) {
     console.error('VITE_PAYSTACK_PUBLIC_KEY is not set in environment');
     return null;
   }
 
-  // Generate unique reference for each transaction
-  const generateReference = () => {
-    return `poscal_${user.id}_${tier}_${Date.now()}`;
-  };
-
-  const paystackConfig = {
-    reference: generateReference(),
-    email: user.email || '',
-    amount: config.amount,
-    currency: config.currency,
-    publicKey,
+  // Launch Paystack InlineJS v2
+  const handlePay = () => {
+    if (!(window as any).PaystackPop) {
+      toast.error('Payment system not loaded. Please try again in a moment.');
+      return;
+    }
+    setIsProcessing(true);
+    setPaymentStatus('processing');
+    const paystack = new (window as any).PaystackPop();
+    paystack.newTransaction({
+      key: publicKey,
+      email: user.email,
+      amount: config.amount,
+      currency: config.currency,
+      reference,
+      onSuccess: (resp: any) => handlePaymentSuccess({ reference: resp.reference }),
+      onCancel: handlePaymentClose,
+    });
   };
 
   // Handle successful payment
@@ -249,18 +280,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
               </div>
 
               {/* Payment Button */}
-              <PaystackButton
-                {...paystackConfig}
-                text={
-                  isProcessing
-                    ? 'Processing...'
-                    : `Pay ${config.displayPrice}`
-                }
-                onSuccess={handlePaymentSuccess}
-                onClose={handlePaymentClose}
+              <Button
+                onClick={handlePay}
                 className="w-full h-10 bg-primary text-primary-foreground font-semibold rounded-md hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
-                disabled={isProcessing}
-              />
+                disabled={isProcessing || !paystackScriptLoaded}
+              >
+                {isProcessing ? 'Processing...' : `Pay ${config.displayPrice}`}
+              </Button>
 
               {/* Security Notice */}
               <p className="text-xs text-center text-muted-foreground">
