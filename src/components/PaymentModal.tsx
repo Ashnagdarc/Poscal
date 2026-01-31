@@ -28,51 +28,19 @@ const TIER_CONFIG = {
   premium: {
     name: 'Premium',
     amount: 299900, // 2999 NGN in kobo
-  userEmail: string;
+    displayPrice: '₦2,999',
+    currency: 'NGN',
+    duration: '1 month',
+    features: [
       'Unlimited journal entries',
-      const AMOUNT = 299900; // 2999 NGN in kobo
-      const DISPLAY_PRICE = '₦2,999';
-      const CURRENCY = 'NGN';
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-        userEmail: string;
-  React.useEffect(() => {
-    if (!document.getElementById('paystack-inline-js')) {
-      export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail }) => {
-        const [paystackLoaded, setPaystackLoaded] = useState(false);
-        const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-      reference: `poscal_${Date.now()}`,
-        React.useEffect(() => {
-          if (!document.getElementById('paystack-inline-js')) {
-            const script = document.createElement('script');
-            script.id = 'paystack-inline-js';
-            script.src = 'https://js.paystack.co/v2/inline.js';
-            script.async = true;
-            script.onload = () => setPaystackLoaded(true);
-            document.body.appendChild(script);
-          } else {
-            setPaystackLoaded(true);
-          }
-        }, []);
-
-        if (!publicKey) {
-          return <div>Paystack public key not set</div>;
-        }
-
-      onSuccess: (resp: any) => alert('Payment successful!'),
-      onCancel: () => alert('Payment cancelled'),
-    });
-  };
-      setErrorMessage('');
-  return (
-    <button
-      onClick={handlePay}
-      disabled={!paystackLoaded}
-      style={{ padding: '1rem', fontSize: '1.2rem', width: '100%', background: '#222', color: '#fff', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
-    >
-      Pay {DISPLAY_PRICE}
-    </button>
-  };
+      'Priority support',
+      'Advanced analytics',
+    ],
+  },
+};
+// ...existing code...
+// ...existing code...
+// The PaymentModal component is defined below (see previous patch for correct implementation)
 // Tier pricing configuration
                 </div>
               </div>
