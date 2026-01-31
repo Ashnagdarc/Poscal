@@ -77,8 +77,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
 
     // Show Paystack payment modal using InlineJS v2 (new API)
     if (window.PaystackPop) {
-      const paystack = new window.PaystackPop();
-      paystack.openIframe({
+      new window.PaystackPop().openIframe({
         key: publicKey,
         email: userEmail,
         amount: config.amount,
