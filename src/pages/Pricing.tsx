@@ -44,7 +44,7 @@ const PRICING_TIERS = [
   {
     id: 'premium',
     name: 'Premium',
-    price: 500,
+    price: 2999,
     currency: 'NGN',
     period: '/month',
     description: 'Most popular for active traders',

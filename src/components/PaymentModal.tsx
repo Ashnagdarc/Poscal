@@ -74,11 +74,31 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     }
     setIsProcessing(true);
     setErrorMessage('');
-    // Simulate payment process
-    setTimeout(() => {
+
+    // Show Paystack payment modal using InlineJS v2
+    if (window.PaystackPop) {
+      const paystack = window.PaystackPop.setup({
+        key: publicKey,
+        email: userEmail,
+        amount: config.amount,
+        currency: config.currency,
+        callback: (response) => {
+          setIsProcessing(false);
+          setPaymentStatus('success');
+          // You can also send response.reference to your backend for verification
+        },
+        onClose: () => {
+          setIsProcessing(false);
+          setPaymentStatus('idle');
+          toast.info('Payment cancelled. Try again whenever you\'re ready.');
+        },
+      });
+      paystack.openIframe();
+    } else {
       setIsProcessing(false);
-      setPaymentStatus('success');
-    }, 2000);
+      setPaymentStatus('error');
+      setErrorMessage('Paystack script not loaded. Please refresh and try again.');
+    }
   };
 
   const handlePaymentClose = () => {
