@@ -80,45 +80,40 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       setPaymentStatus('error');
       return;
     }
+    if (!paystackScriptLoaded || !window.PaystackPop || typeof window.PaystackPop !== 'function') {
+      setErrorMessage('Paystack script not loaded. Please refresh and try again.');
+      setPaymentStatus('error');
+      return;
+    }
+    if (!userEmail || config.amount <= 0 || !config.currency) {
+      setErrorMessage('Invalid payment parameters. Please contact support.');
+      setPaymentStatus('error');
+      return;
+    }
     setIsProcessing(true);
     setErrorMessage('');
-
-    // Show Paystack payment modal using InlineJS v2 (latest API)
-    if (
-      window.PaystackPop &&
-      typeof window.PaystackPop === 'function' &&
-      publicKey &&
-      userEmail &&
-      config.amount > 0 &&
-      config.currency
-    ) {
-      try {
-        const handler = new window.PaystackPop();
-        handler.openIframe({
-          key: publicKey,
-          email: userEmail,
-          amount: config.amount,
-          currency: config.currency,
-          callback: (response: any) => {
-            setIsProcessing(false);
-            setPaymentStatus('success');
-            // You can also send response.reference to your backend for verification
-          },
-          onClose: () => {
-            setIsProcessing(false);
-            setPaymentStatus('idle');
-            toast.info('Payment cancelled. Try again whenever you\'re ready.');
-          },
-        });
-      } catch (err: any) {
-        setIsProcessing(false);
-        setPaymentStatus('error');
-        setErrorMessage(err?.message || 'Paystack transaction failed.');
-      }
-    } else {
+    try {
+      const handler = new window.PaystackPop();
+      handler.openIframe({
+        key: publicKey,
+        email: userEmail,
+        amount: config.amount,
+        currency: config.currency,
+        callback: (response: any) => {
+          setIsProcessing(false);
+          setPaymentStatus('success');
+          // You can also send response.reference to your backend for verification
+        },
+        onClose: () => {
+          setIsProcessing(false);
+          setPaymentStatus('idle');
+          toast.info('Payment cancelled. Try again whenever you\'re ready.');
+        },
+      });
+    } catch (err: any) {
       setIsProcessing(false);
       setPaymentStatus('error');
-      setErrorMessage('Paystack script not loaded or required parameters missing. Please refresh and try again.');
+      setErrorMessage(err?.message || 'Paystack transaction failed.');
     }
   };
 
