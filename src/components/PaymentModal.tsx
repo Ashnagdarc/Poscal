@@ -6,6 +6,14 @@ function setBodyClass(className: string, add: boolean) {
   }
 }
 import React, { useState } from 'react';
+import './PaymentModal.css';
+
+// Declare PaystackPop on window for TypeScript
+declare global {
+  interface Window {
+    PaystackPop?: any;
+  }
+}
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 // Paystack InlineJS v2 integration
@@ -216,7 +224,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
         </DialogContent>
       </Dialog>
       {showPaystackPortal && createPortal(
-        <div id="paystack-portal" style={{ position: 'fixed', zIndex: 2147483647, top: 0, left: 0 }} />,
+        <div id="paystack-portal" className="paystack-portal" />,
         document.body
       )}
     </>
