@@ -75,9 +75,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     setIsProcessing(true);
     setErrorMessage('');
 
-    // Show Paystack payment modal using InlineJS v2
+    // Show Paystack payment modal using InlineJS v2 (new API)
     if (window.PaystackPop) {
-      const paystack = window.PaystackPop.setup({
+      const paystack = new window.PaystackPop();
+      paystack.openIframe({
         key: publicKey,
         email: userEmail,
         amount: config.amount,
@@ -93,7 +94,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
           toast.info('Payment cancelled. Try again whenever you\'re ready.');
         },
       });
-      paystack.openIframe();
     } else {
       setIsProcessing(false);
       setPaymentStatus('error');
