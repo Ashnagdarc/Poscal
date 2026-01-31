@@ -93,7 +93,7 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
             <div className="flex items-center justify-between p-3 bg-background/50 rounded-lg border border-primary/20">
               <div>
                 <p className="text-xs text-muted-foreground">Starting at</p>
-                <p className="text-xl font-bold">₦500/month</p>
+                <p className="text-xl font-bold">₦2,999/month</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-muted-foreground">First month</p>
