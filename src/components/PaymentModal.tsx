@@ -23,11 +23,6 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
-interface PaymentModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  tier: 'premium' | 'pro';
-  redirectPath?: string; // optional path to navigate after success
 }
 
 // Tier pricing configuration
@@ -35,13 +30,9 @@ const TIER_CONFIG = {
   premium: {
     name: 'Premium',
     amount: 299900, // 2999 NGN in kobo
-    currency: 'NGN',
-    displayPrice: '₦2,999',
-    duration: '30 days',
-    features: [
+  userEmail: string;
       'Unlimited journal entries',
       'Take unlimited signals',
-      'Advanced analytics',
       'CSV export',
       'Email support',
     ],
@@ -59,153 +50,49 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const { refreshSubscription } = useSubscription();
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [paystackScriptLoaded, setPaystackScriptLoaded] = useState(false);
-  const [reference, setReference] = useState('');
-  const [showPaystackPortal, setShowPaystackPortal] = useState(false);
-
-  if (!user) return null;
-
-  const config = TIER_CONFIG[tier];
+export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail }) => {
+  const [paystackLoaded, setPaystackLoaded] = useState(false);
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-  const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '';
 
-  // Load Paystack script once
   React.useEffect(() => {
-    if (!paystackScriptLoaded && typeof window !== 'undefined') {
-      if (document.getElementById('paystack-inline-js')) {
-        setPaystackScriptLoaded(true);
-        return;
-      }
+    if (!document.getElementById('paystack-inline-js')) {
       const script = document.createElement('script');
       script.id = 'paystack-inline-js';
       script.src = 'https://js.paystack.co/v2/inline.js';
       script.async = true;
-      script.onload = () => setPaystackScriptLoaded(true);
+      script.onload = () => setPaystackLoaded(true);
       document.body.appendChild(script);
+    } else {
+      setPaystackLoaded(true);
     }
-  }, [paystackScriptLoaded]);
-
-  React.useEffect(() => {
-    if (isOpen) {
-      setReference(`poscal_${user.id}_${tier}_${Date.now()}`);
-      setPaymentStatus('idle');
-      setErrorMessage('');
-    }
-  }, [isOpen, user.id, tier]);
+  }, []);
 
   if (!publicKey) {
-    console.error('VITE_PAYSTACK_PUBLIC_KEY is not set in environment');
-    return null;
+    return <div>Paystack public key not set</div>;
   }
-
-  // Launch Paystack InlineJS v2
+  }, [paystackScriptLoaded]);
   const handlePay = () => {
-    setShowPaystackPortal(true);
-    setBodyClass('paystack-active', true);
+    if (!(window as any).PaystackPop) return;
+    const paystack = new (window as any).PaystackPop();
+    paystack.newTransaction({
+      key: publicKey,
+      email: userEmail,
+      amount: AMOUNT,
+      currency: CURRENCY,
+      reference: `poscal_${Date.now()}`,
+      onSuccess: (resp: any) => alert('Payment successful!'),
+      onCancel: () => alert('Payment cancelled'),
+    });
   };
-
-  // Launch Paystack from portal when showPaystackPortal is true
-  React.useEffect(() => {
-    if (showPaystackPortal && paystackScriptLoaded) {
-      if (!(window as any).PaystackPop) {
-        toast.error('Payment system not loaded. Please try again in a moment.');
-        setShowPaystackPortal(false);
-        setBodyClass('paystack-active', false);
-        return;
-      }
-      setIsProcessing(true);
-      setPaymentStatus('processing');
-      const paystack = new (window as any).PaystackPop();
-      paystack.newTransaction({
-        key: publicKey,
-        email: user.email,
-        amount: config.amount,
-        currency: config.currency,
-        reference,
-        onSuccess: (resp: any) => {
-          setShowPaystackPortal(false);
-          setBodyClass('paystack-active', false);
-          handlePaymentSuccess({ reference: resp.reference });
-        },
-        onCancel: () => {
-          setShowPaystackPortal(false);
-          setBodyClass('paystack-active', false);
-          handlePaymentClose();
-        },
-      });
-    } else if (!showPaystackPortal) {
-      setBodyClass('paystack-active', false);
-    }
-  }, [showPaystackPortal, paystackScriptLoaded, publicKey, user.email, config.amount, config.currency, reference]);
-// Add this style globally (in your main CSS file or here for demo)
-if (typeof document !== 'undefined') {
-  const style = document.createElement('style');
-  style.innerHTML = `
-    body.paystack-active .DialogOverlay,
-    body.paystack-active .dialog-backdrop,
-    body.paystack-active .modal-backdrop,
-    body.paystack-active .MuiBackdrop-root {
-      pointer-events: none !important;
-      opacity: 0.01 !important;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
-  // Handle successful payment
-  const handlePaymentSuccess = async (reference: any) => {
-    try {
-      setIsProcessing(true);
-      setPaymentStatus('processing');
-
-      // Verify payment with backend (Vercel serverless)
-      const response = await fetch(`${apiBaseUrl}/api/verify-payment`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          reference: reference.reference,
-          userId: user.id,
-          tier,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || !data?.success) {
-        throw new Error(data?.message || 'Payment verification failed');
-      }
-
-      // Payment verified successfully
-      setPaymentStatus('success');
-      toast.success('🎉 Payment successful! Welcome to Premium!');
-
-      // Refresh subscription context
-      await refreshSubscription();
-
-      // Close modal after showing success
-      setTimeout(() => {
-        onClose();
-        setPaymentStatus('idle');
-        // Navigate to target page after payment success
-        try {
-          navigate(redirectPath);
-        } catch (e) {
-          // noop: navigation will be skipped if router context isn't available
-        }
-      }, 2000);
-    } catch (err) {
-      const errorMsg =
-        err instanceof Error ? err.message : 'Payment verification failed';
-      setErrorMessage(errorMsg);
-      setPaymentStatus('error');
-      toast.error(errorMsg);
-      console.error('Payment verification error:', err);
-    } finally {
-      setIsProcessing(false);
-    }
+      setErrorMessage('');
+  return (
+    <button
+      onClick={handlePay}
+      disabled={!paystackLoaded}
+      style={{ padding: '1rem', fontSize: '1.2rem', width: '100%', background: '#222', color: '#fff', borderRadius: '8px', border: 'none', cursor: 'pointer' }}
+    >
+      Pay {DISPLAY_PRICE}
+    </button>
   };
 
   // Handle payment close
