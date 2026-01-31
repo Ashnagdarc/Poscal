@@ -83,14 +83,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     setIsProcessing(true);
     setErrorMessage('');
 
-    // Show Paystack payment modal using InlineJS v2 (new API)
-    if (window.PaystackPop) {
-      new window.PaystackPop().openIframe({
+    // Show Paystack payment modal using InlineJS v2 (correct API)
+    if (window.PaystackPop && typeof window.PaystackPop.setup === 'function') {
+      const handler = window.PaystackPop.setup({
         key: publicKey,
         email: userEmail,
         amount: config.amount,
         currency: config.currency,
-        callback: (response) => {
+        callback: (response: any) => {
           setIsProcessing(false);
           setPaymentStatus('success');
           // You can also send response.reference to your backend for verification
@@ -101,10 +101,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
           toast.info('Payment cancelled. Try again whenever you\'re ready.');
         },
       });
+      handler.openIframe();
     } else {
       setIsProcessing(false);
       setPaymentStatus('error');
-      setErrorMessage('Paystack script not loaded. Please refresh and try again.');
+      setErrorMessage('Paystack script not loaded or API unavailable. Please refresh and try again.');
     }
   };
 
