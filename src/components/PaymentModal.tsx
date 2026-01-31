@@ -21,9 +21,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
-import { toast } from 'sonner';
-
-}
+// ...existing code...
 
 // Tier pricing configuration
 const TIER_CONFIG = {
@@ -32,54 +30,35 @@ const TIER_CONFIG = {
     amount: 299900, // 2999 NGN in kobo
   userEmail: string;
       'Unlimited journal entries',
-      'Take unlimited signals',
-      'CSV export',
-      'Email support',
-    ],
-  },
-};
-
-export const PaymentModal: React.FC<PaymentModalProps> = ({
-  isOpen,
-  onClose,
-  tier,
-  redirectPath = '/',
-}) => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const { refreshSubscription } = useSubscription();
+      const AMOUNT = 299900; // 2999 NGN in kobo
+      const DISPLAY_PRICE = '₦2,999';
+      const CURRENCY = 'NGN';
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
-export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail }) => {
-  const [paystackLoaded, setPaystackLoaded] = useState(false);
-  const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
-
+        userEmail: string;
   React.useEffect(() => {
     if (!document.getElementById('paystack-inline-js')) {
-      const script = document.createElement('script');
-      script.id = 'paystack-inline-js';
-      script.src = 'https://js.paystack.co/v2/inline.js';
-      script.async = true;
-      script.onload = () => setPaystackLoaded(true);
-      document.body.appendChild(script);
-    } else {
-      setPaystackLoaded(true);
-    }
-  }, []);
-
-  if (!publicKey) {
-    return <div>Paystack public key not set</div>;
-  }
-  }, [paystackScriptLoaded]);
-  const handlePay = () => {
-    if (!(window as any).PaystackPop) return;
-    const paystack = new (window as any).PaystackPop();
-    paystack.newTransaction({
-      key: publicKey,
-      email: userEmail,
-      amount: AMOUNT,
-      currency: CURRENCY,
+      export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail }) => {
+        const [paystackLoaded, setPaystackLoaded] = useState(false);
+        const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
       reference: `poscal_${Date.now()}`,
+        React.useEffect(() => {
+          if (!document.getElementById('paystack-inline-js')) {
+            const script = document.createElement('script');
+            script.id = 'paystack-inline-js';
+            script.src = 'https://js.paystack.co/v2/inline.js';
+            script.async = true;
+            script.onload = () => setPaystackLoaded(true);
+            document.body.appendChild(script);
+          } else {
+            setPaystackLoaded(true);
+          }
+        }, []);
+
+        if (!publicKey) {
+          return <div>Paystack public key not set</div>;
+        }
+
       onSuccess: (resp: any) => alert('Payment successful!'),
       onCancel: () => alert('Payment cancelled'),
     });
@@ -94,56 +73,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail }) => {
       Pay {DISPLAY_PRICE}
     </button>
   };
-
-  // Handle payment close
-  const handlePaymentClose = () => {
-    if (paymentStatus === 'success') {
-      onClose();
-      setPaymentStatus('idle');
-    } else {
-      toast.info('Payment cancelled. Try again whenever you\'re ready.');
-    }
-  };
-
-  return (
-    <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
-        <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>Upgrade to {config.name}</DialogTitle>
-          <DialogDescription>
-            Complete your payment to unlock premium features
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="space-y-6">
-          {/* Success State */}
-          {paymentStatus === 'success' && (
-            <div className="text-center space-y-4 py-8">
-              <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto" />
-              <div>
-                <h3 className="font-semibold text-lg mb-2">
-                  Payment Successful! 🎉
-                </h3>
-                <p className="text-muted-foreground">
-                  Your subscription is now active. Enjoy unlimited access!
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Error State */}
-          {paymentStatus === 'error' && (
-            <div className="space-y-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-              <div className="flex items-start gap-3">
-                <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h3 className="font-semibold text-red-600 dark:text-red-400 mb-1">
-                    Payment Failed
-                  </h3>
-                  <p className="text-sm text-red-600 dark:text-red-400">
-                    {errorMessage}
-                  </p>
+// Tier pricing configuration
                 </div>
               </div>
               <Button
