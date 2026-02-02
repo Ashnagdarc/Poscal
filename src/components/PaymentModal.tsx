@@ -52,6 +52,7 @@ interface PaymentModalProps {
   onClose: () => void;
 }
 
+
 export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, onClose }) => {
   const [paystackScriptLoaded, setPaystackScriptLoaded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -60,6 +61,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   const [showPaystackPortal, setShowPaystackPortal] = useState(false);
   const config = TIER_CONFIG.premium;
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
+  const { user } = useAuth();
+  // Use prop if provided, else fallback to AuthContext
+  const effectiveUserEmail = userEmail || user?.email || '';
 
   React.useEffect(() => {
     if (!document.getElementById('paystack-inline-js')) {
@@ -77,7 +81,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   const handlePay = () => {
     // Debug: Log all payment parameters
     console.log('[Paystack Debug] publicKey:', publicKey);
-    console.log('[Paystack Debug] userEmail:', userEmail);
+    console.log('[Paystack Debug] userEmail:', effectiveUserEmail);
     console.log('[Paystack Debug] amount:', config.amount);
     console.log('[Paystack Debug] currency:', config.currency);
     if (!publicKey) {
@@ -90,7 +94,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       setPaymentStatus('error');
       return;
     }
-    if (!userEmail || config.amount <= 0 || !config.currency) {
+    if (!effectiveUserEmail || config.amount <= 0 || !config.currency) {
       setErrorMessage('Invalid payment parameters. Please contact support.');
       setPaymentStatus('error');
       return;
@@ -101,7 +105,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       const handler = new window.PaystackPop();
       handler.openIframe({
         key: publicKey,
-        email: userEmail,
+        email: effectiveUserEmail,
         amount: config.amount,
         currency: config.currency,
         callback: (response: any) => {
