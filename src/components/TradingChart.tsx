@@ -75,6 +75,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   // Update current price from WebSocket
   useEffect(() => {
     if (livePrice !== null) {
+      console.log('📊 Live price update:', { symbol, livePrice, liveChange });
       setCurrentPrice(livePrice);
       setPriceChange(liveChange);
       setLastUpdate(new Date(wsLastUpdate));
@@ -84,12 +85,18 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         const lastCandle = dataRef.current[dataRef.current.length - 1];
         const today = new Date().toISOString().split('T')[0];
         
-        if (lastCandle.time === today) {
+        if (lastCandle && lastCandle.time === today) {
           // Update today's candle
-          lastCandle.close = livePrice;
-          lastCandle.high = Math.max(lastCandle.high, livePrice);
-          lastCandle.low = Math.min(lastCandle.low, livePrice);
-          seriesRef.current.update(lastCandle);
+          const updatedCandle = {
+            time: lastCandle.time,
+            open: lastCandle.open,
+            high: Math.max(lastCandle.high, livePrice),
+            low: Math.min(lastCandle.low, livePrice),
+            close: livePrice,
+          };
+          console.log('📈 Updating candle:', updatedCandle);
+          dataRef.current[dataRef.current.length - 1] = updatedCandle;
+          seriesRef.current.update(updatedCandle);
         } else {
           // Create new candle for today
           const newCandle = {
@@ -99,6 +106,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
             low: livePrice,
             close: livePrice,
           };
+          console.log('🆕 Creating new candle:', newCandle);
           dataRef.current.push(newCandle);
           seriesRef.current.update(newCandle);
         }
