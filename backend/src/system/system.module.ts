@@ -15,6 +15,6 @@ import { AuthModule } from '../auth/auth.module';
   ],
   controllers: [UpdatesController, FeatureFlagController, PublicFeatureFlagController],
   providers: [UpdatesService, FeatureFlagService],
-  exports: [TypeOrmModule],
+  exports: [TypeOrmModule, UpdatesService, FeatureFlagService],
 })
 export class SystemModule {}
