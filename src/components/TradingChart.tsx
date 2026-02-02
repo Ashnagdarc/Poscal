@@ -94,18 +94,26 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
             low: Math.min(lastCandle.low, livePrice),
             close: livePrice,
           };
-          console.log('📈 Updating candle:', updatedCandle);
-          dataRef.current[dataRef.current.length - 1] = updatedCandle;
-          seriesRef.current.update(updatedCandle);
           
-          // Update price line to show current price (ask line across entire chart)
+          // Validate candle data
+          if (updatedCandle.time && !isNaN(updatedCandle.open) && !isNaN(updatedCandle.high) && 
+              !isNaN(updatedCandle.low) && !isNaN(updatedCandle.close)) {
+            console.log('📈 Updating candle:', updatedCandle);
+            dataRef.current[dataRef.current.length - 1] = updatedCandle;
+            seriesRef.current.update(updatedCandle);
+          }
+          
+      // Update price line to show current price (ask line across entire chart)
           // Create price line data for all historical candles with current price
-          priceLineDataRef.current = dataRef.current.map(candle => ({
-            time: candle.time,
-            value: livePrice
-          }));
-          if (priceLineSeriesRef.current) {
-            priceLineSeriesRef.current.setData(priceLineDataRef.current);
+          if (dataRef.current && dataRef.current.length > 0 && livePrice !== null && !isNaN(livePrice)) {
+            priceLineDataRef.current = dataRef.current.map(candle => ({
+              time: candle.time,
+              value: livePrice
+            })).filter(d => d.time && !isNaN(d.value)); // Validate data
+            
+            if (priceLineSeriesRef.current && priceLineDataRef.current.length > 0) {
+              priceLineSeriesRef.current.setData(priceLineDataRef.current);
+            }
           }
           
           // Refresh chart view
@@ -121,9 +129,13 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
             low: livePrice,
             close: livePrice,
           };
-          console.log('🆕 Creating new candle:', newCandle);
-          dataRef.current.push(newCandle);
-          seriesRef.current.update(newCandle);
+          
+          // Validate new candle
+          if (newCandle.time && !isNaN(newCandle.open) && !isNaN(newCandle.close)) {
+            console.log('🆕 Creating new candle:', newCandle);
+            dataRef.current.push(newCandle);
+            seriesRef.current.update(newCandle);
+          }
         }
       }
     }
