@@ -124,23 +124,26 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     setIsProcessing(true);
     setErrorMessage('');
     try {
-      const handler = new window.PaystackPop();
-      handler.openIframe({
-        key: publicKey,
-        email: effectiveUserEmail,
-        amount: config.amount,
-        currency: config.currency,
-        callback: (response: any) => {
-          setIsProcessing(false);
-          setPaymentStatus('success');
-          // You can also send response.reference to your backend for verification
-        },
-        onClose: () => {
-          setIsProcessing(false);
-          setPaymentStatus('idle');
-          toast.info('Payment cancelled. Try again whenever you\'re ready.');
-        },
-      });
+      if (typeof window.PaystackPop.setup === 'function') {
+        window.PaystackPop.setup({
+          key: publicKey,
+          email: effectiveUserEmail,
+          amount: config.amount,
+          currency: config.currency,
+          callback: (response: any) => {
+            setIsProcessing(false);
+            setPaymentStatus('success');
+            // You can also send response.reference to your backend for verification
+          },
+          onClose: () => {
+            setIsProcessing(false);
+            setPaymentStatus('idle');
+            toast.info('Payment cancelled. Try again whenever you\'re ready.');
+          },
+        });
+      } else {
+        throw new Error('PaystackPop.setup is not a function.');
+      }
     } catch (err: any) {
       setIsProcessing(false);
       setPaymentStatus('error');
