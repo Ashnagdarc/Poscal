@@ -189,12 +189,68 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       if (chartRef.current && dataRef.current.length > 0) {
         const chart = chartRef.current.getEchartsInstance();
         if (chart) {
+          // Update all series including price line
+          const timestamps = dataRef.current.map(d => d.time);
           const values = dataRef.current.map(candle => [candle.open, candle.close, candle.low, candle.high]);
+          
+          const updatedSeries: any[] = [{
+            type: 'candlestick',
+            name: symbol,
+            data: values,
+            itemStyle: {
+              color: '#10B981',
+              color0: '#EF4444',
+              borderColor: '#10B981',
+              borderColor0: '#EF4444',
+              borderWidth: 1,
+            },
+            barWidth: '60%',
+          }];
+          
+          // Add MA(20) if enabled
+          if (showIndicators) {
+            const ma20Data = dataRef.current.map((_, i) => {
+              if (i < 19) return null;
+              const sum = dataRef.current
+                .slice(i - 19, i + 1)
+                .reduce((acc, c) => acc + c.close, 0);
+              return sum / 20;
+            });
+            
+            updatedSeries.push({
+              type: 'line',
+              name: 'MA(20)',
+              data: ma20Data,
+              lineStyle: {
+                color: '#F59E0B',
+                width: 1.5,
+              },
+              showSymbol: false,
+              smooth: true,
+            });
+          }
+          
+          // Add current price line
+          if (currentPrice > 0) {
+            updatedSeries.push({
+              type: 'line',
+              name: 'Ask Price',
+              data: dataRef.current.map(() => currentPrice),
+              lineStyle: {
+                color: priceChange >= 0 ? '#10B981' : '#EF4444',
+                width: 2,
+                type: 'dashed',
+              },
+              showSymbol: false,
+              z: 10,
+            });
+          }
+          
           chart.setOption({
-            series: [{
-              type: 'candlestick',
-              data: values
-            }]
+            xAxis: {
+              data: timestamps
+            },
+            series: updatedSeries
           }, { notMerge: false, lazyUpdate: false, silent: true });
         }
       }
@@ -205,7 +261,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         clearTimeout(updateTimerRef.current);
       }
     };
-  }, [currentPrice]);
+  }, [currentPrice, priceChange, showIndicators, symbol]);
 
   // Generate ECharts option
   const generateOption = useCallback((): echarts.EChartsOption => {
