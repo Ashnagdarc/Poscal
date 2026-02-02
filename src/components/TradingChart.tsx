@@ -63,7 +63,6 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [timeUntilClose, setTimeUntilClose] = useState<string>('');
-  const priceLineRef = useRef<any>(null);
 
   // Use WebSocket for live prices (handles 10K users, 100% free, no limits!)
   const { 
@@ -104,19 +103,6 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
           if (chartRef.current) {
             chartRef.current.timeScale().fitContent();
           }
-          
-          // Update or create price line at current price
-          if (priceLineRef.current) {
-            chartRef.current?.removePriceLine(priceLineRef.current);
-          }
-          priceLineRef.current = chartRef.current?.addPriceLine({
-            price: livePrice,
-            color: '#3b82f6',
-            lineWidth: 2,
-            lineStyle: 0, // Solid
-            axisLabelVisible: true,
-            title: `Ask: ${livePrice.toFixed(5)}`,
-          });
         } else {
           // Create new candle for today
           const newCandle = {
