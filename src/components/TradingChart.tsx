@@ -41,6 +41,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const chartRef = useRef<EChartsReact>(null);
   const dataRef = useRef<Candle[]>([]);
   const updateTimerRef = useRef<NodeJS.Timeout>();
+  const candleTimerRef = useRef<NodeJS.Timeout>();
+  const currentCandleStartTimeRef = useRef<Date>(new Date());
   
   const [symbol, setSymbol] = useState(initialSymbol);
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -56,6 +58,21 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     change: liveChange, 
     isConnected 
   } = useForexWebSocket(symbol);
+
+  // Get candle duration in milliseconds
+  const getCandleDuration = (tf: Timeframe): number => {
+    const durations: Record<Timeframe, number> = {
+      '1m': 60 * 1000,        // 1 minute
+      '5m': 5 * 60 * 1000,    // 5 minutes
+      '15m': 15 * 60 * 1000,  // 15 minutes
+      '1h': 60 * 60 * 1000,   // 1 hour
+      '4h': 4 * 60 * 60 * 1000, // 4 hours
+      '1d': 24 * 60 * 60 * 1000, // 1 day
+      '1w': 7 * 24 * 60 * 60 * 1000, // 1 week
+      '1M': 30 * 24 * 60 * 60 * 1000, // 1 month (approx)
+    };
+    return durations[tf] || 24 * 60 * 60 * 1000;
+  };
 
   // Get candle count based on timeframe
   const getCandleCount = (tf: Timeframe): number => {
@@ -141,9 +158,64 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   // Load data when symbol/timeframe changes
   useEffect(() => {
     loadChartData();
+    
+    // Reset candle timer when timeframe changes
+    currentCandleStartTimeRef.current = new Date();
   }, [loadChartData]);
 
-  // Update live price with animation
+  // Auto-generate new candles based on timeframe
+  useEffect(() => {
+    const candleDuration = getCandleDuration(timeframe);
+    
+    const checkNewCandle = () => {
+      const now = new Date();
+      const elapsed = now.getTime() - currentCandleStartTimeRef.current.getTime();
+      
+      // If enough time has passed, create a new candle
+      if (elapsed >= candleDuration && dataRef.current.length > 0) {
+        const lastCandle = dataRef.current[dataRef.current.length - 1];
+        const newOpen = lastCandle.close;
+        
+        // Add small random movement for new candle
+        const volatility = newOpen * 0.002;
+        const priceMove = (Math.random() - 0.5) * volatility;
+        const newClose = newOpen + priceMove;
+        
+        const newCandle: Candle = {
+          time: now.toISOString().split('T')[0],
+          open: parseFloat(newOpen.toFixed(5)),
+          high: parseFloat(Math.max(newOpen, newClose).toFixed(5)),
+          low: parseFloat(Math.min(newOpen, newClose).toFixed(5)),
+          close: parseFloat(newClose.toFixed(5)),
+        };
+        
+        dataRef.current.push(newCandle);
+        
+        // Remove oldest candle to maintain count
+        const maxCandles = getCandleCount(timeframe);
+        if (dataRef.current.length > maxCandles) {
+          dataRef.current.shift();
+        }
+        
+        currentCandleStartTimeRef.current = now;
+        setCurrentPrice(newClose);
+        updateChart();
+        
+        console.log('📊 New candle created:', newCandle);
+      }
+    };
+    
+    // Check every second for new candles
+    candleTimerRef.current = setInterval(checkNewCandle, 1000);
+    
+    return () => {
+      if (candleTimerRef.current) {
+        clearInterval(candleTimerRef.current);
+      }
+    };
+  }, [timeframe]);
+
+  // Update live price with real-time candlestick updates
   useEffect(() => {
     if (livePrice !== null && livePrice > 0 && dataRef.current.length > 0) {
       // Animate price change
@@ -172,25 +244,16 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       animatePrice();
       setPriceChange(liveChange);
 
-      // Update last candle
+      // Update last candle with live price to create dynamic movement
       const lastCandle = dataRef.current[dataRef.current.length - 1];
-      const today = new Date().toISOString().split('T')[0];
+      
+      // Update OHLC for current candle
+      lastCandle.close = parseFloat(livePrice.toFixed(5));
+      lastCandle.high = parseFloat(Math.max(lastCandle.high, livePrice).toFixed(5));
+      lastCandle.low = parseFloat(Math.min(lastCandle.low, livePrice).toFixed(5));
 
-      if (lastCandle.time === today) {
-        lastCandle.high = Math.max(lastCandle.high, livePrice);
-        lastCandle.low = Math.min(lastCandle.low, livePrice);
-        lastCandle.close = livePrice;
-      } else {
-        dataRef.current.push({
-          time: today,
-          open: livePrice,
-          high: livePrice,
-          low: livePrice,
-          close: livePrice,
-        });
-      }
-
-      // Update chart
+      // Update chart to show visual candle movement
+      updateChart();
       updateChart();
     }
   }, [livePrice, liveChange]);
