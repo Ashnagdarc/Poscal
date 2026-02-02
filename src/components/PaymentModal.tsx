@@ -1,11 +1,4 @@
-// Utility to add/remove a class from body
-function setBodyClass(className: string, add: boolean) {
-  if (typeof document !== 'undefined') {
-    if (add) document.body.classList.add(className);
-    else document.body.classList.remove(className);
-  }
-}
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import './PaymentModal.css';
 
 // Declare PaystackPop on window for TypeScript
@@ -14,11 +7,8 @@ declare global {
     PaystackPop?: any;
   }
 }
-import { createPortal } from 'react-dom';
-import { useNavigate } from 'react-router-dom';
 // Paystack InlineJS v2 integration
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/contexts/SubscriptionContext';
 import {
   Dialog,
   DialogContent,
@@ -58,14 +48,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [showPaystackPortal, setShowPaystackPortal] = useState(false);
+  const processingRef = useRef(false);
   const config = TIER_CONFIG.premium;
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
   const { user } = useAuth();
   // Use prop if provided, else fallback to AuthContext
   const effectiveUserEmail = userEmail || user?.email || '';
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!document.getElementById('paystack-inline-js')) {
       const script = document.createElement('script');
       script.id = 'paystack-inline-js';
@@ -78,7 +68,29 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     }
   }, []);
 
+  useEffect(() => {
+    processingRef.current = isProcessing;
+  }, [isProcessing]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsProcessing(false);
+      setPaymentStatus('idle');
+      setErrorMessage('');
+      processingRef.current = false;
+    }
+  }, [isOpen]);
+
   const handlePay = () => {
+        // Fallback: Reset UI if Paystack does not respond in 30 seconds
+        const fallbackTimeout = setTimeout(() => {
+          if (processingRef.current) {
+            setIsProcessing(false);
+            setPaymentStatus('error');
+            setErrorMessage('Payment window did not open. Please check your popup blocker, CSP, or try again.');
+            console.warn('[Paystack Warning] Payment window did not open or callback was not triggered.');
+          }
+        }, 30000); // 30 seconds
     // Debug: Log all payment parameters
     console.log('[Paystack Debug] handlePay called');
     console.log('[Paystack Debug] publicKey:', publicKey);
@@ -97,8 +109,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       console.error('[Paystack Error] paystackScriptLoaded:', paystackScriptLoaded);
       return;
     }
-    if (!window.PaystackPop || typeof window.PaystackPop !== 'function') {
-      setErrorMessage('PaystackPop is not available on window.');
+    if (!window.PaystackPop || typeof window.PaystackPop.setup !== 'function') {
+      setErrorMessage('PaystackPop.setup is not available on window.');
       setPaymentStatus('error');
       console.error('[Paystack Error] window.PaystackPop:', window.PaystackPop);
       return;
@@ -122,47 +134,63 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       return;
     }
     setIsProcessing(true);
+    setPaymentStatus('processing');
     setErrorMessage('');
     try {
       if (typeof window.PaystackPop.setup === 'function') {
-        window.PaystackPop.setup({
+        const handler = window.PaystackPop.setup({
           key: publicKey,
           email: effectiveUserEmail,
           amount: config.amount,
           currency: config.currency,
           callback: (response: any) => {
+            clearTimeout(fallbackTimeout);
             setIsProcessing(false);
             setPaymentStatus('success');
+            processingRef.current = false;
             // You can also send response.reference to your backend for verification
           },
           onClose: () => {
+            clearTimeout(fallbackTimeout);
             setIsProcessing(false);
             setPaymentStatus('idle');
+            processingRef.current = false;
             toast.info('Payment cancelled. Try again whenever you\'re ready.');
           },
         });
+        if (typeof handler?.openIframe === 'function') {
+          handler.openIframe();
+        } else if (typeof handler?.open === 'function') {
+          handler.open();
+        } else {
+          throw new Error('Paystack handler could not be opened.');
+        }
       } else {
+        clearTimeout(fallbackTimeout);
         throw new Error('PaystackPop.setup is not a function.');
       }
     } catch (err: any) {
+      clearTimeout(fallbackTimeout);
       setIsProcessing(false);
       setPaymentStatus('error');
+      processingRef.current = false;
       setErrorMessage(err?.message || 'Paystack transaction failed.');
-    }
-  };
-
-  const handlePaymentClose = () => {
-    if (paymentStatus === 'success') {
-      onClose();
-      setPaymentStatus('idle');
-    } else {
-      toast.info('Payment cancelled. Try again whenever you\'re ready.');
     }
   };
 
   return (
     <>
-      <Dialog open={isOpen} onOpenChange={onClose}>
+      <Dialog
+        open={isOpen}
+        onOpenChange={(open) => {
+          if (!open && paymentStatus !== 'success') {
+            toast.info('Payment cancelled. Try again whenever you\'re ready.');
+          }
+          if (!open) {
+            onClose();
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Upgrade to {config.name}</DialogTitle>
@@ -266,10 +294,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
           </div>
         </DialogContent>
       </Dialog>
-      {showPaystackPortal && createPortal(
-        <div id="paystack-portal" className="paystack-portal" />,
-        document.body
-      )}
     </>
   );
 };
