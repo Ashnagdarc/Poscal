@@ -62,6 +62,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeUntilClose, setTimeUntilClose] = useState<string>('');
+  const priceLineRef = useRef<any>(null);
 
   // Use WebSocket for live prices (handles 10K users, 100% free, no limits!)
   const { 
@@ -97,6 +99,24 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
           console.log('📈 Updating candle:', updatedCandle);
           dataRef.current[dataRef.current.length - 1] = updatedCandle;
           seriesRef.current.update(updatedCandle);
+          
+          // Refresh chart view
+          if (chartRef.current) {
+            chartRef.current.timeScale().fitContent();
+          }
+          
+          // Update or create price line at current price
+          if (priceLineRef.current) {
+            chartRef.current?.removePriceLine(priceLineRef.current);
+          }
+          priceLineRef.current = chartRef.current?.addPriceLine({
+            price: livePrice,
+            color: '#3b82f6',
+            lineWidth: 2,
+            lineStyle: 0, // Solid
+            axisLabelVisible: true,
+            title: `Ask: ${livePrice.toFixed(5)}`,
+          });
         } else {
           // Create new candle for today
           const newCandle = {
@@ -113,6 +133,23 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       }
     }
   }, [livePrice, liveChange, wsLastUpdate]);
+
+  // Countdown timer for bar close
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const secondsInDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const secondsUntilMidnight = 86400 - secondsInDay;
+      
+      const hours = Math.floor(secondsUntilMidnight / 3600);
+      const minutes = Math.floor((secondsUntilMidnight % 3600) / 60);
+      const seconds = secondsUntilMidnight % 60;
+      
+      setTimeUntilClose(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
+    }, 1000);
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // Convert symbol format for APIs (EUR/USD -> EURUSD)
   const getApiSymbol = (pair: string) => pair.replace('/', '');
@@ -335,6 +372,12 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
                 </>
               ) : (
                 <span className="text-orange-400">Connecting...</span>
+              )}
+              {timeUntilClose && (
+                <>
+                  <span>•</span>
+                  <span className="text-amber-400">Bar closes in {timeUntilClose}</span>
+                </>
               )}
               {wsError && <span className="text-red-400"> - {wsError}</span>}
             </div>
