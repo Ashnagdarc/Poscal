@@ -217,65 +217,62 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
     chartRef.current = chart;
 
-    // Only set data if we have it
-    if (dataRef.current.length === 0 || isLoading) {
-      return;
-    }
-
     const data = dataRef.current;
 
-    // Add series based on chart type
-    let series: ISeriesApi<any>;
+    // Add series based on chart type (only if we have data)
+    if (data && data.length > 0) {
+      let series: ISeriesApi<any>;
 
-    if (chartType === 'candlestick') {
-      series = chart.addSeries(CandlestickSeries, {
-        upColor: '#10b981',
-        downColor: '#ef4444',
-        borderVisible: false,
-        wickUpColor: '#10b981',
-        wickDownColor: '#ef4444',
-      });
-      series.setData(data);
-    } else if (chartType === 'line') {
-      series = chart.addSeries(LineSeries, {
-        color: '#3b82f6',
-        lineWidth: 2,
-      });
-      series.setData(data.map(d => ({ time: d.time, value: d.close })));
-    } else if (chartType === 'area') {
-      series = chart.addSeries(AreaSeries, {
-        topColor: 'rgba(59, 130, 246, 0.4)',
-        bottomColor: 'rgba(59, 130, 246, 0.0)',
-        lineColor: '#3b82f6',
-        lineWidth: 2,
-      });
-      series.setData(data.map(d => ({ time: d.time, value: d.close })));
-    } else if (chartType === 'bar') {
-      series = chart.addSeries(BarSeries, {
-        upColor: '#10b981',
-        downColor: '#ef4444',
-      });
-      series.setData(data);
+      if (chartType === 'candlestick') {
+        series = chart.addSeries(CandlestickSeries, {
+          upColor: '#10b981',
+          downColor: '#ef4444',
+          borderVisible: false,
+          wickUpColor: '#10b981',
+          wickDownColor: '#ef4444',
+        });
+        series.setData(data);
+      } else if (chartType === 'line') {
+        series = chart.addSeries(LineSeries, {
+          color: '#3b82f6',
+          lineWidth: 2,
+        });
+        series.setData(data.map(d => ({ time: d.time, value: d.close })));
+      } else if (chartType === 'area') {
+        series = chart.addSeries(AreaSeries, {
+          topColor: 'rgba(59, 130, 246, 0.4)',
+          bottomColor: 'rgba(59, 130, 246, 0.0)',
+          lineColor: '#3b82f6',
+          lineWidth: 2,
+        });
+        series.setData(data.map(d => ({ time: d.time, value: d.close })));
+      } else if (chartType === 'bar') {
+        series = chart.addSeries(BarSeries, {
+          upColor: '#10b981',
+          downColor: '#ef4444',
+        });
+        series.setData(data);
+      }
+
+      seriesRef.current = series!;
+
+      // Add moving average indicator if enabled
+      if (showIndicators && data.length > 20) {
+        const ma20 = chart.addSeries(LineSeries, {
+          color: '#f59e0b',
+          lineWidth: 1,
+        });
+        
+        const maData = data.map((d, i) => {
+          if (i < 20) return { time: d.time, value: d.close };
+          const sum = data.slice(i - 19, i + 1).reduce((acc, item) => acc + item.close, 0);
+          return { time: d.time, value: sum / 20 };
+        });
+        ma20.setData(maData);
+      }
+
+      chart.timeScale().fitContent();
     }
-
-    seriesRef.current = series;
-
-    // Add moving average indicator if enabled
-    if (showIndicators && data.length > 20) {
-      const ma20 = chart.addSeries(LineSeries, {
-        color: '#f59e0b',
-        lineWidth: 1,
-      });
-      
-      const maData = data.map((d, i) => {
-        if (i < 20) return { time: d.time, value: d.close };
-        const sum = data.slice(i - 19, i + 1).reduce((acc, item) => acc + item.close, 0);
-        return { time: d.time, value: sum / 20 };
-      });
-      ma20.setData(maData);
-    }
-
-    chart.timeScale().fitContent();
 
     const handleResize = () => {
       if (chartContainerRef.current && chartRef.current) {
@@ -289,7 +286,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [chartType, showIndicators, dataRef.current, isLoading]);
+  }, [chartType, showIndicators, isLoading]);
 
   return (
     <div className="w-full space-y-4">
