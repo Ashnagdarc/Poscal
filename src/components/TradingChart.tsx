@@ -131,22 +131,47 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     }
   }, [livePrice, liveChange, wsLastUpdate]);
 
-  // Countdown timer for bar close
+  // Countdown timer for bar close (respects timeframe)
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
-      const secondsInDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-      const secondsUntilMidnight = 86400 - secondsInDay;
+      let secondsUntilClose = 0;
+
+      if (timeframe === '1m') {
+        const secondsInMinute = now.getSeconds();
+        secondsUntilClose = 60 - secondsInMinute;
+      } else if (timeframe === '5m') {
+        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
+        const barIndex = Math.floor(secondsInHour / 300); // 300 seconds = 5 min
+        secondsUntilClose = 300 - (secondsInHour % 300);
+      } else if (timeframe === '15m') {
+        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
+        const barIndex = Math.floor(secondsInHour / 900); // 900 seconds = 15 min
+        secondsUntilClose = 900 - (secondsInHour % 900);
+      } else if (timeframe === '1h') {
+        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
+        secondsUntilClose = 3600 - secondsInHour;
+      } else if (timeframe === '4h') {
+        const hour = now.getHours();
+        const barIndex = Math.floor(hour / 4);
+        const barStartHour = barIndex * 4;
+        const secondsInBar = (now.getHours() - barStartHour) * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        secondsUntilClose = 14400 - secondsInBar; // 14400 = 4 hours
+      } else {
+        // 1d, 1w, 1m - countdown to midnight
+        const secondsInDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+        secondsUntilClose = 86400 - secondsInDay;
+      }
       
-      const hours = Math.floor(secondsUntilMidnight / 3600);
-      const minutes = Math.floor((secondsUntilMidnight % 3600) / 60);
-      const seconds = secondsUntilMidnight % 60;
+      const hours = Math.floor(secondsUntilClose / 3600);
+      const minutes = Math.floor((secondsUntilClose % 3600) / 60);
+      const seconds = secondsUntilClose % 60;
       
       setTimeUntilClose(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
     }, 1000);
     
     return () => clearInterval(interval);
-  }, []);
+  }, [timeframe]);
 
   // Convert symbol format for APIs (EUR/USD -> EURUSD)
   const getApiSymbol = (pair: string) => pair.replace('/', '');
@@ -211,13 +236,22 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     setError(null);
     
     try {
-      const days = range === '1D' ? 1 : range === '1W' ? 7 : range === '1M' ? 30 : range === '3M' ? 90 : range === '6M' ? 180 : range === '1Y' ? 365 : 365;
+      // Calculate days based on selected range
+      let days = 1;
+      if (range === '1D') days = 1;
+      else if (range === '1W') days = 7;
+      else if (range === '1M') days = 30;
+      else if (range === '3M') days = 90;
+      else if (range === '6M') days = 180;
+      else if (range === '1Y') days = 365;
+      else if (range === 'ALL') days = 730; // 2 years
       
+      console.log(`📊 Loading chart data for ${symbol}: ${days} days`);
       const historicalData = await fetchHistoricalData(symbol, timeframe, days);
       
       if (historicalData && historicalData.length > 0) {
         dataRef.current = historicalData;
-        // Price will be updated by WebSocket
+        console.log(`✅ Loaded ${historicalData.length} candles`);
       }
       
       setIsLoading(false);
