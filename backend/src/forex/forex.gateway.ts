@@ -32,14 +32,16 @@ export class ForexGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   // Map frontend symbols to Binance symbols
   private symbolMap: Record<string, string> = {
-    'EUR/USD': 'EURUSDT', // We'll convert USDT price to USD
+    'EUR/USD': 'EURUSDT',
     'GBP/USD': 'GBPUSDT',
-    'USD/JPY': 'USDTJPY', // Inverted calculation needed
+    'USD/JPY': 'USDTJPY',
     'AUD/USD': 'AUDUSDT',
     'USD/CAD': 'USDTCAD',
-    'NZD/USD': 'NZDUSDT',
     'USD/CHF': 'USDTCHF',
-    // Add more pairs as needed
+    'NZD/USD': 'NZDUSDT',
+    'EUR/GBP': 'EURGBP',
+    'EUR/JPY': 'EURJPY',
+    'GBP/JPY': 'GBPJPY',
   };
 
   handleConnection(client: Socket) {
