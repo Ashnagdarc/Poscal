@@ -2,6 +2,7 @@ import * as nodeCrypto from 'crypto';
 import { NestFactory } from '@nestjs/core';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
   // Ensure the Node crypto API is available as a global before loading any modules that expect it
@@ -16,6 +17,9 @@ async function bootstrap() {
     rawBody: true,
   });
   const port = process.env.PORT || 3001;
+  
+  // Enable WebSocket/Socket.IO adapter
+  app.useWebSocketAdapter(new IoAdapter(app));
   
   // Enable CORS for frontend
   app.enableCors({
