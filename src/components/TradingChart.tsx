@@ -11,10 +11,15 @@ import {
   HistogramSeries
 } from 'lightweight-charts';
 import { TrendingUp, BarChart3, Activity, LineChart, AreaChart } from 'lucide-react';
+import { useForexWebSocket } from '../hooks/useForexWebSocket';
 
 type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 type Range = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
+
+// API Configuration
+const ALPHA_VANTAGE_KEY = '7JNQSHEV4YIH1PG5'; // Replace with your API key from https://www.alphavantage.co/support/#api-key
+const FINNHUB_KEY = 'demo'; // Alternative: Get free key from https://finnhub.io/
 
 // Comprehensive list of forex pairs
 const PAIRS = [
@@ -44,40 +49,130 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<any> | null>(null);
+  const dataRef = useRef<any[]>([]);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const [symbol, setSymbol] = useState(initialSymbol);
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [timeframe, setTimeframe] = useState<Timeframe>('1d');
   const [range, setRange] = useState<Range>('1M');
   const [showIndicators, setShowIndicators] = useState(false);
+  const [currentPrice, setCurrentPrice] = useState<number>(0);
+  const [priceChange, setPriceChange] = useState<number>(0);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Generate sample data based on timeframe
-  const generateData = () => {
-    const data = [];
-    const now = new Date('2018-12-31');
-    const days = range === '1D' ? 1 : range === '1W' ? 7 : range === '1M' ? 30 : range === '3M' ? 90 : range === '6M' ? 180 : range === '1Y' ? 365 : 365;
-    
-    for (let i = days; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
+  // Use WebSocket for live prices (handles 10K users, 100% free, no limits!)
+  const { 
+    price: livePrice, 
+    change: liveChange, 
+    lastUpdate: wsLastUpdate,
+    isConnected,
+    error: wsError 
+  } = useForexWebSocket(symbol);
+
+  // Update current price from WebSocket
+  useEffect(() => {
+    if (livePrice !== null) {
+      setCurrentPrice(livePrice);
+      setPriceChange(liveChange);
+      setLastUpdate(new Date(wsLastUpdate));
       
-      const open = 75 + Math.random() * 50;
-      const close = open + (Math.random() - 0.5) * 20;
-      const high = Math.max(open, close) + Math.random() * 10;
-      const low = Math.min(open, close) - Math.random() * 10;
-      
-      data.push({
-        time: dateStr,
-        open,
-        high,
-        low,
-        close,
-        value: close // for line/area charts
-      });
+      // Update chart with live price
+      if (seriesRef.current && dataRef.current.length > 0) {
+        const lastCandle = dataRef.current[dataRef.current.length - 1];
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (lastCandle.time === today) {
+          // Update today's candle
+          lastCandle.close = livePrice;
+          lastCandle.high = Math.max(lastCandle.high, livePrice);
+          lastCandle.low = Math.min(lastCandle.low, livePrice);
+          seriesRef.current.update(lastCandle);
+        } else {
+          // Create new candle for today
+          const newCandle = {
+            time: today,
+            open: livePrice,
+            high: livePrice,
+            low: livePrice,
+            close: livePrice,
+          };
+          dataRef.current.push(newCandle);
+          seriesRef.current.update(newCandle);
+        }
+      }
     }
-    return data;
+  }, [livePrice, liveChange, wsLastUpdate]);
+
+  // Convert symbol format for APIs (EUR/USD -> EURUSD)
+  const getApiSymbol = (pair: string) => pair.replace('/', '');
+
+  // Fetch historical candlestick data (only needed once on load)
+  const fetchHistoricalData = async (pair: string, interval: string, days: number) => {
+    try {
+      const apiSymbol = getApiSymbol(pair);
+      const endDate = Math.floor(Date.now() / 1000);
+      const startDate = endDate - (days * 24 * 60 * 60);
+      
+      // Using Finnhub for OHLC data
+      const response = await fetch(
+        `https://finnhub.io/api/v1/forex/candle?symbol=OANDA:${apiSymbol}&resolution=D&from=${startDate}&to=${endDate}&token=${FINNHUB_KEY}`
+      );
+      
+      if (!response.ok) throw new Error('Failed to fetch historical data');
+      
+      const data = await response.json();
+      
+      if (data.s !== 'ok') {
+        throw new Error('No data available for this pair');
+      }
+      
+      // Convert to lightweight-charts format
+      const formattedData = data.t.map((timestamp: number, i: number) => ({
+        time: new Date(timestamp * 1000).toISOString().split('T')[0],
+        open: data.o[i],
+        high: data.h[i],
+        low: data.l[i],
+        close: data.c[i],
+        value: data.c[i],
+      }));
+      
+      return formattedData;
+    } catch (err) {
+      console.error('Error fetching historical data:', err);
+      throw err;
+    }
   };
+
+  // Load initial data
+  const loadChartData = async () => {
+    setIsLoading(true);
+    setError(null);
+    
+    try {
+      const days = range === '1D' ? 1 : range === '1W' ? 7 : range === '1M' ? 30 : range === '3M' ? 90 : range === '6M' ? 180 : range === '1Y' ? 365 : 365;
+      
+      const historicalData = await fetchHistoricalData(symbol, timeframe, days);
+      
+      if (historicalData && historicalData.length > 0) {
+        dataRef.current = historicalData;
+        // Price will be updated by WebSocket
+      }
+      
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error('Failed to load chart data:', err);
+      setError(err.message || 'Failed to load data');
+      setIsLoading(false);
+    }
+  };
+
+  // Load data when symbol, range, or timeframe changes
+  useEffect(() => {
+    loadChartData();
+  }, [symbol, range, timeframe]);
 
   useEffect(() => {
     if (!chartContainerRef.current) return;
@@ -105,9 +200,15 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
     chartRef.current = chart;
 
+    // Only set data if we have it
+    if (dataRef.current.length === 0 || isLoading) {
+      return;
+    }
+
+    const data = dataRef.current;
+
     // Add series based on chart type
     let series: ISeriesApi<any>;
-    const data = generateData();
 
     if (chartType === 'candlestick') {
       series = chart.addSeries(CandlestickSeries, {
@@ -143,7 +244,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     seriesRef.current = series;
 
     // Add moving average indicator if enabled
-    if (showIndicators) {
+    if (showIndicators && data.length > 20) {
       const ma20 = chart.addSeries(LineSeries, {
         color: '#f59e0b',
         lineWidth: 1,
@@ -171,13 +272,13 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       window.removeEventListener('resize', handleResize);
       chart.remove();
     };
-  }, [chartType, timeframe, range, symbol, showIndicators]);
+  }, [chartType, showIndicators, dataRef.current, isLoading]);
 
   return (
     <div className="w-full space-y-4">
-      {/* Modern Header with Symbol Info */}
+      {/* Modern Header with Live Price Info */}
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <select
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
@@ -187,13 +288,34 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
               <option key={pair} value={pair}>{pair}</option>
             ))}
           </select>
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">•</span>
-            <span className="text-sm text-muted-foreground">{timeframe.toUpperCase()}</span>
-            <span className="text-sm text-muted-foreground">•</span>
-            <span className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-md">
-              Live
-            </span>
+          
+          {/* Live Price Display */}
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-bold tabular-nums">
+                {currentPrice.toFixed(5)}
+              </span>
+              <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+                priceChange >= 0 
+                  ? 'bg-emerald-500/20 text-emerald-400' 
+                  : 'bg-red-500/20 text-red-400'
+              }`}>
+                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+              </span>
+            </div>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{timeframe.toUpperCase()}</span>
+              <span>•</span>
+              {isConnected ? (
+                <>
+                  <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="Live WebSocket connected"></span>
+                  <span className="text-emerald-400">Live - Updated {Math.floor((new Date().getTime() - lastUpdate.getTime()) / 1000)}s ago</span>
+                </>
+              ) : (
+                <span className="text-orange-400">Connecting...</span>
+              )}
+              {wsError && <span className="text-red-400"> - {wsError}</span>}
+            </div>
           </div>
         </div>
       </div>
