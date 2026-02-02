@@ -17,15 +17,23 @@ export const TradingChart = ({ symbol = 'EUR/USD', priceData }: TradingChartProp
     if (!containerRef.current) return;
 
     const container = containerRef.current;
-    setIsLoading(true);
 
-    // Get initial dimensions
-    const width = container.clientWidth;
-    const height = window.innerWidth < 768 ? 300 : 400;
+    // Wait for container to have dimensions
+    const initChart = () => {
+      const width = container.clientWidth;
+      const height = window.innerWidth < 768 ? 300 : 400;
 
-    try {
-      // Create chart with theme-aware colors
-      const chart = createChart(container, {
+      // Don't initialize if container has no width
+      if (width === 0) {
+        requestAnimationFrame(initChart);
+        return;
+      }
+
+      setIsLoading(true);
+
+      try {
+        // Create chart with theme-aware colors
+        const chart = createChart(container, {
         layout: {
           background: { type: ColorType.Solid, color: '#09090b' },
           textColor: '#9CA3AF',
@@ -48,7 +56,8 @@ export const TradingChart = ({ symbol = 'EUR/USD', priceData }: TradingChartProp
         rightPriceScale: {
           borderVisible: false,
           autoScale: true,
-          scaleMargins: { top: 0.1, bottom: 0.2 },
+          scaleMargins: { top: 0.1, bottom: 0.1 },
+          visible: true,
         },
         leftPriceScale: {
           visible: false,
@@ -83,49 +92,24 @@ export const TradingChart = ({ symbol = 'EUR/USD', priceData }: TradingChartProp
         wickDownColor: '#ef4444',
       });
 
-      // Default demo data with realistic EUR/USD prices
       const defaultData: CandlestickData[] = [
-        { time: '2026-01-20', open: 1.0850, high: 1.0920, low: 1.0840, close: 1.0890 },
-        { time: '2026-01-21', open: 1.0890, high: 1.0950, low: 1.0870, close: 1.0920 },
-        { time: '2026-01-22', open: 1.0920, high: 1.0980, low: 1.0900, close: 1.0960 },
-        { time: '2026-01-23', open: 1.0960, high: 1.1020, low: 1.0940, close: 1.0980 },
-        { time: '2026-01-24', open: 1.0980, high: 1.1040, low: 1.0960, close: 1.1010 },
-        { time: '2026-01-27', open: 1.1010, high: 1.1080, low: 1.0990, close: 1.1040 },
-        { time: '2026-01-28', open: 1.1040, high: 1.1100, low: 1.1020, close: 1.1070 },
-        { time: '2026-01-29', open: 1.1070, high: 1.1150, low: 1.1060, close: 1.1120 },
-        { time: '2026-01-30', open: 1.1120, high: 1.1180, low: 1.1100, close: 1.1150 },
-        { time: '2026-01-31', open: 1.1150, high: 1.1220, low: 1.1140, close: 1.1180 },
-        { time: '2026-02-03', open: 1.1180, high: 1.1240, low: 1.1160, close: 1.1200 },
-        { time: '2026-02-04', open: 1.1200, high: 1.1260, low: 1.1180, close: 1.1240 },
+        { time: '2026-01-20' as any, open: 1.0850, high: 1.0920, low: 1.0840, close: 1.0890 },
+        { time: '2026-01-21' as any, open: 1.0890, high: 1.0950, low: 1.0870, close: 1.0920 },
+        { time: '2026-01-22' as any, open: 1.0920, high: 1.0980, low: 1.0900, close: 1.0960 },
+        { time: '2026-01-23' as any, open: 1.0960, high: 1.1020, low: 1.0940, close: 1.0980 },
+        { time: '2026-01-24' as any, open: 1.0980, high: 1.1040, low: 1.0960, close: 1.1010 },
+        { time: '2026-01-27' as any, open: 1.1010, high: 1.1080, low: 1.0990, close: 1.1040 },
+        { time: '2026-01-28' as any, open: 1.1040, high: 1.1100, low: 1.1020, close: 1.1070 },
+        { time: '2026-01-29' as any, open: 1.1070, high: 1.1150, low: 1.1060, close: 1.1120 },
+        { time: '2026-01-30' as any, open: 1.1120, high: 1.1180, low: 1.1100, close: 1.1150 },
+        { time: '2026-01-31' as any, open: 1.1150, high: 1.1220, low: 1.1140, close: 1.1180 },
+        { time: '2026-02-03' as any, open: 1.1180, high: 1.1240, low: 1.1160, close: 1.1200 },
+        { time: '2026-02-04' as any, open: 1.1200, high: 1.1260, low: 1.1180, close: 1.1240 },
       ];
 
-      candleSeriesRef.setData(priceData || defaultData);
+      candleSeriesRef.setData(defaultData);
 
-      // Add volume series
-      const volumeSeriesRef = chart.addHistogramSeries({
-        color: '#1f2937',
-        priceFormat: {
-          type: 'volume',
-        },
-        priceScaleId: 'volume',
-      });
-
-      chart.priceScale('volume').applyOptions({
-        scaleMargins: {
-          top: 0.8,
-          bottom: 0,
-        },
-      });
-
-      const volumeData: HistogramData[] = (priceData || defaultData).map((candle) => ({
-        time: candle.time,
-        value: Math.random() * 1000000 + 500000,
-        color: Number(candle.close) > Number(candle.open) ? '#10b98133' : '#ef444433',
-      }));
-
-      volumeSeriesRef.setData(volumeData);
-
-      // Fit content
+      // Fit content to show all data
       chart.timeScale().fitContent();
 
       // Use ResizeObserver for better resize handling
@@ -145,6 +129,9 @@ export const TradingChart = ({ symbol = 'EUR/USD', priceData }: TradingChartProp
       console.error('Chart initialization error:', error);
       setIsLoading(false);
     }
+  };
+
+    initChart();
 
     return () => {
       if (resizeObserverRef.current) {
