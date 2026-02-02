@@ -453,6 +453,20 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
   const chartOption = generateOption();
 
+  // Don't render chart until we have data
+  if (isLoading || !chartOption || Object.keys(chartOption).length === 0) {
+    return (
+      <div className="w-full bg-card rounded-lg border border-border shadow-sm overflow-hidden">
+        <div className="w-full h-[600px] flex items-center justify-center bg-background/50">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground">Loading chart data...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full bg-card rounded-lg border border-border shadow-sm overflow-hidden">
       {/* TradingView-style Header */}
