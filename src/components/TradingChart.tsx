@@ -35,8 +35,6 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const [range, setRange] = useState<Range>('1M');
   const [showIndicators, setShowIndicators] = useState(false);
 
-  const [showIndicators, setShowIndicators] = useState(false);
-
   // Generate sample data based on timeframe
   const generateData = () => {
     const data = [];
