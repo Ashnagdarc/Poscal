@@ -12,6 +12,7 @@ import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
+import { TradingChart } from '@/components/TradingChart';
 import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
@@ -712,26 +713,34 @@ const Signals = () => {
             </Button>
           </div>
         ) : signals.length === 0 ? (
-          <div className="bg-secondary rounded-2xl p-6 text-center">
-            <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-            <h2 className="text-lg font-semibold text-foreground mb-2">No Signals Found</h2>
-            <p className="text-sm text-muted-foreground">
-              {hasActiveFilters
-                ? 'No signals match your filters. Try adjusting them.'
-                : 'No trading signals have been posted yet. Check back later!'}
-            </p>
-            <div className="mt-4 flex items-center justify-center gap-2">
-              {hasActiveFilters ? (
-                <Button variant="outline" size="sm" onClick={clearFilters}>
-                  <X className="w-3 h-3 mr-1" /> Clear Filters
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={fetchSignals}>
-                  <RefreshCw className="w-3 h-3 mr-1" /> Refresh
-                </Button>
-              )}
+          <>
+            {/* Trading Chart */}
+            <div className="mb-6">
+              <TradingChart symbol={pairFilter !== 'All Pairs' ? pairFilter : 'EUR/USD'} />
             </div>
-          </div>
+
+            {/* No Signals Found */}
+            <div className="bg-secondary rounded-2xl p-6 text-center">
+              <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <h2 className="text-lg font-semibold text-foreground mb-2">No Signals Found</h2>
+              <p className="text-sm text-muted-foreground">
+                {hasActiveFilters
+                  ? 'No signals match your filters. Try adjusting them.'
+                  : 'No trading signals have been posted yet. Check back later!'}
+              </p>
+              <div className="mt-4 flex items-center justify-center gap-2">
+                {hasActiveFilters ? (
+                  <Button variant="outline" size="sm" onClick={clearFilters}>
+                    <X className="w-3 h-3 mr-1" /> Clear Filters
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" onClick={fetchSignals}>
+                    <RefreshCw className="w-3 h-3 mr-1" /> Refresh
+                  </Button>
+                )}
+              </div>
+            </div>
+          </>
         ) : (
           <>
             {/* Grouped Signals by Date */}
