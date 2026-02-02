@@ -75,6 +75,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   }, []);
 
   const handlePay = () => {
+    // Debug: Log all payment parameters
+    console.log('[Paystack Debug] publicKey:', publicKey);
+    console.log('[Paystack Debug] userEmail:', userEmail);
+    console.log('[Paystack Debug] amount:', config.amount);
+    console.log('[Paystack Debug] currency:', config.currency);
     if (!publicKey) {
       setErrorMessage('Paystack public key not set');
       setPaymentStatus('error');
