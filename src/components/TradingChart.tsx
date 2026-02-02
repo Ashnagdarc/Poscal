@@ -109,39 +109,56 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   // Convert symbol format for APIs (EUR/USD -> EURUSD)
   const getApiSymbol = (pair: string) => pair.replace('/', '');
 
-  // Fetch historical candlestick data (only needed once on load)
+  // Generate realistic historical data for forex pairs
+  const generateHistoricalData = (pair: string, days: number) => {
+    const data = [];
+    const now = new Date();
+    
+    // Base prices for common pairs (realistic mid-market rates)
+    const basePrices: Record<string, number> = {
+      'EUR/USD': 1.0800, 'GBP/USD': 1.2650, 'USD/JPY': 148.50, 'USD/CHF': 0.8750,
+      'AUD/USD': 0.6580, 'USD/CAD': 1.3450, 'NZD/USD': 0.6120, 'EUR/GBP': 0.8530,
+      'EUR/JPY': 160.40, 'GBP/JPY': 188.20, 'AUD/JPY': 97.80, 'EUR/CHF': 0.9450,
+      'GBP/CHF': 1.1080, 'USD/CNY': 7.2400, 'EUR/AUD': 1.6410, 'GBP/AUD': 1.9230,
+    };
+    
+    let basePrice = basePrices[pair] || 1.0;
+    
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+      
+      // Generate realistic price movement (±0.5% volatility)
+      const volatility = basePrice * 0.005;
+      const change = (Math.random() - 0.5) * volatility * 2;
+      basePrice += change;
+      
+      const open = basePrice + (Math.random() - 0.5) * volatility;
+      const close = basePrice + (Math.random() - 0.5) * volatility;
+      const high = Math.max(open, close) + Math.random() * volatility * 0.5;
+      const low = Math.min(open, close) - Math.random() * volatility * 0.5;
+      
+      data.push({
+        time: date.toISOString().split('T')[0],
+        open: parseFloat(open.toFixed(5)),
+        high: parseFloat(high.toFixed(5)),
+        low: parseFloat(low.toFixed(5)),
+        close: parseFloat(close.toFixed(5)),
+        value: parseFloat(close.toFixed(5)),
+      });
+    }
+    
+    return data;
+  };
+
+  // Fetch historical candlestick data (mock data for now - replace with real API when key available)
   const fetchHistoricalData = async (pair: string, interval: string, days: number) => {
     try {
-      const apiSymbol = getApiSymbol(pair);
-      const endDate = Math.floor(Date.now() / 1000);
-      const startDate = endDate - (days * 24 * 60 * 60);
-      
-      // Using Finnhub for OHLC data
-      const response = await fetch(
-        `https://finnhub.io/api/v1/forex/candle?symbol=OANDA:${apiSymbol}&resolution=D&from=${startDate}&to=${endDate}&token=${FINNHUB_KEY}`
-      );
-      
-      if (!response.ok) throw new Error('Failed to fetch historical data');
-      
-      const data = await response.json();
-      
-      if (data.s !== 'ok') {
-        throw new Error('No data available for this pair');
-      }
-      
-      // Convert to lightweight-charts format
-      const formattedData = data.t.map((timestamp: number, i: number) => ({
-        time: new Date(timestamp * 1000).toISOString().split('T')[0],
-        open: data.o[i],
-        high: data.h[i],
-        low: data.l[i],
-        close: data.c[i],
-        value: data.c[i],
-      }));
-      
-      return formattedData;
+      // Generate realistic mock data
+      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+      return generateHistoricalData(pair, days);
     } catch (err) {
-      console.error('Error fetching historical data:', err);
+      console.error('Error generating historical data:', err);
       throw err;
     }
   };
