@@ -8,7 +8,7 @@ interface ForexPrice {
   timestamp: number;
 }
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const BACKEND_URL = import.meta.env.VITE_API_URL || 'https://api.poscalfx.com';
 
 export function useForexWebSocket(symbol: string) {
   const [price, setPrice] = useState<number | null>(null);
@@ -31,7 +31,8 @@ export function useForexWebSocket(symbol: string) {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('WebSocket connected');
+      console.log('✅ WebSocket connected to', BACKEND_URL);
+      console.log('📡 Subscribing to symbol:', symbol);
       setIsConnected(true);
       setError(null);
       // Subscribe to symbol
@@ -39,11 +40,12 @@ export function useForexWebSocket(symbol: string) {
     });
 
     socket.on('disconnect', () => {
-      console.log('WebSocket disconnected');
+      console.log('❌ WebSocket disconnected');
       setIsConnected(false);
     });
 
     socket.on('price_update', (data: ForexPrice) => {
+      console.log('💰 Price update received:', data);
       setPrice(data.price);
       setChange(data.change);
       setLastUpdate(data.timestamp);

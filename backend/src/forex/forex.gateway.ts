@@ -17,7 +17,7 @@ interface ForexPrice {
 
 @WebSocketGateway({
   cors: {
-    origin: ['http://localhost:5173', 'https://poscalfx.com'],
+    origin: ['http://localhost:5173', 'https://poscalfx.com', 'https://www.poscalfx.com'],
     credentials: true,
   },
   namespace: 'forex',
