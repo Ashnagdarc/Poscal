@@ -58,3 +58,36 @@ export class VerifyPaymentDto {
   @IsNotEmpty()
   reference: string;
 }
+
+export class VerifyPaymentFromVercelDto {
+  @IsUUID()
+  @IsNotEmpty()
+  userId: string;
+
+  @IsString()
+  @IsNotEmpty()
+  reference: string;
+
+  @IsString()
+  @IsNotEmpty()
+  tier: string;
+
+  @Type(() => Number)
+  @IsNotEmpty()
+  amount: number;
+
+  @IsString()
+  @IsNotEmpty()
+  currency: string;
+
+  @IsString()
+  @IsOptional()
+  paystack_customer_code?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  expiresAt: string;
+
+  @IsOptional()
+  metadata?: any;
+}

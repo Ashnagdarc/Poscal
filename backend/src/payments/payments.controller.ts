@@ -1,7 +1,7 @@
-import { Controller, Get, Post, Put, Body, Param, UseGuards, Request, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Body, Param, UseGuards, Request, Query, Headers, UnauthorizedException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { PaymentsService } from './payments.service';
-import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentDto } from './dto/payment.dto';
+import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentFromVercelDto } from './dto/payment.dto';
 import { SubscriptionResponseDto } from './dto/subscription-response.dto';
 
 @Controller('payments')
@@ -41,9 +41,19 @@ export class PaymentsController {
   }
 
   @Post('verify')
-  @UseGuards(AuthGuard('jwt'))
-  async verify(@Body() verifyPaymentDto: VerifyPaymentDto) {
-    return await this.paymentsService.verifyPayment(verifyPaymentDto.reference);
+  async verifyFromVercel(
+    @Body() verifyPaymentDto: VerifyPaymentFromVercelDto,
+    @Headers('authorization') auth?: string,
+  ) {
+    // Check for service token from Vercel
+    const serviceToken = process.env.BACKEND_SERVICE_TOKEN;
+    const providedToken = auth?.replace('Bearer ', '');
+
+    if (!serviceToken || providedToken !== serviceToken) {
+      throw new UnauthorizedException('Invalid service token');
+    }
+
+    return await this.paymentsService.createOrUpdatePaymentFromVercel(verifyPaymentDto);
   }
 
   @Post('restore')
