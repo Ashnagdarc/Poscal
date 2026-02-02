@@ -12,14 +12,11 @@ import {
 } from 'lightweight-charts';
 import { TrendingUp, BarChart3, Activity, LineChart, AreaChart } from 'lucide-react';
 import { useForexWebSocket } from '../hooks/useForexWebSocket';
+import { CHART_CONFIG, getBasePrice, getDaysFromRange } from '../config/chartConfig';
 
 type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 type Range = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
-
-// API Configuration
-const ALPHA_VANTAGE_KEY = '7JNQSHEV4YIH1PG5'; // Replace with your API key from https://www.alphavantage.co/support/#api-key
-const FINNHUB_KEY = 'demo'; // Alternative: Get free key from https://finnhub.io/
 
 // Comprehensive list of forex pairs
 const PAIRS = [
@@ -181,22 +178,14 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     const data = [];
     const now = new Date();
     
-    // Base prices for common pairs (realistic mid-market rates)
-    const basePrices: Record<string, number> = {
-      'EUR/USD': 1.0800, 'GBP/USD': 1.2650, 'USD/JPY': 148.50, 'USD/CHF': 0.8750,
-      'AUD/USD': 0.6580, 'USD/CAD': 1.3450, 'NZD/USD': 0.6120, 'EUR/GBP': 0.8530,
-      'EUR/JPY': 160.40, 'GBP/JPY': 188.20, 'AUD/JPY': 97.80, 'EUR/CHF': 0.9450,
-      'GBP/CHF': 1.1080, 'USD/CNY': 7.2400, 'EUR/AUD': 1.6410, 'GBP/AUD': 1.9230,
-    };
-    
-    let basePrice = basePrices[pair] || 1.0;
+    let basePrice = getBasePrice(pair);
     
     for (let i = days - 1; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
       
-      // Generate realistic price movement (±0.5% volatility)
-      const volatility = basePrice * 0.005;
+      // Generate realistic price movement using configurable volatility
+      const volatility = basePrice * CHART_CONFIG.dataGeneration.volatility;
       const change = (Math.random() - 0.5) * volatility * 2;
       basePrice += change;
       
@@ -207,11 +196,11 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       
       data.push({
         time: date.toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(5)),
-        high: parseFloat(high.toFixed(5)),
-        low: parseFloat(low.toFixed(5)),
-        close: parseFloat(close.toFixed(5)),
-        value: parseFloat(close.toFixed(5)),
+        open: parseFloat(open.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        high: parseFloat(high.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        low: parseFloat(low.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        close: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        value: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
       });
     }
     
@@ -222,7 +211,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const fetchHistoricalData = async (pair: string, interval: string, days: number) => {
     try {
       // Generate realistic mock data
-      await new Promise(resolve => setTimeout(resolve, 300)); // Simulate API delay
+      await new Promise(resolve => setTimeout(resolve, CHART_CONFIG.dataGeneration.mockApiDelay));
       return generateHistoricalData(pair, days);
     } catch (err) {
       console.error('Error generating historical data:', err);
@@ -236,15 +225,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     setError(null);
     
     try {
-      // Calculate days based on selected range
-      let days = 1;
-      if (range === '1D') days = 1;
-      else if (range === '1W') days = 7;
-      else if (range === '1M') days = 30;
-      else if (range === '3M') days = 90;
-      else if (range === '6M') days = 180;
-      else if (range === '1Y') days = 365;
-      else if (range === 'ALL') days = 730; // 2 years
+      // Calculate days based on selected range using config mapping
+      const days = getDaysFromRange(range);
       
       console.log(`📊 Loading chart data for ${symbol}: ${days} days`);
       const historicalData = await fetchHistoricalData(symbol, timeframe, days);
@@ -273,21 +255,21 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     // Create chart
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#09090b' },
-        textColor: '#9ca3af',
+        background: { type: ColorType.Solid, color: CHART_CONFIG.colors.background },
+        textColor: CHART_CONFIG.colors.text,
       },
       width: chartContainerRef.current.clientWidth,
-      height: 500,
+      height: CHART_CONFIG.display.height,
       grid: {
-        vertLines: { color: '#1f2937' },
-        horzLines: { color: '#1f2937' },
+        vertLines: { color: CHART_CONFIG.colors.gridLines },
+        horzLines: { color: CHART_CONFIG.colors.gridLines },
       },
       timeScale: {
         timeVisible: true,
-        borderColor: '#334155',
+        borderColor: CHART_CONFIG.colors.border,
       },
       rightPriceScale: {
-        borderColor: '#334155',
+        borderColor: CHART_CONFIG.colors.border,
       },
     });
 
@@ -301,31 +283,31 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
       if (chartType === 'candlestick') {
         series = chart.addSeries(CandlestickSeries, {
-          upColor: '#10b981',
-          downColor: '#ef4444',
-          borderVisible: false,
-          wickUpColor: '#10b981',
-          wickDownColor: '#ef4444',
+          upColor: CHART_CONFIG.colors.candleUp,
+          downColor: CHART_CONFIG.colors.candleDown,
+          borderVisible: CHART_CONFIG.display.candleSettings.borderVisible,
+          wickUpColor: CHART_CONFIG.display.candleSettings.wickUpColor,
+          wickDownColor: CHART_CONFIG.display.candleSettings.wickDownColor,
         });
         series.setData(data);
       } else if (chartType === 'line') {
         series = chart.addSeries(LineSeries, {
-          color: '#3b82f6',
-          lineWidth: 2,
+          color: CHART_CONFIG.colors.line,
+          lineWidth: CHART_CONFIG.display.lineWidth.default,
         });
         series.setData(data.map(d => ({ time: d.time, value: d.close })));
       } else if (chartType === 'area') {
         series = chart.addSeries(AreaSeries, {
-          topColor: 'rgba(59, 130, 246, 0.4)',
-          bottomColor: 'rgba(59, 130, 246, 0.0)',
-          lineColor: '#3b82f6',
-          lineWidth: 2,
+          topColor: CHART_CONFIG.colors.area.top,
+          bottomColor: CHART_CONFIG.colors.area.bottom,
+          lineColor: CHART_CONFIG.colors.line,
+          lineWidth: CHART_CONFIG.display.lineWidth.default,
         });
         series.setData(data.map(d => ({ time: d.time, value: d.close })));
       } else if (chartType === 'bar') {
         series = chart.addSeries(BarSeries, {
-          upColor: '#10b981',
-          downColor: '#ef4444',
+          upColor: CHART_CONFIG.colors.candleUp,
+          downColor: CHART_CONFIG.colors.candleDown,
         });
         series.setData(data);
       }
@@ -334,24 +316,24 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
       // Add price line series (shows current ask price as a moving line)
       const priceLineSeries = chart.addSeries(LineSeries, {
-        color: '#3b82f6',
-        lineWidth: 2,
+        color: CHART_CONFIG.colors.priceLine,
+        lineWidth: CHART_CONFIG.display.lineWidth.priceLine,
         lineStyle: 2, // Dashed
         title: 'Ask Price',
       });
       priceLineSeriesRef.current = priceLineSeries;
 
       // Add moving average indicator if enabled
-      if (showIndicators && data.length > 20) {
+      if (showIndicators && data.length > CHART_CONFIG.indicators.ma20.period) {
         const ma20 = chart.addSeries(LineSeries, {
-          color: '#f59e0b',
-          lineWidth: 1,
+          color: CHART_CONFIG.indicators.ma20.color,
+          lineWidth: CHART_CONFIG.indicators.ma20.lineWidth,
         });
         
         const maData = data.map((d, i) => {
-          if (i < 20) return { time: d.time, value: d.close };
-          const sum = data.slice(i - 19, i + 1).reduce((acc, item) => acc + item.close, 0);
-          return { time: d.time, value: sum / 20 };
+          if (i < CHART_CONFIG.indicators.ma20.period) return { time: d.time, value: d.close };
+          const sum = data.slice(i - CHART_CONFIG.indicators.ma20.period + 1, i + 1).reduce((acc, item) => acc + item.close, 0);
+          return { time: d.time, value: sum / CHART_CONFIG.indicators.ma20.period };
         });
         ma20.setData(maData);
       }
