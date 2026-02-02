@@ -106,13 +106,14 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       // Update price line to show current price (ask line across entire chart)
           // Create price line data for all historical candles with current price
           if (dataRef.current && dataRef.current.length > 0 && livePrice !== null && !isNaN(livePrice)) {
-            priceLineDataRef.current = dataRef.current.map(candle => ({
+            const updatedPriceLine = dataRef.current.map(candle => ({
               time: candle.time,
               value: livePrice
             })).filter(d => d.time && !isNaN(d.value)); // Validate data
             
-            if (priceLineSeriesRef.current && priceLineDataRef.current.length > 0) {
-              priceLineSeriesRef.current.setData(priceLineDataRef.current);
+            if (priceLineSeriesRef.current && updatedPriceLine.length > 0) {
+              console.log('💹 Updating price line to:', livePrice);
+              priceLineSeriesRef.current.setData(updatedPriceLine);
             }
           }
           
@@ -335,6 +336,18 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         title: 'Ask Price',
       });
       priceLineSeriesRef.current = priceLineSeries;
+      
+      // Initialize price line with current price if available
+      if (currentPrice > 0) {
+        priceLineDataRef.current = data.map(candle => ({
+          time: candle.time,
+          value: currentPrice
+        })).filter(d => d.time && !isNaN(d.value));
+        
+        if (priceLineDataRef.current.length > 0) {
+          priceLineSeries.setData(priceLineDataRef.current);
+        }
+      }
 
       // Add moving average indicator if enabled
       if (showIndicators && data.length > CHART_CONFIG.indicators.ma20.period) {
