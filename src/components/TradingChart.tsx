@@ -1,13 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import EChartsReact from 'echarts-for-react';
 import * as echarts from 'echarts';
-import { TrendingUp, BarChart3, Activity, LineChart, AreaChart } from 'lucide-react';
+import { Activity, Wifi, WifiOff, ChevronDown } from 'lucide-react';
 import { useForexWebSocket } from '../hooks/useForexWebSocket';
 import { CHART_CONFIG, getBasePrice, getDaysFromRange } from '../config/chartConfig';
 
-type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
+type ChartType = 'candlestick' | 'line' | 'area';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
-type Range = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
 // Forex pairs
 const PAIRS = [
@@ -22,8 +21,16 @@ const PAIRS = [
   'GBP/SGD', 'GBP/ZAR',
 ];
 
-const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d', '1w', '1M'];
-const RANGES: Range[] = ['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL'];
+const TIMEFRAMES: { value: Timeframe; label: string; }[] = [
+  { value: '1m', label: '1m' },
+  { value: '5m', label: '5m' },
+  { value: '15m', label: '15m' },
+  { value: '1h', label: '1h' },
+  { value: '4h', label: '4h' },
+  { value: '1d', label: '1D' },
+  { value: '1w', label: '1W' },
+  { value: '1M', label: '1M' },
+];
 
 interface TradingChartProps {
   symbol?: string;
@@ -40,40 +47,34 @@ interface Candle {
 export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChartProps) => {
   const chartRef = useRef<EChartsReact>(null);
   const dataRef = useRef<Candle[]>([]);
-  const candleTimestampsRef = useRef<string[]>([]);
+  const updateTimerRef = useRef<NodeJS.Timeout>();
   
   const [symbol, setSymbol] = useState(initialSymbol);
   const [chartType, setChartType] = useState<ChartType>('candlestick');
   const [timeframe, setTimeframe] = useState<Timeframe>('1d');
-  const [range, setRange] = useState<Range>('1M');
   const [showIndicators, setShowIndicators] = useState(false);
   const [currentPrice, setCurrentPrice] = useState<number>(0);
   const [priceChange, setPriceChange] = useState<number>(0);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [timeUntilClose, setTimeUntilClose] = useState<string>('');
 
   // WebSocket for live prices
   const { 
     price: livePrice, 
     change: liveChange, 
-    lastUpdate: wsLastUpdate,
-    isConnected,
-    error: wsError 
+    isConnected 
   } = useForexWebSocket(symbol);
 
   // Generate realistic historical data
-  const generateHistoricalData = (pair: string, days: number): Candle[] => {
+  const generateHistoricalData = useCallback((pair: string, candles: number): Candle[] => {
     const data: Candle[] = [];
     const now = new Date();
     let basePrice = getBasePrice(pair);
 
-    for (let i = days - 1; i >= 0; i--) {
+    for (let i = candles - 1; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(date.getDate() - i);
 
-      const volatility = basePrice * CHART_CONFIG.dataGeneration.volatility;
+      const volatility = basePrice * 0.01;
       const change = (Math.random() - 0.5) * volatility * 2;
       basePrice += change;
 
@@ -84,442 +85,430 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
       data.push({
         time: date.toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        high: parseFloat(high.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        low: parseFloat(low.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        close: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        open: parseFloat(open.toFixed(5)),
+        high: parseFloat(high.toFixed(5)),
+        low: parseFloat(low.toFixed(5)),
+        close: parseFloat(close.toFixed(5)),
       });
     }
 
     return data;
-  };
+  }, []);
 
   // Load chart data
-  const loadChartData = async () => {
+  const loadChartData = useCallback(() => {
     setIsLoading(true);
-    setError(null);
-
-    try {
-      const days = getDaysFromRange(range);
-      console.log(`📊 Loading chart data for ${symbol}: ${days} days`);
-
-      await new Promise(resolve => setTimeout(resolve, CHART_CONFIG.dataGeneration.mockApiDelay));
-      const historicalData = generateHistoricalData(symbol, days);
-
-      if (historicalData && historicalData.length > 0) {
-        dataRef.current = historicalData;
-        candleTimestampsRef.current = historicalData.map(d => d.time);
-        console.log(`✅ Loaded ${historicalData.length} candles`);
+    
+    setTimeout(() => {
+      const historicalData = generateHistoricalData(symbol, 30);
+      dataRef.current = historicalData;
+      
+      if (historicalData.length > 0) {
+        const lastCandle = historicalData[historicalData.length - 1];
+        setCurrentPrice(lastCandle.close);
+        
+        if (historicalData.length > 1) {
+          const prevCandle = historicalData[historicalData.length - 2];
+          const change = ((lastCandle.close - prevCandle.close) / prevCandle.close) * 100;
+          setPriceChange(change);
+        }
       }
-
+      
       setIsLoading(false);
-    } catch (err: any) {
-      console.error('Failed to load chart data:', err);
-      setError(err.message || 'Failed to load data');
-      setIsLoading(false);
-    }
-  };
+    }, 300);
+  }, [symbol, generateHistoricalData]);
 
-  // Load data when symbol/range/timeframe changes
+  // Load data when symbol/timeframe changes
   useEffect(() => {
     loadChartData();
-  }, [symbol, range, timeframe]);
+  }, [loadChartData]);
 
   // Update live price
   useEffect(() => {
-    if (livePrice !== null && livePrice > 0) {
-      console.log('📊 Live price update:', { symbol, livePrice, liveChange });
+    if (livePrice !== null && livePrice > 0 && dataRef.current.length > 0) {
       setCurrentPrice(livePrice);
       setPriceChange(liveChange);
-      setLastUpdate(new Date(wsLastUpdate));
 
       // Update last candle
-      if (dataRef.current && dataRef.current.length > 0) {
-        const lastCandle = dataRef.current[dataRef.current.length - 1];
-        const today = new Date().toISOString().split('T')[0];
+      const lastCandle = dataRef.current[dataRef.current.length - 1];
+      const today = new Date().toISOString().split('T')[0];
 
-        if (lastCandle.time === today) {
-          // Update today's candle
-          lastCandle.high = Math.max(lastCandle.high, livePrice);
-          lastCandle.low = Math.min(lastCandle.low, livePrice);
-          lastCandle.close = livePrice;
-        } else {
-          // Create new candle
-          dataRef.current.push({
-            time: today,
-            open: livePrice,
-            high: livePrice,
-            low: livePrice,
-            close: livePrice,
-          });
-          candleTimestampsRef.current.push(today);
-        }
-
-        // Trigger chart update
-        updateChart();
-      }
-    }
-  }, [livePrice, liveChange, wsLastUpdate]);
-
-  // Countdown timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      let secondsUntilClose = 0;
-
-      if (timeframe === '1m') {
-        secondsUntilClose = 60 - now.getSeconds();
-      } else if (timeframe === '5m') {
-        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 300 - (secondsInHour % 300);
-      } else if (timeframe === '15m') {
-        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 900 - (secondsInHour % 900);
-      } else if (timeframe === '1h') {
-        const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 3600 - secondsInHour;
-      } else if (timeframe === '4h') {
-        const hour = now.getHours();
-        const barIndex = Math.floor(hour / 4);
-        const barStartHour = barIndex * 4;
-        const secondsInBar = (now.getHours() - barStartHour) * 3600 + now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 14400 - secondsInBar;
+      if (lastCandle.time === today) {
+        lastCandle.high = Math.max(lastCandle.high, livePrice);
+        lastCandle.low = Math.min(lastCandle.low, livePrice);
+        lastCandle.close = livePrice;
       } else {
-        const secondsInDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 86400 - secondsInDay;
+        dataRef.current.push({
+          time: today,
+          open: livePrice,
+          high: livePrice,
+          low: livePrice,
+          close: livePrice,
+        });
       }
 
-      const hours = Math.floor(secondsUntilClose / 3600);
-      const minutes = Math.floor((secondsUntilClose % 3600) / 60);
-      const seconds = secondsUntilClose % 60;
-
-      setTimeUntilClose(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timeframe]);
+      // Update chart
+      updateChart();
+    }
+  }, [livePrice, liveChange]);
 
   // Update chart
-  const updateChart = () => {
-    if (!chartRef.current) return;
+  const updateChart = useCallback(() => {
+    if (!chartRef.current || dataRef.current.length === 0) return;
 
     const chart = chartRef.current.getEchartsInstance();
     if (!chart) return;
 
-    const chartData = generateChartData();
-    const option = generateOption(chartData);
-    chart.setOption(option);
-  };
+    const option = generateOption();
+    chart.setOption(option, { notMerge: false, lazyUpdate: false });
+  }, [chartType, showIndicators, currentPrice]);
 
-  // Generate chart data based on type
-  const generateChartData = () => {
-    if (!dataRef.current || dataRef.current.length === 0) {
-      return { candleData: [], ma20Data: [], priceLineData: [] };
+  // Trigger chart updates
+  useEffect(() => {
+    if (updateTimerRef.current) {
+      clearTimeout(updateTimerRef.current);
+    }
+    
+    updateTimerRef.current = setTimeout(() => {
+      updateChart();
+    }, 100);
+
+    return () => {
+      if (updateTimerRef.current) {
+        clearTimeout(updateTimerRef.current);
+      }
+    };
+  }, [chartType, showIndicators, currentPrice, updateChart]);
+
+  // Generate ECharts option
+  const generateOption = useCallback((): echarts.EChartsOption => {
+    if (dataRef.current.length === 0) {
+      return {};
     }
 
-    const candleData = dataRef.current.map(candle => [
-      candle.open,
-      candle.close,
-      candle.low,
-      candle.high,
-    ]);
+    const timestamps = dataRef.current.map(d => d.time);
+    const values = dataRef.current.map(candle => [candle.open, candle.close, candle.low, candle.high]);
 
-    let ma20Data: (number | null)[] = [];
-    if (showIndicators && dataRef.current.length > 20) {
-      ma20Data = dataRef.current.map((candle, i) => {
+    const option: echarts.EChartsOption = {
+      animation: true,
+      animationDuration: 300,
+      backgroundColor: 'transparent',
+      grid: {
+        left: 60,
+        right: 20,
+        top: 40,
+        bottom: 40,
+      },
+      xAxis: {
+        type: 'category',
+        data: timestamps,
+        boundaryGap: true,
+        axisLine: { 
+          lineStyle: { color: '#374151' }
+        },
+        axisTick: { show: false },
+        axisLabel: { 
+          color: '#9CA3AF',
+          fontSize: 11,
+        },
+        splitLine: { show: false },
+      },
+      yAxis: {
+        scale: true,
+        splitNumber: 5,
+        axisLine: { show: false },
+        axisTick: { show: false },
+        axisLabel: {
+          color: '#9CA3AF',
+          fontSize: 11,
+          formatter: (value: number) => value.toFixed(5),
+        },
+        splitLine: {
+          lineStyle: {
+            color: '#374151',
+            opacity: 0.3,
+          }
+        },
+      },
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: {
+          type: 'cross',
+          lineStyle: {
+            color: '#6B7280',
+            width: 1,
+            type: 'dashed',
+          },
+        },
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        borderColor: '#374151',
+        textStyle: {
+          color: '#F3F4F6',
+          fontSize: 12,
+        },
+        formatter: (params: any) => {
+          const data = params[0];
+          if (!data || !data.value) return '';
+          
+          const [open, close, low, high] = data.value;
+          const color = close >= open ? '#10B981' : '#EF4444';
+          
+          return `
+            <div style="font-weight: 600; margin-bottom: 8px;">${data.name}</div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <div style="display: flex; justify-content: space-between; gap: 20px;">
+                <span style="color: #9CA3AF;">Open:</span>
+                <span style="color: ${color}">${open.toFixed(5)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 20px;">
+                <span style="color: #9CA3AF;">High:</span>
+                <span style="color: ${color}">${high.toFixed(5)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 20px;">
+                <span style="color: #9CA3AF;">Low:</span>
+                <span style="color: ${color}">${low.toFixed(5)}</span>
+              </div>
+              <div style="display: flex; justify-content: space-between; gap: 20px;">
+                <span style="color: #9CA3AF;">Close:</span>
+                <span style="color: ${color}; font-weight: 600;">${close.toFixed(5)}</span>
+              </div>
+            </div>
+          `;
+        },
+      },
+      series: [],
+    };
+
+    // Add main series based on chart type
+    if (chartType === 'candlestick') {
+      (option.series as any[]).push({
+        type: 'candlestick',
+        name: symbol,
+        data: values,
+        itemStyle: {
+          color: '#10B981',
+          color0: '#EF4444',
+          borderColor: '#10B981',
+          borderColor0: '#EF4444',
+          borderWidth: 1,
+        },
+        barWidth: '60%',
+      });
+    } else if (chartType === 'line') {
+      (option.series as any[]).push({
+        type: 'line',
+        name: symbol,
+        data: dataRef.current.map(c => c.close),
+        lineStyle: {
+          color: '#3B82F6',
+          width: 2,
+        },
+        showSymbol: false,
+        smooth: true,
+      });
+    } else if (chartType === 'area') {
+      (option.series as any[]).push({
+        type: 'line',
+        name: symbol,
+        data: dataRef.current.map(c => c.close),
+        lineStyle: {
+          color: '#3B82F6',
+          width: 2,
+        },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
+            { offset: 1, color: 'rgba(59, 130, 246, 0.05)' },
+          ]),
+        },
+        showSymbol: false,
+        smooth: true,
+      });
+    }
+
+    // Add MA(20) if enabled
+    if (showIndicators && dataRef.current.length >= 20) {
+      const ma20Data = dataRef.current.map((candle, i) => {
         if (i < 19) return null;
         const sum = dataRef.current
           .slice(i - 19, i + 1)
           .reduce((acc, c) => acc + c.close, 0);
         return sum / 20;
       });
-    }
 
-    const priceLineData = dataRef.current.map(() => currentPrice);
-
-    return { candleData, ma20Data, priceLineData };
-  };
-
-  // Generate ECharts option
-  const generateOption = (chartData: ReturnType<typeof generateChartData>): echarts.EChartsOption => {
-    const baseOption: echarts.EChartsOption = {
-      backgroundColor: CHART_CONFIG.colors.background,
-      textStyle: {
-        color: CHART_CONFIG.colors.text,
-      },
-      grid: {
-        left: '10%',
-        right: '10%',
-        top: '10%',
-        bottom: '10%',
-        containLabel: true,
-      },
-      xAxis: {
-        type: 'category',
-        data: candleTimestampsRef.current,
-        boundaryGap: false,
-        axisLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
-        splitLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
-      },
-      yAxis: {
-        type: 'value',
-        scale: true,
-        axisLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
-        splitLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
-      },
-      tooltip: {
-        trigger: 'axis',
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
-        borderColor: CHART_CONFIG.colors.border,
-        textStyle: { color: CHART_CONFIG.colors.text },
-      },
-      series: [],
-    };
-
-    // Add candlestick series
-    if (chartType === 'candlestick') {
-      (baseOption.series as any[]).push({
-        name: 'Candlestick',
-        type: 'candlestick',
-        data: chartData.candleData,
-        itemStyle: {
-          color: CHART_CONFIG.colors.candleUp,
-          color0: CHART_CONFIG.colors.candleDown,
-          borderColor: CHART_CONFIG.colors.candleUp,
-          borderColor0: CHART_CONFIG.colors.candleDown,
-        },
-      });
-    } else if (chartType === 'line') {
-      (baseOption.series as any[]).push({
-        name: 'Line',
+      (option.series as any[]).push({
         type: 'line',
-        data: dataRef.current.map(c => c.close),
-        lineStyle: { color: CHART_CONFIG.colors.line, width: 2 },
-        smooth: true,
-      });
-    } else if (chartType === 'area') {
-      (baseOption.series as any[]).push({
-        name: 'Area',
-        type: 'area',
-        data: dataRef.current.map(c => c.close),
-        lineStyle: { color: CHART_CONFIG.colors.line, width: 2 },
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: CHART_CONFIG.colors.area.top },
-            { offset: 1, color: CHART_CONFIG.colors.area.bottom },
-          ]),
-        },
-        smooth: true,
-      });
-    } else if (chartType === 'bar') {
-      (baseOption.series as any[]).push({
-        name: 'Bar',
-        type: 'bar',
-        data: chartData.candleData,
-        itemStyle: {
-          color: CHART_CONFIG.colors.candleUp,
-          color0: CHART_CONFIG.colors.candleDown,
-        },
-      });
-    }
-
-    // Add MA(20) if enabled
-    if (showIndicators && chartData.ma20Data.length > 0) {
-      (baseOption.series as any[]).push({
         name: 'MA(20)',
-        type: 'line',
-        data: chartData.ma20Data,
-        lineStyle: { color: CHART_CONFIG.colors.indicator, width: 1 },
+        data: ma20Data,
+        lineStyle: {
+          color: '#F59E0B',
+          width: 1.5,
+        },
+        showSymbol: false,
         smooth: true,
       });
     }
 
-    // Add price line
+    // Add current price line
     if (currentPrice > 0) {
-      (baseOption.series as any[]).push({
-        name: 'Ask Price',
+      (option.series as any[]).push({
         type: 'line',
-        data: chartData.priceLineData,
+        name: 'Ask Price',
+        data: dataRef.current.map(() => currentPrice),
         lineStyle: {
-          color: CHART_CONFIG.colors.priceLine,
+          color: priceChange >= 0 ? '#10B981' : '#EF4444',
           width: 2,
           type: 'dashed',
         },
-        smooth: false,
+        showSymbol: false,
+        z: 10,
       });
     }
 
-    return baseOption;
-  };
+    return option;
+  }, [chartType, showIndicators, symbol, currentPrice, priceChange]);
 
-  const chartOption = generateOption(generateChartData());
+  const chartOption = generateOption();
 
   return (
-    <div className="w-full space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-4">
-          <select
-            value={symbol}
-            onChange={(e) => setSymbol(e.target.value)}
-            className="px-4 py-2 text-lg font-semibold bg-background/50 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 hover:bg-background transition-colors cursor-pointer"
-          >
-            {PAIRS.map(pair => (
-              <option key={pair} value={pair}>{pair}</option>
-            ))}
-          </select>
+    <div className="w-full bg-card rounded-lg border border-border shadow-sm overflow-hidden">
+      {/* TradingView-style Header */}
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border bg-card/50">
+        <div className="flex items-center gap-3">
+          {/* Symbol Selector - TradingView Style */}
+          <div className="relative">
+            <select
+              value={symbol}
+              onChange={(e) => setSymbol(e.target.value)}
+              className="appearance-none bg-transparent text-lg font-bold cursor-pointer pr-6 outline-none hover:text-primary transition-colors"
+            >
+              {PAIRS.map(pair => (
+                <option key={pair} value={pair}>{pair}</option>
+              ))}
+            </select>
+            <ChevronDown className="absolute right-0 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none text-muted-foreground" />
+          </div>
 
-          <div className="flex flex-col">
-            <div className="flex items-center gap-2">
-              <span className="text-2xl font-bold tabular-nums">
-                {currentPrice.toFixed(5)}
-              </span>
-              <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
-                priceChange >= 0 
-                  ? 'bg-emerald-500/20 text-emerald-400' 
-                  : 'bg-red-500/20 text-red-400'
-              }`}>
-                {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
-              </span>
-            </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span>{timeframe.toUpperCase()}</span>
-              <span>•</span>
-              {isConnected ? (
-                <>
-                  <span className="inline-flex h-2 w-2 rounded-full bg-green-500 animate-pulse" title="Live WebSocket connected"></span>
-                  <span className="text-emerald-400">Live - Updated {Math.floor((new Date().getTime() - lastUpdate.getTime()) / 1000)}s ago</span>
-                </>
-              ) : (
-                <span className="text-orange-400">Connecting...</span>
-              )}
-              {timeUntilClose && (
-                <>
-                  <span>•</span>
-                  <span className="text-amber-400">Bar closes in {timeUntilClose}</span>
-                </>
-              )}
-              {wsError && <span className="text-red-400"> - {wsError}</span>}
-            </div>
+          {/* Price Display */}
+          <div className="flex items-center gap-2 pl-3 border-l border-border">
+            <span className="text-2xl font-bold tabular-nums">
+              {currentPrice.toFixed(5)}
+            </span>
+            <span className={`text-sm font-semibold px-2 py-0.5 rounded ${
+              priceChange >= 0 
+                ? 'bg-green-500/20 text-green-500' 
+                : 'bg-red-500/20 text-red-500'
+            }`}>
+              {priceChange >= 0 ? '+' : ''}{priceChange.toFixed(2)}%
+            </span>
+          </div>
+
+          {/* Connection Status */}
+          <div className="flex items-center gap-2 pl-3 border-l border-border">
+            {isConnected ? (
+              <>
+                <Wifi className="w-4 h-4 text-green-500" />
+                <span className="text-xs text-green-500 font-medium">Live</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-4 h-4 text-orange-500 animate-pulse" />
+                <span className="text-xs text-orange-500 font-medium">Connecting...</span>
+              </>
+            )}
           </div>
         </div>
-      </div>
 
-      {/* Toolbar */}
-      <div className="space-y-2">
-        <div className="flex items-center gap-4 flex-wrap">
-          {/* Chart Type */}
-          <div className="flex items-center gap-2 p-1 bg-secondary/40 rounded-lg border border-border/30">
+        {/* Right Controls */}
+        <div className="flex items-center gap-2">
+          {/* Timeframe Selector - Compact */}
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
+            {TIMEFRAMES.map(tf => (
+              <button
+                key={tf.value}
+                onClick={() => setTimeframe(tf.value)}
+                className={`px-3 py-1 text-xs font-medium transition-colors ${
+                  timeframe === tf.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
+                }`}
+              >
+                {tf.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Chart Type Switcher */}
+          <div className="flex items-center border border-border rounded-md overflow-hidden">
             <button
               onClick={() => setChartType('candlestick')}
-              className={`p-2 rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-medium transition-colors ${
                 chartType === 'candlestick'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
               }`}
-              title="Candlestick"
+              title="Candles"
             >
-              <Activity className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setChartType('bar')}
-              className={`p-2 rounded-md transition-all ${
-                chartType === 'bar'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-              }`}
-              title="Bar Chart"
-            >
-              <BarChart3 className="w-4 h-4" />
+              Candles
             </button>
             <button
               onClick={() => setChartType('line')}
-              className={`p-2 rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-medium transition-colors border-l border-border ${
                 chartType === 'line'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
               }`}
-              title="Line Chart"
+              title="Line"
             >
-              <LineChart className="w-4 h-4" />
+              Line
             </button>
             <button
               onClick={() => setChartType('area')}
-              className={`p-2 rounded-md transition-all ${
+              className={`px-3 py-1 text-xs font-medium transition-colors border-l border-border ${
                 chartType === 'area'
-                  ? 'bg-background shadow-sm text-foreground'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground'
               }`}
-              title="Area Chart"
+              title="Area"
             >
-              <AreaChart className="w-4 h-4" />
+              Area
             </button>
           </div>
 
-          {/* Timeframes */}
-          <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
-            {TIMEFRAMES.map(tf => (
-              <button
-                key={tf}
-                onClick={() => setTimeframe(tf)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  timeframe === tf
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                }`}
-              >
-                {tf.toUpperCase()}
-              </button>
-            ))}
-          </div>
-
-          {/* Ranges */}
-          <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
-            {RANGES.map(r => (
-              <button
-                key={r}
-                onClick={() => setRange(r)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                  range === r
-                    ? 'bg-background shadow-sm text-foreground'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                }`}
-              >
-                {r}
-              </button>
-            ))}
-          </div>
-
-          {/* Indicators */}
-          <div className="flex items-center gap-2 ml-auto">
-            <button
-              onClick={() => setShowIndicators(!showIndicators)}
-              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                showIndicators
-                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm'
-                  : 'bg-secondary/40 text-muted-foreground hover:text-foreground border border-border/30 hover:bg-background/50'
-              }`}
-            >
-              <Activity className="w-3.5 h-3.5" />
-              MA(20)
-            </button>
-          </div>
+          {/* Indicators Toggle */}
+          <button
+            onClick={() => setShowIndicators(!showIndicators)}
+            className={`flex items-center gap-1.5 px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+              showIndicators
+                ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30'
+                : 'bg-transparent text-muted-foreground hover:bg-accent hover:text-foreground border border-border'
+            }`}
+          >
+            <Activity className="w-3.5 h-3.5" />
+            MA(20)
+          </button>
         </div>
       </div>
 
-      {/* Chart Container */}
+      {/* Chart */}
       {isLoading ? (
-        <div className="w-full h-[500px] rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50 flex items-center justify-center">
-          <div className="text-muted-foreground">Loading chart...</div>
+        <div className="w-full h-[600px] flex items-center justify-center bg-background/50">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+            <span className="text-sm text-muted-foreground">Loading chart data...</span>
+          </div>
         </div>
       ) : (
-        <EChartsReact
-          ref={chartRef}
-          option={chartOption}
-          style={{ width: '100%', height: '500px' }}
-          opts={{ renderer: 'svg' }}
-          className="w-full rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50"
-        />
+        <div className="relative">
+          <EChartsReact
+            ref={chartRef}
+            option={chartOption}
+            style={{ width: '100%', height: '600px' }}
+            opts={{ renderer: 'canvas' }}
+            notMerge={false}
+            lazyUpdate={false}
+          />
+        </div>
       )}
     </div>
   );
