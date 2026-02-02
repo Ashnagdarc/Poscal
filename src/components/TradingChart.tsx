@@ -1,15 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { 
-  createChart, 
-  ColorType, 
-  IChartApi, 
-  ISeriesApi,
-  CandlestickSeries,
-  LineSeries,
-  AreaSeries,
-  BarSeries,
-  HistogramSeries
-} from 'lightweight-charts';
+import EChartsReact from 'echarts-for-react';
+import * as echarts from 'echarts';
 import { TrendingUp, BarChart3, Activity, LineChart, AreaChart } from 'lucide-react';
 import { useForexWebSocket } from '../hooks/useForexWebSocket';
 import { CHART_CONFIG, getBasePrice, getDaysFromRange } from '../config/chartConfig';
@@ -18,18 +9,14 @@ type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 type Range = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
-// Comprehensive list of forex pairs
+// Forex pairs
 const PAIRS = [
-  // Major Pairs
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
-  // Minor Pairs (Cross Currency Pairs)
   'EUR/GBP', 'EUR/AUD', 'EUR/CAD', 'EUR/CHF', 'EUR/JPY', 'EUR/NZD',
   'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD',
   'AUD/JPY', 'AUD/CAD', 'AUD/CHF', 'AUD/NZD',
-  'CAD/JPY', 'CAD/CHF',
-  'CHF/JPY',
+  'CAD/JPY', 'CAD/CHF', 'CHF/JPY',
   'NZD/JPY', 'NZD/CAD', 'NZD/CHF',
-  // Exotic Pairs
   'USD/SGD', 'USD/HKD', 'USD/ZAR', 'USD/THB', 'USD/MXN', 'USD/TRY',
   'EUR/TRY', 'EUR/NOK', 'EUR/SEK', 'EUR/PLN',
   'GBP/SGD', 'GBP/ZAR',
@@ -42,14 +29,18 @@ interface TradingChartProps {
   symbol?: string;
 }
 
+interface Candle {
+  time: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChartProps) => {
-  const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<IChartApi | null>(null);
-  const seriesRef = useRef<ISeriesApi<any> | null>(null);
-  const priceLineSeriesRef = useRef<ISeriesApi<any> | null>(null);
-  const dataRef = useRef<any[]>([]);
-  const priceLineDataRef = useRef<any[]>([]);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const chartRef = useRef<EChartsReact>(null);
+  const dataRef = useRef<Candle[]>([]);
+  const candleTimestampsRef = useRef<string[]>([]);
   
   const [symbol, setSymbol] = useState(initialSymbol);
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -63,7 +54,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const [error, setError] = useState<string | null>(null);
   const [timeUntilClose, setTimeUntilClose] = useState<string>('');
 
-  // Use WebSocket for live prices (handles 10K users, 100% free, no limits!)
+  // WebSocket for live prices
   const { 
     price: livePrice, 
     change: liveChange, 
@@ -72,92 +63,117 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     error: wsError 
   } = useForexWebSocket(symbol);
 
-  // Update current price from WebSocket
+  // Generate realistic historical data
+  const generateHistoricalData = (pair: string, days: number): Candle[] => {
+    const data: Candle[] = [];
+    const now = new Date();
+    let basePrice = getBasePrice(pair);
+
+    for (let i = days - 1; i >= 0; i--) {
+      const date = new Date(now);
+      date.setDate(date.getDate() - i);
+
+      const volatility = basePrice * CHART_CONFIG.dataGeneration.volatility;
+      const change = (Math.random() - 0.5) * volatility * 2;
+      basePrice += change;
+
+      const open = basePrice + (Math.random() - 0.5) * volatility;
+      const close = basePrice + (Math.random() - 0.5) * volatility;
+      const high = Math.max(open, close) + Math.random() * volatility * 0.5;
+      const low = Math.min(open, close) - Math.random() * volatility * 0.5;
+
+      data.push({
+        time: date.toISOString().split('T')[0],
+        open: parseFloat(open.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        high: parseFloat(high.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        low: parseFloat(low.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+        close: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+      });
+    }
+
+    return data;
+  };
+
+  // Load chart data
+  const loadChartData = async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const days = getDaysFromRange(range);
+      console.log(`📊 Loading chart data for ${symbol}: ${days} days`);
+
+      await new Promise(resolve => setTimeout(resolve, CHART_CONFIG.dataGeneration.mockApiDelay));
+      const historicalData = generateHistoricalData(symbol, days);
+
+      if (historicalData && historicalData.length > 0) {
+        dataRef.current = historicalData;
+        candleTimestampsRef.current = historicalData.map(d => d.time);
+        console.log(`✅ Loaded ${historicalData.length} candles`);
+      }
+
+      setIsLoading(false);
+    } catch (err: any) {
+      console.error('Failed to load chart data:', err);
+      setError(err.message || 'Failed to load data');
+      setIsLoading(false);
+    }
+  };
+
+  // Load data when symbol/range/timeframe changes
   useEffect(() => {
-    if (livePrice !== null) {
+    loadChartData();
+  }, [symbol, range, timeframe]);
+
+  // Update live price
+  useEffect(() => {
+    if (livePrice !== null && livePrice > 0) {
       console.log('📊 Live price update:', { symbol, livePrice, liveChange });
       setCurrentPrice(livePrice);
       setPriceChange(liveChange);
       setLastUpdate(new Date(wsLastUpdate));
-      
-      // Update chart with live price
-      if (seriesRef.current && dataRef.current.length > 0) {
+
+      // Update last candle
+      if (dataRef.current && dataRef.current.length > 0) {
         const lastCandle = dataRef.current[dataRef.current.length - 1];
         const today = new Date().toISOString().split('T')[0];
-        
-        if (lastCandle && lastCandle.time === today) {
+
+        if (lastCandle.time === today) {
           // Update today's candle
-          const updatedCandle = {
-            time: lastCandle.time,
-            open: lastCandle.open,
-            high: Math.max(lastCandle.high, livePrice),
-            low: Math.min(lastCandle.low, livePrice),
-            close: livePrice,
-          };
-          
-          // Validate candle data
-          if (updatedCandle.time && !isNaN(updatedCandle.open) && !isNaN(updatedCandle.high) && 
-              !isNaN(updatedCandle.low) && !isNaN(updatedCandle.close)) {
-            console.log('📈 Updating candle:', updatedCandle);
-            dataRef.current[dataRef.current.length - 1] = updatedCandle;
-            seriesRef.current.update(updatedCandle);
-          }
-          
-      // Update price line to show current price (ask line across entire chart)
-          // Create price line data for all historical candles with current price
-          if (dataRef.current && dataRef.current.length > 0 && livePrice !== null && !isNaN(livePrice)) {
-            const updatedPriceLine = dataRef.current.map(candle => ({
-              time: candle.time,
-              value: livePrice
-            })).filter(d => d.time && !isNaN(d.value)); // Validate data
-            
-            if (priceLineSeriesRef.current && updatedPriceLine.length > 0) {
-              console.log('💹 Updating price line to:', livePrice);
-              priceLineSeriesRef.current.setData(updatedPriceLine);
-            }
-          }
-          
-          // Refresh chart view
-          if (chartRef.current) {
-            chartRef.current.timeScale().fitContent();
-          }
+          lastCandle.high = Math.max(lastCandle.high, livePrice);
+          lastCandle.low = Math.min(lastCandle.low, livePrice);
+          lastCandle.close = livePrice;
         } else {
-          // Create new candle for today
-          const newCandle = {
+          // Create new candle
+          dataRef.current.push({
             time: today,
             open: livePrice,
             high: livePrice,
             low: livePrice,
             close: livePrice,
-          };
-          
-          // Validate new candle
-          if (newCandle.time && !isNaN(newCandle.open) && !isNaN(newCandle.close)) {
-            console.log('🆕 Creating new candle:', newCandle);
-            dataRef.current.push(newCandle);
-            seriesRef.current.update(newCandle);
-          }
+          });
+          candleTimestampsRef.current.push(today);
         }
+
+        // Trigger chart update
+        updateChart();
       }
     }
   }, [livePrice, liveChange, wsLastUpdate]);
 
-  // Countdown timer for bar close (respects timeframe)
+  // Countdown timer
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
       let secondsUntilClose = 0;
 
       if (timeframe === '1m') {
-        const secondsInMinute = now.getSeconds();
-        secondsUntilClose = 60 - secondsInMinute;
+        secondsUntilClose = 60 - now.getSeconds();
       } else if (timeframe === '5m') {
         const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
-        const barIndex = Math.floor(secondsInHour / 300); // 300 seconds = 5 min
         secondsUntilClose = 300 - (secondsInHour % 300);
       } else if (timeframe === '15m') {
         const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
-        const barIndex = Math.floor(secondsInHour / 900); // 900 seconds = 15 min
         secondsUntilClose = 900 - (secondsInHour % 900);
       } else if (timeframe === '1h') {
         const secondsInHour = now.getMinutes() * 60 + now.getSeconds();
@@ -167,223 +183,180 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         const barIndex = Math.floor(hour / 4);
         const barStartHour = barIndex * 4;
         const secondsInBar = (now.getHours() - barStartHour) * 3600 + now.getMinutes() * 60 + now.getSeconds();
-        secondsUntilClose = 14400 - secondsInBar; // 14400 = 4 hours
+        secondsUntilClose = 14400 - secondsInBar;
       } else {
-        // 1d, 1w, 1m - countdown to midnight
         const secondsInDay = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
         secondsUntilClose = 86400 - secondsInDay;
       }
-      
+
       const hours = Math.floor(secondsUntilClose / 3600);
       const minutes = Math.floor((secondsUntilClose % 3600) / 60);
       const seconds = secondsUntilClose % 60;
-      
+
       setTimeUntilClose(`${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`);
     }, 1000);
-    
+
     return () => clearInterval(interval);
   }, [timeframe]);
 
-  // Convert symbol format for APIs (EUR/USD -> EURUSD)
-  const getApiSymbol = (pair: string) => pair.replace('/', '');
+  // Update chart
+  const updateChart = () => {
+    if (!chartRef.current) return;
 
-  // Generate realistic historical data for forex pairs
-  const generateHistoricalData = (pair: string, days: number) => {
-    const data = [];
-    const now = new Date();
-    
-    let basePrice = getBasePrice(pair);
-    
-    for (let i = days - 1; i >= 0; i--) {
-      const date = new Date(now);
-      date.setDate(date.getDate() - i);
-      
-      // Generate realistic price movement using configurable volatility
-      const volatility = basePrice * CHART_CONFIG.dataGeneration.volatility;
-      const change = (Math.random() - 0.5) * volatility * 2;
-      basePrice += change;
-      
-      const open = basePrice + (Math.random() - 0.5) * volatility;
-      const close = basePrice + (Math.random() - 0.5) * volatility;
-      const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-      const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-      
-      data.push({
-        time: date.toISOString().split('T')[0],
-        open: parseFloat(open.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        high: parseFloat(high.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        low: parseFloat(low.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        close: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
-        value: parseFloat(close.toFixed(CHART_CONFIG.dataGeneration.priceDecimals)),
+    const chart = chartRef.current.getEchartsInstance();
+    if (!chart) return;
+
+    const chartData = generateChartData();
+    const option = generateOption(chartData);
+    chart.setOption(option);
+  };
+
+  // Generate chart data based on type
+  const generateChartData = () => {
+    if (!dataRef.current || dataRef.current.length === 0) {
+      return { candleData: [], ma20Data: [], priceLineData: [] };
+    }
+
+    const candleData = dataRef.current.map(candle => [
+      candle.open,
+      candle.close,
+      candle.low,
+      candle.high,
+    ]);
+
+    let ma20Data: (number | null)[] = [];
+    if (showIndicators && dataRef.current.length > 20) {
+      ma20Data = dataRef.current.map((candle, i) => {
+        if (i < 19) return null;
+        const sum = dataRef.current
+          .slice(i - 19, i + 1)
+          .reduce((acc, c) => acc + c.close, 0);
+        return sum / 20;
       });
     }
-    
-    return data;
+
+    const priceLineData = dataRef.current.map(() => currentPrice);
+
+    return { candleData, ma20Data, priceLineData };
   };
 
-  // Fetch historical candlestick data (mock data for now - replace with real API when key available)
-  const fetchHistoricalData = async (pair: string, interval: string, days: number) => {
-    try {
-      // Generate realistic mock data
-      await new Promise(resolve => setTimeout(resolve, CHART_CONFIG.dataGeneration.mockApiDelay));
-      return generateHistoricalData(pair, days);
-    } catch (err) {
-      console.error('Error generating historical data:', err);
-      throw err;
-    }
-  };
-
-  // Load initial data
-  const loadChartData = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      // Calculate days based on selected range using config mapping
-      const days = getDaysFromRange(range);
-      
-      console.log(`📊 Loading chart data for ${symbol}: ${days} days`);
-      const historicalData = await fetchHistoricalData(symbol, timeframe, days);
-      
-      if (historicalData && historicalData.length > 0) {
-        dataRef.current = historicalData;
-        console.log(`✅ Loaded ${historicalData.length} candles`);
-      }
-      
-      setIsLoading(false);
-    } catch (err: any) {
-      console.error('Failed to load chart data:', err);
-      setError(err.message || 'Failed to load data');
-      setIsLoading(false);
-    }
-  };
-
-  // Load data when symbol, range, or timeframe changes
-  useEffect(() => {
-    loadChartData();
-  }, [symbol, range, timeframe]);
-
-  useEffect(() => {
-    if (!chartContainerRef.current) return;
-
-    // Create chart
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: CHART_CONFIG.colors.background },
-        textColor: CHART_CONFIG.colors.text,
+  // Generate ECharts option
+  const generateOption = (chartData: ReturnType<typeof generateChartData>): echarts.EChartsOption => {
+    const baseOption: echarts.EChartsOption = {
+      backgroundColor: CHART_CONFIG.colors.background,
+      textStyle: {
+        color: CHART_CONFIG.colors.text,
       },
-      width: chartContainerRef.current.clientWidth,
-      height: CHART_CONFIG.display.height,
       grid: {
-        vertLines: { color: CHART_CONFIG.colors.gridLines },
-        horzLines: { color: CHART_CONFIG.colors.gridLines },
+        left: '10%',
+        right: '10%',
+        top: '10%',
+        bottom: '10%',
+        containLabel: true,
       },
-      timeScale: {
-        timeVisible: true,
+      xAxis: {
+        type: 'category',
+        data: candleTimestampsRef.current,
+        boundaryGap: false,
+        axisLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
+        splitLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
+      },
+      yAxis: {
+        type: 'value',
+        scale: true,
+        axisLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
+        splitLine: { lineStyle: { color: CHART_CONFIG.colors.gridLines } },
+      },
+      tooltip: {
+        trigger: 'axis',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         borderColor: CHART_CONFIG.colors.border,
+        textStyle: { color: CHART_CONFIG.colors.text },
       },
-      rightPriceScale: {
-        borderColor: CHART_CONFIG.colors.border,
-      },
-    });
+      series: [],
+    };
 
-    chartRef.current = chart;
-
-    const data = dataRef.current;
-
-    // Add series based on chart type (only if we have data)
-    if (data && data.length > 0) {
-      let series: ISeriesApi<any>;
-
-      if (chartType === 'candlestick') {
-        series = chart.addSeries(CandlestickSeries, {
-          upColor: CHART_CONFIG.colors.candleUp,
-          downColor: CHART_CONFIG.colors.candleDown,
-          borderVisible: CHART_CONFIG.display.candleSettings.borderVisible,
-          wickUpColor: CHART_CONFIG.display.candleSettings.wickUpColor,
-          wickDownColor: CHART_CONFIG.display.candleSettings.wickDownColor,
-        });
-        series.setData(data);
-      } else if (chartType === 'line') {
-        series = chart.addSeries(LineSeries, {
-          color: CHART_CONFIG.colors.line,
-          lineWidth: CHART_CONFIG.display.lineWidth.default,
-        });
-        series.setData(data.map(d => ({ time: d.time, value: d.close })));
-      } else if (chartType === 'area') {
-        series = chart.addSeries(AreaSeries, {
-          topColor: CHART_CONFIG.colors.area.top,
-          bottomColor: CHART_CONFIG.colors.area.bottom,
-          lineColor: CHART_CONFIG.colors.line,
-          lineWidth: CHART_CONFIG.display.lineWidth.default,
-        });
-        series.setData(data.map(d => ({ time: d.time, value: d.close })));
-      } else if (chartType === 'bar') {
-        series = chart.addSeries(BarSeries, {
-          upColor: CHART_CONFIG.colors.candleUp,
-          downColor: CHART_CONFIG.colors.candleDown,
-        });
-        series.setData(data);
-      }
-
-      seriesRef.current = series!;
-
-      // Add price line series (shows current ask price as a moving line)
-      const priceLineSeries = chart.addSeries(LineSeries, {
-        color: CHART_CONFIG.colors.priceLine,
-        lineWidth: CHART_CONFIG.display.lineWidth.priceLine,
-        lineStyle: 2, // Dashed
-        title: 'Ask Price',
+    // Add candlestick series
+    if (chartType === 'candlestick') {
+      (baseOption.series as any[]).push({
+        name: 'Candlestick',
+        type: 'candlestick',
+        data: chartData.candleData,
+        itemStyle: {
+          color: CHART_CONFIG.colors.candleUp,
+          color0: CHART_CONFIG.colors.candleDown,
+          borderColor: CHART_CONFIG.colors.candleUp,
+          borderColor0: CHART_CONFIG.colors.candleDown,
+        },
       });
-      priceLineSeriesRef.current = priceLineSeries;
-      
-      // Initialize price line with current price if available
-      if (currentPrice > 0) {
-        priceLineDataRef.current = data.map(candle => ({
-          time: candle.time,
-          value: currentPrice
-        })).filter(d => d.time && !isNaN(d.value));
-        
-        if (priceLineDataRef.current.length > 0) {
-          priceLineSeries.setData(priceLineDataRef.current);
-        }
-      }
-
-      // Add moving average indicator if enabled
-      if (showIndicators && data.length > CHART_CONFIG.indicators.ma20.period) {
-        const ma20 = chart.addSeries(LineSeries, {
-          color: CHART_CONFIG.indicators.ma20.color,
-          lineWidth: CHART_CONFIG.indicators.ma20.lineWidth,
-        });
-        
-        const maData = data.map((d, i) => {
-          if (i < CHART_CONFIG.indicators.ma20.period) return { time: d.time, value: d.close };
-          const sum = data.slice(i - CHART_CONFIG.indicators.ma20.period + 1, i + 1).reduce((acc, item) => acc + item.close, 0);
-          return { time: d.time, value: sum / CHART_CONFIG.indicators.ma20.period };
-        });
-        ma20.setData(maData);
-      }
-
-      chart.timeScale().fitContent();
+    } else if (chartType === 'line') {
+      (baseOption.series as any[]).push({
+        name: 'Line',
+        type: 'line',
+        data: dataRef.current.map(c => c.close),
+        lineStyle: { color: CHART_CONFIG.colors.line, width: 2 },
+        smooth: true,
+      });
+    } else if (chartType === 'area') {
+      (baseOption.series as any[]).push({
+        name: 'Area',
+        type: 'area',
+        data: dataRef.current.map(c => c.close),
+        lineStyle: { color: CHART_CONFIG.colors.line, width: 2 },
+        areaStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: CHART_CONFIG.colors.area.top },
+            { offset: 1, color: CHART_CONFIG.colors.area.bottom },
+          ]),
+        },
+        smooth: true,
+      });
+    } else if (chartType === 'bar') {
+      (baseOption.series as any[]).push({
+        name: 'Bar',
+        type: 'bar',
+        data: chartData.candleData,
+        itemStyle: {
+          color: CHART_CONFIG.colors.candleUp,
+          color0: CHART_CONFIG.colors.candleDown,
+        },
+      });
     }
 
-    const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({ width: chartContainerRef.current.clientWidth });
-      }
-    };
+    // Add MA(20) if enabled
+    if (showIndicators && chartData.ma20Data.length > 0) {
+      (baseOption.series as any[]).push({
+        name: 'MA(20)',
+        type: 'line',
+        data: chartData.ma20Data,
+        lineStyle: { color: CHART_CONFIG.colors.indicator, width: 1 },
+        smooth: true,
+      });
+    }
 
-    window.addEventListener('resize', handleResize);
+    // Add price line
+    if (currentPrice > 0) {
+      (baseOption.series as any[]).push({
+        name: 'Ask Price',
+        type: 'line',
+        data: chartData.priceLineData,
+        lineStyle: {
+          color: CHART_CONFIG.colors.priceLine,
+          width: 2,
+          type: 'dashed',
+        },
+        smooth: false,
+      });
+    }
 
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
-  }, [chartType, showIndicators, isLoading]);
+    return baseOption;
+  };
+
+  const chartOption = generateOption(generateChartData());
 
   return (
     <div className="w-full space-y-4">
-      {/* Modern Header with Live Price Info */}
+      {/* Header */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-4">
           <select
@@ -395,8 +368,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
               <option key={pair} value={pair}>{pair}</option>
             ))}
           </select>
-          
-          {/* Live Price Display */}
+
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="text-2xl font-bold tabular-nums">
@@ -433,11 +405,10 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         </div>
       </div>
 
-      {/* Clean Toolbar - Split into Logical Groups */}
+      {/* Toolbar */}
       <div className="space-y-2">
-        {/* Primary Controls */}
         <div className="flex items-center gap-4 flex-wrap">
-          {/* Chart Type Selector */}
+          {/* Chart Type */}
           <div className="flex items-center gap-2 p-1 bg-secondary/40 rounded-lg border border-border/30">
             <button
               onClick={() => setChartType('candlestick')}
@@ -485,7 +456,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
             </button>
           </div>
 
-          {/* Timeframe Selector */}
+          {/* Timeframes */}
           <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
             {TIMEFRAMES.map(tf => (
               <button
@@ -502,7 +473,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
             ))}
           </div>
 
-          {/* Range Selector */}
+          {/* Ranges */}
           <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
             {RANGES.map(r => (
               <button
@@ -537,11 +508,19 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       </div>
 
       {/* Chart Container */}
-      <div 
-        ref={chartContainerRef}
-        className="w-full rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50"
-        style={{ height: '500px' }}
-      />
+      {isLoading ? (
+        <div className="w-full h-[500px] rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50 flex items-center justify-center">
+          <div className="text-muted-foreground">Loading chart...</div>
+        </div>
+      ) : (
+        <EChartsReact
+          ref={chartRef}
+          option={chartOption}
+          style={{ width: '100%', height: '500px' }}
+          opts={{ renderer: 'svg' }}
+          className="w-full rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50"
+        />
+      )}
     </div>
   );
 };
