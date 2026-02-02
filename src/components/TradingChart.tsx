@@ -49,7 +49,9 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const chartContainerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const seriesRef = useRef<ISeriesApi<any> | null>(null);
+  const priceLineSeriesRef = useRef<ISeriesApi<any> | null>(null);
   const dataRef = useRef<any[]>([]);
+  const priceLineDataRef = useRef<any[]>([]);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const [symbol, setSymbol] = useState(initialSymbol);
@@ -98,6 +100,15 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
           console.log('📈 Updating candle:', updatedCandle);
           dataRef.current[dataRef.current.length - 1] = updatedCandle;
           seriesRef.current.update(updatedCandle);
+          
+          // Update price line to show current price (ask line)
+          const today = new Date().toISOString().split('T')[0];
+          priceLineDataRef.current = [
+            { time: today, value: livePrice }
+          ];
+          if (priceLineSeriesRef.current) {
+            priceLineSeriesRef.current.setData(priceLineDataRef.current);
+          }
           
           // Refresh chart view
           if (chartRef.current) {
@@ -286,6 +297,15 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       }
 
       seriesRef.current = series!;
+
+      // Add price line series (shows current ask price as a moving line)
+      const priceLineSeries = chart.addSeries(LineSeries, {
+        color: '#3b82f6',
+        lineWidth: 2,
+        lineStyle: 2, // Dashed
+        title: 'Ask Price',
+      });
+      priceLineSeriesRef.current = priceLineSeries;
 
       // Add moving average indicator if enabled
       if (showIndicators && data.length > 20) {
