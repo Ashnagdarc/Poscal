@@ -225,6 +225,11 @@ export const subscriptionApi = {
     return data;
   },
 
+  verifyPayment: async (payload: { reference: string; userId: string; tier: 'premium' | 'pro' }): Promise<any> => {
+    const { data } = await serverlessApi.post('/api/verify-payment', payload);
+    return data;
+  },
+
   checkFeatureAccess: async (feature: string): Promise<boolean> => {
     const { data } = await api.get(`/payments/feature-access/${feature}`);
     return data.hasAccess;

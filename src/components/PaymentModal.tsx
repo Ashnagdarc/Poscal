@@ -9,6 +9,7 @@ declare global {
 }
 // Paystack InlineJS v2 integration
 import { useAuth } from '@/contexts/AuthContext';
+import { useSubscription } from '@/contexts/SubscriptionContext';
 import {
   Dialog,
   DialogContent,
@@ -20,6 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { subscriptionApi } from '@/lib/api';
 
 const TIER_CONFIG = {
   premium: {
@@ -53,8 +55,10 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   const config = TIER_CONFIG.premium;
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
   const { user } = useAuth();
+  const { refreshSubscription } = useSubscription();
   // Use prop if provided, else fallback to AuthContext
   const effectiveUserEmail = userEmail || user?.email || '';
+  const userId = user?.id || '';
 
   useEffect(() => {
     if (!document.getElementById('paystack-inline-js')) {
@@ -147,13 +151,31 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
           email: effectiveUserEmail,
           amount: config.amount,
           currency: config.currency,
-          callback: (response: any) => {
+          callback: async (response: any) => {
             clearTimeout(fallbackTimeout);
             setIsProcessing(false);
             setPaymentStatus('success');
             processingRef.current = false;
             suppressCloseToastRef.current = false;
-            // You can also send response.reference to your backend for verification
+            try {
+              if (!response?.reference) {
+                throw new Error('Missing payment reference from Paystack.');
+              }
+              if (!userId) {
+                throw new Error('Missing user id. Please sign in again.');
+              }
+              await subscriptionApi.verifyPayment({
+                reference: response.reference,
+                userId,
+                tier: 'premium',
+              });
+              await refreshSubscription();
+              toast.success('Subscription activated. Enjoy premium!');
+            } catch (verifyError: any) {
+              setPaymentStatus('error');
+              setErrorMessage(verifyError?.message || 'Payment verified but subscription was not activated.');
+              toast.error('Payment verified, but subscription activation failed. Please contact support.');
+            }
           },
           onClose: () => {
             clearTimeout(fallbackTimeout);
