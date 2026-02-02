@@ -92,19 +92,18 @@ export const TradingChart = ({ symbol = 'EUR/USD', priceData }: TradingChartProp
         wickDownColor: '#ef4444',
       });
 
+      // Use proper data format - dates must be in chronological order and in YYYY-MM-DD format
       const defaultData: CandlestickData[] = [
-        { time: '2026-01-20' as any, open: 1.0850, high: 1.0920, low: 1.0840, close: 1.0890 },
-        { time: '2026-01-21' as any, open: 1.0890, high: 1.0950, low: 1.0870, close: 1.0920 },
-        { time: '2026-01-22' as any, open: 1.0920, high: 1.0980, low: 1.0900, close: 1.0960 },
-        { time: '2026-01-23' as any, open: 1.0960, high: 1.1020, low: 1.0940, close: 1.0980 },
-        { time: '2026-01-24' as any, open: 1.0980, high: 1.1040, low: 1.0960, close: 1.1010 },
-        { time: '2026-01-27' as any, open: 1.1010, high: 1.1080, low: 1.0990, close: 1.1040 },
-        { time: '2026-01-28' as any, open: 1.1040, high: 1.1100, low: 1.1020, close: 1.1070 },
-        { time: '2026-01-29' as any, open: 1.1070, high: 1.1150, low: 1.1060, close: 1.1120 },
-        { time: '2026-01-30' as any, open: 1.1120, high: 1.1180, low: 1.1100, close: 1.1150 },
-        { time: '2026-01-31' as any, open: 1.1150, high: 1.1220, low: 1.1140, close: 1.1180 },
-        { time: '2026-02-03' as any, open: 1.1180, high: 1.1240, low: 1.1160, close: 1.1200 },
-        { time: '2026-02-04' as any, open: 1.1200, high: 1.1260, low: 1.1180, close: 1.1240 },
+        { time: '2018-12-22', open: 75.16, high: 82.84, low: 36.16, close: 45.72 },
+        { time: '2018-12-23', open: 45.12, high: 53.90, low: 45.12, close: 48.09 },
+        { time: '2018-12-24', open: 60.71, high: 60.71, low: 53.39, close: 59.29 },
+        { time: '2018-12-25', open: 68.26, high: 68.26, low: 59.04, close: 60.50 },
+        { time: '2018-12-26', open: 67.71, high: 105.85, low: 66.67, close: 91.04 },
+        { time: '2018-12-27', open: 91.04, high: 121.40, low: 82.70, close: 111.40 },
+        { time: '2018-12-28', open: 111.51, high: 142.83, low: 103.34, close: 131.25 },
+        { time: '2018-12-29', open: 131.33, high: 151.17, low: 77.68, close: 96.43 },
+        { time: '2018-12-30', open: 106.33, high: 110.20, low: 90.39, close: 98.10 },
+        { time: '2018-12-31', open: 109.87, high: 114.69, low: 85.66, close: 111.26 },
       ];
 
       candleSeriesRef.setData(defaultData);
