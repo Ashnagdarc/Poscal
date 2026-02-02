@@ -80,6 +80,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
 
   const handlePay = () => {
     // Debug: Log all payment parameters
+    console.log('[Paystack Debug] handlePay called');
     console.log('[Paystack Debug] publicKey:', publicKey);
     console.log('[Paystack Debug] userEmail:', effectiveUserEmail);
     console.log('[Paystack Debug] amount:', config.amount);
@@ -87,16 +88,37 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
     if (!publicKey) {
       setErrorMessage('Paystack public key not set');
       setPaymentStatus('error');
+      console.error('[Paystack Error] Missing publicKey:', publicKey);
       return;
     }
-    if (!paystackScriptLoaded || !window.PaystackPop || typeof window.PaystackPop !== 'function') {
+    if (!paystackScriptLoaded) {
       setErrorMessage('Paystack script not loaded. Please refresh and try again.');
       setPaymentStatus('error');
+      console.error('[Paystack Error] paystackScriptLoaded:', paystackScriptLoaded);
       return;
     }
-    if (!effectiveUserEmail || config.amount <= 0 || !config.currency) {
-      setErrorMessage('Invalid payment parameters. Please contact support.');
+    if (!window.PaystackPop || typeof window.PaystackPop !== 'function') {
+      setErrorMessage('PaystackPop is not available on window.');
       setPaymentStatus('error');
+      console.error('[Paystack Error] window.PaystackPop:', window.PaystackPop);
+      return;
+    }
+    if (!effectiveUserEmail) {
+      setErrorMessage('User email is missing. Please log in or contact support.');
+      setPaymentStatus('error');
+      console.error('[Paystack Error] effectiveUserEmail:', effectiveUserEmail);
+      return;
+    }
+    if (config.amount <= 0) {
+      setErrorMessage('Invalid payment amount. Please contact support.');
+      setPaymentStatus('error');
+      console.error('[Paystack Error] amount:', config.amount);
+      return;
+    }
+    if (!config.currency) {
+      setErrorMessage('Currency is missing. Please contact support.');
+      setPaymentStatus('error');
+      console.error('[Paystack Error] currency:', config.currency);
       return;
     }
     setIsProcessing(true);
