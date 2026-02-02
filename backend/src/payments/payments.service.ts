@@ -3,6 +3,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
 import { PaystackWebhookLog } from './entities/paystack-webhook-log.entity';
+import { User } from '../auth/entities/user.entity';
 import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentFromVercelDto } from './dto/payment.dto';
 
 @Injectable()
@@ -12,6 +13,8 @@ export class PaymentsService {
     private paymentRepository: Repository<Payment>,
     @InjectRepository(PaystackWebhookLog)
     private webhookLogRepository: Repository<PaystackWebhookLog>,
+    @InjectRepository(User)
+    private userRepository: Repository<User>,
   ) {}
 
   async findAll(userId: string): Promise<Payment[]> {
@@ -77,6 +80,20 @@ export class PaymentsService {
   }
 
   async getActiveSubscription(userId: string): Promise<any> {
+    // Get user details
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+
+    // Admin users always get premium
+    if (user && user.is_admin) {
+      return {
+        payment_status: 'paid',
+        subscription_tier: 'premium',
+        expires_at: null, // No expiry for admin
+        trial_ends_at: null,
+        is_active: true,
+      };
+    }
+
     const now = new Date();
     const payment = await this.paymentRepository
       .createQueryBuilder('payment')

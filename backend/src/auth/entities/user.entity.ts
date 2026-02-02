@@ -18,6 +18,14 @@ export class User {
   @Column({ type: 'boolean', default: false })
   email_verified: boolean;
 
+  @Column({ type: 'boolean', default: false })
+  @Index()
+  is_admin: boolean;
+
+  @Column({ type: 'varchar', length: 50, default: 'manual' })
+  @Index()
+  account_type: string;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
 
