@@ -8,17 +8,10 @@ import { CHART_CONFIG, getBasePrice, getDaysFromRange } from '../config/chartCon
 type ChartType = 'candlestick' | 'line' | 'area';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 
-// Forex pairs
+// Binance-supported Forex pairs (these work with the WebSocket backend)
 const PAIRS = [
-  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
-  'EUR/GBP', 'EUR/AUD', 'EUR/CAD', 'EUR/CHF', 'EUR/JPY', 'EUR/NZD',
-  'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD',
-  'AUD/JPY', 'AUD/CAD', 'AUD/CHF', 'AUD/NZD',
-  'CAD/JPY', 'CAD/CHF', 'CHF/JPY',
-  'NZD/JPY', 'NZD/CAD', 'NZD/CHF',
-  'USD/SGD', 'USD/HKD', 'USD/ZAR', 'USD/THB', 'USD/MXN', 'USD/TRY',
-  'EUR/TRY', 'EUR/NOK', 'EUR/SEK', 'EUR/PLN',
-  'GBP/SGD', 'GBP/ZAR',
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
+  'USD/CHF', 'NZD/USD', 'EUR/GBP', 'EUR/JPY', 'GBP/JPY',
 ];
 
 const TIMEFRAMES: { value: Timeframe; label: string; }[] = [
@@ -64,15 +57,42 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     isConnected 
   } = useForexWebSocket(symbol);
 
+  // Get candle count based on timeframe
+  const getCandleCount = (tf: Timeframe): number => {
+    const counts: Record<Timeframe, number> = {
+      '1m': 60,
+      '5m': 72,
+      '15m': 96,
+      '1h': 100,
+      '4h': 90,
+      '1d': 30,
+      '1w': 52,
+      '1M': 24,
+    };
+    return counts[tf] || 30;
+  };
+
   // Generate realistic historical data
-  const generateHistoricalData = useCallback((pair: string, candles: number): Candle[] => {
+  const generateHistoricalData = useCallback((pair: string, tf: Timeframe): Candle[] => {
     const data: Candle[] = [];
     const now = new Date();
     let basePrice = getBasePrice(pair);
+    const candleCount = getCandleCount(tf);
 
-    for (let i = candles - 1; i >= 0; i--) {
+    for (let i = candleCount - 1; i >= 0; i--) {
       const date = new Date(now);
-      date.setDate(date.getDate() - i);
+      
+      // Adjust date based on timeframe
+      if (tf === '1M') {
+        date.setMonth(date.getMonth() - i);
+      } else if (tf === '1w') {
+        date.setDate(date.getDate() - (i * 7));
+      } else if (tf === '1d' || tf === '4h' || tf === '1h') {
+        date.setDate(date.getDate() - i);
+      } else {
+        // For minute timeframes, use hours
+        date.setHours(date.getHours() - i);
+      }
 
       const volatility = basePrice * 0.01;
       const change = (Math.random() - 0.5) * volatility * 2;
@@ -84,7 +104,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       const low = Math.min(open, close) - Math.random() * volatility * 0.5;
 
       data.push({
-        time: date.toISOString().split('T')[0],
+        time: tf === '1M' ? date.toISOString().split('T')[0].slice(0, 7) : date.toISOString().split('T')[0],
         open: parseFloat(open.toFixed(5)),
         high: parseFloat(high.toFixed(5)),
         low: parseFloat(low.toFixed(5)),
@@ -100,7 +120,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     setIsLoading(true);
     
     setTimeout(() => {
-      const historicalData = generateHistoricalData(symbol, 30);
+      const historicalData = generateHistoricalData(symbol, timeframe);
       dataRef.current = historicalData;
       
       if (historicalData.length > 0) {
@@ -116,17 +136,40 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       
       setIsLoading(false);
     }, 300);
-  }, [symbol, generateHistoricalData]);
+  }, [symbol, timeframe, generateHistoricalData]);
 
   // Load data when symbol/timeframe changes
   useEffect(() => {
     loadChartData();
   }, [loadChartData]);
 
-  // Update live price
+  // Update live price with animation
   useEffect(() => {
     if (livePrice !== null && livePrice > 0 && dataRef.current.length > 0) {
-      setCurrentPrice(livePrice);
+      // Animate price change
+      const startPrice = currentPrice;
+      const endPrice = livePrice;
+      const duration = 500; // 500ms animation
+      const startTime = Date.now();
+
+      const animatePrice = () => {
+        const elapsed = Date.now() - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        
+        // Ease-out animation
+        const easeProgress = 1 - Math.pow(1 - progress, 3);
+        const interpolatedPrice = startPrice + (endPrice - startPrice) * easeProgress;
+        
+        setCurrentPrice(interpolatedPrice);
+        
+        if (progress < 1) {
+          requestAnimationFrame(animatePrice);
+        } else {
+          setCurrentPrice(endPrice);
+        }
+      };
+
+      animatePrice();
       setPriceChange(liveChange);
 
       // Update last candle
