@@ -10,13 +10,29 @@ import {
   BarSeries,
   HistogramSeries
 } from 'lightweight-charts';
-import { TrendingUp, BarChart3, Activity, Maximize2, Plus } from 'lucide-react';
+import { TrendingUp, BarChart3, Activity, LineChart, AreaChart, Candlestick } from 'lucide-react';
 
 type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 type Range = '1D' | '1W' | '1M' | '3M' | '6M' | '1Y' | 'ALL';
 
-const PAIRS = ['EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD', 'NZD/USD'];
+// Comprehensive list of forex pairs
+const PAIRS = [
+  // Major Pairs
+  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD', 'NZD/USD',
+  // Minor Pairs (Cross Currency Pairs)
+  'EUR/GBP', 'EUR/AUD', 'EUR/CAD', 'EUR/CHF', 'EUR/JPY', 'EUR/NZD',
+  'GBP/JPY', 'GBP/CHF', 'GBP/AUD', 'GBP/CAD', 'GBP/NZD',
+  'AUD/JPY', 'AUD/CAD', 'AUD/CHF', 'AUD/NZD',
+  'CAD/JPY', 'CAD/CHF',
+  'CHF/JPY',
+  'NZD/JPY', 'NZD/CAD', 'NZD/CHF',
+  // Exotic Pairs
+  'USD/SGD', 'USD/HKD', 'USD/ZAR', 'USD/THB', 'USD/MXN', 'USD/TRY',
+  'EUR/TRY', 'EUR/NOK', 'EUR/SEK', 'EUR/PLN',
+  'GBP/SGD', 'GBP/ZAR',
+];
+
 const TIMEFRAMES: Timeframe[] = ['1m', '5m', '15m', '1h', '4h', '1d', '1w', '1M'];
 const RANGES: Range[] = ['1D', '1W', '1M', '3M', '6M', '1Y', 'ALL'];
 
@@ -158,125 +174,137 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   }, [chartType, timeframe, range, symbol, showIndicators]);
 
   return (
-    <div className="w-full space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
-            <TrendingUp className="w-4 h-4 text-emerald-400" />
-          </div>
-          <div>
-            <h3 className="text-base font-semibold text-foreground">{symbol}</h3>
-            <p className="text-xs text-muted-foreground">Timeframe: {timeframe.toUpperCase()}</p>
-          </div>
-        </div>
-        <div className="text-xs px-2.5 py-1.5 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-lg">
-          Live Data
-        </div>
-      </div>
-
-      {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-3 p-3 bg-secondary/30 rounded-xl border border-border/50">
-        {/* Pair Selector */}
-        <div className="flex items-center gap-1">
-          <span className="text-xs text-muted-foreground mr-1">Pair:</span>
+    <div className="w-full space-y-4">
+      {/* Modern Header with Symbol Info */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
           <select
             value={symbol}
             onChange={(e) => setSymbol(e.target.value)}
-            className="px-2 py-1 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-primary"
+            className="px-4 py-2 text-lg font-semibold bg-background/50 border border-border/50 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/50 hover:bg-background transition-colors cursor-pointer"
           >
             {PAIRS.map(pair => (
               <option key={pair} value={pair}>{pair}</option>
             ))}
           </select>
-        </div>
-
-        {/* Chart Type */}
-        <div className="flex items-center gap-1 border-l border-border/50 pl-3">
-          <span className="text-xs text-muted-foreground mr-1">Type:</span>
-          <div className="flex gap-1">
-            {(['candlestick', 'line', 'area', 'bar'] as ChartType[]).map(type => (
-              <button
-                key={type}
-                onClick={() => setChartType(type)}
-                className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                  chartType === type
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background hover:bg-accent text-muted-foreground'
-                }`}
-              >
-                {type === 'candlestick' ? 'Candle' : type.charAt(0).toUpperCase() + type.slice(1)}
-              </button>
-            ))}
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">•</span>
+            <span className="text-sm text-muted-foreground">{timeframe.toUpperCase()}</span>
+            <span className="text-sm text-muted-foreground">•</span>
+            <span className="text-xs px-2 py-1 bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 rounded-md">
+              Live
+            </span>
           </div>
         </div>
+      </div>
 
-        {/* Timeframe */}
-        <div className="flex items-center gap-1 border-l border-border/50 pl-3">
-          <span className="text-xs text-muted-foreground mr-1">TF:</span>
-          <div className="flex gap-1">
+      {/* Clean Toolbar - Split into Logical Groups */}
+      <div className="space-y-2">
+        {/* Primary Controls */}
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Chart Type Selector */}
+          <div className="flex items-center gap-2 p-1 bg-secondary/40 rounded-lg border border-border/30">
+            <button
+              onClick={() => setChartType('candlestick')}
+              className={`p-2 rounded-md transition-all ${
+                chartType === 'candlestick'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+              title="Candlestick"
+            >
+              <Candlestick className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setChartType('bar')}
+              className={`p-2 rounded-md transition-all ${
+                chartType === 'bar'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+              title="Bar Chart"
+            >
+              <BarChart3 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setChartType('line')}
+              className={`p-2 rounded-md transition-all ${
+                chartType === 'line'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+              title="Line Chart"
+            >
+              <LineChart className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setChartType('area')}
+              className={`p-2 rounded-md transition-all ${
+                chartType === 'area'
+                  ? 'bg-background shadow-sm text-foreground'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+              }`}
+              title="Area Chart"
+            >
+              <AreaChart className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Timeframe Selector */}
+          <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
             {TIMEFRAMES.map(tf => (
               <button
                 key={tf}
                 onClick={() => setTimeframe(tf)}
-                className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   timeframe === tf
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background hover:bg-accent text-muted-foreground'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                 }`}
               >
                 {tf.toUpperCase()}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Range */}
-        <div className="flex items-center gap-1 border-l border-border/50 pl-3">
-          <span className="text-xs text-muted-foreground mr-1">Range:</span>
-          <div className="flex gap-1">
+          {/* Range Selector */}
+          <div className="flex items-center gap-1 p-1 bg-secondary/40 rounded-lg border border-border/30">
             {RANGES.map(r => (
               <button
                 key={r}
                 onClick={() => setRange(r)}
-                className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
                   range === r
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-background hover:bg-accent text-muted-foreground'
+                    ? 'bg-background shadow-sm text-foreground'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
                 }`}
               >
                 {r}
               </button>
             ))}
           </div>
-        </div>
 
-        {/* Indicators */}
-        <div className="flex items-center gap-1 border-l border-border/50 pl-3 ml-auto">
-          <button
-            onClick={() => setShowIndicators(!showIndicators)}
-            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
-              showIndicators
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                : 'bg-background hover:bg-accent text-muted-foreground'
-            }`}
-          >
-            <Activity className="w-3 h-3" />
-            MA(20)
-          </button>
-          <button
-            className="flex items-center gap-1 px-2 py-1 text-xs bg-background hover:bg-accent text-muted-foreground rounded-md transition-colors"
-            title="Add Indicator"
-          >
-            <Plus className="w-3 h-3" />
-          </button>
+          {/* Indicators */}
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => setShowIndicators(!showIndicators)}
+              className={`flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
+                showIndicators
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 shadow-sm'
+                  : 'bg-secondary/40 text-muted-foreground hover:text-foreground border border-border/30 hover:bg-background/50'
+              }`}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              MA(20)
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart Container */}
       <div 
         ref={chartContainerRef}
-        className="w-full rounded-xl overflow-hidden border border-border/50 shadow-lg"
+        className="w-full rounded-xl overflow-hidden border border-border/50 shadow-lg bg-background/50"
         style={{ height: '500px' }}
       />
     </div>
