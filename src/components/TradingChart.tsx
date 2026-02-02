@@ -10,7 +10,7 @@ import {
   BarSeries,
   HistogramSeries
 } from 'lightweight-charts';
-import { TrendingUp, BarChart3, Activity, LineChart, AreaChart, Candlestick } from 'lucide-react';
+import { TrendingUp, BarChart3, Activity, LineChart, AreaChart } from 'lucide-react';
 
 type ChartType = 'candlestick' | 'line' | 'area' | 'bar';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
@@ -213,7 +213,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
               }`}
               title="Candlestick"
             >
-              <Candlestick className="w-4 h-4" />
+              <Activity className="w-4 h-4" />
             </button>
             <button
               onClick={() => setChartType('bar')}
