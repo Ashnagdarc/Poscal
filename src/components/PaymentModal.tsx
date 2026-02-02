@@ -49,6 +49,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   const [paymentStatus, setPaymentStatus] = useState<'idle' | 'processing' | 'success' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState('');
   const processingRef = useRef(false);
+  const suppressCloseToastRef = useRef(false);
   const config = TIER_CONFIG.premium;
   const publicKey = import.meta.env.VITE_PAYSTACK_PUBLIC_KEY;
   const { user } = useAuth();
@@ -82,6 +83,9 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   }, [isOpen]);
 
   const handlePay = () => {
+        // Close the Radix dialog before opening Paystack to avoid focus/inert lock.
+        suppressCloseToastRef.current = true;
+        onClose();
         // Fallback: Reset UI if Paystack does not respond in 30 seconds
         const fallbackTimeout = setTimeout(() => {
           if (processingRef.current) {
@@ -148,6 +152,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
             setIsProcessing(false);
             setPaymentStatus('success');
             processingRef.current = false;
+            suppressCloseToastRef.current = false;
             // You can also send response.reference to your backend for verification
           },
           onClose: () => {
@@ -155,6 +160,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
             setIsProcessing(false);
             setPaymentStatus('idle');
             processingRef.current = false;
+            suppressCloseToastRef.current = false;
             toast.info('Payment cancelled. Try again whenever you\'re ready.');
           },
         });
@@ -174,6 +180,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       setIsProcessing(false);
       setPaymentStatus('error');
       processingRef.current = false;
+      suppressCloseToastRef.current = false;
       setErrorMessage(err?.message || 'Paystack transaction failed.');
     }
   };
@@ -183,8 +190,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
       <Dialog
         open={isOpen}
         onOpenChange={(open) => {
-          if (!open && paymentStatus !== 'success') {
+          if (!open && paymentStatus !== 'success' && !suppressCloseToastRef.current) {
             toast.info('Payment cancelled. Try again whenever you\'re ready.');
+          }
+          if (!open) {
+            suppressCloseToastRef.current = false;
           }
           if (!open) {
             onClose();
