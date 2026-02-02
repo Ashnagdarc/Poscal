@@ -98,11 +98,12 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
           dataRef.current[dataRef.current.length - 1] = updatedCandle;
           seriesRef.current.update(updatedCandle);
           
-          // Update price line to show current price (ask line)
-          const today = new Date().toISOString().split('T')[0];
-          priceLineDataRef.current = [
-            { time: today, value: livePrice }
-          ];
+          // Update price line to show current price (ask line across entire chart)
+          // Create price line data for all historical candles with current price
+          priceLineDataRef.current = dataRef.current.map(candle => ({
+            time: candle.time,
+            value: livePrice
+          }));
           if (priceLineSeriesRef.current) {
             priceLineSeriesRef.current.setData(priceLineDataRef.current);
           }
