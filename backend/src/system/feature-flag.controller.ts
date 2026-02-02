@@ -3,21 +3,6 @@ import { AuthGuard } from '@nestjs/passport';
 import { FeatureFlagService } from './feature-flag.service';
 import { AuthService } from '../auth/auth.service';
 
-// Public controller for reading feature flags (no auth required)
-@Controller('public/feature-flag')
-export class PublicFeatureFlagController {
-  constructor(private readonly featureFlagService: FeatureFlagService) {}
-
-  @Get('paid-lock')
-  async getPaidLockStatus() {
-    const enabled = await this.featureFlagService.getPaidLockStatus();
-    return {
-      success: true,
-      enabled,
-    };
-  }
-}
-
 // Admin controller for managing feature flags (requires auth)
 @Controller('admin/feature-flag')
 export class FeatureFlagController {

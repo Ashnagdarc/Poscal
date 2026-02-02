@@ -12,7 +12,6 @@ import { PaymentsModule } from './payments/payments.module';
 import { PricesModule } from './prices/prices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SystemModule } from './system/system.module';
-import { PublicModule } from './public/public.module';
 import { HealthController } from './health.controller';
 import { getDatabaseConfig } from './config/database.config';
 
@@ -46,7 +45,6 @@ import { getDatabaseConfig } from './config/database.config';
     PricesModule,
     NotificationsModule,
     SystemModule,
-    PublicModule,
     // Storage is a provider-only module; imported where needed
   ],
   controllers: [HealthController],
