@@ -163,63 +163,12 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     currentCandleStartTimeRef.current = new Date();
   }, [loadChartData]);
 
-  // Auto-generate new candles based on timeframe
-  useEffect(() => {
-    const candleDuration = getCandleDuration(timeframe);
-    let lastCandleTime = Date.now();
-    
-    const checkNewCandle = () => {
-      const now = Date.now();
-      
-      // If enough time has passed, create a new candle
-      if (now - lastCandleTime >= candleDuration && dataRef.current.length > 0) {
-        const lastCandle = dataRef.current[dataRef.current.length - 1];
-        const newOpen = lastCandle.close;
-        
-        // Add small random movement for new candle
-        const volatility = newOpen * 0.001;
-        const priceMove = (Math.random() - 0.5) * volatility;
-        const newClose = newOpen + priceMove;
-        
-        const newCandle: Candle = {
-          time: new Date().toISOString().split('T')[0],
-          open: parseFloat(newOpen.toFixed(5)),
-          high: parseFloat(Math.max(newOpen, newClose).toFixed(5)),
-          low: parseFloat(Math.min(newOpen, newClose).toFixed(5)),
-          close: parseFloat(newClose.toFixed(5)),
-        };
-        
-        dataRef.current.push(newCandle);
-        
-        // Remove oldest candle to maintain count
-        const maxCandles = getCandleCount(timeframe);
-        if (dataRef.current.length > maxCandles) {
-          dataRef.current.shift();
-        }
-        
-        lastCandleTime = now;
-        console.log('📊 New candle created:', newCandle);
-        updateChart();
-      }
-    };
-    
-    // Check more frequently for candle creation
-    candleTimerRef.current = setInterval(checkNewCandle, 500);
-    
-    return () => {
-      if (candleTimerRef.current) {
-        clearInterval(candleTimerRef.current);
-      }
-    };
-  }, [timeframe, updateChart]);
-
   // Update live price with real-time candlestick updates
   useEffect(() => {
     if (livePrice !== null && livePrice > 0 && dataRef.current.length > 0) {
       const lastCandle = dataRef.current[dataRef.current.length - 1];
       
       // Update OHLC for current candle - create dynamic movement
-      const prevClose = lastCandle.close;
       lastCandle.close = parseFloat(livePrice.toFixed(5));
       lastCandle.high = parseFloat(Math.max(lastCandle.high, livePrice).toFixed(5));
       lastCandle.low = parseFloat(Math.min(lastCandle.low, livePrice).toFixed(5));
@@ -227,48 +176,36 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       // Set current price for display
       setCurrentPrice(livePrice);
       setPriceChange(liveChange);
-      
-      // Update chart immediately to show candlestick movement
-      if (chartRef.current) {
-        const chart = chartRef.current.getEchartsInstance();
-        if (chart) {
-          const option = generateOption();
-          chart.setOption(option, { notMerge: true, lazyUpdate: false, silent: true });
-        }
-      }
-
-      console.log('💰 Price updated:', livePrice, 'Candle:', lastCandle);
     }
   }, [livePrice, liveChange]);
 
-  // Update chart - forces re-render with latest candle data
-  const updateChart = useCallback(() => {
-    if (!chartRef.current || dataRef.current.length === 0) return;
-
-    const chart = chartRef.current.getEchartsInstance();
-    if (!chart) return;
-
-    const option = generateOption();
-    // Use notMerge to completely replace series data
-    chart.setOption(option, { notMerge: true, lazyUpdate: false, silent: true });
-  }, [chartType, showIndicators]);
-
-  // Trigger chart updates
+  // Trigger chart updates when price changes
   useEffect(() => {
     if (updateTimerRef.current) {
       clearTimeout(updateTimerRef.current);
     }
     
     updateTimerRef.current = setTimeout(() => {
-      updateChart();
-    }, 100);
+      if (chartRef.current && dataRef.current.length > 0) {
+        const chart = chartRef.current.getEchartsInstance();
+        if (chart) {
+          const values = dataRef.current.map(candle => [candle.open, candle.close, candle.low, candle.high]);
+          chart.setOption({
+            series: [{
+              type: 'candlestick',
+              data: values
+            }]
+          }, { notMerge: false, lazyUpdate: false, silent: true });
+        }
+      }
+    }, 50);
 
     return () => {
       if (updateTimerRef.current) {
         clearTimeout(updateTimerRef.current);
       }
     };
-  }, [chartType, showIndicators, currentPrice, updateChart]);
+  }, [currentPrice]);
 
   // Generate ECharts option
   const generateOption = useCallback((): echarts.EChartsOption => {
