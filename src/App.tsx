@@ -72,7 +72,7 @@ const AppContent = () => {
           <Route 
             path="/admin/users" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiresAdmin>
                 <UserManagement />
               </ProtectedRoute>
             } 
@@ -80,7 +80,7 @@ const AppContent = () => {
           <Route 
             path="/admin/updates" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiresAdmin>
                 <AdminUpdates />
               </ProtectedRoute>
             } 
@@ -88,7 +88,7 @@ const AppContent = () => {
           <Route 
             path="/admin/payments" 
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiresAdmin>
                 <AdminPayments />
               </ProtectedRoute>
             } 
@@ -96,7 +96,7 @@ const AppContent = () => {
           <Route
             path="/admin/ingestor-health"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute requiresAdmin>
                 <AdminIngestorHealth />
               </ProtectedRoute>
             }

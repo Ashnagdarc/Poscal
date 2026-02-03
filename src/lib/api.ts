@@ -230,6 +230,33 @@ export const tradesApi = {
   },
 };
 
+// Trading Accounts API
+export const accountsApi = {
+  getAll: async (): Promise<any[]> => {
+    const { data } = await api.get('/accounts');
+    return data;
+  },
+
+  getOne: async (id: string): Promise<any> => {
+    const { data } = await api.get(`/accounts/${id}`);
+    return data;
+  },
+
+  create: async (payload: any): Promise<any> => {
+    const { data } = await api.post('/accounts', payload);
+    return data;
+  },
+
+  update: async (id: string, updates: any): Promise<any> => {
+    const { data } = await api.put(`/accounts/${id}`, updates);
+    return data;
+  },
+
+  delete: async (id: string): Promise<void> => {
+    await api.delete(`/accounts/${id}`);
+  },
+};
+
 // Subscription API
 export const subscriptionApi = {
   getDetails: async (): Promise<any> => {
