@@ -33,6 +33,7 @@ const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
 const AdminPayments = lazy(() => import("./pages/AdminPayments"));
 const AdminWebhookLogs = lazy(() => import("./pages/AdminWebhookLogs"));
+const AdminIngestorHealth = lazy(() => import("./pages/AdminIngestorHealth"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
 const NotFound = lazy(() => import("./pages/NotFound"));
@@ -91,6 +92,14 @@ const AppContent = () => {
                 <AdminPayments />
               </ProtectedRoute>
             } 
+          />
+          <Route
+            path="/admin/ingestor-health"
+            element={
+              <ProtectedRoute>
+                <AdminIngestorHealth />
+              </ProtectedRoute>
+            }
           />
           <Route
             path="/profile" 

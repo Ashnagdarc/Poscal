@@ -111,6 +111,18 @@ export const featureFlagApi = {
   },
 };
 
+export const systemApi = {
+  getIngestorHealth: async (): Promise<{
+    recent_401_count: number;
+    last_401_at: string | null;
+    last_flush_at: string | null;
+    backend_reachable: boolean;
+  }> => {
+    const { data } = await api.get('/admin/ingestor-health');
+    return data;
+  },
+};
+
 export const authApi = {
   signUp: async (email: string, password: string, fullName?: string): Promise<AuthResponse> => {
     const { data } = await api.post<AuthResponse>('/auth/signup', {
