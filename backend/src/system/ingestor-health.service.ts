@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import * as fs from 'fs';
 
-interface IngestorHealth {
+export interface IngestorHealth {
   recent_401_count: number;
   last_401_at: string | null;
   last_flush_at: string | null;

@@ -1,6 +1,6 @@
 import { Controller, Get, UseGuards, Request, ForbiddenException } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { IngestorHealthService } from './ingestor-health.service';
+import { IngestorHealth, IngestorHealthService } from './ingestor-health.service';
 import { AuthService } from '../auth/auth.service';
 
 @Controller('admin/ingestor-health')
@@ -12,7 +12,7 @@ export class IngestorHealthController {
 
   @Get()
   @UseGuards(AuthGuard('jwt'))
-  async getHealth(@Request() req: any) {
+  async getHealth(@Request() req: any): Promise<IngestorHealth> {
     const isAdmin = await this.authService.isAdmin(req.user.userId);
     if (!isAdmin) {
       throw new ForbiddenException('Only admins can view ingestor health');
