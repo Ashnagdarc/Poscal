@@ -123,6 +123,22 @@ export const systemApi = {
   },
 };
 
+export const adminUsersApi = {
+  getAll: async (): Promise<Array<{
+    id: string;
+    full_name: string | null;
+    email: string;
+    is_admin: boolean;
+    account_type: string | null;
+    created_at: string;
+    subscription_tier: string;
+    subscription_end: string | null;
+  }>> => {
+    const { data } = await api.get('/admin/users');
+    return data;
+  },
+};
+
 export const authApi = {
   signUp: async (email: string, password: string, fullName?: string): Promise<AuthResponse> => {
     const { data } = await api.post<AuthResponse>('/auth/signup', {

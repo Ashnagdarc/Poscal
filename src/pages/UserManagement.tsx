@@ -1,247 +1,93 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { logger } from "@/lib/logger";
-import { useAdmin } from "@/hooks/use-admin";
-import { useAuth } from "@/contexts/AuthContext";
-import { 
-  ArrowLeft, 
-  Users, 
-  Shield, 
-  ShieldOff, 
-  Trash2, 
-  Ban, 
-  Loader2, 
-  Search, 
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight
-} from "lucide-react";
+import { ArrowLeft, RefreshCw, Search, Users } from "lucide-react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useAdmin } from "@/hooks/use-admin";
 import { BottomNav } from "@/components/BottomNav";
-import { supabase, isSupabaseConfigured } from "@/lib/supabase-shim";
+import { adminUsersApi, featureFlagApi } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
-interface UserWithRole {
+interface AdminUserRow {
   id: string;
+  full_name: string | null;
   email: string;
-  created_at: string;
-  last_sign_in_at: string | null;
   is_admin: boolean;
-  is_banned: boolean;
+  account_type: string | null;
+  created_at: string;
+  subscription_tier: string;
+  subscription_end: string | null;
 }
 
-const USERS_PER_PAGE = 10;
+const USERS_PER_PAGE = 15;
 
 const UserManagement = () => {
   const navigate = useNavigate();
   const { isAdmin, loading: adminLoading } = useAdmin();
-  const { user: currentUser } = useAuth();
-  const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
-  
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean;
-    title: string;
-    description: string;
-    onConfirm: () => void;
-    variant?: "default" | "destructive";
-  }>({
-    isOpen: false,
-    title: "",
-    description: "",
-    onConfirm: () => {},
-  });
+  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
 
   const fetchUsers = async () => {
-    if (!isSupabaseConfigured || !isAdmin) return;
-    
     setLoading(true);
     try {
-      const { data, error } = await supabase.rpc('get_all_users_admin');
-      
-      if (error) {
-        logger.error('Error fetching users:', error);
-        toast.error("Failed to fetch users");
-        return;
-      }
-      
+      const data = await adminUsersApi.getAll();
       setUsers(data || []);
     } catch (err) {
-      logger.error('Error:', err);
       toast.error("Failed to fetch users");
+      console.error(err);
     } finally {
       setLoading(false);
     }
   };
 
+  const fetchPaidLock = async () => {
+    try {
+      const enabled = await featureFlagApi.getPaidLock();
+      setPaidLockEnabled(!!enabled);
+    } catch (err) {
+      console.error("Could not fetch paid lock flag", err);
+      setPaidLockEnabled(false);
+    }
+  };
+
   useEffect(() => {
+    if (!adminLoading && !isAdmin) {
+      navigate("/settings");
+      return;
+    }
     if (isAdmin) {
       fetchUsers();
-    } else if (!adminLoading && !isAdmin) {
-      navigate('/settings');
+      fetchPaidLock();
     }
   }, [isAdmin, adminLoading, navigate]);
 
-  const handlePromoteToAdmin = async (userId: string, userEmail: string) => {
-    setConfirmDialog({
-      isOpen: true,
-      title: "Promote to Admin",
-      description: `Are you sure you want to make ${userEmail} an admin? They will have full access to manage users and signals.`,
-      onConfirm: async () => {
-        setActionLoading(userId);
-        try {
-          const { error } = await supabase
-            .from('user_roles')
-            .insert({ user_id: userId, role: 'admin' });
-          
-          if (error) {
-            if (error.code === '23505') {
-              toast.error("User is already an admin");
-            } else {
-              throw error;
-            }
-          } else {
-            toast.success(`${userEmail} is now an admin`);
-            fetchUsers();
-          }
-        } catch (err) {
-          logger.error('Error promoting user:', err);
-          toast.error("Failed to promote user");
-        } finally {
-          setActionLoading(null);
-        }
-      },
+  const filteredUsers = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return users;
+    return users.filter((u) => {
+      return (
+        u.email.toLowerCase().includes(q) ||
+        (u.full_name || "").toLowerCase().includes(q) ||
+        (u.subscription_tier || "").toLowerCase().includes(q)
+      );
     });
-  };
+  }, [users, searchQuery]);
 
-  const handleDemoteAdmin = async (userId: string, userEmail: string) => {
-    if (userId === currentUser?.id) {
-      toast.error("You cannot demote yourself");
-      return;
-    }
-    
-    setConfirmDialog({
-      isOpen: true,
-      title: "Remove Admin Role",
-      description: `Are you sure you want to remove admin privileges from ${userEmail}?`,
-      variant: "destructive",
-      onConfirm: async () => {
-        setActionLoading(userId);
-        try {
-          const { error } = await supabase
-            .from('user_roles')
-            .delete()
-            .eq('user_id', userId)
-            .eq('role', 'admin');
-          
-          if (error) throw error;
-          
-          toast.success(`${userEmail} is no longer an admin`);
-          fetchUsers();
-        } catch (err) {
-          logger.error('Error demoting user:', err);
-          toast.error("Failed to demote user");
-        } finally {
-          setActionLoading(null);
-        }
-      },
-    });
-  };
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
+  const pageStart = (currentPage - 1) * USERS_PER_PAGE;
+  const pageUsers = filteredUsers.slice(pageStart, pageStart + USERS_PER_PAGE);
 
-  const handleBanUser = async (userId: string, userEmail: string, isBanned: boolean) => {
-    if (userId === currentUser?.id) {
-      toast.error("You cannot ban yourself");
-      return;
-    }
-    
-    setConfirmDialog({
-      isOpen: true,
-      title: isBanned ? "Unban User" : "Ban User",
-      description: isBanned 
-        ? `Are you sure you want to unban ${userEmail}? They will be able to access the app again.`
-        : `Are you sure you want to ban ${userEmail}? They will no longer be able to access the app.`,
-      variant: isBanned ? "default" : "destructive",
-      onConfirm: async () => {
-        setActionLoading(userId);
-        try {
-          const { error } = await supabase.rpc('toggle_user_ban', {
-            target_user_id: userId,
-            ban_status: !isBanned
-          });
-          
-          if (error) throw error;
-          
-          toast.success(isBanned ? `${userEmail} has been unbanned` : `${userEmail} has been banned`);
-          fetchUsers();
-        } catch (err) {
-          logger.error('Error toggling ban:', err);
-          toast.error("Failed to update ban status");
-        } finally {
-          setActionLoading(null);
-        }
-      },
-    });
-  };
-
-  const handleDeleteUser = async (userId: string, userEmail: string) => {
-    if (userId === currentUser?.id) {
-      toast.error("You cannot delete yourself");
-      return;
-    }
-    
-    setConfirmDialog({
-      isOpen: true,
-      title: "Delete User",
-      description: `Are you sure you want to permanently delete ${userEmail}? This action cannot be undone.`,
-      variant: "destructive",
-      onConfirm: async () => {
-        setActionLoading(userId);
-        try {
-          const { error } = await supabase.rpc('delete_user_admin', {
-            target_user_id: userId
-          });
-          
-          if (error) throw error;
-          
-          toast.success(`${userEmail} has been deleted`);
-          fetchUsers();
-        } catch (err) {
-          logger.error('Error deleting user:', err);
-          toast.error("Failed to delete user");
-        } finally {
-          setActionLoading(null);
-        }
-      },
-    });
-  };
-
-  const filteredUsers = users.filter(user => 
-    user.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE);
-  const startIndex = (currentPage - 1) * USERS_PER_PAGE;
-  const endIndex = startIndex + USERS_PER_PAGE;
-  const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
-
-  // Reset to page 1 when search query changes
   useEffect(() => {
-    setCurrentPage(1);
-  }, [searchQuery]);
+    if (currentPage > totalPages) setCurrentPage(1);
+  }, [currentPage, totalPages]);
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return "Never";
-    return new Date(dateString).toLocaleDateString();
-  };
-
-  if (adminLoading) {
+  if (adminLoading || (isAdmin && loading)) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -251,234 +97,112 @@ const UserManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-24">
-      {/* Header */}
-      <header className="pt-12 pb-4 px-6 flex items-center gap-3 animate-fade-in">
-        <button
-          onClick={() => navigate('/settings')}
-          className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-        >
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-        </button>
-        <div className="flex items-center gap-2">
-          <Users className="w-6 h-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+    <div className="min-h-screen bg-background pb-24">
+      <header className="pt-12 pb-4 px-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")}>
+            <ArrowLeft className="w-5 h-5" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center">
+              <Users className="w-5 h-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-foreground">User Management</h1>
+              <p className="text-sm text-muted-foreground">Name, email, and subscription tier</p>
+            </div>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <div className="text-sm text-muted-foreground">Paid lock:</div>
+            <span className={`text-xs px-2 py-1 rounded-full ${paidLockEnabled ? "bg-primary/20 text-primary" : "bg-secondary/50 text-muted-foreground"}`}>
+              {paidLockEnabled ? "Enabled" : "Disabled"}
+            </span>
+          </div>
         </div>
-        <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Admin</span>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-6 py-4 space-y-4 animate-slide-up">
-        {/* Search and Refresh */}
-        <div className="flex gap-2">
+      <main className="px-6 space-y-4">
+        <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Search users..."
+            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+            <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full h-12 pl-10 pr-4 bg-secondary rounded-2xl text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+              placeholder="Search name, email, tier..."
+              className="pl-9"
             />
           </div>
-          <button
-            onClick={fetchUsers}
-            disabled={loading}
-            className="w-12 h-12 bg-secondary rounded-2xl flex items-center justify-center transition-all hover:bg-muted disabled:opacity-50"
-          >
-            <RefreshCw className={`w-5 h-5 text-foreground ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <Button variant="outline" size="icon" onClick={fetchUsers} title="Refresh">
+            <RefreshCw className="w-4 h-4" />
+          </Button>
         </div>
 
-        {/* Stats */}
-        <div className="bg-secondary rounded-2xl p-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <p className="text-2xl font-bold text-foreground">{users.length}</p>
-              <p className="text-xs text-muted-foreground">Total Users</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-primary">{users.filter(u => u.is_admin).length}</p>
-              <p className="text-xs text-muted-foreground">Admins</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-destructive">{users.filter(u => u.is_banned).length}</p>
-              <p className="text-xs text-muted-foreground">Banned</p>
-            </div>
-          </div>
-        </div>
-        
-        {/* Users List */}
-        {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-          </div>
-        ) : filteredUsers.length === 0 ? (
-          <div className="bg-secondary rounded-2xl p-8 text-center">
-            <Users className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">No users found</p>
-          </div>
-        ) : (
-          <>
-            <div className="space-y-3">
-              {paginatedUsers.map((user) => (
-                <div
-                  key={user.id}
-                  className={`bg-secondary rounded-2xl p-4 space-y-3 ${user.is_banned ? 'opacity-60 border border-destructive/30' : ''}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="font-medium text-foreground truncate">{user.email}</p>
-                        {user.is_admin && (
-                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">Admin</span>
-                        )}
-                        {user.is_banned && (
-                          <span className="text-xs bg-destructive/20 text-destructive px-2 py-0.5 rounded-full">Banned</span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        Joined: {formatDate(user.created_at)} • Last login: {formatDate(user.last_sign_in_at)}
-                      </p>
-                    </div>
-                    {user.id === currentUser?.id && (
-                      <span className="text-xs bg-foreground/10 text-muted-foreground px-2 py-1 rounded-full">You</span>
+        <div className="grid gap-3">
+          {pageUsers.map((user) => (
+            <div
+              key={user.id}
+              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 border border-border/50"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-semibold text-foreground">
+                    {user.full_name || "Unnamed User"}
+                    {user.is_admin && (
+                      <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">
+                        Admin
+                      </span>
                     )}
                   </div>
-                  
-                  {/* Action Buttons */}
-                  {user.id !== currentUser?.id && (
-                    <div className="flex gap-2">
-                      {user.is_admin ? (
-                        <button
-                          onClick={() => handleDemoteAdmin(user.id, user.email)}
-                          disabled={actionLoading === user.id}
-                          className="flex-1 h-10 bg-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-amber-500/30 disabled:opacity-50"
-                        >
-                          {actionLoading === user.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <ShieldOff className="w-4 h-4" />
-                          )}
-                          Demote
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handlePromoteToAdmin(user.id, user.email)}
-                          disabled={actionLoading === user.id}
-                          className="flex-1 h-10 bg-primary/20 text-primary rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-primary/30 disabled:opacity-50"
-                        >
-                          {actionLoading === user.id ? (
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                          ) : (
-                            <Shield className="w-4 h-4" />
-                          )}
-                          Make Admin
-                        </button>
-                      )}
-                      
-                      <button
-                        onClick={() => handleBanUser(user.id, user.email, user.is_banned)}
-                        disabled={actionLoading === user.id}
-                        className={`flex-1 h-10 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all disabled:opacity-50 ${
-                          user.is_banned 
-                            ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/30' 
-                            : 'bg-orange-500/20 text-orange-600 dark:text-orange-400 hover:bg-orange-500/30'
-                        }`}
-                      >
-                        {actionLoading === user.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Ban className="w-4 h-4" />
-                        )}
-                        {user.is_banned ? 'Unban' : 'Ban'}
-                      </button>
-                      
-                      <button
-                        onClick={() => handleDeleteUser(user.id, user.email)}
-                        disabled={actionLoading === user.id}
-                        className="flex-1 h-10 bg-destructive/20 text-destructive rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-all hover:bg-destructive/30 disabled:opacity-50"
-                      >
-                        {actionLoading === user.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-4 h-4" />
-                        )}
-                        Delete
-                      </button>
+                  <div className="text-sm text-muted-foreground">{user.email}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs text-muted-foreground">Subscription</div>
+                  <div className="text-sm font-semibold text-foreground">
+                    {(user.subscription_tier || "free").toUpperCase()}
+                  </div>
+                  {user.subscription_end && (
+                    <div className="text-xs text-muted-foreground">
+                      Expires {new Date(user.subscription_end).toLocaleDateString()}
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
-
-            {/* Pagination Controls */}
-            {totalPages > 1 && (
-              <div className="bg-secondary rounded-2xl p-4">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground">
-                    Showing {startIndex + 1}-{Math.min(endIndex, filteredUsers.length)} of {filteredUsers.length}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                      disabled={currentPage === 1}
-                      className="w-10 h-10 bg-background rounded-xl flex items-center justify-center transition-all hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronLeft className="w-5 h-5 text-foreground" />
-                    </button>
-                    <div className="flex gap-1">
-                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                        let pageNum;
-                        if (totalPages <= 5) {
-                          pageNum = i + 1;
-                        } else if (currentPage <= 3) {
-                          pageNum = i + 1;
-                        } else if (currentPage >= totalPages - 2) {
-                          pageNum = totalPages - 4 + i;
-                        } else {
-                          pageNum = currentPage - 2 + i;
-                        }
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={`w-10 h-10 rounded-xl text-sm font-medium transition-all ${
-                              currentPage === pageNum
-                                ? 'bg-foreground text-background'
-                                : 'bg-background text-foreground hover:bg-muted'
-                            }`}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    <button
-                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                      disabled={currentPage === totalPages}
-                      className="w-10 h-10 bg-background rounded-xl flex items-center justify-center transition-all hover:bg-muted disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <ChevronRight className="w-5 h-5 text-foreground" />
-                    </button>
-                  </div>
-                </div>
               </div>
-            )}
-          </>
-        )}
+            </div>
+          ))}
+
+          {pageUsers.length === 0 && (
+            <div className="text-center text-muted-foreground py-10">No users found.</div>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between text-sm text-muted-foreground pt-2">
+          <span>
+            Showing {pageUsers.length} of {filteredUsers.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              Prev
+            </Button>
+            <span>
+              Page {currentPage} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages}
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
       </main>
-      
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        onClose={() => setConfirmDialog(prev => ({ ...prev, isOpen: false }))}
-        onConfirm={confirmDialog.onConfirm}
-        title={confirmDialog.title}
-        description={confirmDialog.description}
-        variant={confirmDialog.variant}
-        confirmText="Confirm"
-        cancelText="Cancel"
-      />
-      
+
       <BottomNav />
     </div>
   );

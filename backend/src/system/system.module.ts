@@ -10,14 +10,24 @@ import { FeatureFlagService } from './feature-flag.service';
 import { AuthModule } from '../auth/auth.module';
 import { IngestorHealthController } from './ingestor-health.controller';
 import { IngestorHealthService } from './ingestor-health.service';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
+import { User } from '../auth/entities/user.entity';
+import { Payment } from '../payments/entities/payment.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([AppSetting, AppUpdate]),
+    TypeOrmModule.forFeature([AppSetting, AppUpdate, User, Payment]),
     AuthModule,
   ],
-  controllers: [UpdatesController, FeatureFlagController, PublicFeatureFlagController, IngestorHealthController],
-  providers: [UpdatesService, FeatureFlagService, IngestorHealthService],
-  exports: [TypeOrmModule, UpdatesService, FeatureFlagService, IngestorHealthService],
+  controllers: [
+    UpdatesController,
+    FeatureFlagController,
+    PublicFeatureFlagController,
+    IngestorHealthController,
+    AdminUsersController,
+  ],
+  providers: [UpdatesService, FeatureFlagService, IngestorHealthService, AdminUsersService],
+  exports: [TypeOrmModule, UpdatesService, FeatureFlagService, IngestorHealthService, AdminUsersService],
 })
 export class SystemModule {}

@@ -1,7 +1,7 @@
 // ...existing code...
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield, X } from "lucide-react";
+import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, CreditCard, FileText, Shield, X, Users } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
@@ -9,7 +9,6 @@ import { BottomNav } from "@/components/BottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
-import { AdminUsersTab } from "@/components/AdminUsersTab";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -562,6 +561,23 @@ const Settings = () => {
                       <Megaphone className="w-4.5 h-4.5 text-primary" />
                     </div>
                     <span className="font-medium text-foreground">App Updates</span>
+                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Admin</span>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                </button>
+              )}
+
+              {/* Admin User Management */}
+              {isAdmin && (
+                <button
+                  onClick={() => navigate('/admin/users')}
+                  className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                      <Users className="w-4.5 h-4.5 text-primary" />
+                    </div>
+                    <span className="font-medium text-foreground">User Management</span>
                     <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Admin</span>
                   </div>
                   <ChevronRight className="w-5 h-5 text-muted-foreground" />
