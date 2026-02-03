@@ -64,9 +64,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const resetPassword = async (email: string) => {
-    // TODO: Implement password reset with backend
-    console.warn('[auth] Password reset not yet implemented');
-    return { error: new Error('Password reset not yet implemented') };
+    try {
+      await authApi.requestReset(email);
+      return { error: null };
+    } catch (error: any) {
+      console.error('[auth] Reset password error:', error);
+      return { error: error.response?.data?.message || error.message || 'Failed to request password reset' };
+    }
   };
 
   const signOut = async () => {
