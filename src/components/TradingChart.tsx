@@ -8,6 +8,7 @@ import { getBasePrice } from '../config/chartConfig';
 type ChartType = 'candlestick' | 'line' | 'area';
 type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w' | '1M';
 type DrawingMode = 'hline' | 'trend' | 'rect' | null;
+const ENABLE_ADVANCED_CHART_TOOLS = false;
 
 const PAIRS = [
   'EUR/USD', 'GBP/USD', 'USD/JPY', 'AUD/USD', 'USD/CAD',
@@ -730,68 +731,76 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         </div>
       </div>
 
-      <div className="px-4 py-2 border-b border-border/70 bg-background/40 flex items-center justify-between gap-3 flex-wrap">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => adjustZoom(0.8)}
-            className="px-2 py-1 border border-border rounded text-xs hover:bg-accent"
-            title="Zoom in"
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={() => adjustZoom(1.25)}
-            className="px-2 py-1 border border-border rounded text-xs hover:bg-accent"
-            title="Zoom out"
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-          <button onClick={() => panBy(-10)} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">◀</button>
-          <button onClick={() => panBy(10)} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">▶</button>
-          <button
-            onClick={resetZoom}
-            className="px-2 py-1 border border-border rounded text-xs hover:bg-accent flex items-center gap-1"
-          >
-            <RotateCcw className="w-3.5 h-3.5" />
-            Reset
-          </button>
-          <button
-            onClick={() => setAutoScale((v) => !v)}
-            className={`px-2 py-1 border rounded text-xs ${autoScale ? 'border-green-500/50 text-green-500' : 'border-border hover:bg-accent'}`}
-          >
-            Autoscale {autoScale ? 'On' : 'Off'}
-          </button>
-        </div>
+      {ENABLE_ADVANCED_CHART_TOOLS ? (
+        <div className="px-4 py-2 border-b border-border/70 bg-background/40 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => adjustZoom(0.8)}
+              className="px-2 py-1 border border-border rounded text-xs hover:bg-accent"
+              title="Zoom in"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => adjustZoom(1.25)}
+              className="px-2 py-1 border border-border rounded text-xs hover:bg-accent"
+              title="Zoom out"
+            >
+              <Minus className="w-3.5 h-3.5" />
+            </button>
+            <button onClick={() => panBy(-10)} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">◀</button>
+            <button onClick={() => panBy(10)} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">▶</button>
+            <button
+              onClick={resetZoom}
+              className="px-2 py-1 border border-border rounded text-xs hover:bg-accent flex items-center gap-1"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Reset
+            </button>
+            <button
+              onClick={() => setAutoScale((v) => !v)}
+              className={`px-2 py-1 border rounded text-xs ${autoScale ? 'border-green-500/50 text-green-500' : 'border-border hover:bg-accent'}`}
+            >
+              Autoscale {autoScale ? 'On' : 'Off'}
+            </button>
+          </div>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => { setDrawingMode(drawingMode === 'hline' ? null : 'hline'); setPendingPoint(null); }}
-            className={`px-2 py-1 border rounded text-xs ${drawingMode === 'hline' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
-          >
-            H-Line
-          </button>
-          <button
-            onClick={() => { setDrawingMode(drawingMode === 'trend' ? null : 'trend'); setPendingPoint(null); }}
-            className={`px-2 py-1 border rounded text-xs ${drawingMode === 'trend' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
-          >
-            Trendline
-          </button>
-          <button
-            onClick={() => { setDrawingMode(drawingMode === 'rect' ? null : 'rect'); setPendingPoint(null); }}
-            className={`px-2 py-1 border rounded text-xs ${drawingMode === 'rect' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
-          >
-            Rectangle
-          </button>
-          <button onClick={clearDrawings} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">
-            Clear Drawings
-          </button>
-          {drawingMode && (
-            <span className="text-xs text-muted-foreground">
-              {pendingPoint ? 'Select second point...' : `Drawing: ${drawingMode}`}
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => { setDrawingMode(drawingMode === 'hline' ? null : 'hline'); setPendingPoint(null); }}
+              className={`px-2 py-1 border rounded text-xs ${drawingMode === 'hline' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
+            >
+              H-Line
+            </button>
+            <button
+              onClick={() => { setDrawingMode(drawingMode === 'trend' ? null : 'trend'); setPendingPoint(null); }}
+              className={`px-2 py-1 border rounded text-xs ${drawingMode === 'trend' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
+            >
+              Trendline
+            </button>
+            <button
+              onClick={() => { setDrawingMode(drawingMode === 'rect' ? null : 'rect'); setPendingPoint(null); }}
+              className={`px-2 py-1 border rounded text-xs ${drawingMode === 'rect' ? 'border-primary text-primary' : 'border-border hover:bg-accent'}`}
+            >
+              Rectangle
+            </button>
+            <button onClick={clearDrawings} className="px-2 py-1 border border-border rounded text-xs hover:bg-accent">
+              Clear Drawings
+            </button>
+            {drawingMode && (
+              <span className="text-xs text-muted-foreground">
+                {pendingPoint ? 'Select second point...' : `Drawing: ${drawingMode}`}
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="px-4 py-2 border-b border-border/70 bg-background/40">
+          <div className="text-xs text-muted-foreground">
+            Advanced chart tools (drawings, zoom controls, custom layouts) are coming soon.
+          </div>
+        </div>
+      )}
 
       <div className="relative">
         <EChartsReact
