@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -15,6 +15,7 @@ import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import UpgradeBanner from '@/components/UpgradeBanner';
 import { Analytics } from "@vercel/analytics/react";
+import { BottomNav } from "@/components/BottomNav";
 
 // Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
@@ -41,6 +42,10 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const queryClient = new QueryClient();
 
 const AppContent = () => {
+  const location = useLocation();
+  const hideBottomNavOn = ['/signin', '/signup', '/forgot-password', '/reset-password', '/welcome', '/terms', '/privacy'];
+  const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
+
   return (
     <>
       <SkipLink />
@@ -114,6 +119,7 @@ const AppContent = () => {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      {shouldShowBottomNav && <BottomNav persistent />}
     </>
   );
 };

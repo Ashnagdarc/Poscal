@@ -10,7 +10,11 @@ const navItems = [
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
 
-export const BottomNav = () => {
+interface BottomNavProps {
+  persistent?: boolean;
+}
+
+export const BottomNav = ({ persistent = false }: BottomNavProps) => {
   const navigate = useNavigate();
   const location = useLocation();
   const navRef = useRef<HTMLDivElement>(null);
@@ -46,6 +50,15 @@ export const BottomNav = () => {
     return () => window.removeEventListener('resize', updateIndicator);
   }, [updateIndicator]);
 
+  // When a persistent nav is mounted at app shell level, suppress page-level nav instances.
+  if (!persistent && (window as any).__POSCAL_PERSISTENT_NAV_MOUNTED) {
+    return null;
+  }
+
+  if (persistent) {
+    (window as any).__POSCAL_PERSISTENT_NAV_MOUNTED = true;
+  }
+
   return (
     <nav 
       className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-3"
@@ -56,15 +69,15 @@ export const BottomNav = () => {
       <div 
         ref={navRef}
         className="relative isolate flex justify-around items-center max-w-md mx-auto px-3 py-3.5 rounded-[2rem]
-                   bg-[linear-gradient(180deg,rgba(255,255,255,0.3),rgba(255,255,255,0.08))]
-                   dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04))]
-                   backdrop-blur-3xl backdrop-saturate-[1.9]
-                   border border-white/40 dark:border-white/10
-                   shadow-[0_20px_45px_-22px_rgba(0,0,0,0.45),0_8px_20px_-12px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.55)]
-                   dark:shadow-[0_24px_52px_-24px_rgba(0,0,0,0.8),0_10px_24px_-16px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.12)]"
+                   bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))]
+                   dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.02))]
+                   backdrop-blur-[30px] backdrop-saturate-[2]
+                   border border-white/25 dark:border-white/8
+                   shadow-[0_18px_36px_-22px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.32)]
+                   dark:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.1)]"
       >
         {/* Glass sheen */}
-        <div className="pointer-events-none absolute inset-x-3 top-[3px] h-1/2 rounded-[1.6rem] bg-gradient-to-b from-white/45 via-white/10 to-transparent dark:from-white/15 dark:via-white/5 dark:to-transparent" />
+        <div className="pointer-events-none absolute inset-x-3 top-[3px] h-1/2 rounded-[1.6rem] bg-gradient-to-b from-white/25 via-white/5 to-transparent dark:from-white/12 dark:via-white/3 dark:to-transparent" />
 
         {/* Floating glow */}
         <div className="pointer-events-none absolute -inset-1 rounded-[2.2rem] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.22),transparent_60%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_60%)]" />
@@ -72,10 +85,10 @@ export const BottomNav = () => {
         {/* Animated active pill */}
         <div
           className={`absolute top-1.5 bottom-1.5 rounded-full
-                     bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.72))]
-                     dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.1))]
-                     shadow-[0_6px_18px_-8px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.9)]
-                     dark:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.2)]
+                     bg-[linear-gradient(180deg,rgba(255,255,255,0.26),rgba(255,255,255,0.12))]
+                     dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.06))]
+                     shadow-[0_4px_16px_-10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]
+                     dark:shadow-[0_6px_20px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.15)]
                      ${isInitialized ? 'transition-all duration-[400ms] ease-[cubic-bezier(0.25,1,0.5,1)]' : ''}`}
           style={{
             left: indicatorStyle.left,
