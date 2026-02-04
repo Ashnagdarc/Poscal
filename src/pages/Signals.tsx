@@ -12,7 +12,6 @@ import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
-import { TradingChart } from '@/components/TradingChart';
 import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useNotifications } from '@/hooks/use-notifications';
 import { toast } from 'sonner';
@@ -714,9 +713,12 @@ const Signals = () => {
           </div>
         ) : signals.length === 0 ? (
           <>
-            {/* Trading Chart */}
-            <div className="mb-6">
-              <TradingChart symbol={pairFilter !== 'All Pairs' ? pairFilter : 'EUR/USD'} />
+            {/* Trading Chart - Coming Soon */}
+            <div className="mb-6 bg-secondary rounded-2xl p-6 text-center border border-border/50">
+              <h3 className="text-lg font-semibold text-foreground mb-2">Advanced Charting Coming Soon</h3>
+              <p className="text-sm text-muted-foreground">
+                We are upgrading the chart experience. This feature is temporarily hidden while improvements are completed.
+              </p>
             </div>
 
             {/* No Signals Found */}
