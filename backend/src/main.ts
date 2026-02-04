@@ -5,8 +5,11 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { IoAdapter } from '@nestjs/platform-socket.io';
 
 async function bootstrap() {
-  // Ensure the Node crypto API is available as a global before loading any modules that expect it
-  (global as any).crypto = nodeCrypto;
+  // Node 20+ already exposes globalThis.crypto as a read-only Web Crypto object.
+  // Only polyfill it on runtimes where it is missing.
+  if (!(globalThis as any).crypto) {
+    (globalThis as any).crypto = nodeCrypto.webcrypto;
+  }
 
   // Dynamically import AppModule after crypto is set on global
   const { AppModule } = await import('./app.module');
