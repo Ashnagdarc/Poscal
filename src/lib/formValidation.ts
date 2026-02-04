@@ -33,7 +33,6 @@ export const NewTradeFormSchema = z.object({
     .refine(val => !val || !isNaN(parseFloat(val)), "Must be a valid number")
     .refine(val => !val || (parseFloat(val) >= 0 && parseFloat(val) <= 100), "Must be between 0-100"),
   notes: z.string().max(1000, "Notes too long (max 1000 characters)").optional(),
-  account_id: z.string().optional(),
 });
 
 export const SignalFormSchema = z.object({

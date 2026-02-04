@@ -216,13 +216,13 @@ export const signalsApi = {
 
 // Trading Journal API
 export const tradesApi = {
-  getAll: async (query?: { account_id?: string; status?: string }): Promise<any[]> => {
+  getAll: async (query?: { status?: string }): Promise<any[]> => {
     const { data } = await api.get('/trades', { params: query });
     return data;
   },
 
-  getStatistics: async (accountId?: string): Promise<any> => {
-    const { data } = await api.get('/trades/statistics', { params: { account_id: accountId } });
+  getStatistics: async (): Promise<any> => {
+    const { data } = await api.get('/trades/statistics');
     return data;
   },
 
@@ -243,33 +243,6 @@ export const tradesApi = {
 
   delete: async (id: string): Promise<void> => {
     await api.delete(`/trades/${id}`);
-  },
-};
-
-// Trading Accounts API
-export const accountsApi = {
-  getAll: async (): Promise<any[]> => {
-    const { data } = await api.get('/accounts');
-    return data;
-  },
-
-  getOne: async (id: string): Promise<any> => {
-    const { data } = await api.get(`/accounts/${id}`);
-    return data;
-  },
-
-  create: async (payload: any): Promise<any> => {
-    const { data } = await api.post('/accounts', payload);
-    return data;
-  },
-
-  update: async (id: string, updates: any): Promise<any> => {
-    const { data } = await api.put(`/accounts/${id}`, updates);
-    return data;
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/accounts/${id}`);
   },
 };
 

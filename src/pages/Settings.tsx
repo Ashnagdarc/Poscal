@@ -12,7 +12,7 @@ import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { featureFlagApi, accountsApi } from '@/lib/api';
+import { featureFlagApi } from '@/lib/api';
 
 interface PaymentDetails {
   name: string;
@@ -21,18 +21,6 @@ interface PaymentDetails {
   tier: string;
   amount?: number;
   reference?: string;
-}
-
-interface TradingAccount {
-  id: string;
-  user_id: string;
-  account_name: string;
-  platform: string;
-  initial_balance: number;
-  current_balance: number;
-  currency: string;
-  is_active: boolean;
-  created_at: string;
 }
 
 function PaymentDetailsModal({ isOpen, details, onClose }: { isOpen: boolean; details: PaymentDetails | null; onClose: () => void }) {
@@ -200,17 +188,6 @@ const Settings = () => {
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { currency, setCurrency } = useCurrency();
-  const [accounts, setAccounts] = useState<TradingAccount[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(false);
-  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
-  const [accountForm, setAccountForm] = useState({
-    account_name: '',
-    platform: '',
-    initial_balance: '',
-    current_balance: '',
-    currency: 'USD',
-    is_active: true,
-  });
 
   useEffect(() => {
     const savedRisk = localStorage.getItem("defaultRisk");
@@ -236,21 +213,6 @@ const Settings = () => {
     }
   }, [isAdmin]);
 
-  useEffect(() => {
-    if (!user) return;
-    (async () => {
-      try {
-        setAccountsLoading(true);
-        const data = await accountsApi.getAll();
-        setAccounts(data || []);
-      } catch (err) {
-        console.error('Failed to load accounts', err);
-      } finally {
-        setAccountsLoading(false);
-      }
-    })();
-  }, [user]);
-
   const togglePaidLockFromSettings = async () => {
     try {
       const desiredState = !(paidLockEnabled ?? false);
@@ -275,75 +237,6 @@ const Settings = () => {
     setHapticsEnabled(newValue);
     localStorage.setItem("hapticsEnabled", String(newValue));
     if (newValue) lightTap();
-  };
-
-  const resetAccountForm = () => {
-    setAccountForm({
-      account_name: '',
-      platform: '',
-      initial_balance: '',
-      current_balance: '',
-      currency: 'USD',
-      is_active: true,
-    });
-    setEditingAccountId(null);
-  };
-
-  const submitAccount = async () => {
-    if (!user) return;
-    try {
-      const payload = {
-        account_name: accountForm.account_name.trim(),
-        platform: accountForm.platform.trim(),
-        initial_balance: Number(accountForm.initial_balance),
-        current_balance: Number(accountForm.current_balance),
-        currency: accountForm.currency || 'USD',
-        is_active: accountForm.is_active,
-      };
-
-      if (!payload.account_name || !payload.platform || Number.isNaN(payload.initial_balance) || Number.isNaN(payload.current_balance)) {
-        toast.error('Please fill in account name, platform, and balances');
-        return;
-      }
-
-      if (editingAccountId) {
-        await accountsApi.update(editingAccountId, payload);
-        toast.success('Account updated');
-      } else {
-        await accountsApi.create(payload);
-        toast.success('Account created');
-      }
-
-      const data = await accountsApi.getAll();
-      setAccounts(data || []);
-      resetAccountForm();
-    } catch (err: any) {
-      console.error('Account save failed', err);
-      toast.error(err?.message || 'Failed to save account');
-    }
-  };
-
-  const startEditAccount = (account: TradingAccount) => {
-    setEditingAccountId(account.id);
-    setAccountForm({
-      account_name: account.account_name,
-      platform: account.platform,
-      initial_balance: String(account.initial_balance ?? ''),
-      current_balance: String(account.current_balance ?? ''),
-      currency: account.currency || 'USD',
-      is_active: !!account.is_active,
-    });
-  };
-
-  const deleteAccount = async (accountId: string) => {
-    try {
-      await accountsApi.delete(accountId);
-      setAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
-      toast.success('Account removed');
-    } catch (err: any) {
-      console.error('Account delete failed', err);
-      toast.error(err?.message || 'Failed to delete account');
-    }
   };
 
   const handleRiskChange = (value: string) => {
@@ -436,113 +329,6 @@ const Settings = () => {
             )}
           </div>
         </section>
-
-        {/* Trading Accounts Section */}
-        {user && (
-          <section>
-            <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Trading Accounts</h2>
-            <div className="bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border/50 p-5 space-y-4">
-              <div className="grid gap-3 md:grid-cols-2">
-                <input
-                  className="h-11 rounded-xl border border-border/60 bg-background/60 px-3 text-sm text-foreground"
-                  placeholder="Account name"
-                  value={accountForm.account_name}
-                  onChange={(e) => setAccountForm({ ...accountForm, account_name: e.target.value })}
-                />
-                <input
-                  className="h-11 rounded-xl border border-border/60 bg-background/60 px-3 text-sm text-foreground"
-                  placeholder="Platform (e.g. MetaTrader)"
-                  value={accountForm.platform}
-                  onChange={(e) => setAccountForm({ ...accountForm, platform: e.target.value })}
-                />
-                <input
-                  className="h-11 rounded-xl border border-border/60 bg-background/60 px-3 text-sm text-foreground"
-                  placeholder="Initial balance"
-                  type="number"
-                  value={accountForm.initial_balance}
-                  onChange={(e) => setAccountForm({ ...accountForm, initial_balance: e.target.value })}
-                />
-                <input
-                  className="h-11 rounded-xl border border-border/60 bg-background/60 px-3 text-sm text-foreground"
-                  placeholder="Current balance"
-                  type="number"
-                  value={accountForm.current_balance}
-                  onChange={(e) => setAccountForm({ ...accountForm, current_balance: e.target.value })}
-                />
-                <select
-                  className="h-11 rounded-xl border border-border/60 bg-background/60 px-3 text-sm text-foreground"
-                  value={accountForm.currency}
-                  onChange={(e) => setAccountForm({ ...accountForm, currency: e.target.value })}
-                >
-                  {ACCOUNT_CURRENCIES.map((curr) => (
-                    <option key={curr.code} value={curr.code}>
-                      {curr.code}
-                    </option>
-                  ))}
-                </select>
-                <label className="flex items-center gap-3 text-sm text-foreground">
-                  <input
-                    type="checkbox"
-                    checked={accountForm.is_active}
-                    onChange={(e) => setAccountForm({ ...accountForm, is_active: e.target.checked })}
-                  />
-                  Active account
-                </label>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={submitAccount}
-                  className="h-11 px-4 rounded-xl bg-primary text-primary-foreground font-medium"
-                >
-                  {editingAccountId ? 'Update Account' : 'Add Account'}
-                </button>
-                {editingAccountId && (
-                  <button
-                    onClick={resetAccountForm}
-                    className="h-11 px-4 rounded-xl bg-secondary text-foreground"
-                  >
-                    Cancel
-                  </button>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                {accountsLoading && <p className="text-xs text-muted-foreground">Loading accounts…</p>}
-                {!accountsLoading && accounts.length === 0 && (
-                  <p className="text-xs text-muted-foreground">No accounts yet. Add one above.</p>
-                )}
-                {accounts.map((account) => (
-                  <div
-                    key={account.id}
-                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/50 bg-background/60 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{account.account_name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {account.platform} · {account.currency} · {account.is_active ? 'Active' : 'Inactive'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => startEditAccount(account)}
-                        className="text-xs px-3 py-2 rounded-lg bg-secondary text-foreground"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteAccount(account.id)}
-                        className="text-xs px-3 py-2 rounded-lg bg-destructive/10 text-destructive"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
 
         {/* Admin & Management Section */}
         {isAdmin && (

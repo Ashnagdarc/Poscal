@@ -39,11 +39,10 @@ import { filtersReducer, initialFiltersState, modalReducer, initialModalState } 
 import { NewTradeFormSchema } from "@/lib/formValidation";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { tradesApi, uploadsApi, accountsApi } from "@/lib/api";
+import { tradesApi, uploadsApi } from "@/lib/api";
 
 interface Trade {
   id: string;
-  account_id?: string | null;
   pair: string;
   direction: 'buy' | 'sell';
   entry_price: number | null;
@@ -71,8 +70,6 @@ const Journal = () => {
   const { isPaid, subscriptionTier } = useSubscription();
   const { sendNotification, permission } = useNotifications();
   const [trades, setTrades] = useState<Trade[]>([]);
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [accountsLoading, setAccountsLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [showLimitBanner, setShowLimitBanner] = useState(true);
@@ -92,7 +89,6 @@ const Journal = () => {
 
   // New trade form
   const [newTrade, setNewTrade] = useState({
-    account_id: "" as string,
     pair: "EUR/USD",
     direction: "buy" as 'buy' | 'sell',
     entry_price: "",
@@ -128,24 +124,10 @@ const Journal = () => {
   useEffect(() => {
     if (user) {
       fetchTrades();
-      fetchAccounts();
     } else {
       setIsLoading(false);
     }
   }, [user]);
-
-  const fetchAccounts = async () => {
-    if (!user) return;
-    try {
-      setAccountsLoading(true);
-      const data = await accountsApi.getAll();
-      setAccounts(data || []);
-    } catch (error) {
-      logger.error('Error fetching accounts:', error);
-    } finally {
-      setAccountsLoading(false);
-    }
-  };
 
   // Keyboard shortcuts
   useKeyboardShortcut([
@@ -248,7 +230,6 @@ const Journal = () => {
     try {
       const tradeData = {
         user_id: user.id,
-        account_id: tradeToValidate.account_id || undefined,
         symbol: tradeToValidate.pair || 'JOURNAL',
         direction: tradeToValidate.direction === 'long' ? 'buy' : (tradeToValidate.direction === 'short' ? 'sell' : tradeToValidate.direction) || 'buy',
         entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
@@ -362,7 +343,6 @@ const Journal = () => {
 
   const resetForm = () => {
     setNewTrade({
-      account_id: "",
       pair: "EUR/USD",
       direction: "long",
       entry_price: "",
@@ -387,7 +367,6 @@ const Journal = () => {
     const tradeJournalType = (trade.journal_type || 'structured') as 'structured' | 'notes';
     setJournalView(tradeJournalType);
     setNewTrade({
-      account_id: trade.account_id || "",
       pair: trade.pair,
       direction: trade.direction,
       entry_price: trade.entry_price?.toString() || "",
@@ -1025,23 +1004,6 @@ const Journal = () => {
                     className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
                     placeholder="EUR/USD"
                   />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Trading Account</label>
-                  <select
-                    value={newTrade.account_id}
-                    onChange={(e) => setNewTrade({ ...newTrade, account_id: e.target.value })}
-                    className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                  >
-                    <option value="">Default</option>
-                    {accountsLoading && <option value="">Loading accounts…</option>}
-                    {accounts.map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.account_name} · {account.platform}
-                      </option>
-                    ))}
-                  </select>
                 </div>
 
                 <div>

@@ -6,10 +6,6 @@ export class CreateTradeDto {
   @IsNotEmpty()
   user_id: string;
 
-  @IsUUID()
-  @IsOptional()
-  account_id?: string;
-
   @IsDateString()
   @IsNotEmpty()
   trade_date: string;

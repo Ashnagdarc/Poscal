@@ -8,9 +8,6 @@ export class TradingJournal {
   @Column('uuid')
   user_id: string;
 
-  @Column({ type: 'uuid', nullable: true })
-  account_id: string | null;
-
   @Column({ type: 'date' })
   trade_date: string;
 

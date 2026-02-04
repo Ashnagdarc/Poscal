@@ -67,8 +67,6 @@ interface Trade {
   entry_date: string | null;
   created_at: string;
   screenshot_urls?: string[];
-  account_id: string | null;
-  account_name?: string;
 }
 
 export interface ModalState {

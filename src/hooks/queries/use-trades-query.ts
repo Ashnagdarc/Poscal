@@ -20,11 +20,8 @@ interface Trade {
   entry_date: string | null;
   exit_date: string | null;
   created_at: string;
-  account_id: string | null;
   user_id: string;
   screenshot_urls?: string[];
-  account_name?: string;
-  trading_accounts?: { account_name: string } | null;
 }
 
 export const TRADES_QUERY_KEY = ['trades'] as const;
@@ -78,7 +75,6 @@ interface AddTradeData {
   position_size: number | null;
   risk_percent: number | null;
   notes: string | null;
-  account_id: string | null;
 }
 
 export const useAddTradeMutation = () => {
@@ -119,7 +115,6 @@ interface UpdateTradeData {
   position_size: number | null;
   risk_percent: number | null;
   notes: string | null;
-  account_id: string | null;
 }
 
 export const useUpdateTradeMutation = () => {

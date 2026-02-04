@@ -16,8 +16,8 @@ export class TradesController {
   }
 
   @Get('statistics')
-  async getStatistics(@Request() req: any, @Query('account_id') accountId?: string) {
-    return await this.tradesService.getStatistics(req.user.userId, accountId);
+  async getStatistics(@Request() req: any) {
+    return await this.tradesService.getStatistics(req.user.userId);
   }
 
   @Get(':id')

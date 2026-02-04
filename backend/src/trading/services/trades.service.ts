@@ -14,10 +14,6 @@ export class TradesService {
   async findAll(userId: string, filters?: any): Promise<TradingJournal[]> {
     const where: any = { user_id: userId };
 
-    if (filters?.account_id) {
-      where.account_id = filters.account_id;
-    }
-
     if (filters?.status) {
       where.status = filters.status;
     }
@@ -66,11 +62,8 @@ export class TradesService {
     await this.tradeRepository.remove(trade);
   }
 
-  async getStatistics(userId: string, accountId?: string): Promise<any> {
+  async getStatistics(userId: string): Promise<any> {
     const where: any = { user_id: userId };
-    if (accountId) {
-      where.account_id = accountId;
-    }
 
     const trades = await this.tradeRepository.find({ where });
 
