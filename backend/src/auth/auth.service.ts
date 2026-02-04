@@ -193,6 +193,13 @@ export class AuthService {
       // Assign default user role
       await this.assignRole({ user_id: savedUser.id, role: AppRole.USER });
 
+      // Welcome email should not block signup success.
+      try {
+        await this.sendWelcomeEmail(savedUser.email, savedUser.full_name || savedUser.email);
+      } catch (error) {
+        this.logger.warn(`Welcome email failed for ${savedUser.email}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+
       const token = this.generateToken(savedUser.id, savedUser.email, AppRole.USER);
 
       return { user: savedUser, token };
@@ -289,6 +296,50 @@ export class AuthService {
       this.logger.error('Failed to send password reset email', error instanceof Error ? error.stack : String(error));
       throw new InternalServerErrorException('Unable to send reset email');
     }
+  }
+
+  private async sendWelcomeEmail(email: string, recipientName: string): Promise<void> {
+    const host = this.configService.get<string>('SMTP_HOST');
+    const port = Number(this.configService.get<string>('SMTP_PORT') || '587');
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS') || this.configService.get<string>('SMTP_PASSWORD');
+    const from = this.configService.get<string>('MAIL_FROM') || this.configService.get<string>('SMTP_FROM') || 'Poscal <noreply@poscalfx.com>';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://poscalfx.com';
+
+    if (!host || !port || !user || !pass) {
+      throw new InternalServerErrorException('Email service is not configured');
+    }
+
+    const secure = port === 465;
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: { user, pass },
+    });
+
+    const signInUrl = `${frontendUrl.replace(/\/$/, '')}/signin`;
+
+    await transporter.sendMail({
+      from,
+      to: email,
+      subject: 'Welcome to Poscal',
+      text: `Hi ${recipientName},\n\nWelcome to Poscal. Your account is ready.\n\nSign in: ${signInUrl}\n\n— Poscal Team`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; color: #111;">
+          <h2 style="margin: 0 0 12px;">Welcome to Poscal</h2>
+          <p>Hi ${recipientName},</p>
+          <p>Your account has been created successfully.</p>
+          <p style="margin: 20px 0;">
+            <a href="${signInUrl}" style="background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;display:inline-block;">
+              Sign In
+            </a>
+          </p>
+          <p>We are glad to have you onboard.</p>
+          <p>— Poscal Team</p>
+        </div>
+      `,
+    });
   }
 
   /**
