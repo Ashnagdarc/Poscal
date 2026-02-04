@@ -68,14 +68,14 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
   const wordCount = editor.storage.characterCount?.words?.() || 0;
   const charCount = editor.storage.characterCount?.characters?.() || 0;
   const toolbarBtnClass = (active = false) =>
-    `h-8 w-8 rounded-lg flex items-center justify-center transition-colors ${
+    `h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center transition-colors ${
       active ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-secondary/70'
     }`;
 
   return (
     <div className="w-full rounded-2xl overflow-hidden bg-[#121417] border border-white/10 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.75)]">
       {/* Toolbar */}
-      <div className="flex flex-wrap gap-1.5 p-3 border-b border-white/10 bg-[#171a1f]">
+      <div className="flex flex-wrap gap-1.5 p-2.5 sm:p-3 border-b border-white/10 bg-[#171a1f]">
         {/* Text Formatting */}
         <button
           onClick={() => editor.chain().focus().toggleBold().run()}
@@ -103,7 +103,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           <Strikethrough className="w-4 h-4" />
         </button>
 
-        <div className="h-8 w-px bg-white/10 mx-0.5" />
+        <div className="h-7 sm:h-8 w-px bg-white/10 mx-0.5" />
 
         {/* Headings */}
         <button
@@ -114,7 +114,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           <Heading2 className="w-4 h-4" />
         </button>
 
-        <div className="h-8 w-px bg-white/10 mx-0.5" />
+        <div className="h-7 sm:h-8 w-px bg-white/10 mx-0.5" />
 
         {/* Lists */}
         <button
@@ -141,7 +141,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           <Quote className="w-4 h-4" />
         </button>
 
-        <div className="h-8 w-px bg-white/10 mx-0.5" />
+        <div className="h-7 sm:h-8 w-px bg-white/10 mx-0.5" />
 
         {/* Code & Links */}
         <button
@@ -176,7 +176,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           className="hidden"
         />
 
-        <div className="h-8 w-px bg-white/10 mx-0.5" />
+        <div className="h-7 sm:h-8 w-px bg-white/10 mx-0.5" />
 
         {/* History */}
         <button
@@ -197,12 +197,12 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           <Redo2 className="w-4 h-4" />
         </button>
 
-        <div className="h-8 w-px bg-white/10 mx-0.5" />
+        <div className="h-7 sm:h-8 w-px bg-white/10 mx-0.5" />
 
         {/* Clear & Preview */}
         <button
           onClick={() => editor.chain().focus().clearContent().run()}
-          className="h-8 w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary/70 hover:text-destructive transition-colors"
+          className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary/70 hover:text-destructive transition-colors"
           title="Clear All"
         >
           <Trash2 className="w-4 h-4" />
@@ -219,7 +219,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
         <div className="flex-1" />
         
         {/* Character Count */}
-        <div className="flex items-center gap-2 px-2 text-xs text-muted-foreground/80">
+        <div className="hidden sm:flex items-center gap-2 px-2 text-xs text-muted-foreground/80">
           <span>{charCount} chars</span>
           <span>•</span>
           <span>{wordCount} words</span>
@@ -229,16 +229,16 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
       {/* Editor */}
       <EditorContent 
         editor={editor} 
-        className={`apple-note-editor prose prose-invert max-w-none p-5 text-[15px] leading-7 text-foreground focus:outline-none
+        className={`apple-note-editor prose prose-invert max-w-none p-4 sm:p-5 text-[16px] leading-[1.6] text-foreground focus:outline-none
           prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground
           prose-em:text-foreground prose-a:text-primary prose-code:text-foreground
           prose-li:text-foreground prose-blockquote:text-muted-foreground prose-blockquote:border-l-primary
-          min-h-72 bg-[#111317] ${showPreview ? 'hidden' : ''}`}
+          min-h-64 sm:min-h-72 bg-[#111317] ${showPreview ? 'hidden' : ''}`}
       />
 
       {/* Preview Mode */}
       {showPreview && (
-        <div className="p-5 min-h-72 bg-[#111317]">
+        <div className="p-4 sm:p-5 min-h-64 sm:min-h-72 bg-[#111317]">
           <div className="prose prose-invert max-w-none text-foreground
             prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground
             prose-em:text-foreground prose-a:text-primary prose-code:text-foreground

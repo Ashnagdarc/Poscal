@@ -1143,9 +1143,9 @@ const Journal = () => {
             )}
 
             {journalView === 'notes' && (
-              <div className="space-y-4">
+              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#121417] p-4">
                 <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Journal Entry</label>
+                  <label className="block text-sm text-muted-foreground/90 mb-2">Journal Entry</label>
                   <RichNoteEditor
                     content={newTrade.rich_content}
                     onChange={(content) => setNewTrade({ ...newTrade, rich_content: content })}
@@ -1154,10 +1154,10 @@ const Journal = () => {
                 </div>
 
                 {/* Metadata for Notes */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   {/* Market Condition */}
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Market Condition</label>
+                    <label className="block text-sm text-muted-foreground/90 mb-2">Market Condition</label>
                     <select
                       value={newTrade.market_condition}
                       onChange={(e) => setNewTrade({ ...newTrade, market_condition: e.target.value as any })}
@@ -1172,7 +1172,7 @@ const Journal = () => {
 
                   {/* Sentiment */}
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Sentiment</label>
+                    <label className="block text-sm text-muted-foreground/90 mb-2">Sentiment</label>
                     <select
                       value={newTrade.sentiment}
                       onChange={(e) => setNewTrade({ ...newTrade, sentiment: e.target.value as any })}
@@ -1187,7 +1187,7 @@ const Journal = () => {
 
                   {/* Tags */}
                   <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Tags</label>
+                    <label className="block text-sm text-muted-foreground/90 mb-2">Tags</label>
                     <input
                       type="text"
                       value={newTrade.tags}
