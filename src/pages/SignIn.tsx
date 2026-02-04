@@ -1,20 +1,35 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Eye, EyeOff } from "lucide-react";
 import { EmojiAvatar } from "@/components/EmojiAvatar";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
 const SignIn = () => {
   const navigate = useNavigate();
-  const { signIn, resetPassword } = useAuth();
+  const [searchParams] = useSearchParams();
+  const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [showForgotPassword, setShowForgotPassword] = useState(false);
-  const [resetEmail, setResetEmail] = useState("");
-  const [isResetting, setIsResetting] = useState(false);
+
+  const bannerMessage = useMemo(() => {
+    if (searchParams.get("fromSignup") === "1") {
+      return "Account created. Verify your email, then sign in.";
+    }
+    if (searchParams.get("reset") === "sent") {
+      return "Reset link sent. Check your email and follow the instructions.";
+    }
+    return "";
+  }, [searchParams]);
+
+  useEffect(() => {
+    const prefilledEmail = searchParams.get("email");
+    if (prefilledEmail) {
+      setEmail(prefilledEmail);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -50,92 +65,6 @@ const SignIn = () => {
     setIsLoading(false);
   };
 
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!resetEmail) {
-      toast.error("Please enter your email address");
-      return;
-    }
-
-    setIsResetting(true);
-    const { error } = await resetPassword(resetEmail);
-
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success("Password reset email sent! Check your inbox.");
-      setShowForgotPassword(false);
-      setResetEmail("");
-    }
-    setIsResetting(false);
-  };
-
-  if (showForgotPassword) {
-    return (
-      <div className="min-h-screen bg-gradient-to-b from-background via-background to-background/50 flex flex-col px-6">
-        {/* Header */}
-        <div className="pt-12 pb-8 animate-fade-in max-w-md mx-auto w-full">
-          <button
-            onClick={() => setShowForgotPassword(false)}
-            className="w-11 h-11 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary mb-8 border border-border/50"
-          >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
-          </button>
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
-              <span className="text-3xl">🔐</span>
-            </div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Reset Password</h1>
-            <p className="text-muted-foreground text-base">We'll send you a link to reset your password</p>
-          </div>
-        </div>
-
-        {/* Form */}
-        <form onSubmit={handleResetPassword} className="space-y-5 animate-slide-up max-w-md mx-auto w-full">
-          <div>
-            <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={resetEmail}
-              onChange={(e) => setResetEmail(e.target.value)}
-              placeholder="you@example.com"
-              autoComplete="email"
-              required
-              className="w-full h-14 px-5 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={isResetting}
-            className="w-full h-14 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground text-base font-semibold rounded-2xl transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25 mt-6"
-          >
-            {isResetting ? (
-              <span className="flex items-center justify-center gap-2">
-                <span className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></span>
-                Sending...
-              </span>
-            ) : "Send Reset Link"}
-          </button>
-        </form>
-
-        {/* Footer */}
-        <div className="mt-auto pb-8 text-center max-w-md mx-auto w-full">
-          <button
-            onClick={() => setShowForgotPassword(false)}
-            className="text-muted-foreground hover:text-foreground transition-colors"
-          >
-            Back to{" "}
-            <span className="text-primary font-semibold">Sign In</span>
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-background/50 flex flex-col px-6">
       {/* Header */}
@@ -149,6 +78,12 @@ const SignIn = () => {
 
       {/* Form */}
       <form onSubmit={handleSubmit} className="space-y-5 animate-slide-up max-w-md mx-auto w-full">
+        {bannerMessage && (
+          <div className="rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm text-primary">
+            {bannerMessage}
+          </div>
+        )}
+
         <div>
           <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
             Email Address
@@ -192,7 +127,7 @@ const SignIn = () => {
 
         <div className="flex items-center justify-end">
           <Link
-            to="/forgot-password"
+            to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
             className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
           >
             Forgot password?

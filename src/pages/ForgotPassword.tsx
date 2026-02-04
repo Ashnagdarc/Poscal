@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,10 +9,18 @@ import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
 
 const ForgotPassword = () => {
+  const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const { toast } = useToast();
+
+  useEffect(() => {
+    const emailParam = searchParams.get("email");
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchParams]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -82,7 +90,7 @@ const ForgotPassword = () => {
                 <li>Wait a few minutes and try again</li>
               </ul>
             </div>
-            <Link to="/signin" className="block">
+            <Link to={`/signin?reset=sent${email ? `&email=${encodeURIComponent(email)}` : ""}`} className="block">
               <Button variant="outline" className="w-full">
                 <ArrowLeft className="mr-2 h-4 w-4" />
                 Back to Sign In
@@ -135,7 +143,7 @@ const ForgotPassword = () => {
 
             <div className="text-center">
               <Link 
-                to="/signin" 
+                to={`/signin${email ? `?email=${encodeURIComponent(email)}` : ""}`} 
                 className="text-sm text-muted-foreground hover:text-primary transition-colors inline-flex items-center gap-1"
               >
                 <ArrowLeft className="h-3 w-3" />

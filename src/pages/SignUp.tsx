@@ -11,6 +11,7 @@ const SignUp = () => {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -24,6 +25,11 @@ const SignUp = () => {
 
     if (password.length < 6) {
       toast.error("Password must be at least 6 characters");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
       return;
     }
 
@@ -42,7 +48,7 @@ const SignUp = () => {
     }
 
     toast.success("Account created! Please check your email to verify.");
-    navigate("/signin");
+    navigate(`/signin?fromSignup=1&email=${encodeURIComponent(email)}`);
     setIsLoading(false);
   };
 
@@ -115,9 +121,28 @@ const SignUp = () => {
           <p className="text-xs text-muted-foreground mt-2 ml-1">Must be at least 6 characters</p>
         </div>
 
+        <div>
+          <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
+            Confirm Password
+          </label>
+          <input
+            type={showPassword ? "text" : "password"}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Re-enter your password"
+            autoComplete="new-password"
+            required
+            minLength={6}
+            className="w-full h-14 px-5 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
+          />
+          {confirmPassword.length > 0 && confirmPassword !== password && (
+            <p className="text-xs text-destructive mt-2 ml-1">Passwords do not match</p>
+          )}
+        </div>
+
         <button
           type="submit"
-          disabled={isLoading}
+          disabled={isLoading || (confirmPassword.length > 0 && confirmPassword !== password)}
           className="w-full h-14 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground text-base font-semibold rounded-2xl transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25 mt-6"
         >
           {isLoading ? (
@@ -130,13 +155,13 @@ const SignUp = () => {
 
         <p className="text-xs text-center text-muted-foreground pt-2">
           By signing up, you agree to our{" "}
-          <button type="button" onClick={() => window.open('/terms', '_blank')} className="text-primary hover:underline">
+          <Link to="/terms" className="text-primary hover:underline">
             Terms
-          </button>
+          </Link>
           {" "}and{" "}
-          <button type="button" onClick={() => window.open('/privacy', '_blank')} className="text-primary hover:underline">
+          <Link to="/privacy" className="text-primary hover:underline">
             Privacy Policy
-          </button>
+          </Link>
         </p>
       </form>
 
