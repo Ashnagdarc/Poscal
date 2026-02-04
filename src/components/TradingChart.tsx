@@ -159,13 +159,13 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     return localIso.slice(0, 16).replace('T', ' ');
   }, []);
 
-  const generateHistoricalData = useCallback((pair: string, tf: Timeframe): Candle[] => {
+  const generateHistoricalData = useCallback((pair: string, tf: Timeframe, anchorPrice?: number): Candle[] => {
     const result: Candle[] = [];
     const now = Date.now();
     const latestBucket = getCandleBucketStart(now, tf);
     const duration = getCandleDuration(tf);
     const candleCount = getCandleCount(tf);
-    let basePrice = getBasePrice(pair);
+    let basePrice = anchorPrice && anchorPrice > 0 ? anchorPrice : getBasePrice(pair);
 
     for (let i = candleCount - 1; i >= 0; i--) {
       const bucketStart = latestBucket - i * duration;
@@ -194,7 +194,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   const loadChartData = useCallback(() => {
     setIsLoading(true);
     setTimeout(() => {
-      const historical = generateHistoricalData(symbol, timeframe);
+      const anchor = livePrice && livePrice > 0 ? livePrice : undefined;
+      const historical = generateHistoricalData(symbol, timeframe, anchor);
       dataRef.current = historical;
       setHoveredOHLC(null);
       setZoomRange({ start: 0, end: 100 });
@@ -207,7 +208,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       }
       setIsLoading(false);
     }, 250);
-  }, [generateHistoricalData, symbol, timeframe]);
+  }, [generateHistoricalData, livePrice, symbol, timeframe]);
 
   useEffect(() => {
     loadChartData();
@@ -234,15 +235,30 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
     if (livePrice === null || livePrice <= 0 || dataRef.current.length === 0) return;
 
     const rounded = parseFloat(livePrice.toFixed(5));
-    const bucketStart = getCandleBucketStart(Date.now(), timeframe);
     const last = dataRef.current[dataRef.current.length - 1];
 
-    if (last.timestamp === bucketStart) {
-      last.close = rounded;
-      last.high = parseFloat(Math.max(last.high, rounded).toFixed(5));
-      last.low = parseFloat(Math.min(last.low, rounded).toFixed(5));
+    // If synthetic history is far from live market, rebase candles to avoid giant jump candle.
+    const driftRatio = last.close > 0 ? Math.abs(last.close - rounded) / last.close : 0;
+    if (driftRatio > 0.02) {
+      const scale = rounded / last.close;
+      dataRef.current = dataRef.current.map((c) => ({
+        ...c,
+        open: parseFloat((c.open * scale).toFixed(5)),
+        high: parseFloat((c.high * scale).toFixed(5)),
+        low: parseFloat((c.low * scale).toFixed(5)),
+        close: parseFloat((c.close * scale).toFixed(5)),
+      }));
+    }
+
+    const bucketStart = getCandleBucketStart(Date.now(), timeframe);
+    const activeLast = dataRef.current[dataRef.current.length - 1];
+
+    if (activeLast.timestamp === bucketStart) {
+      activeLast.close = rounded;
+      activeLast.high = parseFloat(Math.max(activeLast.high, rounded).toFixed(5));
+      activeLast.low = parseFloat(Math.min(activeLast.low, rounded).toFixed(5));
     } else {
-      const open = parseFloat(last.close.toFixed(5));
+      const open = parseFloat(activeLast.close.toFixed(5));
       dataRef.current.push({
         timestamp: bucketStart,
         time: formatCandleTime(bucketStart, timeframe),

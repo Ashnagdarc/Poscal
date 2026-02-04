@@ -20,6 +20,10 @@ export function useForexWebSocket(symbol: string) {
   const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
+    // Reset stale values when switching symbols so chart doesn't render old pair price.
+    setPrice(null);
+    setChange(0);
+
     // Connect to WebSocket
     const socket = io(`${BACKEND_URL}/forex`, {
       transports: ['websocket'],
