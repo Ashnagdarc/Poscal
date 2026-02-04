@@ -86,6 +86,7 @@ const makeDrawingKey = (symbol: string, timeframe: Timeframe) => `${DRAWING_KEY_
 export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChartProps) => {
   const chartRef = useRef<EChartsReact>(null);
   const dataRef = useRef<Candle[]>([]);
+  const lastHoverIndexRef = useRef<number | null>(null);
 
   const [symbol, setSymbol] = useState(initialSymbol);
   const [chartType, setChartType] = useState<ChartType>('candlestick');
@@ -198,6 +199,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       const historical = generateHistoricalData(symbol, timeframe, anchor);
       dataRef.current = historical;
       setHoveredOHLC(null);
+      lastHoverIndexRef.current = null;
       setZoomRange({ start: 0, end: 100 });
 
       if (historical.length > 1) {
@@ -347,6 +349,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
 
   const updateHoveredFromIndex = useCallback((index?: number) => {
     if (typeof index !== 'number' || index < 0 || index >= dataRef.current.length) return;
+    if (lastHoverIndexRef.current === index) return;
+    lastHoverIndexRef.current = index;
     const c = dataRef.current[index];
     setHoveredOHLC({
       time: c.time,
@@ -378,6 +382,7 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
   }, [updateHoveredFromIndex]);
 
   const onGlobalOut = useCallback(() => {
+    lastHoverIndexRef.current = null;
     setHoveredOHLC(null);
   }, []);
 
@@ -486,11 +491,17 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
         { coord: [d.x2, Math.min(d.y1, d.y2)] },
       ]));
 
-    if (hLineData.length > 0 || trendData.length > 0) {
+    const priceLineData = currentPrice > 0 ? [{
+      yAxis: currentPrice,
+      lineStyle: { color: priceChange >= 0 ? '#10B981' : '#EF4444', width: 1.5, type: 'dashed' },
+      label: { show: false },
+    }] : [];
+
+    if (hLineData.length > 0 || trendData.length > 0 || priceLineData.length > 0) {
       mainSeries.markLine = {
         symbol: ['none', 'none'],
         label: { show: false },
-        data: [...hLineData, ...trendData],
+        data: [...hLineData, ...trendData, ...priceLineData],
       };
     }
 
@@ -524,24 +535,8 @@ export const TradingChart = ({ symbol: initialSymbol = 'EUR/USD' }: TradingChart
       });
     }
 
-    if (currentPrice > 0) {
-      series.push({
-        type: 'line',
-        name: 'Ask Price',
-        data: dataRef.current.map(() => currentPrice),
-        lineStyle: {
-          color: priceChange >= 0 ? '#10B981' : '#EF4444',
-          width: 1.5,
-          type: 'dashed',
-        },
-        showSymbol: false,
-        z: 10,
-      });
-    }
-
     return {
-      animation: true,
-      animationDuration: 180,
+      animation: false,
       backgroundColor: 'transparent',
       grid: { left: 60, right: 20, top: 28, bottom: 42 },
       dataZoom: [
