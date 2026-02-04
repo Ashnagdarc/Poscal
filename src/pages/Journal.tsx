@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useReducer } from "react";
+import { useState, useEffect, useMemo, useReducer, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { generateHTML } from '@tiptap/html';
 import StarterKit from '@tiptap/starter-kit';
@@ -72,6 +72,19 @@ const Journal = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [showLimitBanner, setShowLimitBanner] = useState(true);
+  const swipeStartXRef = useRef<number | null>(null);
+  const swipeStartYRef = useRef<number | null>(null);
+  const [swipeState, setSwipeState] = useState<{
+    tradeId: string | null;
+    offset: number;
+    dragging: boolean;
+    moved: boolean;
+  }>({
+    tradeId: null,
+    offset: 0,
+    dragging: false,
+    moved: false,
+  });
   
   // Free tier limits
   const FREE_TRADE_LIMIT = 5;
@@ -414,6 +427,103 @@ const Journal = () => {
     }
   };
 
+  const handleArchiveTrade = async (tradeId: string) => {
+    if (!user) return;
+
+    try {
+      await tradesApi.update(tradeId, {
+        status: "cancelled",
+      });
+      toast.success("Journal entry archived");
+      fetchTrades();
+    } catch (error) {
+      toast.error("Failed to archive journal entry");
+    }
+  };
+
+  const SWIPE_ACTION_THRESHOLD = 82;
+  const SWIPE_MAX_DISTANCE = 108;
+
+  const startSwipe = (tradeId: string, e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    swipeStartXRef.current = e.clientX;
+    swipeStartYRef.current = e.clientY;
+    setSwipeState({
+      tradeId,
+      offset: 0,
+      dragging: true,
+      moved: false,
+    });
+  };
+
+  const moveSwipe = (tradeId: string, e: React.PointerEvent<HTMLDivElement>) => {
+    if (!swipeState.dragging || swipeState.tradeId !== tradeId || swipeStartXRef.current === null || swipeStartYRef.current === null) {
+      return;
+    }
+
+    const deltaX = e.clientX - swipeStartXRef.current;
+    const deltaY = e.clientY - swipeStartYRef.current;
+
+    // Keep vertical page scrolling smooth; only lock into horizontal when intent is clear.
+    if (!swipeState.moved && Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 8) {
+      setSwipeState({
+        tradeId: null,
+        offset: 0,
+        dragging: false,
+        moved: false,
+      });
+      return;
+    }
+
+    const clamped = Math.max(-SWIPE_MAX_DISTANCE, Math.min(SWIPE_MAX_DISTANCE, deltaX));
+    setSwipeState((prev) => ({
+      ...prev,
+      offset: clamped,
+      moved: prev.moved || Math.abs(clamped) > 8,
+    }));
+  };
+
+  const endSwipe = async (trade: Trade) => {
+    if (!swipeState.dragging || swipeState.tradeId !== trade.id) return;
+
+    const offset = swipeState.offset;
+    const moved = swipeState.moved;
+
+    setSwipeState({
+      tradeId: null,
+      offset: 0,
+      dragging: false,
+      moved: false,
+    });
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+
+    if (offset <= -SWIPE_ACTION_THRESHOLD) {
+      dispatchModals({ type: "OPEN_DELETE_CONFIRM", payload: trade.id });
+      return;
+    }
+
+    if (offset >= SWIPE_ACTION_THRESHOLD) {
+      await handleArchiveTrade(trade.id);
+      return;
+    }
+
+    if (!moved) {
+      dispatchModals({ type: "OPEN_VIEW_TRADE", payload: trade });
+    }
+  };
+
+  const cancelSwipe = () => {
+    setSwipeState({
+      tradeId: null,
+      offset: 0,
+      dragging: false,
+      moved: false,
+    });
+    swipeStartXRef.current = null;
+    swipeStartYRef.current = null;
+  };
+
   const handleExportCSV = () => {
     if (trades.length === 0) {
       toast.error("No trades to export");
@@ -742,51 +852,68 @@ const Journal = () => {
           </div>
         ) : (
           filteredTrades.map((trade) => (
-            <div
-              key={trade.id}
-              className="bg-secondary rounded-2xl p-4 animate-fade-in cursor-pointer hover:bg-secondary/80 transition-colors"
-              onClick={() => dispatchModals({ type: 'OPEN_VIEW_TRADE', payload: trade })}
-            >
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  {trade.direction === 'buy' ? (
-                    <TrendingUp className="w-5 h-5 text-foreground" />
-                  ) : (
-                    <TrendingDown className="w-5 h-5 text-destructive" />
-                  )}
-                  <span className="font-bold text-foreground">{trade.pair}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    trade.status === 'open' 
-                      ? 'bg-foreground/10 text-foreground' 
-                      : trade.status === 'closed'
-                      ? 'bg-muted text-muted-foreground'
-                      : 'bg-destructive/10 text-destructive'
-                  }`}>
-                    {trade.status}
-                  </span>
-                </div>
-                <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                  <Calendar className="w-4 h-4" />
-                  <span>{formatDate(trade.entry_date || trade.created_at)}</span>
-                </div>
+            <div key={trade.id} className="relative rounded-2xl overflow-hidden">
+              <div className="absolute inset-0 flex items-center justify-between px-4 bg-[#111317]">
+                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Archive</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-red-400">Delete</span>
               </div>
 
-              {/* Preview Content */}
-              {trade.notes && (
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{trade.notes}</p>
-              )}
-              
-              {trade.journal_type === 'notes' && trade.rich_content && (
-                <p className="text-sm text-muted-foreground italic">Rich journal entry...</p>
-              )}
-
-              {/* Entry Price Preview */}
-              {trade.entry_price && (
-                <div className="mt-2 text-xs">
-                  <span className="text-muted-foreground">Entry: </span>
-                  <span className="font-medium text-foreground">{trade.entry_price}</span>
+              <div
+                className={`bg-secondary rounded-2xl p-4 animate-fade-in cursor-pointer hover:bg-secondary/80 ${
+                  swipeState.dragging && swipeState.tradeId === trade.id
+                    ? ""
+                    : "transition-transform duration-200 ease-out"
+                }`}
+                style={{
+                  transform: `translateX(${swipeState.tradeId === trade.id ? swipeState.offset : 0}px)`,
+                  touchAction: "pan-y",
+                }}
+                onPointerDown={(e) => startSwipe(trade.id, e)}
+                onPointerMove={(e) => moveSwipe(trade.id, e)}
+                onPointerUp={() => endSwipe(trade)}
+                onPointerCancel={cancelSwipe}
+              >
+                <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    {trade.direction === 'buy' ? (
+                      <TrendingUp className="w-5 h-5 text-foreground" />
+                    ) : (
+                      <TrendingDown className="w-5 h-5 text-destructive" />
+                    )}
+                    <span className="font-bold text-foreground">{trade.pair}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      trade.status === 'open' 
+                        ? 'bg-foreground/10 text-foreground' 
+                        : trade.status === 'closed'
+                        ? 'bg-muted text-muted-foreground'
+                        : 'bg-destructive/10 text-destructive'
+                    }`}>
+                      {trade.status}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                    <Calendar className="w-4 h-4" />
+                    <span>{formatDate(trade.entry_date || trade.created_at)}</span>
+                  </div>
                 </div>
-              )}
+
+                {/* Preview Content */}
+                {trade.notes && (
+                  <p className="text-sm text-muted-foreground line-clamp-2 mb-2">{trade.notes}</p>
+                )}
+                
+                {trade.journal_type === 'notes' && trade.rich_content && (
+                  <p className="text-sm text-muted-foreground italic">Rich journal entry...</p>
+                )}
+
+                {/* Entry Price Preview */}
+                {trade.entry_price && (
+                  <div className="mt-2 text-xs">
+                    <span className="text-muted-foreground">Entry: </span>
+                    <span className="font-medium text-foreground">{trade.entry_price}</span>
+                  </div>
+                )}
+              </div>
             </div>
           ))
         )}
