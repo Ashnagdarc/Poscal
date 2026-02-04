@@ -33,6 +33,7 @@ import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { PnLInputModal } from "@/components/PnLInputModal";
 import { RichNoteEditor } from "@/components/RichNoteEditor";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
 import { NewTradeFormSchema } from "@/lib/formValidation";
@@ -1158,31 +1159,37 @@ const Journal = () => {
                   {/* Market Condition */}
                   <div>
                     <label className="block text-sm text-muted-foreground/90 mb-2">Market Condition</label>
-                    <select
-                      value={newTrade.market_condition}
-                      onChange={(e) => setNewTrade({ ...newTrade, market_condition: e.target.value as any })}
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
+                    <Select
+                      value={newTrade.market_condition || ""}
+                      onValueChange={(value) => setNewTrade({ ...newTrade, market_condition: value as any })}
                     >
-                      <option value="">Select...</option>
-                      <option value="bullish">Bullish</option>
-                      <option value="bearish">Bearish</option>
-                      <option value="sideways">Sideways</option>
-                    </select>
+                      <SelectTrigger className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bullish">Bullish</SelectItem>
+                        <SelectItem value="bearish">Bearish</SelectItem>
+                        <SelectItem value="sideways">Sideways</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Sentiment */}
                   <div>
                     <label className="block text-sm text-muted-foreground/90 mb-2">Sentiment</label>
-                    <select
-                      value={newTrade.sentiment}
-                      onChange={(e) => setNewTrade({ ...newTrade, sentiment: e.target.value as any })}
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
+                    <Select
+                      value={newTrade.sentiment || ""}
+                      onValueChange={(value) => setNewTrade({ ...newTrade, sentiment: value as any })}
                     >
-                      <option value="">Select...</option>
-                      <option value="bullish">Bullish</option>
-                      <option value="neutral">Neutral</option>
-                      <option value="bearish">Bearish</option>
-                    </select>
+                      <SelectTrigger className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all">
+                        <SelectValue placeholder="Select..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bullish">Bullish</SelectItem>
+                        <SelectItem value="neutral">Neutral</SelectItem>
+                        <SelectItem value="bearish">Bearish</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Tags */}
