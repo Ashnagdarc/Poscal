@@ -1154,19 +1154,19 @@ const Journal = () => {
                 </div>
 
                 {/* Metadata for Notes */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 gap-3">
                   {/* Market Condition */}
                   <div>
                     <label className="block text-sm text-muted-foreground/90 mb-2">Market Condition</label>
                     <select
                       value={newTrade.market_condition}
                       onChange={(e) => setNewTrade({ ...newTrade, market_condition: e.target.value as any })}
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
                     >
                       <option value="">Select...</option>
-                      <option value="bullish">📈 Bullish</option>
-                      <option value="bearish">📉 Bearish</option>
-                      <option value="sideways">↔️ Sideways</option>
+                      <option value="bullish">Bullish</option>
+                      <option value="bearish">Bearish</option>
+                      <option value="sideways">Sideways</option>
                     </select>
                   </div>
 
@@ -1176,24 +1176,24 @@ const Journal = () => {
                     <select
                       value={newTrade.sentiment}
                       onChange={(e) => setNewTrade({ ...newTrade, sentiment: e.target.value as any })}
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
                     >
                       <option value="">Select...</option>
-                      <option value="bullish">😊 Bullish</option>
-                      <option value="neutral">😐 Neutral</option>
-                      <option value="bearish">😟 Bearish</option>
+                      <option value="bullish">Bullish</option>
+                      <option value="neutral">Neutral</option>
+                      <option value="bearish">Bearish</option>
                     </select>
                   </div>
 
                   {/* Tags */}
-                  <div>
+                  <div className="col-span-2">
                     <label className="block text-sm text-muted-foreground/90 mb-2">Tags</label>
                     <input
                       type="text"
                       value={newTrade.tags}
                       onChange={(e) => setNewTrade({ ...newTrade, tags: e.target.value })}
-                      placeholder="e.g., breakout, support"
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
+                      placeholder="e.g. breakout, support"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all placeholder:text-muted-foreground/70"
                     />
                   </div>
                 </div>
