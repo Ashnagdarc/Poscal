@@ -1161,7 +1161,7 @@ const Journal = () => {
                     <select
                       value={newTrade.market_condition}
                       onChange={(e) => setNewTrade({ ...newTrade, market_condition: e.target.value as any })}
-                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
                     >
                       <option value="">Select...</option>
                       <option value="bullish">📈 Bullish</option>
@@ -1176,7 +1176,7 @@ const Journal = () => {
                     <select
                       value={newTrade.sentiment}
                       onChange={(e) => setNewTrade({ ...newTrade, sentiment: e.target.value as any })}
-                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
                     >
                       <option value="">Select...</option>
                       <option value="bullish">😊 Bullish</option>
@@ -1193,7 +1193,7 @@ const Journal = () => {
                       value={newTrade.tags}
                       onChange={(e) => setNewTrade({ ...newTrade, tags: e.target.value })}
                       placeholder="e.g., breakout, support"
-                      className="w-full px-3 py-2 bg-secondary text-foreground rounded-lg outline-none border border-border focus:border-primary transition-colors"
+                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all"
                     />
                   </div>
                 </div>
@@ -1224,7 +1224,7 @@ const Journal = () => {
                       ))}
                     </div>
                   )}
-                  <label className="block border border-dashed border-border rounded-xl p-4 text-center cursor-pointer hover:border-foreground/50 transition-colors">
+                  <label className="block border border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer hover:border-white/35 transition-colors bg-[#111317]">
                     <input
                       type="file"
                       accept="image/*"
@@ -1243,7 +1243,7 @@ const Journal = () => {
           <div className="px-6 pb-8">
             <button
               onClick={modals.editingTrade ? handleEditTrade : handleAddTrade}
-              className="w-full h-14 bg-foreground text-background font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
+              className="w-full h-14 bg-[#F2F2F7] text-[#111111] font-semibold rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-[0_8px_20px_-12px_rgba(0,0,0,0.5)]"
             >
               {modals.editingTrade ? 'Update Trade' : 'Add Trade'}
             </button>
