@@ -176,7 +176,7 @@ export const authApi = {
     return data;
   },
 
-  requestReset: async (email: string): Promise<{ token: string }> => {
+  requestReset: async (email: string): Promise<{ success: boolean }> => {
     const { data } = await api.post('/auth/request-reset', { email });
     return data;
   },

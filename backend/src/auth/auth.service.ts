@@ -1,8 +1,10 @@
-import { Injectable, UnauthorizedException, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, NotFoundException, ConflictException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
+import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
+import * as nodemailer from 'nodemailer';
 import { Profile } from './entities/profile.entity';
 import { UserRole, AppRole } from './entities/user-role.entity';
 import { User } from './entities/user.entity';
@@ -15,8 +17,11 @@ import { RequestResetDto, ResetPasswordDto } from './dto/reset-password.dto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private jwtService: JwtService,
+    private configService: ConfigService,
     @InjectRepository(Profile)
     private profileRepository: Repository<Profile>,
     @InjectRepository(UserRole)
@@ -224,14 +229,66 @@ export class AuthService {
   /**
    * Issue a password reset token (to be emailed to user)
    */
-  async requestResetPassword(dto: RequestResetDto): Promise<{ token: string }> {
+  async requestResetPassword(dto: RequestResetDto): Promise<{ success: boolean }> {
     const user = await this.userRepository.findOne({ where: { email: dto.email } });
     if (!user) {
       // Do not reveal existence
-      return { token: '' };
+      return { success: true };
     }
     const token = this.jwtService.sign({ email: user.email, type: 'reset' }, { expiresIn: '30m' });
-    return { token };
+    await this.sendPasswordResetEmail(user.email, token);
+    return { success: true };
+  }
+
+  private async sendPasswordResetEmail(email: string, token: string): Promise<void> {
+    const host = this.configService.get<string>('SMTP_HOST');
+    const port = Number(this.configService.get<string>('SMTP_PORT') || '587');
+    const user = this.configService.get<string>('SMTP_USER');
+    const pass = this.configService.get<string>('SMTP_PASS') || this.configService.get<string>('SMTP_PASSWORD');
+    const from = this.configService.get<string>('MAIL_FROM') || this.configService.get<string>('SMTP_FROM') || 'Poscal <noreply@poscalfx.com>';
+    const frontendUrl = this.configService.get<string>('FRONTEND_URL') || 'https://poscalfx.com';
+
+    if (!host || !port || !user || !pass) {
+      throw new InternalServerErrorException('Email service is not configured');
+    }
+
+    const secure = port === 465;
+    const transporter = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user,
+        pass,
+      },
+    });
+
+    const resetUrl = `${frontendUrl.replace(/\/$/, '')}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+
+    try {
+      await transporter.sendMail({
+        from,
+        to: email,
+        subject: 'Reset your Poscal password',
+        text: `You requested a password reset for Poscal.\n\nUse this link to reset your password:\n${resetUrl}\n\nThis link expires in 30 minutes.\nIf you did not request this, you can ignore this email.`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.5; color: #111;">
+            <h2 style="margin: 0 0 12px;">Reset your Poscal password</h2>
+            <p>You requested a password reset for your Poscal account.</p>
+            <p style="margin: 20px 0;">
+              <a href="${resetUrl}" style="background:#111;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none;display:inline-block;">
+                Reset Password
+              </a>
+            </p>
+            <p>This link expires in <strong>30 minutes</strong>.</p>
+            <p>If you did not request this, you can ignore this email.</p>
+          </div>
+        `,
+      });
+    } catch (error) {
+      this.logger.error('Failed to send password reset email', error instanceof Error ? error.stack : String(error));
+      throw new InternalServerErrorException('Unable to send reset email');
+    }
   }
 
   /**
@@ -256,4 +313,3 @@ export class AuthService {
     }
   }
 }
-

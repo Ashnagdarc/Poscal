@@ -37,17 +37,7 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      const { token } = await authApi.requestReset(email);
-      
-      // In production, the backend would send an email with the reset link
-      // For now, we'll show a success message
-      // The reset link would be: /reset-password?email=${email}&token=${token}
-      
-      if (token) {
-        // In development, we can show the link directly
-        const resetLink = `${window.location.origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
-        console.log('Reset link (development only):', resetLink);
-      }
+      await authApi.requestReset(email);
       
       setEmailSent(true);
       toast({
