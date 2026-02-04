@@ -52,22 +52,30 @@ export const BottomNav = () => {
       role="navigation"
       aria-label="Main navigation"
     >
-      {/* Liquid Glass Container - full pill shape like reference */}
+      {/* Liquid Glass Container */}
       <div 
         ref={navRef}
-        className="relative flex justify-around items-center max-w-md mx-auto px-3 py-3 rounded-full
-                   bg-background/80 dark:bg-card/70
-                   backdrop-blur-2xl backdrop-saturate-[1.8]
-                   border border-border/50 dark:border-white/10
-                   shadow-[0_8px_40px_-12px_rgba(0,0,0,0.15),0_4px_20px_-8px_rgba(0,0,0,0.1),inset_0_1px_0_rgba(255,255,255,0.5)]
-                   dark:shadow-[0_8px_40px_-12px_rgba(0,0,0,0.5),0_4px_20px_-8px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.08)]"
+        className="relative isolate flex justify-around items-center max-w-md mx-auto px-3 py-3.5 rounded-[2rem]
+                   bg-[linear-gradient(180deg,rgba(255,255,255,0.3),rgba(255,255,255,0.08))]
+                   dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.12),rgba(255,255,255,0.04))]
+                   backdrop-blur-3xl backdrop-saturate-[1.9]
+                   border border-white/40 dark:border-white/10
+                   shadow-[0_20px_45px_-22px_rgba(0,0,0,0.45),0_8px_20px_-12px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.55)]
+                   dark:shadow-[0_24px_52px_-24px_rgba(0,0,0,0.8),0_10px_24px_-16px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.12)]"
       >
-        {/* Animated Pill Indicator - smoother, always visible */}
+        {/* Glass sheen */}
+        <div className="pointer-events-none absolute inset-x-3 top-[3px] h-1/2 rounded-[1.6rem] bg-gradient-to-b from-white/45 via-white/10 to-transparent dark:from-white/15 dark:via-white/5 dark:to-transparent" />
+
+        {/* Floating glow */}
+        <div className="pointer-events-none absolute -inset-1 rounded-[2.2rem] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.22),transparent_60%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_60%)]" />
+
+        {/* Animated active pill */}
         <div
-          className={`absolute top-2 bottom-2 rounded-full
-                     bg-secondary dark:bg-secondary/80
-                     shadow-[0_2px_12px_-3px_rgba(0,0,0,0.12),inset_0_1px_0_rgba(255,255,255,0.6)]
-                     dark:shadow-[0_2px_12px_-3px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.1)]
+          className={`absolute top-1.5 bottom-1.5 rounded-full
+                     bg-[linear-gradient(180deg,rgba(255,255,255,0.92),rgba(255,255,255,0.72))]
+                     dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.22),rgba(255,255,255,0.1))]
+                     shadow-[0_6px_18px_-8px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.9)]
+                     dark:shadow-[0_8px_24px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.2)]
                      ${isInitialized ? 'transition-all duration-[400ms] ease-[cubic-bezier(0.25,1,0.5,1)]' : ''}`}
           style={{
             left: indicatorStyle.left,
@@ -85,21 +93,21 @@ export const BottomNav = () => {
               onClick={() => navigate(path)}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
-              className={`relative z-10 flex flex-col items-center gap-1 px-3 py-1.5 rounded-full
-                         transition-all duration-200 ease-out
+              className={`relative z-10 flex flex-col items-center gap-1 px-3 py-1 rounded-full
+                         transition-all duration-300 ease-out
                          ${isActive
-                           ? 'text-foreground'
-                           : 'text-muted-foreground hover:text-foreground/80 active:scale-95'
+                           ? 'text-[#0f1115] dark:text-white -translate-y-[1px]'
+                           : 'text-muted-foreground hover:text-foreground/85 active:scale-95'
                          }`}
             >
               <Icon 
-                className={`w-5 h-5 transition-all duration-200 ${
-                  isActive ? 'stroke-[2.5]' : 'stroke-[1.5]'
+                className={`w-5 h-5 transition-all duration-300 ${
+                  isActive ? 'stroke-[2.3] drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] dark:drop-shadow-[0_1px_4px_rgba(255,255,255,0.35)]' : 'stroke-[1.7]'
                 }`} 
                 aria-hidden="true" 
               />
-              <span className={`text-[10px] font-medium transition-opacity duration-200 ${
-                isActive ? 'opacity-100' : 'opacity-60'
+              <span className={`text-[10px] font-medium tracking-[0.01em] transition-all duration-300 ${
+                isActive ? 'opacity-100' : 'opacity-65'
               }`}>
                 {label}
               </span>
