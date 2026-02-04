@@ -45,6 +45,10 @@ export function useForexWebSocket(symbol: string) {
     });
 
     socket.on('price_update', (data: ForexPrice) => {
+      // Ignore updates for other symbols to prevent cross-pair spikes.
+      if (!data || data.symbol !== symbol) {
+        return;
+      }
       console.log('💰 Price update received:', data);
       setPrice(data.price);
       setChange(data.change);
