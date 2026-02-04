@@ -135,7 +135,7 @@ export class ForexGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: unknown) => {
       console.error(`Binance WebSocket error for ${symbol}:`, error);
     });
 
