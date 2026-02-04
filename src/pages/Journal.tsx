@@ -36,7 +36,6 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/lib/tradeValidation";
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
-import { NewTradeFormSchema } from "@/lib/formValidation";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
 import { tradesApi, uploadsApi } from "@/lib/api";
@@ -84,20 +83,10 @@ const Journal = () => {
   const [filters, dispatchFilters] = useReducer(filtersReducer, initialFiltersState);
   const [modals, dispatchModals] = useReducer(modalReducer, initialModalState);
 
-  // Journal view toggle
-  const [journalView, setJournalView] = useState<'structured' | 'notes'>('structured');
-
-  // New trade form
+  // Notes-only journal form
   const [newTrade, setNewTrade] = useState({
-    pair: "EUR/USD",
-    direction: "buy" as 'buy' | 'sell',
-    entry_price: "",
-    stop_loss: "",
-    take_profit: "",
-    position_size: "",
-    risk_percent: "",
     notes: "",
-    journal_type: "structured" as 'structured' | 'notes',
+    journal_type: "notes" as 'notes',
     rich_content: null,
     images: [],
     links: [],
@@ -194,6 +183,12 @@ const Journal = () => {
     return urls;
   };
 
+  const hasMeaningfulJournalContent = (content: any, fallbackText: string) => {
+    const html = convertRichContentToHTML(content);
+    const plainText = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
+    return plainText.length > 0 || /<img\b/i.test(html) || fallbackText.trim().length > 0;
+  };
+
   const handleAddTrade = async () => {
     if (!user) {
       toast.error("Please sign in to add trades");
@@ -207,42 +202,23 @@ const Journal = () => {
       return;
     }
 
-    // For Notes view, set default values for required structured fields
-    const tradeToValidate = journalView === 'notes' ? {
-      ...newTrade,
-      pair: newTrade.pair || 'JOURNAL',
-      direction: newTrade.direction || 'buy',
-      entry_price: newTrade.entry_price || '0.1',
-      stop_loss: newTrade.stop_loss || undefined,
-      take_profit: newTrade.take_profit || undefined,
-      position_size: newTrade.position_size || '1',
-      risk_percent: newTrade.risk_percent || undefined,
-    } : newTrade;
-
-    // Validate form data
-    const validation = NewTradeFormSchema.safeParse(tradeToValidate);
-    if (!validation.success) {
-      const firstError = validation.error.errors[0];
-      toast.error(firstError.message);
+    if (!hasMeaningfulJournalContent(newTrade.rich_content, newTrade.notes)) {
+      toast.error("Please add a journal note before saving");
       return;
     }
 
     try {
       const tradeData = {
         user_id: user.id,
-        symbol: tradeToValidate.pair || 'JOURNAL',
-        direction: tradeToValidate.direction === 'long' ? 'buy' : (tradeToValidate.direction === 'short' ? 'sell' : tradeToValidate.direction) || 'buy',
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
-        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
-        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
-        notes: tradeToValidate.notes || null,
-        journal_type: journalView,
-        rich_content: tradeToValidate.rich_content || null,
-        images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
-        links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
-        market_condition: tradeToValidate.market_condition || null,
-        tags: tradeToValidate.tags || null,
+        symbol: 'JOURNAL',
+        direction: 'buy',
+        notes: newTrade.notes || null,
+        journal_type: 'notes',
+        rich_content: newTrade.rich_content || null,
+        images: (newTrade.images && newTrade.images.length > 0) ? newTrade.images : null,
+        links: (newTrade.links && newTrade.links.length > 0) ? newTrade.links : null,
+        market_condition: newTrade.market_condition || null,
+        tags: newTrade.tags || null,
         status: 'open',
         trade_date: new Date().toISOString().split('T')[0],
       };
@@ -257,7 +233,7 @@ const Journal = () => {
       
       // Send push notification for new log entry
       sendNotification('📝 Journal Entry Added', {
-        body: `${journalView === 'notes' ? 'New journal note' : `${tradeToValidate.pair} ${tradeToValidate.direction.toUpperCase()}`} added successfully`,
+        body: 'New journal note added successfully',
         tag: 'journal-add',
         icon: '/pwa-192x192.png'
       });
@@ -285,41 +261,22 @@ const Journal = () => {
   const handleEditTrade = async () => {
     if (!user || !modals.editingTrade) return;
 
-    // For Notes view, set default values for required structured fields
-    const tradeToValidate = journalView === 'notes' ? {
-      ...newTrade,
-      pair: newTrade.pair || 'JOURNAL',
-      direction: newTrade.direction || 'buy',
-      entry_price: newTrade.entry_price || '0.1',
-      stop_loss: newTrade.stop_loss || undefined,
-      take_profit: newTrade.take_profit || undefined,
-      position_size: newTrade.position_size || '1',
-      risk_percent: newTrade.risk_percent || undefined,
-    } : newTrade;
-
-    // Validate form data
-    const validation = NewTradeFormSchema.safeParse(tradeToValidate);
-    if (!validation.success) {
-      const firstError = validation.error.errors[0];
-      toast.error(firstError.message);
+    if (!hasMeaningfulJournalContent(newTrade.rich_content, newTrade.notes)) {
+      toast.error("Please add a journal note before saving");
       return;
     }
 
     try {
       const updates = {
-        symbol: tradeToValidate.pair || 'JOURNAL',
-        direction: tradeToValidate.direction === 'long' ? 'buy' : (tradeToValidate.direction === 'short' ? 'sell' : tradeToValidate.direction) || 'buy',
-        entry_price: tradeToValidate.entry_price ? parseFloat(tradeToValidate.entry_price) : undefined,
-        stop_loss: tradeToValidate.stop_loss ? parseFloat(tradeToValidate.stop_loss) : undefined,
-        take_profit: tradeToValidate.take_profit ? parseFloat(tradeToValidate.take_profit) : undefined,
-        position_size: tradeToValidate.position_size ? parseFloat(tradeToValidate.position_size) : undefined,
-        notes: tradeToValidate.notes || null,
-        journal_type: journalView,
-        rich_content: tradeToValidate.rich_content || null,
-        images: (tradeToValidate.images && tradeToValidate.images.length > 0) ? tradeToValidate.images : null,
-        links: (tradeToValidate.links && tradeToValidate.links.length > 0) ? tradeToValidate.links : null,
-        market_condition: tradeToValidate.market_condition || null,
-        tags: tradeToValidate.tags || null,
+        symbol: 'JOURNAL',
+        direction: 'buy',
+        notes: newTrade.notes || null,
+        journal_type: 'notes',
+        rich_content: newTrade.rich_content || null,
+        images: (newTrade.images && newTrade.images.length > 0) ? newTrade.images : null,
+        links: (newTrade.links && newTrade.links.length > 0) ? newTrade.links : null,
+        market_condition: newTrade.market_condition || null,
+        tags: newTrade.tags || null,
       };
 
       await tradesApi.update(modals.editingTrade.id, updates);
@@ -327,7 +284,7 @@ const Journal = () => {
       
       // Send push notification for updated log entry
       sendNotification('✏️ Journal Entry Updated', {
-        body: `${journalView === 'notes' ? 'Journal note' : `${tradeToValidate.pair} ${tradeToValidate.direction.toUpperCase()}`} updated successfully`,
+        body: 'Journal note updated successfully',
         tag: 'journal-update',
         icon: '/pwa-192x192.png'
       });
@@ -343,15 +300,8 @@ const Journal = () => {
 
   const resetForm = () => {
     setNewTrade({
-      pair: "EUR/USD",
-      direction: "long",
-      entry_price: "",
-      stop_loss: "",
-      take_profit: "",
-      position_size: "",
-      risk_percent: "",
       notes: "",
-      journal_type: journalView,
+      journal_type: "notes",
       rich_content: null,
       images: [],
       links: [],
@@ -364,18 +314,9 @@ const Journal = () => {
 
   const openEditModal = (trade: Trade) => {
     dispatchModals({ type: 'SET_EDITING_TRADE', payload: trade });
-    const tradeJournalType = (trade.journal_type || 'structured') as 'structured' | 'notes';
-    setJournalView(tradeJournalType);
     setNewTrade({
-      pair: trade.pair,
-      direction: trade.direction,
-      entry_price: trade.entry_price?.toString() || "",
-      stop_loss: trade.stop_loss?.toString() || "",
-      take_profit: trade.take_profit?.toString() || "",
-      position_size: trade.position_size?.toString() || "",
-      risk_percent: trade.risk_percent?.toString() || "",
       notes: trade.notes || "",
-      journal_type: tradeJournalType,
+      journal_type: "notes",
       rich_content: trade.rich_content || null,
       images: trade.images || [],
       links: trade.links || [],
@@ -962,151 +903,8 @@ const Journal = () => {
             </button>
           </header>
 
-          {/* Journal Type Toggle */}
-          <div className="px-6 pb-4 flex gap-2">
-            <button
-              onClick={() => {
-                setJournalView('structured');
-                setNewTrade({ ...newTrade, journal_type: 'structured' });
-              }}
-              className={`flex-1 h-10 rounded-lg font-medium transition-colors ${
-                journalView === 'structured'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Structured
-            </button>
-            <button
-              onClick={() => {
-                setJournalView('notes');
-                setNewTrade({ ...newTrade, journal_type: 'notes' });
-              }}
-              className={`flex-1 h-10 rounded-lg font-medium transition-colors ${
-                journalView === 'notes'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-secondary text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              Notes
-            </button>
-          </div>
-
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            {journalView === 'structured' && (
-              <>
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Currency Pair</label>
-                  <input
-                    type="text"
-                    value={newTrade.pair}
-                    onChange={(e) => setNewTrade({ ...newTrade, pair: e.target.value.toUpperCase() })}
-                    className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                    placeholder="EUR/USD"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Direction</label>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setNewTrade({ ...newTrade, direction: 'long' })}
-                      className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
-                        newTrade.direction === 'long' 
-                          ? 'bg-foreground text-background' 
-                          : 'bg-secondary text-foreground'
-                      }`}
-                    >
-                      <TrendingUp className="w-5 h-5" />
-                      Long
-                    </button>
-                    <button
-                      onClick={() => setNewTrade({ ...newTrade, direction: 'short' })}
-                      className={`flex-1 h-12 rounded-xl font-medium flex items-center justify-center gap-2 ${
-                        newTrade.direction === 'short' 
-                          ? 'bg-destructive text-background' 
-                          : 'bg-secondary text-foreground'
-                      }`}
-                    >
-                      <TrendingDown className="w-5 h-5" />
-                      Short
-                    </button>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Entry Price</label>
-                    <input
-                      type="number"
-                      value={newTrade.entry_price}
-                      onChange={(e) => setNewTrade({ ...newTrade, entry_price: e.target.value })}
-                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                      placeholder="1.0850"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Position Size</label>
-                    <input
-                      type="number"
-                      value={newTrade.position_size}
-                      onChange={(e) => setNewTrade({ ...newTrade, position_size: e.target.value })}
-                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                      placeholder="0.10"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Stop Loss</label>
-                    <input
-                      type="number"
-                      value={newTrade.stop_loss}
-                      onChange={(e) => setNewTrade({ ...newTrade, stop_loss: e.target.value })}
-                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                      placeholder="1.0800"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-muted-foreground mb-2">Take Profit</label>
-                    <input
-                      type="number"
-                      value={newTrade.take_profit}
-                      onChange={(e) => setNewTrade({ ...newTrade, take_profit: e.target.value })}
-                      className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                      placeholder="1.0950"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm text-muted-foreground mb-2">Risk %</label>
-                  <input
-                    type="number"
-                    value={newTrade.risk_percent}
-                    onChange={(e) => setNewTrade({ ...newTrade, risk_percent: e.target.value })}
-                    className="w-full h-12 px-4 bg-secondary text-foreground rounded-xl outline-none"
-                    placeholder="1"
-                  />
-                </div>
-              </>
-            )}
-
-            {journalView === 'structured' && (
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Notes</label>
-                <textarea
-                  value={newTrade.notes}
-                  onChange={(e) => setNewTrade({ ...newTrade, notes: e.target.value })}
-                  className="w-full h-24 px-4 py-3 bg-secondary text-foreground rounded-xl outline-none resize-none"
-                  placeholder="Trade setup notes..."
-                />
-              </div>
-            )}
-
-            {journalView === 'notes' && (
-              <div className="space-y-4 rounded-2xl border border-white/10 bg-[#121417] p-4">
+            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#121417] p-4">
                 <div>
                   <label className="block text-sm text-muted-foreground/90 mb-2">Journal Entry</label>
                   <RichNoteEditor
@@ -1166,11 +964,10 @@ const Journal = () => {
                     />
                   </div>
                 </div>
-              </div>
-            )}
+            </div>
 
-            {/* Screenshots Section - Only for Notes View */}
-            {!modals.editingTrade && journalView === 'notes' && (
+            {/* Screenshots Section */}
+            {!modals.editingTrade && (
               <div>
                 <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
                 <div className="space-y-2">
