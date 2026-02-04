@@ -79,11 +79,13 @@ const Journal = () => {
     offset: number;
     dragging: boolean;
     moved: boolean;
+    actionSide: "left" | "right" | null;
   }>({
     tradeId: null,
     offset: 0,
     dragging: false,
     moved: false,
+    actionSide: null,
   });
   
   // Free tier limits
@@ -453,6 +455,7 @@ const Journal = () => {
       offset: 0,
       dragging: true,
       moved: false,
+      actionSide: null,
     });
   };
 
@@ -476,10 +479,13 @@ const Journal = () => {
     }
 
     const clamped = Math.max(-SWIPE_MAX_DISTANCE, Math.min(SWIPE_MAX_DISTANCE, deltaX));
+    const actionSide =
+      clamped <= -SWIPE_ACTION_THRESHOLD ? "left" : clamped >= SWIPE_ACTION_THRESHOLD ? "right" : null;
     setSwipeState((prev) => ({
       ...prev,
       offset: clamped,
       moved: prev.moved || Math.abs(clamped) > 8,
+      actionSide,
     }));
   };
 
@@ -494,6 +500,7 @@ const Journal = () => {
       offset: 0,
       dragging: false,
       moved: false,
+      actionSide: null,
     });
     swipeStartXRef.current = null;
     swipeStartYRef.current = null;
@@ -519,6 +526,7 @@ const Journal = () => {
       offset: 0,
       dragging: false,
       moved: false,
+      actionSide: null,
     });
     swipeStartXRef.current = null;
     swipeStartYRef.current = null;
@@ -854,8 +862,24 @@ const Journal = () => {
           filteredTrades.map((trade) => (
             <div key={trade.id} className="relative rounded-2xl overflow-hidden">
               <div className="absolute inset-0 flex items-center justify-between px-4 bg-[#111317]">
-                <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400">Archive</span>
-                <span className="text-xs font-semibold uppercase tracking-wide text-red-400">Delete</span>
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wide transition-all duration-150 ${
+                    swipeState.tradeId === trade.id && swipeState.actionSide === "right"
+                      ? "text-emerald-300 scale-110"
+                      : "text-emerald-400/85"
+                  }`}
+                >
+                  Archive
+                </span>
+                <span
+                  className={`text-xs font-semibold uppercase tracking-wide transition-all duration-150 ${
+                    swipeState.tradeId === trade.id && swipeState.actionSide === "left"
+                      ? "text-red-300 scale-110"
+                      : "text-red-400/85"
+                  }`}
+                >
+                  Delete
+                </span>
               </div>
 
               <div
@@ -863,6 +887,14 @@ const Journal = () => {
                   swipeState.dragging && swipeState.tradeId === trade.id
                     ? ""
                     : "transition-transform duration-200 ease-out"
+                } ${
+                  swipeState.tradeId === trade.id && swipeState.actionSide === "left"
+                    ? "ring-1 ring-red-400/60 shadow-[0_0_0_1px_rgba(248,113,113,0.25),0_12px_24px_-16px_rgba(248,113,113,0.65)]"
+                    : ""
+                } ${
+                  swipeState.tradeId === trade.id && swipeState.actionSide === "right"
+                    ? "ring-1 ring-emerald-400/60 shadow-[0_0_0_1px_rgba(52,211,153,0.25),0_12px_24px_-16px_rgba(52,211,153,0.65)]"
+                    : ""
                 }`}
                 style={{
                   transform: `translateX(${swipeState.tradeId === trade.id ? swipeState.offset : 0}px)`,
