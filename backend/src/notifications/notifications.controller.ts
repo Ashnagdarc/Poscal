@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Delete, Body, Param, UseGuards, Request, Patch, Query, Logger } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { SkipThrottle } from '@nestjs/throttler';
 import { NotificationsService } from './notifications.service';
 import { CreatePushSubscriptionDto, CreatePushNotificationDto, CreateEmailDto } from './dto/notifications.dto';
 import { UpdateNotificationStatusDto, NotificationStatus } from './dto/update-notification-status.dto';
@@ -18,12 +19,14 @@ export class NotificationsController {
   }
 
   @Get('push/subscriptions/active')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async getAllActiveSubscriptions() {
     return await this.notificationsService.getAllActiveSubscriptions();
   }
 
   @Get('push/subscriptions/user/:userId')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async getSubscriptionsForUser(@Param('userId') userId: string) {
     return await this.notificationsService.getUserSubscriptions(userId);
@@ -72,6 +75,15 @@ export class NotificationsController {
     return { message: 'Subscription deleted successfully' };
   }
 
+  @Delete('push/subscriptions/expired/:id')
+  @SkipThrottle()
+  @UseGuards(ServiceTokenGuard)
+  async deleteExpiredSubscription(@Param('id') id: string) {
+    this.logger.log(`Removing expired push subscription: ${id}`);
+    await this.notificationsService.deleteExpiredSubscription(id);
+    return { message: 'Expired subscription removed' };
+  }
+
   @Get('push')
   @UseGuards(AuthGuard('jwt'))
   async getUserNotifications(@Request() req: any) {
@@ -94,6 +106,7 @@ export class NotificationsController {
   }
 
   @Get('push/pending')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async getPendingPushNotifications(@Query('limit') limit?: string) {
     const take = limit ? parseInt(limit, 10) : 100;
@@ -119,6 +132,7 @@ export class NotificationsController {
   }
 
   @Patch('push/:id/status')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async updateNotificationStatus(
     @Param('id') id: string,
@@ -128,6 +142,7 @@ export class NotificationsController {
   }
 
   @Post('push/batch-status')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async batchUpdateStatus(@Body() body: { ids: string[]; status: NotificationStatus }) {
     await this.notificationsService.batchUpdateNotificationStatus(body.ids, body.status);

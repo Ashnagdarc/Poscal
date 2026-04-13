@@ -47,7 +47,8 @@ export const PWAInstallPrompt = () => {
       return () => clearTimeout(timer);
     };
 
-    shouldShowPrompt();
+    const cleanup = shouldShowPrompt();
+    return cleanup;
   }, [isInstallable, isInstalled]);
 
   const handleInstall = async () => {

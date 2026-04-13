@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Eye, EyeOff, Lock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { authApi } from "@/lib/api";
+import axios from "axios";
 
 const ResetPassword = () => {
   const [password, setPassword] = useState("");
@@ -72,15 +73,18 @@ const ResetPassword = () => {
       } else {
         throw new Error('Reset failed');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const description = axios.isAxiosError(err)
+        ? err.response?.data?.message || err.message
+        : err instanceof Error ? err.message : 'Failed to update password';
       toast({
         title: "Error updating password",
-        description: err?.response?.data?.message || err?.message || 'Failed to update password',
+        description,
         variant: "destructive",
       });
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   if (!isValidSession) {

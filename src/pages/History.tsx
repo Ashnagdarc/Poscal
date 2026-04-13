@@ -32,7 +32,8 @@ const History = () => {
   const isHistoryLimited = !isPaid && history.length > FREE_HISTORY_LIMIT;
 
   useEffect(() => {
-    // Simulate loading for better UX
+    // Intentional: run once on mount to load persisted history from localStorage.
+    // This component is the sole writer of positionSizeHistory, so a one-time read is correct.
     const timer = setTimeout(() => {
       const savedHistory = localStorage.getItem("positionSizeHistory");
       if (savedHistory) {

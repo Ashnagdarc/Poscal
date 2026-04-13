@@ -31,6 +31,7 @@
   "type": "commonjs",
   "dependencies": {
     "@nestjs/common": "^11.1.12",
+    "@nestjs/throttler": "^6.4.0",
     "@nestjs/config": "^4.0.2",
     "@nestjs/core": "^11.1.12",
     "@nestjs/jwt": "^11.0.2",

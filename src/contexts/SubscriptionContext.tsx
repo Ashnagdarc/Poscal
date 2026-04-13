@@ -58,6 +58,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     isActive: false,
   });
 
+  // Type guard to validate API response structure before accessing properties
+  const isSubscriptionResponse = (data: unknown): data is Record<string, unknown> =>
+    typeof data === 'object' && data !== null && 'payment_status' in data;
+
   // Fetch user's subscription details from database
   const fetchSubscriptionDetails = async () => {
     if (!user) {
@@ -78,13 +82,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
       // Call the subscription API
       const data = await subscriptionApi.getDetails();
 
-      if (data) {
+      if (isSubscriptionResponse(data)) {
         setSubscriptionDetails({
-          paymentStatus: data.payment_status || 'free',
-          subscriptionTier: data.subscription_tier || 'free',
-          expiresAt: data.expires_at ? new Date(data.expires_at) : null,
-          trialEndsAt: data.trial_ends_at ? new Date(data.trial_ends_at) : null,
-          isActive: data.is_active || false,
+          paymentStatus: (data.payment_status as PaymentStatus) || 'free',
+          subscriptionTier: (data.subscription_tier as SubscriptionTier) || 'free',
+          expiresAt: data.expires_at ? new Date(data.expires_at as string) : null,
+          trialEndsAt: data.trial_ends_at ? new Date(data.trial_ends_at as string) : null,
+          isActive: Boolean(data.is_active),
         });
       }
     } catch (error) {

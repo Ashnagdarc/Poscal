@@ -107,20 +107,20 @@ const Signals = () => {
 
   // Helper: Check if price is in entry range
   const isPriceNearEntry = (signal: TradingSignal, tolerance: number = 50): boolean => {
-    const priceDiff = Math.abs(toNumber(signal.entry_price) - (prices[signal.currency_pair] || toNumber(signal.entry_price)));
+    const priceDiff = Math.abs(toNumber(signal.entry_price) - (prices?.[signal.currency_pair] ?? toNumber(signal.entry_price)));
     return priceDiff <= tolerance;
   };
 
   // Helper: Check if price is in warning range (near SL)
   const isNearStopLoss = (signal: TradingSignal, percentThreshold: number = 0.8): boolean => {
     const slDistance = Math.abs(toNumber(signal.entry_price) - toNumber(signal.stop_loss));
-    const currentDistance = Math.abs(toNumber(signal.entry_price) - (prices[signal.currency_pair] || toNumber(signal.entry_price)));
+    const currentDistance = Math.abs(toNumber(signal.entry_price) - (prices?.[signal.currency_pair] ?? toNumber(signal.entry_price)));
     return currentDistance >= (slDistance * percentThreshold);
   };
 
   // Helper: Calculate profit potential at current price
   const getCurrentProfit = (signal: TradingSignal): number => {
-    const currentPrice = prices[signal.currency_pair] || toNumber(signal.entry_price);
+    const currentPrice = prices?.[signal.currency_pair] ?? toNumber(signal.entry_price);
     if (signal.direction === 'buy') {
       return currentPrice - toNumber(signal.entry_price);
     } else {

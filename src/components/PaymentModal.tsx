@@ -1,10 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { logger } from '@/lib/logger';
 import './PaymentModal.css';
 
 // Declare PaystackPop on window for TypeScript
 declare global {
   interface Window {
-    PaystackPop?: any;
+    PaystackPop?: {
+      setup: (config: Record<string, unknown>) => { openIframe?: () => void; open?: () => void };
+    };
   }
 }
 // Paystack InlineJS v2 integration
@@ -22,6 +25,8 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { subscriptionApi } from '@/lib/api';
+
+const PAYSTACK_FALLBACK_TIMEOUT_MS = 30_000;
 
 const TIER_CONFIG = {
   premium: {
@@ -74,10 +79,6 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
   }, []);
 
   useEffect(() => {
-    processingRef.current = isProcessing;
-  }, [isProcessing]);
-
-  useEffect(() => {
     if (!isOpen) {
       setIsProcessing(false);
       setPaymentStatus('idle');
@@ -93,54 +94,44 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
         // Fallback: Reset UI if Paystack does not respond in 30 seconds
         const fallbackTimeout = setTimeout(() => {
           if (processingRef.current) {
+            processingRef.current = false;
             setIsProcessing(false);
             setPaymentStatus('error');
             setErrorMessage('Payment window did not open. Please check your popup blocker, CSP, or try again.');
-            console.warn('[Paystack Warning] Payment window did not open or callback was not triggered.');
+            logger.warn('[Paystack] Payment window did not open or callback was not triggered.');
           }
-        }, 30000); // 30 seconds
-    // Debug: Log all payment parameters
-    console.log('[Paystack Debug] handlePay called');
-    console.log('[Paystack Debug] publicKey:', publicKey);
-    console.log('[Paystack Debug] userEmail:', effectiveUserEmail);
-    console.log('[Paystack Debug] amount:', config.amount);
-    console.log('[Paystack Debug] currency:', config.currency);
+        }, PAYSTACK_FALLBACK_TIMEOUT_MS);
     if (!publicKey) {
       setErrorMessage('Paystack public key not set');
       setPaymentStatus('error');
-      console.error('[Paystack Error] Missing publicKey:', publicKey);
       return;
     }
     if (!paystackScriptLoaded) {
       setErrorMessage('Paystack script not loaded. Please refresh and try again.');
       setPaymentStatus('error');
-      console.error('[Paystack Error] paystackScriptLoaded:', paystackScriptLoaded);
       return;
     }
     if (!window.PaystackPop || typeof window.PaystackPop.setup !== 'function') {
       setErrorMessage('PaystackPop.setup is not available on window.');
       setPaymentStatus('error');
-      console.error('[Paystack Error] window.PaystackPop:', window.PaystackPop);
       return;
     }
     if (!effectiveUserEmail) {
       setErrorMessage('User email is missing. Please log in or contact support.');
       setPaymentStatus('error');
-      console.error('[Paystack Error] effectiveUserEmail:', effectiveUserEmail);
       return;
     }
     if (config.amount <= 0) {
       setErrorMessage('Invalid payment amount. Please contact support.');
       setPaymentStatus('error');
-      console.error('[Paystack Error] amount:', config.amount);
       return;
     }
     if (!config.currency) {
       setErrorMessage('Currency is missing. Please contact support.');
       setPaymentStatus('error');
-      console.error('[Paystack Error] currency:', config.currency);
       return;
     }
+    processingRef.current = true;
     setIsProcessing(true);
     setPaymentStatus('processing');
     setErrorMessage('');
@@ -151,11 +142,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
           email: effectiveUserEmail,
           amount: config.amount,
           currency: config.currency,
-          callback: async (response: any) => {
+          callback: async (response: { reference?: string }) => {
             clearTimeout(fallbackTimeout);
+            processingRef.current = false;
             setIsProcessing(false);
             setPaymentStatus('success');
-            processingRef.current = false;
             suppressCloseToastRef.current = false;
             try {
               if (!response?.reference) {
@@ -171,17 +162,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
               });
               await refreshSubscription();
               toast.success('Subscription activated. Enjoy premium!');
-            } catch (verifyError: any) {
+            } catch (verifyError: unknown) {
               setPaymentStatus('error');
-              setErrorMessage(verifyError?.message || 'Payment verified but subscription was not activated.');
+              const msg = verifyError instanceof Error ? verifyError.message : 'Payment verified but subscription was not activated.';
+              setErrorMessage(msg);
               toast.error('Payment verified, but subscription activation failed. Please contact support.');
             }
           },
           onClose: () => {
             clearTimeout(fallbackTimeout);
+            processingRef.current = false;
             setIsProcessing(false);
             setPaymentStatus('idle');
-            processingRef.current = false;
             suppressCloseToastRef.current = false;
             toast.info('Payment cancelled. Try again whenever you\'re ready.');
           },
@@ -197,13 +189,13 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({ userEmail, isOpen, o
         clearTimeout(fallbackTimeout);
         throw new Error('PaystackPop.setup is not a function.');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       clearTimeout(fallbackTimeout);
+      processingRef.current = false;
       setIsProcessing(false);
       setPaymentStatus('error');
-      processingRef.current = false;
       suppressCloseToastRef.current = false;
-      setErrorMessage(err?.message || 'Paystack transaction failed.');
+      setErrorMessage(err instanceof Error ? err.message : 'Paystack transaction failed.');
     }
   };
 

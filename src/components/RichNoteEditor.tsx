@@ -5,10 +5,11 @@ import Image from '@tiptap/extension-image';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Bold, Italic, List, Link2, Image as ImageIcon, Code, Undo2, Redo2, Heading2, ListOrdered, Quote, Strikethrough, Trash2, Eye } from 'lucide-react';
 import { useState, useRef } from 'react';
+import DOMPurify from 'dompurify';
 
 interface RichNoteEditorProps {
-  content: any;
-  onChange: (content: any) => void;
+  content: unknown;
+  onChange: (content: unknown) => void;
   placeholder?: string;
 }
 
@@ -82,6 +83,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           disabled={!editor.can().chain().focus().toggleBold().run()}
           className={toolbarBtnClass(editor.isActive('bold'))}
           title="Bold (Ctrl+B)"
+          aria-label="Bold"
         >
           <Bold className="w-4 h-4" />
         </button>
@@ -91,6 +93,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           disabled={!editor.can().chain().focus().toggleItalic().run()}
           className={toolbarBtnClass(editor.isActive('italic'))}
           title="Italic (Ctrl+I)"
+          aria-label="Italic"
         >
           <Italic className="w-4 h-4" />
         </button>
@@ -99,6 +102,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleStrike().run()}
           className={toolbarBtnClass(editor.isActive('strike'))}
           title="Strikethrough"
+          aria-label="Strikethrough"
         >
           <Strikethrough className="w-4 h-4" />
         </button>
@@ -110,6 +114,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
           className={toolbarBtnClass(editor.isActive('heading', { level: 2 }))}
           title="Heading 2"
+          aria-label="Heading 2"
         >
           <Heading2 className="w-4 h-4" />
         </button>
@@ -121,6 +126,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleBulletList().run()}
           className={toolbarBtnClass(editor.isActive('bulletList'))}
           title="Bullet List"
+          aria-label="Bullet list"
         >
           <List className="w-4 h-4" />
         </button>
@@ -129,6 +135,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleOrderedList().run()}
           className={toolbarBtnClass(editor.isActive('orderedList'))}
           title="Ordered List"
+          aria-label="Ordered list"
         >
           <ListOrdered className="w-4 h-4" />
         </button>
@@ -137,6 +144,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleBlockquote().run()}
           className={toolbarBtnClass(editor.isActive('blockquote'))}
           title="Quote"
+          aria-label="Blockquote"
         >
           <Quote className="w-4 h-4" />
         </button>
@@ -148,6 +156,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().toggleCodeBlock().run()}
           className={toolbarBtnClass(editor.isActive('codeBlock'))}
           title="Code Block"
+          aria-label="Code block"
         >
           <Code className="w-4 h-4" />
         </button>
@@ -156,6 +165,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={addLink}
           className={toolbarBtnClass(editor.isActive('link'))}
           title="Add Link"
+          aria-label="Add link"
         >
           <Link2 className="w-4 h-4" />
         </button>
@@ -164,6 +174,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={addImage}
           className={toolbarBtnClass()}
           title="Add Image (File)"
+          aria-label="Add image"
         >
           <ImageIcon className="w-4 h-4" />
         </button>
@@ -184,6 +195,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           disabled={!editor.can().chain().focus().undo().run()}
           className={`${toolbarBtnClass()} disabled:opacity-40`}
           title="Undo"
+          aria-label="Undo"
         >
           <Undo2 className="w-4 h-4" />
         </button>
@@ -193,6 +205,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           disabled={!editor.can().chain().focus().redo().run()}
           className={`${toolbarBtnClass()} disabled:opacity-40`}
           title="Redo"
+          aria-label="Redo"
         >
           <Redo2 className="w-4 h-4" />
         </button>
@@ -204,6 +217,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => editor.chain().focus().clearContent().run()}
           className="h-7 w-7 sm:h-8 sm:w-8 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-secondary/70 hover:text-destructive transition-colors"
           title="Clear All"
+          aria-label="Clear all content"
         >
           <Trash2 className="w-4 h-4" />
         </button>
@@ -212,6 +226,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
           onClick={() => setShowPreview(!showPreview)}
           className={toolbarBtnClass(showPreview)}
           title="Preview"
+          aria-label={showPreview ? 'Hide preview' : 'Show preview'}
         >
           <Eye className="w-4 h-4" />
         </button>
@@ -244,7 +259,7 @@ export const RichNoteEditor = ({ content, onChange, placeholder = "Write your tr
             prose-em:text-foreground prose-a:text-primary prose-code:text-foreground
             prose-li:text-foreground prose-blockquote:text-muted-foreground">
             {content && editor.getHTML() ? (
-              <div dangerouslySetInnerHTML={{ __html: editor.getHTML() }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(editor.getHTML()) }} />
             ) : (
               <p className="text-muted-foreground italic">Nothing to preview yet...</p>
             )}

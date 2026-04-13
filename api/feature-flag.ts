@@ -1,5 +1,5 @@
 // Proxy to Contabo backend for feature flags
-const BACKEND_URL = process.env.VITE_API_URL || 'https://api.poscalfx.com';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://api.poscalfx.com';
 const BACKEND_TOKEN = process.env.BACKEND_SERVICE_TOKEN;
 
 export default async function handler(req: any, res: any) {

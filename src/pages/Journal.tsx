@@ -168,7 +168,7 @@ const Journal = () => {
 
   const fetchTrades = async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
     try {
       const data = await tradesApi.getAll();
@@ -177,8 +177,9 @@ const Journal = () => {
     } catch (error) {
       logger.error('Error fetching trades:', error);
       toast.error("Failed to load trades");
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const uploadScreenshots = async (tradeId: string): Promise<string[]> => {

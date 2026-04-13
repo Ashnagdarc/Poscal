@@ -17,6 +17,7 @@ dist-ssr
 .env.local
 .env.production
 .env.development
+.env.vercel
 .env*.local
 
 # Editor directories and files
@@ -44,8 +45,6 @@ __pycache__/
 *.zip
 *.gz
 
-# Supabase
-supabase/.temp/
 *-old.ts
 
 # Temporary files

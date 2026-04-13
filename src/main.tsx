@@ -3,6 +3,8 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
+const SW_REGISTRATION_TIMEOUT_MS = 5000;
+
 // Register service worker for push notifications if enabled
 const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
 if (ENABLE_SW && "serviceWorker" in navigator) {
@@ -17,15 +19,15 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
 
       // Register with a simple timeout
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("SW registration timeout")), 5000)
+        setTimeout(() => reject(new Error("SW registration timeout")), SW_REGISTRATION_TIMEOUT_MS)
       );
 
       const registrationPromise = navigator.serviceWorker.register("/sw.js", { scope: "/" });
       
       const registration = await Promise.race([registrationPromise, timeoutPromise]);
-      console.log("[sw] Service worker registered successfully:", registration);
+      if (import.meta.env.DEV) console.log("[sw] Service worker registered successfully:", registration);
     } catch (error) {
-      console.error("[sw] Failed to register service worker:", error);
+      if (import.meta.env.DEV) console.error("[sw] Failed to register service worker:", error);
     }
   };
 

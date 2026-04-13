@@ -238,7 +238,8 @@ export class NotificationWorker {
     } catch (error: unknown) {
       const err = error as { statusCode?: number; message?: string };
       if (err?.statusCode === 410 || err?.statusCode === 404) {
-        logger.warn('Subscription expired', { subscriptionId: subscription.id });
+        logger.warn('Subscription expired, removing from database', { subscriptionId: subscription.id });
+        void this.removeExpiredSubscription(subscription.id);
         return false;
       }
 
@@ -247,6 +248,20 @@ export class NotificationWorker {
         error: err?.message || 'Unknown error',
       });
       return false;
+    }
+  }
+
+  private async removeExpiredSubscription(subscriptionId: string): Promise<void> {
+    try {
+      await withRetry(() =>
+        this.nestApi.delete(`/notifications/push/subscriptions/expired/${subscriptionId}`),
+      );
+      logger.info('Removed expired subscription from database', { subscriptionId });
+    } catch (error) {
+      logger.error('Failed to remove expired subscription', {
+        subscriptionId,
+        error: (error as Error).message,
+      });
     }
   }
 

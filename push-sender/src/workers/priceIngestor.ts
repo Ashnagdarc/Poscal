@@ -14,6 +14,7 @@ const MAX_RECONNECT_DELAY_MS = 60000;
 const SUBSCRIBE_BATCH_SIZE = 25;
 const SUBSCRIBE_BATCH_DELAY_MS = 400;
 const METRICS_LOG_INTERVAL_MS = 60000;
+const HEARTBEAT_INTERVAL_MS = 30000;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,6 +41,7 @@ export class PriceIngestor {
   private flushTimer?: NodeJS.Timeout;
   private metricsTimer?: NodeJS.Timeout;
   private reconnectTimer?: NodeJS.Timeout;
+  private heartbeatTimer?: NodeJS.Timeout;
   private reconnectAttempts = 0;
   private reconnectDelayMs = RECONNECT_DELAY_MS;
   private lastCloseRateLimited = false;
@@ -84,6 +86,11 @@ export class PriceIngestor {
       this.reconnectTimer = undefined;
     }
 
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = undefined;
+    }
+
     if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
       this.websocket.close();
     }
@@ -109,6 +116,13 @@ export class PriceIngestor {
       this.reconnectAttempts = 0;
       this.reconnectDelayMs = RECONNECT_DELAY_MS;
       void this.subscribeAllSymbols();
+
+      // Keep connection alive — Finnhub drops idle sockets without periodic pings
+      this.heartbeatTimer = setInterval(() => {
+        if (this.websocket?.readyState === WebSocket.OPEN) {
+          this.websocket.send(JSON.stringify({ type: 'ping' }));
+        }
+      }, HEARTBEAT_INTERVAL_MS);
     });
 
     this.websocket.on('message', (payload) => {
@@ -128,6 +142,10 @@ export class PriceIngestor {
 
     this.websocket.on('close', () => {
       logger.warn('Finnhub WebSocket closed');
+      if (this.heartbeatTimer) {
+        clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = undefined;
+      }
       this.scheduleReconnect(this.lastCloseRateLimited);
       this.lastCloseRateLimited = false;
     });

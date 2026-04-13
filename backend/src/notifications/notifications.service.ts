@@ -54,6 +54,10 @@ export class NotificationsService {
     await this.pushSubscriptionRepository.delete(id);
   }
 
+  async deleteExpiredSubscription(id: string): Promise<void> {
+    await this.pushSubscriptionRepository.delete({ id });
+  }
+
   // Push Notifications
   async queuePushNotification(dto: CreatePushNotificationDto): Promise<any> {
     // If user_id is provided, queue for that specific user

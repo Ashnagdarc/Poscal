@@ -172,7 +172,7 @@ export const SYMBOL_MAPPINGS: Record<string, string> = {
   'FIL/USD': 'BINANCE:FILUSDT',
   'LINK/USD': 'BINANCE:LINKUSDT',
   'NEAR/USD': 'BINANCE:NEARUSDT',
-  'SHIB/USD': 'BINANCE:SHIBUUSDT',
+  'SHIB/USD': 'BINANCE:SHIBUSDT',
   'ARB/USD': 'BINANCE:ARBUSDT',
   'BLUR/USD': 'BINANCE:BLURUSDT',
   'APE/USD': 'BINANCE:APEUSDT',
@@ -190,7 +190,7 @@ export const SYMBOL_MAPPINGS: Record<string, string> = {
   'XMR/USD': 'BINANCE:XMRUSDT',
   'DASH/USD': 'BINANCE:DASHUSDT',
   'BCH/USD': 'BINANCE:BCHUSDT',
-  'BSV/USD': 'BINANCE:BSVUSDT',
+  // BSV delisted from Binance 2021 — removed
   'DYDX/USD': 'BINANCE:DYDXUSDT',
   'AAVE/USD': 'BINANCE:AAVEUSDT',
   'UNI/USD': 'BINANCE:UNIUSDT',
@@ -199,14 +199,14 @@ export const SYMBOL_MAPPINGS: Record<string, string> = {
   'CRV/USD': 'BINANCE:CRVUSDT',
   'USDT/USD': 'BINANCE:USDTUSDT',
   'USDC/USD': 'BINANCE:USDCUSDT',
-  'BUSD/USD': 'BINANCE:BUSDUSDT',
+  // BUSD deprecated and delisted 2023 — removed
   'DAI/USD': 'BINANCE:DAIUSDT',
   'FRAX/USD': 'BINANCE:FRAXUSDT',
   'OP/USD': 'BINANCE:OPUSDT',
   'LIDO/USD': 'BINANCE:LDOUSDT',
-  'ARBITRUM/USD': 'BINANCE:ARBITRUSUSDT',
-  'OPTIMISM/USD': 'BINANCE:OPTIMISMUSDT',
-  'ZKSPACES/USD': 'BINANCE:ZKSPACESUSDT',
+  // ARBITRUM/USD used wrong ticker — already covered by ARB/USD above
+  // OPTIMISM/USD used wrong ticker — already covered by OP/USD above
+  // ZKSPACES — not a valid Binance listing, removed
   'BTC/EUR': 'BINANCE:BTCEUR',
   'BTC/GBP': 'BINANCE:BTCGBP',
   'ETH/EUR': 'BINANCE:ETHEUR',

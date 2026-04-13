@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import axios from 'axios';
 import { authApi, User } from '@/lib/api';
 
 interface AuthContextType {
@@ -6,10 +7,10 @@ interface AuthContextType {
   session: { access_token: string } | null;
   loading: boolean;
   isConfigured: boolean;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -20,7 +21,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session on mount
+    // Check for existing session on mount.
+    // TODO: Migrate to httpOnly cookies to prevent XSS token theft (requires backend Set-Cookie changes).
     const token = localStorage.getItem('auth_token');
     const storedUser = localStorage.getItem('user');
 
@@ -45,9 +47,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(user);
       setSession({ access_token: token });
       return { error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[auth] Sign up error:', error);
-      return { error: error.response?.data?.message || error.message || 'Sign up failed' };
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : error instanceof Error ? error.message : 'Sign up failed';
+      return { error: msg };
     }
   };
 
@@ -57,9 +62,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUser(user);
       setSession({ access_token: token });
       return { error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[auth] Sign in error:', error);
-      return { error: error.response?.data?.message || error.message || 'Sign in failed' };
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : error instanceof Error ? error.message : 'Sign in failed';
+      return { error: msg };
     }
   };
 
@@ -67,9 +75,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await authApi.requestReset(email);
       return { error: null };
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('[auth] Reset password error:', error);
-      return { error: error.response?.data?.message || error.message || 'Failed to request password reset' };
+      const msg = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : error instanceof Error ? error.message : 'Failed to request password reset';
+      return { error: msg };
     }
   };
 

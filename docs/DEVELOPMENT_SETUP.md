@@ -130,6 +130,13 @@ VAPID_PUBLIC_KEY=your_vapid_public_key
 VAPID_PRIVATE_KEY=your_vapid_private_key
 ```
 
+#### Vercel Functions (server-side only)
+Legacy handlers in `api/` use server-only environment variables documented in `.env.vercel.example`.
+
+- Set these in the Vercel dashboard for production.
+- For local `vercel dev`, place the needed values in a local `.env` or `.env.local`.
+- Do not put these values in `.env.production` because that file is bundled into the browser build.
+
 ### 5. Run Database Migrations
 
 ```bash

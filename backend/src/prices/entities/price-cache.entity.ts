@@ -8,13 +8,13 @@ export class PriceCache {
   @Column({ type: 'varchar', length: 20, unique: true })
   symbol: string;
 
-  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  @Column({ type: 'decimal', precision: 15, scale: 6 })
   bid_price: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  @Column({ type: 'decimal', precision: 15, scale: 6 })
   ask_price: number;
 
-  @Column({ type: 'decimal', precision: 10, scale: 5 })
+  @Column({ type: 'decimal', precision: 15, scale: 6 })
   mid_price: number;
 
   @Column({ type: 'bigint', nullable: true })

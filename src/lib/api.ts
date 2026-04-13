@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logger } from '@/lib/logger';
 
 // Use relative path for Vercel serverless functions, fallback to external API for other endpoints
 const API_URL = import.meta.env.VITE_API_URL || 'https://api.poscalfx.com';
@@ -69,43 +70,45 @@ interface FeatureFlagResponse {
   message?: string;
 }
 
-const parseFeatureFlagError = (err: any) => {
-  const status = err?.response?.status;
-  const apiMessage = err?.response?.data?.message;
-  const generic = err?.message || 'Failed to reach feature flag API';
-  const statusText = status ? ` (${status})` : '';
-  return apiMessage || `${generic}${statusText}`;
+const parseFeatureFlagError = (err: unknown): string => {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    const apiMessage = err.response?.data?.message as string | undefined;
+    const statusText = status ? ` (${status})` : '';
+    return apiMessage || `${err.message}${statusText}`;
+  }
+  return err instanceof Error ? err.message : 'Failed to reach feature flag API';
 };
 
 export const featureFlagApi = {
   getPaidLock: async (): Promise<boolean> => {
     try {
-      console.debug('[feature-flag] Fetching paid lock status...');
+      logger.log('[feature-flag] Fetching paid lock status...');
       // Use public endpoint (no auth required) for reading
       const { data } = await api.get<FeatureFlagResponse>('/public/feature-flag/paid-lock');
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to read paid lock flag');
       }
-      console.debug('[feature-flag] Paid lock status:', data.enabled);
+      logger.log('[feature-flag] Paid lock status:', data.enabled);
       return !!data.enabled;
     } catch (err) {
-      console.error('[feature-flag] Error:', err);
+      logger.error('[feature-flag] Error:', err);
       throw new Error(parseFeatureFlagError(err));
     }
   },
 
   setPaidLock: async (enabled: boolean): Promise<boolean> => {
     try {
-      console.debug('[feature-flag] Setting paid lock to:', enabled);
+      logger.log('[feature-flag] Setting paid lock to:', enabled);
       // Use admin endpoint (requires auth) for writing
       const { data } = await api.post<FeatureFlagResponse>('/admin/feature-flag', { enabled });
       if (!data?.success) {
         throw new Error(data?.message || 'Unable to update paid lock flag');
       }
-      console.debug('[feature-flag] Update success');
+      logger.log('[feature-flag] Update success');
       return !!data.enabled;
     } catch (err) {
-      console.error('[feature-flag] Update error:', err);
+      logger.error('[feature-flag] Update error:', err);
       throw new Error(parseFeatureFlagError(err));
     }
   },
@@ -326,7 +329,7 @@ export const appUpdatesApi = {
       const { data } = await api.get('/system/updates');
       return data;
     } catch (error) {
-      console.warn('App updates endpoint not implemented yet');
+      logger.warn('App updates endpoint not implemented yet');
       return [];
     }
   },

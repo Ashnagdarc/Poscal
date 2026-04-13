@@ -36,13 +36,6 @@ export const EmojiMarquee = ({ speed = "fast", size = "lg", className = "" }: Em
 
   return (
     <div className={`relative w-full overflow-hidden ${className}`} aria-hidden>
-      {/* Inject keyframes for rightward marquee */}
-      <style>{`
-        @keyframes marquee-right {
-          0% { transform: translateX(-50%); }
-          100% { transform: translateX(0%); }
-        }
-      `}</style>
       <div className="relative h-16">
         {/* Two identical tracks for seamless loop */}
         <div

@@ -10,7 +10,7 @@ export const SkipLink = () => {
       main.setAttribute('tabindex', '-1');
       main.focus();
       // Remove tabindex after focus to restore natural tab order
-      setTimeout(() => main.removeAttribute('tabindex'), 100);
+      setTimeout(() => document.querySelector('main')?.removeAttribute('tabindex'), 100);
     }
   };
 

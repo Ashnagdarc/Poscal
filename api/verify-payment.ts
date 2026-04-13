@@ -1,5 +1,5 @@
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;
-const BACKEND_URL = process.env.VITE_API_URL || 'https://api.poscalfx.com';
+const BACKEND_URL = process.env.BACKEND_URL || 'https://api.poscalfx.com';
 const BACKEND_SERVICE_TOKEN = process.env.BACKEND_SERVICE_TOKEN;
 
 export default async function handler(req: any, res: any) {

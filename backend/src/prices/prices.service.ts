@@ -48,28 +48,32 @@ export class PricesService {
   }
 
   async batchUpsert(
-    prices: Array<{ symbol: string; bid_price?: number; mid_price?: number; ask_price?: number; price?: number; source?: string }>,
+    prices: Array<{ symbol: string; bid_price?: number; mid_price?: number; ask_price?: number; price?: number; source?: string; timestamp?: number }>,
   ): Promise<void> {
     if (prices.length === 0) return;
 
-    // Use raw SQL INSERT ON CONFLICT instead of TypeORM upsert (which is broken)
-    const values = prices.map((p) => {
+    // Build parameterized query — never concatenate user-supplied values into SQL
+    const params: (string | number | null)[] = [];
+    const valuePlaceholders = prices.map((p, i) => {
+      const base = i * 5;
       const midPrice = p.mid_price ?? p.price ?? p.ask_price ?? p.bid_price ?? 0;
-      return `('${p.symbol.replace(/'/g, "''")}', ${p.bid_price ?? 'NULL'}, ${p.ask_price ?? 'NULL'}, ${midPrice}, NOW(), NOW())`;
-    }).join(',');
+      params.push(p.symbol, p.bid_price ?? null, p.ask_price ?? null, midPrice, p.timestamp ?? null);
+      return `($${base + 1}::varchar, $${base + 2}::numeric, $${base + 3}::numeric, $${base + 4}::numeric, NOW(), NOW(), $${base + 5}::bigint)`;
+    });
 
     const sql = `
-      INSERT INTO price_cache (symbol, bid_price, ask_price, mid_price, created_at, updated_at)
-      VALUES ${values}
+      INSERT INTO price_cache (symbol, bid_price, ask_price, mid_price, created_at, updated_at, timestamp)
+      VALUES ${valuePlaceholders.join(',')}
       ON CONFLICT (symbol)
       DO UPDATE SET
         bid_price = EXCLUDED.bid_price,
         ask_price = EXCLUDED.ask_price,
         mid_price = EXCLUDED.mid_price,
-        updated_at = EXCLUDED.updated_at
+        updated_at = EXCLUDED.updated_at,
+        timestamp = EXCLUDED.timestamp
     `;
 
-    await this.priceCacheRepository.query(sql);
+    await this.priceCacheRepository.query(sql, params);
   }
 
   async deletePrice(symbol: string): Promise<void> {

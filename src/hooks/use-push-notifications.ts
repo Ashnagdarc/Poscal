@@ -3,7 +3,13 @@ import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import { notificationsApi } from '@/lib/api';
 
-const VAPID_PUBLIC_KEY = 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
+const PERMISSION_REQUEST_TIMEOUT_MS = 10_000;
+
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
+  ?? (() => {
+    logger.warn('[push-notifications] VITE_VAPID_PUBLIC_KEY is not set. Using fallback key.');
+    return 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
+  })();
 
 interface UsePushNotificationsResult {
   isSupported: boolean;
@@ -123,7 +129,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         permissionResult = await Promise.race([
           permPromise,
           new Promise<NotificationPermission>((_, reject) => 
-            setTimeout(() => reject(new Error('Permission request timeout - took too long')), 10000)
+            setTimeout(() => reject(new Error('Permission request timeout - took too long')), PERMISSION_REQUEST_TIMEOUT_MS)
           )
         ]);
       } catch (error) {

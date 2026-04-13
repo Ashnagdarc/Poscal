@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Logger } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { PricesService } from './prices.service';
 import { ServiceTokenGuard } from '../auth/guards/service-token.guard';
 
@@ -25,6 +26,7 @@ export class PricesController {
   }
 
   @Post('batch-update')
+  @SkipThrottle()
   @UseGuards(ServiceTokenGuard)
   async batchUpdatePrices(
     @Body()
@@ -62,6 +64,8 @@ export class PricesController {
   }
 
   @Post('batch')
+  @SkipThrottle()
+  @UseGuards(ServiceTokenGuard)
   async updatePrices(@Body() body: { prices: Array<{ symbol: string; data: any }> }) {
     return await this.pricesService.updatePrices(body.prices);
   }
