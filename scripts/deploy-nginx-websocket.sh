@@ -10,7 +10,7 @@ SSH_USER="root"
 
 # Copy the Nginx config to VPS
 echo "📋 Copying Nginx config to VPS..."
-scp nginx-websocket-config.conf ${SSH_USER}@${VPS_IP}:/etc/nginx/sites-available/poscalfx.com
+scp "$(dirname "$0")/../infra/nginx-websocket-config.conf" ${SSH_USER}@${VPS_IP}:/etc/nginx/sites-available/poscalfx.com
 
 # SSH to VPS and reload Nginx
 echo "🔧 Reloading Nginx configuration..."
