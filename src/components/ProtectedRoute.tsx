@@ -72,7 +72,8 @@ export const ProtectedRoute = ({
 
   // Check premium requirement. Enforce only if route requires premium AND admin has enabled paid lock.
   if (requiresPremium && paidLockEnabled && !isPaid && !isTrial) {
-    return <Navigate to="/pricing" replace />;
+    const redirectPath = encodeURIComponent(location.pathname || '/');
+    return <Navigate to={`/upgrade?tier=premium&redirectPath=${redirectPath}`} replace />;
   }
 
   return <>{children}</>;

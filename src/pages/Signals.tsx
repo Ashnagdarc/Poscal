@@ -422,21 +422,21 @@ const Signals = () => {
     switch (result) {
       case 'win':
         return (
-          <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+          <Badge className="border-emerald-500/30 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400">
             <Trophy className="w-3 h-3 mr-1" />
             Win
           </Badge>
         );
       case 'loss':
         return (
-          <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+          <Badge className="border-red-500/30 bg-red-500/20 text-red-700 dark:text-red-400">
             <XCircle className="w-3 h-3 mr-1" />
             Loss
           </Badge>
         );
       case 'breakeven':
         return (
-          <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">
+          <Badge className="border-yellow-500/30 bg-yellow-500/20 text-yellow-800 dark:text-yellow-400">
             <Minus className="w-3 h-3 mr-1" />
             BE
           </Badge>
@@ -449,11 +449,11 @@ const Signals = () => {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'active':
-        return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+        return 'border-emerald-500/30 bg-emerald-500/20 text-emerald-700 dark:text-emerald-400';
       case 'closed':
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        return 'border-blue-500/30 bg-blue-500/20 text-blue-700 dark:text-blue-400';
       case 'cancelled':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
+        return 'border-red-500/30 bg-red-500/20 text-red-700 dark:text-red-400';
       default:
         return 'bg-muted text-muted-foreground';
     }
@@ -774,9 +774,9 @@ const Signals = () => {
                       }`}
                     >
                       {signal.direction === 'buy' ? (
-                        <TrendingUp className="w-4 h-4 text-emerald-400" />
+                        <TrendingUp className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
                       ) : (
-                        <TrendingDown className="w-4 h-4 text-red-400" />
+                        <TrendingDown className="w-4 h-4 text-red-700 dark:text-red-400" />
                       )}
                     </div>
                     <div className="flex-1">
@@ -784,7 +784,7 @@ const Signals = () => {
                         <span className="font-semibold text-foreground text-base">{signal.currency_pair}</span>
                         <span
                           className={`text-xs font-semibold uppercase ${
-                            signal.direction === 'buy' ? 'text-emerald-400' : 'text-red-400'
+                            signal.direction === 'buy' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                           }`}
                         >
                           {signal.direction}
@@ -821,8 +821,8 @@ const Signals = () => {
                     </div>
                     <span className={`text-sm font-bold ${
                       signal.direction === 'buy'
-                        ? prices[signal.currency_pair] > toNumber(signal.entry_price) ? 'text-emerald-400' : 'text-red-400'
-                        : prices[signal.currency_pair] < toNumber(signal.entry_price) ? 'text-emerald-400' : 'text-red-400'
+                        ? prices[signal.currency_pair] > toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+                        : prices[signal.currency_pair] < toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                     }`}>
                       {formatPrice(prices[signal.currency_pair])}
                     </span>
@@ -838,8 +838,8 @@ const Signals = () => {
                     </span>
                   </div>
                   <div className="bg-red-500/10 rounded-lg p-2">
-                    <span className="text-xs text-red-400 block">Stop Loss</span>
-                    <span className="text-sm font-semibold text-red-400">
+                    <span className="text-xs text-red-700 dark:text-red-400 block">Stop Loss</span>
+                    <span className="text-sm font-semibold text-red-700 dark:text-red-400">
                       {formatPrice(signal.stop_loss)}
                     </span>
                     <span className="text-xs text-muted-foreground ml-1">
@@ -856,8 +856,8 @@ const Signals = () => {
                         <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
-                    <span className="text-xs text-emerald-400 block">TP1</span>
-                    <span className="text-sm font-semibold text-emerald-400">
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP1</span>
+                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                       {formatPrice(signal.take_profit_1)}
                     </span>
                     <span className="text-xs text-muted-foreground block">
@@ -871,8 +871,8 @@ const Signals = () => {
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
-                      <span className="text-xs text-emerald-400 block">TP2</span>
-                      <span className="text-sm font-semibold text-emerald-400">
+                      <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP2</span>
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                         {formatPrice(signal.take_profit_2)}
                       </span>
                       <span className="text-xs text-muted-foreground block">
@@ -887,8 +887,8 @@ const Signals = () => {
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
-                      <span className="text-xs text-emerald-400 block">TP3</span>
-                      <span className="text-sm font-semibold text-emerald-400">
+                      <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP3</span>
+                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                         {formatPrice(signal.take_profit_3)}
                       </span>
                       <span className="text-xs text-muted-foreground block">

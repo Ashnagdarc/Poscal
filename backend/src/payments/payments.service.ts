@@ -2,14 +2,17 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
+import { PaystackWebhookLog } from './entities/paystack-webhook-log.entity';
 import { User } from '../auth/entities/user.entity';
-import { CreatePaymentDto, UpdatePaymentDto } from './dto/payment.dto';
+import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentFromVercelDto } from './dto/payment.dto';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     @InjectRepository(Payment)
     private paymentRepository: Repository<Payment>,
+    @InjectRepository(PaystackWebhookLog)
+    private paystackWebhookLogRepository: Repository<PaystackWebhookLog>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
   ) {}
@@ -142,6 +145,104 @@ export class PaymentsService {
         reference: payment.reference,
       },
     };
+  }
+
+  async createOrUpdatePaymentFromVercel(dto: VerifyPaymentFromVercelDto): Promise<any> {
+    const user = await this.userRepository.findOne({ where: { id: dto.userId } });
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const now = new Date();
+    const subscriptionEnd = new Date(dto.expiresAt);
+    if (Number.isNaN(subscriptionEnd.getTime())) {
+      throw new Error('Invalid expiresAt value');
+    }
+
+    let payment = await this.paymentRepository.findOne({
+      where: [{ reference: dto.reference }, { paystack_reference: dto.reference }],
+    });
+
+    if (!payment) {
+      payment = this.paymentRepository.create({
+        user_id: dto.userId,
+        reference: dto.reference,
+        paystack_reference: dto.reference,
+        amount: Number(dto.amount) / 100,
+        currency: dto.currency || 'NGN',
+        tier: dto.tier,
+        subscription_tier: dto.tier,
+        status: 'success',
+        payment_method: 'paystack',
+        paystack_customer_code: dto.paystack_customer_code || null,
+        subscription_plan: dto.tier,
+        subscription_start: now,
+        subscription_end: subscriptionEnd,
+        paid_at: now,
+        metadata: dto.metadata || null,
+      });
+    } else {
+      payment.status = 'success';
+      payment.currency = dto.currency || payment.currency || 'NGN';
+      payment.tier = dto.tier;
+      payment.subscription_tier = dto.tier;
+      payment.payment_method = 'paystack';
+      payment.reference = dto.reference;
+      payment.paystack_reference = dto.reference;
+      payment.amount = Number(dto.amount) / 100;
+      payment.paystack_customer_code = dto.paystack_customer_code || payment.paystack_customer_code;
+      payment.subscription_plan = dto.tier;
+      payment.subscription_start = payment.subscription_start || now;
+      payment.subscription_end = subscriptionEnd;
+      payment.paid_at = now;
+      payment.metadata = {
+        ...(payment.metadata || {}),
+        ...(dto.metadata || {}),
+      };
+    }
+
+    const savedPayment = await this.paymentRepository.save(payment);
+
+    user.subscription_tier = dto.tier;
+    user.subscription_expires_at = subscriptionEnd;
+    await this.userRepository.save(user);
+
+    return {
+      success: true,
+      message: 'Payment verified and subscription activated',
+      data: {
+        paymentId: savedPayment.id,
+        reference: savedPayment.reference,
+        tier: dto.tier,
+        expiresAt: subscriptionEnd.toISOString(),
+      },
+    };
+  }
+
+  async logWebhook(
+    event: string,
+    data: any,
+    status: string,
+    errorMessage?: string,
+    reference?: string,
+  ): Promise<PaystackWebhookLog> {
+    const log = this.paystackWebhookLogRepository.create({
+      event,
+      data,
+      status,
+      error_message: errorMessage || null,
+      reference: reference || null,
+    });
+
+    return await this.paystackWebhookLogRepository.save(log);
+  }
+
+  async getWebhookLogs(limit = 50): Promise<PaystackWebhookLog[]> {
+    const safeLimit = Number.isFinite(Number(limit)) ? Math.max(1, Math.min(Number(limit), 200)) : 50;
+    return await this.paystackWebhookLogRepository.find({
+      order: { created_at: 'DESC' },
+      take: safeLimit,
+    });
   }
 
 }

@@ -739,7 +739,7 @@ const Journal = () => {
             onChange={(e) => dispatchFilters({ type: 'SET_SEARCH_QUERY', payload: e.target.value })}
             placeholder="Search trades..."
             aria-label="Search trades"
-            className="w-full h-12 pl-12 pr-4 bg-secondary text-foreground rounded-xl outline-none focus:ring-2 focus:ring-foreground/10"
+            className="w-full h-12 pl-12 pr-4 bg-secondary text-foreground rounded-xl outline-none focus:ring-2 focus:ring-primary/30"
           />
         </div>
       </div>
@@ -955,8 +955,8 @@ const Journal = () => {
       {/* Trade Limit Banner for Free Users */}
       {!isPaid && showLimitBanner && (
         <div className="fixed bottom-24 left-0 right-0 px-6 z-40">
-          <div className="bg-secondary/80 backdrop-blur-sm border border-border rounded-lg p-3 text-center flex items-center justify-between gap-3">
-            <p className="text-sm text-muted-foreground flex-1">
+          <div className="bg-secondary/95 backdrop-blur-sm border border-border rounded-lg p-3 text-center flex items-center justify-between gap-3 shadow-sm">
+            <p className="text-sm text-foreground/80 flex-1">
               {tradeCount}/{FREE_TRADE_LIMIT} trades used. 
               {isAtTradeLimit ? (
                 <span className="text-orange-500 font-semibold"> Upgrade for unlimited trades!</span>
@@ -1014,7 +1014,7 @@ const Journal = () => {
                 Maybe Later
               </button>
               <button
-                onClick={() => navigate('/upgrade')}
+                onClick={() => navigate('/upgrade?tier=premium&redirectPath=/journal')}
                 className="flex-1 px-4 py-2 rounded-lg bg-primary text-primary-foreground font-medium hover:bg-primary/90 transition-colors"
               >
                 Upgrade Now
@@ -1064,9 +1064,9 @@ const Journal = () => {
           </header>
 
           <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-            <div className="space-y-4 rounded-2xl border border-white/10 bg-[#121417] p-4">
+            <div className="space-y-4 rounded-2xl border border-border bg-card p-4">
                 <div>
-                  <label className="block text-sm text-muted-foreground/90 mb-2">Journal Entry</label>
+                  <label className="block text-sm text-foreground/80 mb-2">Journal Entry</label>
                   <RichNoteEditor
                     content={newTrade.rich_content}
                     onChange={(content) => setNewTrade({ ...newTrade, rich_content: content })}
@@ -1078,12 +1078,12 @@ const Journal = () => {
                 <div className="grid grid-cols-2 gap-3">
                   {/* Market Condition */}
                   <div>
-                    <label className="block text-sm text-muted-foreground/90 mb-2">Market Condition</label>
+                    <label className="block text-sm text-foreground/80 mb-2">Market Condition</label>
                     <Select
                       value={newTrade.market_condition || ""}
                       onValueChange={(value) => setNewTrade({ ...newTrade, market_condition: value as any })}
                     >
-                      <SelectTrigger className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all">
+                      <SelectTrigger className="w-full h-11 px-3 bg-background text-foreground rounded-2xl border border-border focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all">
                         <SelectValue placeholder="Select..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -1096,12 +1096,12 @@ const Journal = () => {
 
                   {/* Sentiment */}
                   <div>
-                    <label className="block text-sm text-muted-foreground/90 mb-2">Sentiment</label>
+                    <label className="block text-sm text-foreground/80 mb-2">Sentiment</label>
                     <Select
                       value={newTrade.sentiment || ""}
                       onValueChange={(value) => setNewTrade({ ...newTrade, sentiment: value as any })}
                     >
-                      <SelectTrigger className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all">
+                      <SelectTrigger className="w-full h-11 px-3 bg-background text-foreground rounded-2xl border border-border focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all">
                         <SelectValue placeholder="Select..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -1114,13 +1114,13 @@ const Journal = () => {
 
                   {/* Tags */}
                   <div className="col-span-2">
-                    <label className="block text-sm text-muted-foreground/90 mb-2">Tags</label>
+                    <label className="block text-sm text-foreground/80 mb-2">Tags</label>
                     <input
                       type="text"
                       value={newTrade.tags}
                       onChange={(e) => setNewTrade({ ...newTrade, tags: e.target.value })}
                       placeholder="e.g. breakout, support"
-                      className="w-full h-11 px-3 bg-[#171a1f] text-foreground rounded-2xl outline-none border border-white/10 focus:border-[#0A84FF] focus:ring-2 focus:ring-[#0A84FF]/25 transition-all placeholder:text-muted-foreground/70"
+                      className="w-full h-11 px-3 bg-background text-foreground rounded-2xl outline-none border border-border focus:border-primary focus:ring-2 focus:ring-primary/25 transition-all placeholder:text-muted-foreground"
                     />
                   </div>
                 </div>
@@ -1150,7 +1150,7 @@ const Journal = () => {
                       ))}
                     </div>
                   )}
-                  <label className="block border border-dashed border-white/15 rounded-2xl p-6 text-center cursor-pointer hover:border-white/35 transition-colors bg-[#111317]">
+                  <label className="block border border-dashed border-border rounded-2xl p-6 text-center cursor-pointer hover:border-foreground/25 transition-colors bg-card">
                     <input
                       type="file"
                       accept="image/*"
@@ -1169,7 +1169,7 @@ const Journal = () => {
           <div className="px-6 pb-8">
             <button
               onClick={modals.editingTrade ? handleEditTrade : handleAddTrade}
-              className="w-full h-14 bg-[#F2F2F7] text-[#111111] font-semibold rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-[0_8px_20px_-12px_rgba(0,0,0,0.5)]"
+              className="w-full h-14 bg-primary text-primary-foreground font-semibold rounded-2xl transition-all duration-200 active:scale-[0.98] shadow-[0_8px_20px_-12px_rgba(0,0,0,0.35)]"
             >
               {modals.editingTrade ? 'Update Trade' : 'Add Trade'}
             </button>
@@ -1317,7 +1317,7 @@ const Journal = () => {
               {modals.viewTradeModal.trade.rich_content && (
                 <div className="bg-secondary rounded-2xl p-4">
                   <h3 className="text-sm font-semibold text-foreground mb-3">Journal Entry</h3>
-                  <div className="prose prose-invert max-w-none text-foreground
+                  <div className="prose dark:prose-invert max-w-none text-foreground
                     prose-headings:text-foreground prose-p:text-foreground prose-strong:text-foreground
                     prose-em:text-foreground prose-a:text-primary prose-code:text-foreground
                     prose-li:text-foreground prose-blockquote:text-muted-foreground prose-blockquote:border-l-primary

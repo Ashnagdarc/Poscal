@@ -11,7 +11,7 @@ import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
-import { featureFlagApi } from '@/lib/api';
+import { featureFlagApi, subscriptionApi } from '@/lib/api';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -25,6 +25,7 @@ const Settings = () => {
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { currency, setCurrency } = useCurrency();
+  const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
 
   useEffect(() => {
     const savedRisk = localStorage.getItem("defaultRisk");
@@ -110,6 +111,30 @@ const Settings = () => {
     }
   };
 
+  const handleRestorePurchase = async () => {
+    if (!user?.id) {
+      toast.error('Please sign in to restore purchases.');
+      navigate('/signin');
+      return;
+    }
+
+    setIsRestoringPurchase(true);
+    try {
+      const result = await subscriptionApi.restorePurchase({ userId: user.id });
+      if (!result?.success) {
+        throw new Error(result?.message || 'No eligible purchase found.');
+      }
+
+      const tier = result?.data?.tier || 'premium';
+      toast.success(`Purchase restored successfully (${tier}).`);
+      navigate('/journal');
+    } catch (error: any) {
+      toast.error(error?.message || 'Restore failed. Please contact support.');
+    } finally {
+      setIsRestoringPurchase(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col pb-24">
       {/* Header */}
@@ -164,6 +189,41 @@ const Settings = () => {
                 <ChevronRight className="w-5 h-5 text-muted-foreground" />
               </button>
             )}
+
+            <button
+              onClick={() => navigate('/upgrade?tier=premium&redirectPath=/settings')}
+              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                  <Wallet className="w-4.5 h-4.5 text-primary" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-medium text-foreground">Upgrade to Premium</p>
+                  <p className="text-xs text-muted-foreground">Open payment wall and choose a plan</p>
+                </div>
+              </div>
+              <ChevronRight className="w-5 h-5 text-muted-foreground" />
+            </button>
+
+            <button
+              onClick={handleRestorePurchase}
+              disabled={isRestoringPurchase}
+              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
+                  <RotateCcw className="w-4.5 h-4.5 text-foreground" />
+                </div>
+                <div className="text-left flex-1">
+                  <p className="font-medium text-foreground">Restore Purchase</p>
+                  <p className="text-xs text-muted-foreground">Recover your existing subscription</p>
+                </div>
+              </div>
+              <span className="text-xs text-muted-foreground">
+                {isRestoringPurchase ? 'Restoring...' : 'Run'}
+              </span>
+            </button>
           </div>
         </section>
 

@@ -47,8 +47,7 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
-      {/* Temporarily disable non-essential overlays to minimize startup issues */}
-      {/* <UpgradeBanner /> */}
+      <UpgradeBanner />
       <AppUpdateModal />
       {/* <PWAInstallPrompt /> */}
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
@@ -62,7 +61,7 @@ const AppContent = () => {
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute requiresPremium>{<History />}</ProtectedRoute>} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/pricing" element={<Pricing />} />
+          <Route path="/pricing" element={<Upgrade />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route 
             path="/signals" 

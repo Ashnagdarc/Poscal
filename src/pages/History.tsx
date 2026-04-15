@@ -84,10 +84,10 @@ const History = () => {
           </button>
           <div>
             <h1 className="text-2xl font-bold text-foreground tracking-tight">History</h1>
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-foreground/75 dark:text-muted-foreground">
               Position size calculations
               {isHistoryLimited && (
-                <span className="text-orange-500 ml-1">
+                <span className="ml-1 text-orange-600 dark:text-orange-500">
                   (Showing {FREE_HISTORY_LIMIT} of {history.length})
                 </span>
               )}
@@ -123,7 +123,7 @@ const History = () => {
             ))}
           </div>
         ) : history.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground animate-fade-in">
+          <div className="flex flex-col items-center justify-center h-64 text-foreground/70 dark:text-muted-foreground animate-fade-in">
             <HistoryIcon className="w-12 h-12 mb-3 opacity-30" />
             <p className="font-medium">No calculations saved</p>
             <p className="text-sm">Your saved calculations will appear here</p>

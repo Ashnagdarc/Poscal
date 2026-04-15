@@ -26,7 +26,16 @@ export default async function handler(req: any, res: any) {
   }
 
   if (!PAYSTACK_WEBHOOK_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return res.status(500).json({ error: 'Server not configured (missing env vars)' });
+    const missing = [
+      !PAYSTACK_WEBHOOK_SECRET ? 'PAYSTACK_WEBHOOK_SECRET' : null,
+      !SUPABASE_URL ? 'SUPABASE_URL' : null,
+      !SUPABASE_SERVICE_ROLE_KEY ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
+    ].filter(Boolean);
+
+    return res.status(500).json({
+      error: 'Server not configured (missing env vars)',
+      missing,
+    });
   }
 
   try {

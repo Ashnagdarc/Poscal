@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { type AxiosInstance } from 'axios';
 import { logger } from '@/lib/logger';
 
 // Use relative path for Vercel serverless functions, fallback to external API for other endpoints
@@ -21,7 +21,7 @@ const api = axios.create({
 });
 
 // Add auth token to requests if available (for both APIs)
-const addAuthInterceptor = (axiosInstance: typeof axios) => {
+const addAuthInterceptor = (axiosInstance: AxiosInstance) => {
   axiosInstance.interceptors.request.use((config) => {
     const token = localStorage.getItem('auth_token');
     if (token) {
@@ -32,7 +32,7 @@ const addAuthInterceptor = (axiosInstance: typeof axios) => {
 };
 
 // Handle token expiration (for both APIs)
-const addErrorInterceptor = (axiosInstance: typeof axios) => {
+const addErrorInterceptor = (axiosInstance: AxiosInstance) => {
   axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
@@ -265,6 +265,25 @@ export const subscriptionApi = {
   checkFeatureAccess: async (feature: string): Promise<boolean> => {
     const { data } = await api.get(`/payments/feature-access/${feature}`);
     return data.hasAccess;
+  },
+
+  verifyPayment: async (payload: {
+    userId: string;
+    reference: string;
+    tier: string;
+    amount: number;
+    currency: string;
+    expiresAt: string;
+    paystack_customer_code?: string;
+    metadata?: any;
+  }): Promise<any> => {
+    const { data } = await serverlessApi.post('/api/verify-payment', payload);
+    return data;
+  },
+
+  restorePurchase: async (payload: { userId: string }): Promise<any> => {
+    const { data } = await serverlessApi.post('/api/restore-purchase', payload);
+    return data;
   },
 };
 
