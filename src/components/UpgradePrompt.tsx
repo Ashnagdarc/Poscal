@@ -1,12 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { PaymentModal } from './PaymentModal';
 import { Trophy, Zap, ArrowRight } from 'lucide-react';
-import { toast } from 'sonner';
-import { openRevenueCatCheckout } from '@/lib/revenuecat-checkout';
 
 interface UpgradePromptProps {
   feature?: string;
@@ -25,29 +24,19 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
 }) => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const revenueCatCheckoutUrl = import.meta.env.VITE_REVENUECAT_WEB_CHECKOUT_URL || '';
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const handleUpgrade = () => {
     if (!user) {
       navigate('/signin');
       return;
     }
-
-    if (!revenueCatCheckoutUrl) {
-      toast.error('RevenueCat checkout is not configured yet.');
-      return;
-    }
-
-    openRevenueCatCheckout({
-      checkoutUrl: revenueCatCheckoutUrl,
-      userId: user.id,
-      email: user.email,
-      tier,
-    });
+    setShowPaymentModal(true);
   };
 
   return (
-    <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/5 via-primary/10 to-transparent p-6 md:p-8">
+    <>
+      <Card className="relative overflow-hidden border-primary/30 bg-gradient-to-br from-primary/5 via-primary/10 to-transparent p-6 md:p-8">
         {/* Decorative background */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl -mr-16 -mt-16" />
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/20 rounded-full blur-2xl -ml-8 -mb-8" />
@@ -129,6 +118,14 @@ export const UpgradePrompt: React.FC<UpgradePromptProps> = ({
           </p>
         </div>
       </Card>
+
+      {/* Payment Modal */}
+      <PaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => setShowPaymentModal(false)}
+        tier={tier}
+      />
+    </>
   );
 };
 

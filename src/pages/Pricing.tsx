@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
@@ -10,10 +11,11 @@ import {
   TrendingUp,
   Zap,
   BarChart3,
+  FileJson,
+  Lock,
   Crown,
 } from 'lucide-react';
-import { toast } from 'sonner';
-import { openRevenueCatCheckout } from '@/lib/revenuecat-checkout';
+import { PaymentModal } from '@/components/PaymentModal';
 
 // Pricing tiers configuration
 const PRICING_TIERS = [
@@ -66,8 +68,9 @@ const PRICING_TIERS = [
 const Pricing = () => {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
-  const { isPaid, isTrial } = useSubscription();
-  const revenueCatCheckoutUrl = import.meta.env.VITE_REVENUECAT_WEB_CHECKOUT_URL || '';
+  const { isPaid, isTrial, subscriptionTier } = useSubscription();
+  const [selectedTier, setSelectedTier] = useState<string | null>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const handleUpgrade = (tierId: string) => {
     // Don't redirect if auth is still loading
@@ -85,17 +88,8 @@ const Pricing = () => {
       return;
     }
 
-    if (!revenueCatCheckoutUrl) {
-      toast.error('RevenueCat checkout is not configured yet.');
-      return;
-    }
-
-    openRevenueCatCheckout({
-      checkoutUrl: revenueCatCheckoutUrl,
-      userId: user.id,
-      email: user.email,
-      tier: tierId,
-    });
+    setSelectedTier(tierId);
+    setShowPaymentModal(true);
   };
 
   const getCurrentStatus = () => {
@@ -117,11 +111,6 @@ const Pricing = () => {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Choose the perfect plan for your trading journey. Upgrade anytime.
           </p>
-          <div className="mt-4 flex justify-center">
-            <Badge variant={revenueCatCheckoutUrl ? 'default' : 'secondary'}>
-              {revenueCatCheckoutUrl ? 'RevenueCat checkout enabled' : 'Standard checkout enabled (RevenueCat URL not configured)'}
-            </Badge>
-          </div>
         </div>
 
         {/* Trial Banner (if applicable) */}
@@ -309,7 +298,8 @@ const Pricing = () => {
             <div>
               <h3 className="font-semibold mb-2">What payment methods do you accept?</h3>
               <p className="text-muted-foreground text-sm">
-                We use RevenueCat checkout for subscriptions.
+                We accept all major payment methods via Paystack including cards,
+                bank transfers, and USSD.
               </p>
             </div>
 
@@ -363,6 +353,15 @@ const Pricing = () => {
         </div>
       </div>
 
+      {/* Payment Modal */}
+      {selectedTier && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          tier={selectedTier as 'premium' | 'pro'}
+          redirectPath="/"
+        />
+      )}
     </div>
   );
 };
