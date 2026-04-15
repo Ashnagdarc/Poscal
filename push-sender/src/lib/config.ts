@@ -5,8 +5,18 @@ export interface BaseConfig {
   serviceToken: string;
 }
 
+export type PriceProviderMode = 'finnhub';
+export type OandaEnvironment = 'practice' | 'live';
+
 export interface PriceIngestorConfig extends BaseConfig {
-  finnhubApiKey: string;
+  priceProviderMode: PriceProviderMode;
+  oandaEnvironment: OandaEnvironment;
+  finnhubApiKey?: string;
+  oandaApiKey?: string;
+  oandaAccountId?: string;
+  oandaApiUrl: string;
+  oandaInstrumentChunkSize: number;
+  liveForexSymbolLimit: number;
   batchIntervalMs: number;
 }
 
@@ -25,6 +35,36 @@ function requireEnv(key: string): string {
   return value;
 }
 
+function requireNonPlaceholderEnv(key: string): string {
+  const value = requireEnv(key).trim();
+  const normalized = value.toLowerCase();
+
+  const placeholderValues = new Set([
+    'your_finnhub_api_key_here',
+    'your-finnhub-api-key-here',
+    'finnhub_api_key_here',
+    'changeme',
+    'replace_me',
+    'replace-me',
+    'placeholder',
+  ]);
+
+  if (
+    placeholderValues.has(normalized) ||
+    normalized.includes('your_') ||
+    normalized.includes('your-') ||
+    normalized.includes('placeholder') ||
+    normalized.includes('finnhub_api_key_here') ||
+    normalized.includes('example') ||
+    normalized.startsWith('<') ||
+    normalized.endsWith('>')
+  ) {
+    throw new Error(`Environment variable ${key} appears to be a placeholder. Set a real API key.`);
+  }
+
+  return value;
+}
+
 function getNumericEnv(key: string, fallback: number): number {
   const raw = process.env[key];
   if (!raw) {
@@ -39,6 +79,25 @@ function getNumericEnv(key: string, fallback: number): number {
   return parsed;
 }
 
+function getPriceProviderModeEnv(): PriceProviderMode {
+  const raw = (process.env.PRICE_PROVIDER_MODE || process.env.PRICE_PROVIDER || 'finnhub').toLowerCase();
+  if (raw === 'finnhub') {
+    return 'finnhub';
+  }
+
+  // OANDA and hybrid live modes are deprecated in favor of the shared Finnhub stream path.
+  return 'finnhub';
+}
+
+function getOandaEnvironmentEnv(): OandaEnvironment {
+  const raw = (process.env.OANDA_ENV || 'practice').toLowerCase();
+  if (raw === 'practice' || raw === 'live') {
+    return raw;
+  }
+
+  throw new Error(`Unsupported OANDA_ENV: ${raw}`);
+}
+
 export function loadBaseConfig(): BaseConfig {
   return {
     nestApiUrl: process.env.NESTJS_API_URL || 'http://localhost:3001',
@@ -48,11 +107,23 @@ export function loadBaseConfig(): BaseConfig {
 
 export function loadPriceIngestorConfig(): PriceIngestorConfig {
   const base = loadBaseConfig();
+  const priceProviderMode = getPriceProviderModeEnv();
+  const oandaEnvironment = getOandaEnvironmentEnv();
+  const defaultOandaApiUrl = oandaEnvironment === 'live'
+    ? 'https://api-fxtrade.oanda.com'
+    : 'https://api-fxpractice.oanda.com';
 
   return {
     ...base,
-    finnhubApiKey: requireEnv('FINNHUB_API_KEY'),
-    batchIntervalMs: getNumericEnv('BATCH_INTERVAL', 1000),
+    priceProviderMode,
+    oandaEnvironment,
+    finnhubApiKey: requireNonPlaceholderEnv('FINNHUB_API_KEY'),
+    oandaApiKey: process.env.OANDA_API_KEY,
+    oandaAccountId: process.env.OANDA_ACCOUNT_ID,
+    oandaApiUrl: process.env.OANDA_API_URL || defaultOandaApiUrl,
+    oandaInstrumentChunkSize: getNumericEnv('OANDA_INSTRUMENT_CHUNK_SIZE', 25),
+    liveForexSymbolLimit: getNumericEnv('LIVE_FOREX_SYMBOL_LIMIT', 50),
+    batchIntervalMs: getNumericEnv('BATCH_INTERVAL', 10000),
   };
 }
 

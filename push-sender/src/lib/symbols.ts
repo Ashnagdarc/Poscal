@@ -228,3 +228,30 @@ export const SYMBOL_MAPPINGS: Record<string, string> = {
   'AUD/ZAR': 'OANDA:AUD_ZAR',
   'NZD/ZAR': 'OANDA:NZD_ZAR',
 };
+
+export function getSymbolMappingsForPrefix(prefix: string): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(SYMBOL_MAPPINGS).filter(([, providerSymbol]) => providerSymbol.startsWith(`${prefix}:`)),
+  );
+}
+
+export function getSymbolMappingsExcludingPrefix(prefix: string): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(SYMBOL_MAPPINGS).filter(([, providerSymbol]) => !providerSymbol.startsWith(`${prefix}:`)),
+  );
+}
+
+export function partitionSymbolMappings(liveOandaLimit = 50): {
+  oanda: Record<string, string>;
+  referenceOanda: Record<string, string>;
+  nonOanda: Record<string, string>;
+} {
+  const oandaEntries = Object.entries(getSymbolMappingsForPrefix('OANDA'));
+  const safeLimit = Math.min(Math.max(Math.floor(liveOandaLimit), 1), oandaEntries.length || 1);
+
+  return {
+    oanda: Object.fromEntries(oandaEntries.slice(0, safeLimit)),
+    referenceOanda: Object.fromEntries(oandaEntries.slice(safeLimit)),
+    nonOanda: getSymbolMappingsExcludingPrefix('OANDA'),
+  };
+}

@@ -25,6 +25,7 @@ export interface PriceBatchItem {
   bid_price: number;
   timestamp: number;
   updated_at: string;
+  source?: 'finnhub' | 'oanda';
 }
 
 export interface FinnhubTradeMessage {
@@ -37,4 +38,24 @@ export interface FinnhubTrade {
   p: number;
   t: number;
   v?: number;
+}
+
+export interface OandaPriceBucket {
+  liquidity: number;
+  price: string;
+}
+
+export interface OandaClientPrice {
+  asks?: OandaPriceBucket[];
+  bids?: OandaPriceBucket[];
+  closeoutAsk?: string;
+  closeoutBid?: string;
+  instrument: string;
+  status?: string;
+  time: string;
+}
+
+export interface OandaPricingResponse {
+  prices: OandaClientPrice[];
+  time?: string;
 }

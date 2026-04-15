@@ -1,288 +1,148 @@
-# Using Real Ask Prices for Position Sizing - Like Stinu App
+# Ask/Bid Price Implementation
 
-## Problem Solved
+This document explains the current production price-sizing flow in Poscal.
 
-The position size calculator was showing lot sizes "a few pips lower" than the Stinu app because it was using **mid-market prices** instead of **real ask prices**.
+## Why This Changed
 
-## Why Ask Prices Matter
+The calculator used to size positions from mid-market prices. That caused small but important differences versus professional tools like Stinu because a trader does not enter at the mid:
 
-When you open a **buy position** in forex:
+- buys execute at `ask`
+- sells execute at `bid`
 
-- You pay the **ASK PRICE** (higher price)
-- NOT the mid-market price
+For a trading calculator, execution-side pricing is the correct model.
 
-Example: USD/JPY
+## Current System
 
-- **Bid**: 149.995 (price you can sell at)
-- **Mid**: 150.000 (average)
-- **Ask**: 150.005 (price you must pay to buy)
+Poscal now uses a backend cache architecture instead of having each user call a market-data API directly.
 
-Professional calculators like Stinu use the **ask price** for position sizing because that's the actual price you'll pay.
+### Flow
 
-## Solution: Fetch Real Bid/Ask Prices
+1. One `push-sender` worker fetches market data.
+2. The worker normalizes:
+   - `bid_price`
+   - `ask_price`
+   - `mid_price`
+   - `timestamp`
+3. The worker writes that batch to the Nest backend `/prices/batch-update`.
+4. The backend stores the latest values in `price_cache`.
+5. The frontend reads prices from the backend cache only.
 
-Instead of estimating ask prices by adding spreads to mid-market prices, we now fetch **actual bid/ask prices** from the APIs.
+That means:
 
-## Implementation
-
-### 1. Edge Function (`supabase/functions/get-live-prices/index.ts`)
+- better rate-limit protection
+- one shared source of truth
+- support for large numbers of users without each user hitting Finnhub or OANDA directly
 
-**Changed API Endpoint:**
-
-```typescript
-// OLD: /price endpoint (mid-market only)
-const url = `https://api.twelvedata.com/price?symbol=${symbols}&apikey=${key}`;
-// Returns: { "EURUSD": { "price": "1.09000" } }
+## Provider Modes
 
-// NEW: /quote endpoint (bid/ask/close)
-const url = `https://api.twelvedata.com/quote?symbol=${symbols}&apikey=${key}`;
-// Returns: {
-//   "EURUSD": {
-//     "bid": "1.08995",
-//     "ask": "1.09005",
-//     "close": "1.09000"
-//   }
-// }
-```
+### Recommended: `PRICE_PROVIDER_MODE=hybrid`
 
-**New Response Structure:**
+- OANDA provides real `closeoutBid` and `closeoutAsk` for forex and metals
+- Finnhub provides crypto prices
 
-```typescript
-{
-  prices: {      // Mid-market (close prices)
-    "EUR/USD": 1.09000,
-    "USD/JPY": 150.000
-  },
-  askPrices: {   // Real ask prices from API
-    "EUR/USD": 1.09005,
-    "USD/JPY": 150.005
-  },
-  bidPrices: {   // Real bid prices from API
-    "EUR/USD": 1.08995,
-    "USD/JPY": 149.995
-  }
-}
-```
+### Other Modes
 
-### 2. useLivePrices Hook (`src/hooks/use-live-prices.ts`)
+- `PRICE_PROVIDER_MODE=oanda`
+  - OANDA-only for mapped instruments
+- `PRICE_PROVIDER_MODE=finnhub`
+  - keeps the older trade-tick approach with synthetic bid/ask estimation
 
-**Updated Interface:**
+## Calculator Logic
 
-```typescript
-interface UseLivePricesResult {
-  prices: Record<string, number>; // Mid-market
-  askPrices: Record<string, number>; // Ask prices ✨ NEW
-  bidPrices: Record<string, number>; // Bid prices ✨ NEW
-  loading: boolean;
-  error: string | null;
-  lastUpdated: Date | null;
-  refresh: () => Promise<void>;
-}
-```
+The calculator is now direction-aware.
 
-**All Fetch Functions Updated:**
+### Long / Buy
 
-- `fetchForexPrices()` - Estimates bid/ask using `TYPICAL_SPREADS`
-- `fetchCryptoPrices()` - Estimates bid/ask using typical spreads
-- `fetchMetalPrices()` - Estimates bid/ask using typical spreads
+- use `ask_price` as the execution-side price
 
-For free APIs that don't provide bid/ask (ExchangeRate-API, CoinGecko), we estimate using typical broker spreads:
+### Short / Sell
 
-```typescript
-const midPrice = rates["EUR"] / rates["USD"];
-const typicalSpread = TYPICAL_SPREADS["EUR/USD"]; // 1.0 pip
-const halfSpread = spreadPipsToPrice("EUR/USD", typicalSpread) / 2;
+- use `bid_price` as the execution-side price
 
-askPrices["EUR/USD"] = midPrice + halfSpread;
-bidPrices["EUR/USD"] = midPrice - halfSpread;
-```
+### Cross Pair Conversion
 
-### 3. Calculator Component (`src/components/Calculator.tsx`)
+Pip-value conversion also uses sided quotes where available instead of treating every conversion as a pure mid-price calculation.
 
-**Using Real Ask Prices:**
+That matters most for pairs like:
 
-```typescript
-// Get prices from hook
-const { prices, askPrices, bidPrices, loading } = useLivePrices({
-  symbols: symbolsToFetch,
-  enabled: true,
-  refreshInterval: 10 * 60 * 1000
-});
+- `GBP/JPY`
+- `EUR/JPY`
+- other non-USD crosses
 
-const currentLivePrice = prices[selectedPair.symbol];      // Mid-market
-const currentAskPrice = askPrices[selectedPair.symbol];    // Real ask price ✨
+## Stale Handling
 
-// Use real ask price for position sizing
-const calculation = useMemo(() => {
-  // Use real ask price from API (the price you'll actually pay)
-  // Falls back to mid-market if ask price not available
-  const priceForCalculation = currentAskPrice || currentLivePrice;
+The frontend now treats cached quotes as one of:
 
-  const pipVal = getPipValueInUSD(
-    selectedPair.symbol,
-    'USD',
-    priceForCalculation,  // ✨ Real ask price, not estimated
-    prices,
-    false  // Don't estimate ask - we already have it
-  );
+- `fresh`
+- `stale`
+- `unavailable`
 
-  // ... rest of calculation
-}, [currentAskPrice, currentLivePrice, ...]);
-```
+Rules:
 
-### 4. Forex Calculations (`src/lib/forexCalculations.ts`)
+- if a required quote is unavailable, the calculator should not silently size from missing data
+- if the worker temporarily stops updating a symbol, the last good cached quote can still be shown as stale
 
-**No need to estimate ask prices anymore** - we pass the real ask price directly:
+This avoids silently swapping forex back to fake bid/ask values during an outage.
 
-```typescript
-// OLD way (estimating):
-const pipVal = getPipValueInUSD(pair, "USD", midPrice, prices, true);
-// Would internally calculate: askPrice = midPrice + estimatedSpread
+## Fallback Policy
 
-// NEW way (using real ask):
-const pipVal = getPipValueInUSD(pair, "USD", realAskPrice, prices, false);
-// Uses the actual ask price from the API
-```
+### Forex and Metals
 
-## Benefits
+- primary source: OANDA
+- if OANDA fails, keep the last good cached OANDA quote
+- do not overwrite forex rows with synthetic Finnhub values in hybrid mode
 
-### 1. **Accuracy** ✅
+### Crypto
 
-- Matches professional calculators like Stinu app
-- Uses actual prices you'll pay when trading
-- No estimation errors
+- primary source: Finnhub
+- if Finnhub fails, crypto data becomes stale or unavailable until the worker recovers
 
-### 2. **Real-Time Spreads** ✅
+## Why This Architecture Matters
 
-- Spreads vary throughout the day
-- Twelve Data provides current bid/ask
-- More accurate than using typical spreads
+This design solves both accuracy and scaling:
 
-### 3. **Better Risk Management** ✅
+- users get execution-side bid/ask aware sizing
+- the app does not multiply vendor API requests by user count
+- one worker can serve many users through the shared backend cache
 
-- Position sizes reflect actual trading conditions
-- Accounts for spread costs in calculations
-- Prevents over-leveraging
+That is the right structure for a low-cost build.
 
-## Example Comparison
+## Files Involved
 
-### EUR/USD at 1.09000
+### Frontend
 
-```
-Source          Bid        Mid        Ask        Spread
-──────────────────────────────────────────────────────
-OLD (estimated) —          1.09000    1.09005    1.0 pip
-NEW (real API)  1.08995    1.09000    1.09005    1.0 pip
-```
+- `src/components/Calculator.tsx`
+- `src/hooks/use-realtime-prices.ts`
+- `src/lib/forexCalculations.ts`
 
-### USD/JPY at 150.000
+### Backend
 
-```
-Source          Bid        Mid        Ask        Spread
-──────────────────────────────────────────────────────
-OLD (estimated) —          150.000    150.005    1.0 pip
-NEW (real API)  149.995    150.000    150.005    1.0 pip
-```
+- `backend/src/prices/prices.controller.ts`
+- `backend/src/prices/prices.service.ts`
+- `backend/src/prices/entities/price-cache.entity.ts`
 
-### Position Size Calculation
+### Worker
 
-**Account**: $10,000  
-**Risk**: 1% = $100  
-**Stop Loss**: 20 pips  
-**Pair**: USD/JPY
+- `push-sender/src/workers/priceIngestor.ts`
+- `push-sender/src/providers/oandaQuoteProvider.ts`
+- `push-sender/src/lib/config.ts`
+- `push-sender/src/lib/symbols.ts`
 
-```
-Using Mid Price (150.000):
-  Pip Value = 100,000 × 0.01 / 150.000 = $6.6667
-  Position = $100 / (20 × $6.6667) = 0.75 lots
+## Deployment Notes
 
-Using Ask Price (150.005):
-  Pip Value = 100,000 × 0.01 / 150.005 = $6.6664
-  Position = $100 / (20 × $6.6664) = 0.75 lots
-```
+Recommended production split:
 
-The difference is small but critical for accuracy and matches Stinu app exactly.
+- frontend on Vercel
+- backend + PostgreSQL + workers on Docker on your VPS
 
-## Data Sources
+That keeps frontend deploys simple while preserving the centralized cached pricing model on the server side.
 
-### With Real Bid/Ask:
+## Verification Checklist
 
-1. **Twelve Data** (via Edge Function)
-   - Provides: bid, ask, close
-   - Used for: Forex, Crypto, Metals when API key configured
-
-### With Estimated Bid/Ask:
-
-1. **ExchangeRate-API** (Free, no key)
-
-   - Provides: Mid-market rates
-   - We estimate bid/ask using `TYPICAL_SPREADS`
-
-2. **CoinGecko** (Free, no key)
-
-   - Provides: Mid-market prices
-   - We estimate bid/ask using typical crypto spreads
-
-3. **Metals-API** (Free, no key)
-   - Provides: Mid-market prices
-   - We estimate bid/ask using typical gold/silver spreads
-
-## Files Modified
-
-1. ✅ `supabase/functions/get-live-prices/index.ts`
-
-   - Changed from `/price` to `/quote` endpoint
-   - Returns bid, ask, close prices
-
-2. ✅ `src/hooks/use-live-prices.ts`
-
-   - Added `askPrices` and `bidPrices` to result
-   - Updated all fetch functions to return bid/ask
-   - Imports spread utilities from forexCalculations
-
-3. ✅ `src/components/Calculator.tsx`
-
-   - Destructures `askPrices` and `bidPrices` from hook
-   - Uses real ask price for position sizing
-   - Falls back to mid-market if ask not available
-
-4. ✅ `src/lib/forexCalculations.ts`
-   - Already had `TYPICAL_SPREADS` for estimation
-   - Has `getAskPrice()` and `getBidPrice()` helpers
-   - Updated `getPipValueInUSD()` to accept ask price directly
-
-## Testing
-
-To verify it's working:
-
-1. **Check Console Logs** (Edge Function):
-
-   ```
-   Parsed prices: { "USD/JPY": 150.000 }
-   Ask prices: { "USD/JPY": 150.005 }
-   Bid prices: { "USD/JPY": 149.995 }
-   ```
-
-2. **Compare with Stinu**:
-
-   - Same pair, balance, risk%, stop loss
-   - Lot sizes should now match exactly
-
-3. **Check Different Pairs**:
-   - USD/JPY (USD-base pair) - uses ask price
-   - EUR/USD (USD-quote pair) - less affected
-   - GBP/JPY (cross pair) - uses ask price
-
-## Migration Note
-
-The system gracefully falls back:
-
-1. Try to use real ask price from API
-2. If not available, estimate using typical spreads
-3. If estimation fails, use mid-market price
-
-This ensures the calculator works even if:
-
-- Twelve Data API is down
-- API key not configured
-- Free tier rate limits exceeded
+- the worker is running
+- `/prices/batch-update` receives quote batches
+- `price_cache` contains `bid_price`, `ask_price`, `mid_price`, and timestamps
+- the frontend reads from the backend only
+- buy sizing uses ask
+- sell sizing uses bid
+- stale quotes are shown as stale, not treated as fresh

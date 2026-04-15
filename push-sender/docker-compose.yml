@@ -1,15 +1,14 @@
-version: '3.8'
-
 services:
-  poscal-push-sender:
+  poscal-notification-worker:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: poscal-push-sender
+    container_name: poscal-notification-worker
     restart: unless-stopped
+    command: ["node", "dist/notification-worker.js"]
     environment:
       # NestJS backend configuration
-      NESTJS_API_URL: ${NESTJS_API_URL:-http://backend:3000}
+      NESTJS_API_URL: ${NESTJS_API_URL:-http://backend:3001}
       NESTJS_SERVICE_TOKEN: ${NESTJS_SERVICE_TOKEN}
 
       # VAPID keys for web push
@@ -20,11 +19,15 @@ services:
       # Finnhub key for real-time prices
       FINNHUB_API_KEY: ${FINNHUB_API_KEY}
 
+      # Price ingestor uses finnhub stream mode for live runtime
+      PRICE_PROVIDER_MODE: ${PRICE_PROVIDER_MODE:-finnhub}
+      LIVE_FOREX_SYMBOL_LIMIT: ${LIVE_FOREX_SYMBOL_LIMIT:-50}
+
       # Polling interval (milliseconds, default 30000 = 30 seconds)
       POLL_INTERVAL: ${POLL_INTERVAL:-30000}
 
       # Batch interval for price cache flush
-      BATCH_INTERVAL: ${BATCH_INTERVAL:-1000}
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
 
       # Timezone
       TZ: UTC
@@ -54,6 +57,49 @@ services:
       retries: 3
       start_period: 10s
 
-# If you want to add this to your existing docker-compose.yml,
-# just copy the "poscal-push-sender" service definition above
-# and paste it into your existing services section
+  poscal-price-ingestor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poscal-price-ingestor
+    restart: unless-stopped
+    command: ["node", "dist/price-ingestor.js"]
+    environment:
+      # NestJS backend configuration
+      NESTJS_API_URL: ${NESTJS_API_URL:-http://backend:3001}
+      NESTJS_SERVICE_TOKEN: ${NESTJS_SERVICE_TOKEN}
+
+      # Finnhub key for real-time prices
+      FINNHUB_API_KEY: ${FINNHUB_API_KEY}
+
+      # Price ingestor uses finnhub stream mode for live runtime
+      PRICE_PROVIDER_MODE: ${PRICE_PROVIDER_MODE:-finnhub}
+      LIVE_FOREX_SYMBOL_LIMIT: ${LIVE_FOREX_SYMBOL_LIMIT:-50}
+
+      # Batch interval for price cache flush
+      BATCH_INTERVAL: ${BATCH_INTERVAL:-10000}
+
+      # Timezone
+      TZ: UTC
+
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "process.exit(0)"]
+      interval: 60s
+      timeout: 3s
+      retries: 3
+      start_period: 10s

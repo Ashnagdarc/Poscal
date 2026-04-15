@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
+import { toast } from "sonner";
 
 export interface CurrencyPair {
   symbol: string;
@@ -275,6 +276,16 @@ export const CURRENCY_PAIRS: CurrencyPair[] = [
   { symbol: "GBP/AED", pipDecimal: 4 },
 ];
 
+const DEFAULT_LIVE_PAIR_LIMIT = 50;
+const parsedLivePairLimit = Number(import.meta.env.VITE_LIVE_PAIR_LIMIT || DEFAULT_LIVE_PAIR_LIMIT);
+const livePairLimit = Number.isFinite(parsedLivePairLimit)
+  ? Math.min(Math.max(Math.floor(parsedLivePairLimit), 1), CURRENCY_PAIRS.length)
+  : DEFAULT_LIVE_PAIR_LIMIT;
+
+export const FEATURED_CURRENCY_PAIRS = CURRENCY_PAIRS.slice(0, livePairLimit);
+
+const featuredPairSymbols = new Set(FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol));
+
 interface CurrencyGridProps {
   selectedPair: CurrencyPair;
   onSelect: (pair: CurrencyPair) => void;
@@ -311,9 +322,15 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
 
   const handleCustomSubmit = () => {
     if (customSymbol.trim()) {
+      const normalizedSymbol = customSymbol.toUpperCase();
+      if (!featuredPairSymbols.has(normalizedSymbol)) {
+        toast.error(`${normalizedSymbol} is coming soon`);
+        return;
+      }
+
       const customPair: CurrencyPair = {
-        symbol: customSymbol.toUpperCase(),
-        pipDecimal: detectPipDecimal(customSymbol),
+        symbol: normalizedSymbol,
+        pipDecimal: detectPipDecimal(normalizedSymbol),
       };
       onSelect(customPair);
       onBack();
@@ -388,7 +405,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
         )}
 
         <div className="grid grid-cols-3 gap-3">
-          {CURRENCY_PAIRS.map((pair) => {
+          {FEATURED_CURRENCY_PAIRS.map((pair) => {
             const isSelected = selectedPair.symbol === pair.symbol;
             return (
               <button
@@ -416,6 +433,9 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
             );
           })}
         </div>
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          Showing {FEATURED_CURRENCY_PAIRS.length} live pairs. Other pairs are coming soon.
+        </p>
       </div>
     </div>
   );

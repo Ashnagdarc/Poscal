@@ -37,6 +37,7 @@ export class NotificationWorker {
   };
   private pollTimer?: NodeJS.Timeout;
   private metricsTimer?: NodeJS.Timeout;
+  private isProcessing = false;
 
   constructor() {
     this.config = loadNotificationWorkerConfig();
@@ -85,6 +86,13 @@ export class NotificationWorker {
   }
 
   private async processQueue(): Promise<void> {
+    if (this.isProcessing) {
+      logger.debug('Skipping notification poll because previous cycle is still running');
+      return;
+    }
+
+    this.isProcessing = true;
+
     try {
       const notifications = await this.fetchPendingNotifications();
       if (notifications.length === 0) {
@@ -133,6 +141,8 @@ export class NotificationWorker {
       }
     } catch (error) {
       logger.error('Notification queue processing failed', { error: (error as Error).message });
+    } finally {
+      this.isProcessing = false;
     }
   }
 
@@ -198,10 +208,17 @@ export class NotificationWorker {
     errorMessage?: string,
   ): Promise<void> {
     try {
-      await withRetry(() => this.nestApi.patch(`/notifications/push/${id}/status`, {
+      const payload: Record<string, string | undefined> = {
         status,
-        sent_at: new Date().toISOString(),
         error_message: errorMessage,
+      };
+
+      if (status === 'sent') {
+        payload.sent_at = new Date().toISOString();
+      }
+
+      await withRetry(() => this.nestApi.patch(`/notifications/push/${id}/status`, {
+        ...payload,
       }));
     } catch (error) {
       logger.error('Failed to update notification status', { id, status, error: (error as Error).message });

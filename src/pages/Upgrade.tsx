@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { PaymentModal } from '@/components/PaymentModal';
 import { useAuth } from '@/contexts/AuthContext';
+import { openRevenueCatCheckout } from '@/lib/revenuecat-checkout';
 
 const UpgradePage: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const [showModal, setShowModal] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const revenueCatCheckoutUrl = import.meta.env.VITE_REVENUECAT_WEB_CHECKOUT_URL || '';
 
   // Read query params: ?tier=premium&redirectPath=/calculator
   const qp = new URLSearchParams(location.search);
@@ -22,29 +23,42 @@ const UpgradePage: React.FC = () => {
       return;
     }
 
-    // Open modal once user is present
-    setShowModal(true);
-  }, [user]);
+    if (!revenueCatCheckoutUrl) {
+      setError('RevenueCat checkout URL is not configured.');
+      return;
+    }
+
+    const opened = openRevenueCatCheckout({
+      checkoutUrl: revenueCatCheckoutUrl,
+      userId: user.id,
+      email: user.email,
+      tier: tierParam,
+    });
+
+    if (!opened) {
+      setError('Unable to open RevenueCat checkout.');
+    }
+  }, [user, revenueCatCheckoutUrl, tierParam]);
 
   return (
-    <>
-      <PaymentModal
-        isOpen={showModal}
-        onClose={() => {
-          setShowModal(false);
-          navigate(redirectPath);
-        }}
-        tier={tierParam}
-        redirectPath={redirectPath}
-      />
-      {/* In case modal cannot render, show fallback link */}
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">Upgrade</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Opening payment dialog…</p>
-        </div>
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h2 className="text-lg font-semibold">Upgrade</h2>
+        {error ? (
+          <>
+            <p className="mt-2 text-sm text-destructive">{error}</p>
+            <button
+              className="mt-4 text-sm underline"
+              onClick={() => navigate(redirectPath)}
+            >
+              Go back
+            </button>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-muted-foreground">Opening RevenueCat checkout…</p>
+        )}
       </div>
-    </>
+    </div>
   );
 };
 

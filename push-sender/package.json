@@ -5,6 +5,7 @@
   "main": "dist/notification-worker.js",
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "npm run build && find dist -name '*.test.js' -print0 | xargs -0 node --test",
     "dev": "tsx watch src/notification-worker.ts",
     "dev:notification": "tsx watch src/notification-worker.ts",
     "dev:prices": "tsx watch src/price-ingestor.ts",

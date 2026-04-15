@@ -4,7 +4,7 @@ import { loadPriceIngestorConfig, PriceIngestorConfig } from '../lib/config';
 import { createNestApi } from '../lib/nestApi';
 import { logger } from '../lib/logger';
 import { withRetry } from '../lib/retry';
-import { SYMBOL_MAPPINGS } from '../lib/symbols';
+import { partitionSymbolMappings } from '../lib/symbols';
 import { PriceBatchItem, FinnhubTradeMessage } from '../types';
 
 const FINNHUB_WS_URL = 'wss://ws.finnhub.io';
@@ -20,6 +20,55 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+export function buildReverseSymbolMap(symbolMappings: Record<string, string>): Map<string, string[]> {
+  const reverse = new Map<string, string[]>();
+  Object.entries(symbolMappings).forEach(([displaySymbol, providerSymbol]) => {
+    const entries = reverse.get(providerSymbol) ?? [];
+    entries.push(displaySymbol);
+    reverse.set(providerSymbol, entries);
+  });
+  return reverse;
+}
+
+export function normalizeFinnhubTradeMessage(
+  message: FinnhubTradeMessage,
+  reverseSymbolMap: Map<string, string[]>,
+): PriceBatchItem[] {
+  if (message.type !== 'trade' || !Array.isArray(message.data)) {
+    return [];
+  }
+
+  const batchItems: PriceBatchItem[] = [];
+
+  for (const trade of message.data) {
+    if (typeof trade.p !== 'number') {
+      continue;
+    }
+
+    const mappedSymbols = reverseSymbolMap.get(trade.s);
+    if (!mappedSymbols?.length) {
+      continue;
+    }
+
+    const price = trade.p;
+    const spread = price * 0.0001;
+
+    for (const symbol of mappedSymbols) {
+      batchItems.push({
+        symbol,
+        mid_price: price,
+        ask_price: price + spread / 2,
+        bid_price: price - spread / 2,
+        timestamp: trade.t,
+        updated_at: new Date().toISOString(),
+        source: 'finnhub',
+      });
+    }
+  }
+
+  return batchItems;
+}
+
 interface PriceMetrics {
   tradesReceived: number;
   batchesFlushed: number;
@@ -29,8 +78,9 @@ interface PriceMetrics {
 export class PriceIngestor {
   private readonly config: PriceIngestorConfig;
   private readonly nestApi: AxiosInstance;
+  private readonly finnhubSymbolMappings: Record<string, string>;
   private readonly priceBatch: Record<string, PriceBatchItem> = {};
-  private readonly reverseSymbolMap = this.buildReverseSymbolMap();
+  private readonly reverseSymbolMap: Map<string, string[]>;
   private readonly metrics: PriceMetrics = {
     tradesReceived: 0,
     batchesFlushed: 0,
@@ -52,15 +102,22 @@ export class PriceIngestor {
       baseUrl: this.config.nestApiUrl,
       serviceToken: this.config.serviceToken,
     });
+    const { oanda, nonOanda } = partitionSymbolMappings(this.config.liveForexSymbolLimit);
+    this.finnhubSymbolMappings = {
+      ...oanda,
+      ...nonOanda,
+    };
+    this.reverseSymbolMap = buildReverseSymbolMap(this.finnhubSymbolMappings);
   }
 
   async start(): Promise<void> {
     logger.info('Starting price ingestor', {
       backend: this.config.nestApiUrl,
+      providerMode: this.config.priceProviderMode,
       batchIntervalMs: this.config.batchIntervalMs,
-      subscriptions: this.reverseSymbolMap.size,
+      finnhubSubscriptions: this.reverseSymbolMap.size,
+      liveForexSymbols: Object.keys(partitionSymbolMappings(this.config.liveForexSymbolLimit).oanda).length,
     });
-
     this.connect();
 
     this.flushTimer = setInterval(() => {
@@ -98,14 +155,10 @@ export class PriceIngestor {
     Object.keys(this.priceBatch).forEach((key) => delete this.priceBatch[key]);
   }
 
-  private buildReverseSymbolMap(): Map<string, string[]> {
-    const reverse = new Map<string, string[]>();
-    Object.entries(SYMBOL_MAPPINGS).forEach(([displaySymbol, finnhubSymbol]) => {
-      const entries = reverse.get(finnhubSymbol) ?? [];
-      entries.push(displaySymbol);
-      reverse.set(finnhubSymbol, entries);
-    });
-    return reverse;
+  private upsertPriceBatch(items: PriceBatchItem[]): void {
+    for (const item of items) {
+      this.priceBatch[item.symbol] = item;
+    }
   }
 
   private connect(): void {
@@ -152,7 +205,7 @@ export class PriceIngestor {
   }
 
   private async subscribeAllSymbols(): Promise<void> {
-    const uniqueSymbols = [...new Set(Object.values(SYMBOL_MAPPINGS))];
+    const uniqueSymbols = [...new Set(Object.values(this.finnhubSymbolMappings))];
     const batches = Math.ceil(uniqueSymbols.length / SUBSCRIBE_BATCH_SIZE) || 1;
 
     for (let i = 0; i < uniqueSymbols.length; i += SUBSCRIBE_BATCH_SIZE) {
@@ -174,36 +227,13 @@ export class PriceIngestor {
   private handleMessage(serialized: string): void {
     try {
       const message: FinnhubTradeMessage = JSON.parse(serialized);
-      if (message.type !== 'trade' || !Array.isArray(message.data)) {
+      if (!Array.isArray(message.data)) {
         return;
       }
 
       this.metrics.tradesReceived += message.data.length;
-
-      for (const trade of message.data) {
-        if (typeof trade.p !== 'number') {
-          continue;
-        }
-
-        const mappedSymbols = this.reverseSymbolMap.get(trade.s);
-        if (!mappedSymbols?.length) {
-          continue;
-        }
-
-        const price = trade.p;
-        const spread = price * 0.0001;
-
-        for (const symbol of mappedSymbols) {
-          this.priceBatch[symbol] = {
-            symbol,
-            mid_price: price,
-            ask_price: price + spread / 2,
-            bid_price: price - spread / 2,
-            timestamp: trade.t,
-            updated_at: new Date().toISOString(),
-          };
-        }
-      }
+      const items = normalizeFinnhubTradeMessage(message, this.reverseSymbolMap);
+      this.upsertPriceBatch(items);
     } catch (error) {
       logger.error('Failed to process Finnhub payload', { error: (error as Error).message });
     }
@@ -215,28 +245,35 @@ export class PriceIngestor {
       return;
     }
 
+    const batchSnapshot = batch.map((item) => ({ ...item }));
+
     try {
       await withRetry(() =>
         this.nestApi.post(
           '/prices/batch-update',
-          batch.map((item) => ({
+          batchSnapshot.map((item) => ({
             symbol: item.symbol,
             bid_price: item.bid_price,
             mid_price: item.mid_price,
             ask_price: item.ask_price,
             timestamp: item.timestamp,
-            source: 'finnhub',
+            source: item.source ?? 'unknown',
           })),
         ),
       );
 
       this.metrics.batchesFlushed++;
-      this.metrics.totalPricesSent += batch.length;
-      logger.info('Flushed price batch', { size: batch.length });
+      this.metrics.totalPricesSent += batchSnapshot.length;
+      logger.info('Flushed price batch', { size: batchSnapshot.length });
+
+      for (const item of batchSnapshot) {
+        const current = this.priceBatch[item.symbol];
+        if (current && current.timestamp === item.timestamp) {
+          delete this.priceBatch[item.symbol];
+        }
+      }
     } catch (error) {
       logger.error('Failed to upsert price batch', { error: (error as Error).message });
-    } finally {
-      batch.forEach((item) => delete this.priceBatch[item.symbol]);
     }
   }
 

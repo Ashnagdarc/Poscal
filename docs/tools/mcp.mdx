@@ -1,0 +1,47 @@
+---
+id: "tools/mcp"
+title: "RevenueCat MCP Server"
+description: "The RevenueCat MCP (Model Context Protocol) server enables AI assistants to manage subscription apps, products, entitlements, and everything in-between without using the RevenueCat dashboard."
+permalink: "/docs/tools/mcp"
+slug: "mcp"
+version: "current"
+original_source: "docs/tools/mcp.mdx"
+---
+
+The RevenueCat MCP (Model Context Protocol) server enables AI assistants to manage subscription apps, products, entitlements, and everything in-between without using the RevenueCat dashboard.
+
+## What is MCP?
+
+[Model Context Protocol](https://modelcontextprotocol.io/) is a standard that allows AI assistants to securely access external tools and data sources. The RevenueCat MCP server acts as a bridge between AI assistants (like Claude, ChatGPT, etc.) and the RevenueCat API, enabling natural language interactions with your subscription infrastructure.
+
+## Access
+
+The RevenueCat MCP server is available as a cloud-hosted service:
+
+**URL:** `https://mcp.revenuecat.ai/mcp`
+
+**Authentication:**
+
+- **Bearer token** with a RevenueCat API v2 key
+- **OAuth** with your RevenueCat account
+
+## Core Features & Capabilities
+
+The MCP server provides tools for:
+
+- **Project Management**: Access and view RevenueCat project details
+- **App Management**: Create, read, update, and delete apps across platforms
+- **Product Management**: Manage subscription products and in-app purchases
+- **Offering & Package Management**: Create and manage subscription offerings
+- **Analytics Integration**: Analyze charts and experiment results
+
+## Getting Started
+
+1. [Setup](./mcp/setup)
+   Get your API keys and configure the MCP server for your AI assistant.
+2. [Usage Examples](./mcp/usage-examples)
+   Natural language interaction examples and common usage patterns to help you get the most out of the MCP server.
+3. [Best Practices & Troubleshooting](./mcp/best-practices-and-troubleshooting)
+   Security considerations, best practices, troubleshooting guides, and advanced usage patterns.
+
+Ready to get started? Jump to [Setup](./mcp/setup) to configure the MCP server for your AI assistant.

@@ -283,42 +283,35 @@ DELETE /accounts/:id
 
 ## Payments Module
 
-### Paystack Webhook
+### RevenueCat Webhook
 ```http
-POST /webhooks/paystack
+POST /webhooks/revenuecat
 ```
-**Description**: Receive Paystack payment webhooks  
-**Auth Required**: No (HMAC verification)  
-**Headers**:
-- `x-paystack-signature`: HMAC signature
+**Description**: Receive RevenueCat subscription webhooks  
+**Auth Required**: No (signature verification)
 
-### Verify Payment
+### Get Entitlements
 ```http
-POST /payments/verify
+GET /payments/entitlements
 ```
-**Description**: Verify a payment reference  
+**Description**: Get authenticated user's current subscription entitlements  
 **Auth Required**: Yes  
-**Request Body**:
-```json
-{
-  "reference": "REF_123456789"
-}
-```
-
 **Response**:
 ```json
 {
-  "status": "success",
-  "amount": 5000,
-  "tier": "pro",
-  "subscription_expiry": "2026-02-23T00:00:00.000Z"
+  "subscriptionTier": "free",
+  "entitlements": [],
+  "expiresAt": null,
+  "isActive": false
 }
 ```
 
-### Get Payment Status
+### Get Active Subscription
 ```http
-GET /payments/status/:userId
+GET /payments/subscription
 ```
+**Description**: Get normalized subscription status for authenticated user  
+**Auth Required**: Yes
 **Description**: Get user's payment and subscription status  
 **Auth Required**: Yes (admin or self)
 

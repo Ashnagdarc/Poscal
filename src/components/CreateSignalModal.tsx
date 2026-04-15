@@ -11,11 +11,9 @@ import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
 import { SignalFormSchema } from '@/lib/formValidation';
 import { signalsApi, notificationsApi } from '@/lib/api';
+import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
 
-const CURRENCY_PAIRS = [
-  'EUR/USD', 'GBP/USD', 'USD/JPY', 'USD/CHF', 'AUD/USD', 'USD/CAD',
-  'NZD/USD', 'EUR/GBP', 'EUR/JPY', 'GBP/JPY', 'XAU/USD', 'BTC/USD',
-];
+const CURRENCY_PAIRS = FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol);
 
 interface CreateSignalModalProps {
   onSignalCreated: () => void;

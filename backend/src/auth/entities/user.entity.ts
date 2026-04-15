@@ -26,6 +26,16 @@ export class User {
   @Index()
   account_type: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Index()
+  revenue_cat_user_id: string | null;
+
+  @Column({ type: 'varchar', length: 50, default: 'free' })
+  subscription_tier: string;
+
+  @Column({ type: 'timestamp with time zone', nullable: true })
+  subscription_expires_at: Date | null;
+
   @CreateDateColumn({ type: 'timestamp with time zone' })
   created_at: Date;
 

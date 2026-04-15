@@ -14,7 +14,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       return res.status(400).json({ error: 'symbols parameter required' });
     }
 
-    const url = `${BACKEND_URL}/prices?symbols=${encodeURIComponent(String(symbols))}`;
+    const url = `${BACKEND_URL}/prices/multiple?symbols=${encodeURIComponent(String(symbols))}`;
     console.log(`[API] Fetching from backend: ${url}`);
     
     const backendRes = await Promise.race([

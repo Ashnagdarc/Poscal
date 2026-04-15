@@ -2,7 +2,8 @@ import axios from 'axios';
 import { logger } from '@/lib/logger';
 
 // Use relative path for Vercel serverless functions, fallback to external API for other endpoints
-const API_URL = import.meta.env.VITE_API_URL || 'https://api.poscalfx.com';
+// In development, use /api proxy to localhost:3001; in production, use external API
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? '/api' : 'https://api.poscalfx.com');
 
 // For serverless functions in /api, use relative path
 const serverlessApi = axios.create({
@@ -256,8 +257,8 @@ export const subscriptionApi = {
     return data;
   },
 
-  verifyPayment: async (payload: { reference: string; userId: string; tier: 'premium' | 'pro' }): Promise<any> => {
-    const { data } = await serverlessApi.post('/api/verify-payment', payload);
+  getEntitlements: async (): Promise<any> => {
+    const { data } = await api.get('/payments/entitlements');
     return data;
   },
 

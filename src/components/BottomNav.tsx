@@ -89,11 +89,12 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
                      dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.06))]
                      shadow-[0_4px_16px_-10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]
                      dark:shadow-[0_6px_20px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.15)]
-                     ${isInitialized ? 'transition-all duration-[400ms] ease-[cubic-bezier(0.25,1,0.5,1)]' : ''}`}
+                    ${isInitialized ? 'transition-all duration-500 ease-out' : ''}`}
           style={{
             left: indicatorStyle.left,
             width: indicatorStyle.width,
             opacity: activeIndex >= 0 && isInitialized ? 1 : 0,
+            transitionTimingFunction: isInitialized ? 'cubic-bezier(0.25, 1, 0.5, 1)' : undefined,
           }}
         />
 

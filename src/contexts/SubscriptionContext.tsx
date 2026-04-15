@@ -79,7 +79,26 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     try {
       setIsLoading(true);
       
-      // Call the subscription API
+      // Try RevenueCat entitlements API first
+      try {
+        const entitlements = await subscriptionApi.getEntitlements();
+        
+        if (entitlements && entitlements.subscriptionTier) {
+          setSubscriptionDetails({
+            paymentStatus: entitlements.isActive ? 'paid' : 'free',
+            subscriptionTier: entitlements.subscriptionTier,
+            expiresAt: entitlements.expiresAt ? new Date(entitlements.expiresAt) : null,
+            trialEndsAt: null, // RevenueCat handles this separately
+            isActive: entitlements.isActive,
+          });
+          return;
+        }
+      } catch (entitlementError) {
+        // Fall back to old subscription API if RevenueCat endpoint fails
+        console.warn('RevenueCat entitlements API failed, falling back to subscription API', entitlementError);
+      }
+
+      // Fallback: Call the old subscription API
       const data = await subscriptionApi.getDetails();
 
       if (isSubscriptionResponse(data)) {

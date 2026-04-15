@@ -87,8 +87,8 @@ Create a `.env.local` file in the project root:
 VITE_API_URL=http://localhost:3001
 VITE_WS_URL=ws://localhost:3001
 
-# Payment Configuration (Paystack)
-VITE_PAYSTACK_PUBLIC_KEY=your_paystack_public_key
+# Subscription Configuration (RevenueCat)
+VITE_REVENUECAT_WEB_CHECKOUT_URL=https://your-revenuecat-web-checkout-url
 ```
 
 #### Backend (.env)
@@ -113,9 +113,9 @@ JWT_EXPIRATION=24h
 FRONTEND_URL=http://localhost:5173
 FRONTEND_PRODUCTION_URL=https://poscal.com
 
-# Paystack Configuration
-PAYSTACK_SECRET_KEY=your_paystack_secret_key
-PAYSTACK_PUBLIC_KEY=your_paystack_public_key
+# RevenueCat Configuration
+REVENUECAT_API_KEY=your_revenuecat_api_key
+REVENUECAT_WEBHOOK_SECRET=your_revenuecat_webhook_secret
 
 # Finnhub API (for price data)
 FINNHUB_API_KEY=your_finnhub_api_key

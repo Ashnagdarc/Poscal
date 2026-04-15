@@ -3,7 +3,7 @@
 This package now ships **two focused Node.js workers** that talk to the NestJS backend only:
 
 1. **Notification Worker** – polls `/notifications/push/pending`, delivers Web Push messages, and updates queue status.
-2. **Price Ingestor** – holds a single Finnhub WebSocket connection, batches ticks, and POSTs to `/prices/batch-update`.
+2. **Price Ingestor** – ingests market prices and POSTs normalized bid/ask/mid data to `/prices/batch-update`.
 
 Both workers share common config/logging/retry helpers in `src/lib` and can be run independently on the same host.
 
@@ -14,7 +14,7 @@ Both workers share common config/logging/retry helpers in `src/lib` and can be r
 | Path | Purpose |
 |------|---------|
 | `src/notification-worker.ts` | Entry point for queue processing service |
-| `src/price-ingestor.ts` | Entry point for Finnhub → backend bridge |
+| `src/price-ingestor.ts` | Entry point for the market-data → backend bridge |
 | `src/workers/*` | Worker implementations |
 | `src/lib/*` | Shared config, logger, NestJS Axios client, retry helper, symbol map |
 | `ecosystem.config.js` | PM2 definition for running both workers |
@@ -30,7 +30,13 @@ The workers rely on the NestJS internal API rather than talking to the database 
 |------|----------|---------|-------|
 | `NESTJS_API_URL` | ✅ | `http://localhost:3000` | Base URL for the backend |
 | `NESTJS_SERVICE_TOKEN` | ✅ | – | Must match `SERVICE_TOKEN` configured in the backend |
-| `FINNHUB_API_KEY` | ✅ (prices) | – | Required only when running the price ingestor |
+| `PRICE_PROVIDER_MODE` | ❌ | `hybrid` | `hybrid` uses OANDA for forex/metals and Finnhub for crypto |
+| `OANDA_ENV` | ❌ | `practice` | `practice` uses fxPractice and `live` uses fxTrade |
+| `FINNHUB_API_KEY` | ✅ (`PRICE_PROVIDER_MODE=finnhub` or `hybrid`) | – | Required for the Finnhub crypto branch |
+| `OANDA_API_URL` | ❌ | `https://api-fxpractice.oanda.com` | Override with `https://api-fxtrade.oanda.com` for a live OANDA account |
+| `OANDA_API_KEY` | ✅ (`PRICE_PROVIDER_MODE=oanda` or `hybrid`) | – | Personal access token for OANDA REST pricing |
+| `OANDA_ACCOUNT_ID` | ✅ (`PRICE_PROVIDER_MODE=oanda` or `hybrid`) | – | Account ID used for OANDA pricing requests |
+| `OANDA_INSTRUMENT_CHUNK_SIZE` | ❌ | `25` | Instruments fetched per OANDA pricing request |
 | `VAPID_PUBLIC_KEY` | ✅ (notifications) | – | Already embedded in the frontend; keep in sync |
 | `VAPID_PRIVATE_KEY` | ✅ (notifications) | – | Private VAPID key used to sign pushes |
 | `VAPID_SUBJECT` | ❌ | `mailto:info@poscalfx.com` | Contact email advertised in VAPID headers |
@@ -120,7 +126,7 @@ npx web-push generate-vapid-keys
 
 ### Verify Price Flow
 
-1. Check that `FINNHUB_API_KEY` is present and correct.
+1. Check that the provider-specific credentials are present and correct.
 2. Tail logs: `pm2 logs poscal-price-ingestor`.
 3. Ensure `/prices/batch-update` responds 2xx and price cache rows update.
 
@@ -133,11 +139,20 @@ npx web-push generate-vapid-keys
 | `Missing required environment variable` on boot | `.env` not present or wrong working dir | Ensure PM2/Systemd `cwd` is `push-sender/` |
 | HTTP 401 from backend | `NESTJS_SERVICE_TOKEN` mismatch | Update `.env` to match the backend token |
 | Finnhub reconnect loop | Invalid / rate-limited API key | Double-check key or reduce subscribed symbols |
+| OANDA pricing 401/403 | Bad token, wrong API URL, or account mismatch | Verify `OANDA_API_KEY`, `OANDA_ACCOUNT_ID`, and practice/live URL pairing |
 | Pushes never send | Missing VAPID keys or queue empty | Validate `.env` keys and inspect `/notifications/push/pending` |
 
 Use `npm run build` before redeploying so the latest TypeScript changes are in `dist/`.
 
 ---
+
+## Price Sources
+
+- `PRICE_PROVIDER_MODE=hybrid`: OANDA powers forex/metals while Finnhub powers crypto.
+- `PRICE_PROVIDER_MODE=finnhub`: keeps the existing WebSocket trade-tick flow and estimates bid/ask around the last trade for all supported symbols.
+- `PRICE_PROVIDER_MODE=oanda`: polls OANDA’s official pricing endpoint and stores real `closeoutBid` / `closeoutAsk` for all `OANDA:*` mapped instruments.
+
+If your main goal is Stinu-style forex sizing parity without dropping crypto coverage, use `hybrid`.
 
 ## 📚 Related Docs
 

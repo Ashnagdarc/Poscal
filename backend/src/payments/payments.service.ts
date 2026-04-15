@@ -2,17 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Payment } from './entities/payment.entity';
-import { PaystackWebhookLog } from './entities/paystack-webhook-log.entity';
 import { User } from '../auth/entities/user.entity';
-import { CreatePaymentDto, UpdatePaymentDto, VerifyPaymentFromVercelDto } from './dto/payment.dto';
+import { CreatePaymentDto, UpdatePaymentDto } from './dto/payment.dto';
 
 @Injectable()
 export class PaymentsService {
   constructor(
     @InjectRepository(Payment)
     private paymentRepository: Repository<Payment>,
-    @InjectRepository(PaystackWebhookLog)
-    private webhookLogRepository: Repository<PaystackWebhookLog>,
     @InjectRepository(User)
     private userRepository: Repository<User>,
   ) {}
@@ -47,36 +44,6 @@ export class PaymentsService {
     const payment = await this.findOne(id);
     Object.assign(payment, updatePaymentDto);
     return await this.paymentRepository.save(payment);
-  }
-
-  async verifyPayment(reference: string): Promise<Payment> {
-    const payment = await this.findByReference(reference);
-    
-    if (!payment) {
-      throw new NotFoundException('Payment not found');
-    }
-
-    // TODO: Call Paystack API to verify payment
-    // For now, just return the payment
-    return payment;
-  }
-
-  async logWebhook(event: string, data: any, status: string, errorMessage?: string, reference?: string): Promise<PaystackWebhookLog> {
-    const log = this.webhookLogRepository.create({
-      event,
-      data,
-      status,
-      error_message: errorMessage,
-      reference,
-    });
-    return await this.webhookLogRepository.save(log);
-  }
-
-  async getWebhookLogs(limit: number = 50): Promise<PaystackWebhookLog[]> {
-    return await this.webhookLogRepository.find({
-      order: { created_at: 'DESC' },
-      take: limit,
-    });
   }
 
   async getActiveSubscription(userId: string): Promise<any> {
@@ -177,57 +144,4 @@ export class PaymentsService {
     };
   }
 
-  async createOrUpdatePaymentFromVercel(dto: VerifyPaymentFromVercelDto): Promise<any> {
-    // Check if payment already exists
-    let payment = await this.findByReference(dto.reference);
-
-    const now = new Date();
-    const expiryDate = new Date(dto.expiresAt);
-
-    if (payment) {
-      // Update existing payment
-      payment.status = 'success';
-      payment.amount = dto.amount;
-      payment.currency = dto.currency;
-      payment.subscription_plan = dto.tier;
-      payment.subscription_tier = dto.tier;
-      payment.subscription_start = now;
-      payment.subscription_end = expiryDate;
-      payment.paid_at = now;
-      payment.paystack_customer_code = dto.paystack_customer_code || null;
-      payment.metadata = dto.metadata;
-      payment.updated_at = now;
-    } else {
-      // Create new payment
-      payment = this.paymentRepository.create({
-        user_id: dto.userId,
-        reference: dto.reference,
-        paystack_reference: dto.reference,
-        amount: dto.amount,
-        currency: dto.currency,
-        status: 'success',
-        payment_method: 'paystack',
-        subscription_plan: dto.tier,
-        subscription_tier: dto.tier,
-        subscription_start: now,
-        subscription_end: expiryDate,
-        subscription_duration: 30,
-        paid_at: now,
-        paystack_customer_code: dto.paystack_customer_code,
-        metadata: dto.metadata,
-      });
-    }
-
-    const savedPayment = await this.paymentRepository.save(payment);
-
-    return {
-      success: true,
-      message: 'Payment verified and subscription activated',
-      data: {
-        paymentId: savedPayment.id,
-        tier: dto.tier,
-        expiresAt: expiryDate.toISOString(),
-      },
-    };
-  }
 }

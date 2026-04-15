@@ -73,6 +73,14 @@ interface PairConfig {
   typicalSpread: number; // Typical spread in pips
 }
 
+export type ExecutionPriceSide = 'ask' | 'bid' | 'mid';
+
+export interface MarketPriceSnapshot {
+  midPrices?: Record<string, number>;
+  askPrices?: Record<string, number>;
+  bidPrices?: Record<string, number>;
+}
+
 /**
  * Dynamically determine configuration for ANY currency pair
  * Works for all XXX/YYY format pairs without hardcoding
@@ -140,6 +148,61 @@ function getPairConfig(pair: string): PairConfig {
   };
 }
 
+function isMarketPriceSnapshot(
+  value?: Record<string, number> | MarketPriceSnapshot
+): value is MarketPriceSnapshot {
+  return !!value && (
+    'midPrices' in value ||
+    'askPrices' in value ||
+    'bidPrices' in value
+  );
+}
+
+function getMarketPrice(
+  pair: string,
+  side: ExecutionPriceSide,
+  priceData?: Record<string, number> | MarketPriceSnapshot
+): number | undefined {
+  if (!priceData) {
+    return undefined;
+  }
+
+  if (!isMarketPriceSnapshot(priceData)) {
+    return priceData[pair];
+  }
+
+  if (side === 'ask') {
+    return priceData.askPrices?.[pair] ?? priceData.midPrices?.[pair] ?? priceData.bidPrices?.[pair];
+  }
+
+  if (side === 'bid') {
+    return priceData.bidPrices?.[pair] ?? priceData.midPrices?.[pair] ?? priceData.askPrices?.[pair];
+  }
+
+  return priceData.midPrices?.[pair] ?? priceData.askPrices?.[pair] ?? priceData.bidPrices?.[pair];
+}
+
+function getUsdConversionDetails(
+  quoteCurrency: string,
+  priceData?: Record<string, number> | MarketPriceSnapshot
+): { rate: number; operation: 'multiply' | 'divide' } | undefined {
+  const usdBasePair = `USD/${quoteCurrency}`;
+  const usdBaseRate = getMarketPrice(usdBasePair, 'ask', priceData);
+
+  if (usdBaseRate) {
+    return { rate: usdBaseRate, operation: 'divide' };
+  }
+
+  const usdQuotePair = `${quoteCurrency}/USD`;
+  const usdQuoteRate = getMarketPrice(usdQuotePair, 'bid', priceData);
+
+  if (usdQuoteRate) {
+    return { rate: usdQuoteRate, operation: 'multiply' };
+  }
+
+  return undefined;
+}
+
 /**
  * Calculate pips between two prices for a given pair
  * Works for ALL currency pairs dynamically
@@ -196,16 +259,16 @@ export function getBidPrice(midPrice: number, pair: string, spreadPips?: number)
  * 
  * @param pair - Currency pair (e.g., 'EUR/USD', 'GBP/JPY')
  * @param accountCurrency - Account currency (default 'USD')
- * @param currentPrice - Current market price of the pair (mid-market)
- * @param livePrices - Optional map of live exchange rates for cross pair conversion
- * @param useAskPrice - If true, uses ask price instead of mid for USD-base pairs (more accurate for position sizing)
+ * @param currentPrice - Current execution price for the pair
+ * @param marketPrices - Optional market data for cross-pair conversion
+ * @param entryPriceSide - Side of book used for the entry price
  */
 export function getPipValueInUSD(
   pair: string, 
   accountCurrency: string = 'USD',
   currentPrice?: number,
-  livePrices?: Record<string, number>,
-  useAskPrice: boolean = true
+  marketPrices?: Record<string, number> | MarketPriceSnapshot,
+  entryPriceSide: ExecutionPriceSide = 'ask'
 ): number {
   const config = getPairConfig(pair);
   const pipSize = 1 / config.pipMultiplier;
@@ -257,36 +320,26 @@ export function getPipValueInUSD(
   }
 
   // For USD-base pairs (USD/XXX), calculate based on current price
-  // Use ask price for more accurate position sizing (the price you actually pay)
   // Example: USD/JPY at 150.00 → pip value = 100,000 × 0.01 / 150.00 ≈ $6.67
-  if (config.baseCurrency === 'USD' && currentPrice) {
-    const priceToUse = useAskPrice ? getAskPrice(currentPrice, pair) : currentPrice;
-    return (STANDARD_LOT_SIZE * pipSize) / priceToUse;
+  if (config.baseCurrency === 'USD') {
+    const executionPrice = currentPrice ?? getMarketPrice(pair, entryPriceSide, marketPrices);
+
+    if (executionPrice) {
+      return (STANDARD_LOT_SIZE * pipSize) / executionPrice;
+    }
   }
 
   // For cross pairs (XXX/YYY where neither is USD), need conversion rate
   // Example: GBP/JPY needs GBP/USD rate to convert pip value to USD
   // Example: EUR/GBP needs GBP/USD rate to convert pip value to USD
-  if (config.quoteCurrency !== 'USD' && livePrices) {
-    // For JPY pairs, pip value in JPY is 1000 per standard lot (0.01 × 100,000)
-    // For other pairs, pip value in quote currency is 10 per standard lot (0.0001 × 100,000)
+  if (config.quoteCurrency !== 'USD' && marketPrices) {
     const pipValueInQuoteCurrency = STANDARD_LOT_SIZE * pipSize;
-    
-    // For JPY as quote currency, we need to divide by USD/JPY rate
-    if (config.quoteCurrency === 'JPY') {
-      const usdJpyRate = livePrices['USD/JPY'];
-      if (usdJpyRate) {
-        // pip value in USD = pip value in JPY / USD/JPY rate
-        return pipValueInQuoteCurrency / usdJpyRate;
-      }
-    } else {
-      // For other quote currencies, we need the quote/USD rate
-      const conversionPair = `${config.quoteCurrency}/USD`;
-      const conversionRate = livePrices[conversionPair];
-      
-      if (conversionRate) {
-        return pipValueInQuoteCurrency * conversionRate;
-      }
+
+    const conversion = getUsdConversionDetails(config.quoteCurrency, marketPrices);
+    if (conversion) {
+      return conversion.operation === 'divide'
+        ? pipValueInQuoteCurrency / conversion.rate
+        : pipValueInQuoteCurrency * conversion.rate;
     }
   }
 

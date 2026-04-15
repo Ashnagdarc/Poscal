@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react-swc";
+import react from "@vitejs/plugin-react";
 import path from "path";
 import { VitePWA } from "vite-plugin-pwa";
 
@@ -8,6 +8,13 @@ export default defineConfig(({ mode }) => ({
   server: {
     host: "::",
     port: 8080,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3001',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
   },
   plugins: [
     react(),
@@ -61,30 +68,36 @@ export default defineConfig(({ mode }) => ({
   build: {
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Separate React and React DOM
-          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-          // Radix UI components (large library)
-          'radix-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
-            '@radix-ui/react-select',
-            '@radix-ui/react-popover',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-toast',
-            '@radix-ui/react-scroll-area',
-            '@radix-ui/react-accordion',
-            '@radix-ui/react-alert-dialog',
-            '@radix-ui/react-navigation-menu',
-          ],
-          // Charts library
-          'charts': ['recharts'],
-          // TanStack Query
-          'data-libs': ['@tanstack/react-query'],
-          // Form libraries
-          'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
-          // Icons and utilities
-          'utils': ['lucide-react', 'date-fns', 'clsx', 'tailwind-merge'],
+        manualChunks(id) {
+          if (!id.includes('node_modules')) {
+            return undefined;
+          }
+
+          if (id.includes('/node_modules/react/') || id.includes('/node_modules/react-dom/') || id.includes('/node_modules/react-router-dom/')) {
+            return 'react-vendor';
+          }
+
+          if (id.includes('/node_modules/@radix-ui/')) {
+            return 'radix-ui';
+          }
+
+          if (id.includes('/node_modules/recharts/')) {
+            return 'charts';
+          }
+
+          if (id.includes('/node_modules/@tanstack/react-query/')) {
+            return 'data-libs';
+          }
+
+          if (id.includes('/node_modules/react-hook-form/') || id.includes('/node_modules/@hookform/resolvers/') || id.includes('/node_modules/zod/')) {
+            return 'forms';
+          }
+
+          if (id.includes('/node_modules/lucide-react/') || id.includes('/node_modules/date-fns/') || id.includes('/node_modules/clsx/') || id.includes('/node_modules/tailwind-merge/')) {
+            return 'utils';
+          }
+
+          return undefined;
         },
       },
     },

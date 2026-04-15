@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 export interface HistoryItem {
   id: string;
   pair: string;
+  direction?: 'buy' | 'sell';
   balance: number;
   risk: number;
   stopLoss: number;
@@ -136,7 +137,14 @@ const History = () => {
                 className="bg-secondary rounded-2xl p-4"
               >
                 <div className="flex items-center justify-between mb-3">
-                  <span className="font-bold text-foreground">{item.pair}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-foreground">{item.pair}</span>
+                    {item.direction && (
+                      <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-foreground">
+                        {item.direction.toUpperCase()}
+                      </span>
+                    )}
+                  </div>
                   <span className="text-xs text-muted-foreground">
                     {formatDate(item.timestamp)}
                   </span>

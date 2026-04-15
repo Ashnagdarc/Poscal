@@ -119,6 +119,48 @@ The API will be available at:
 - **Health Check**: http://localhost:3001/health
 - **Swagger Docs**: http://localhost:3001/api/docs (when configured)
 
+## Docker Deployment
+
+The repo root now includes a `docker-compose.yml` that runs:
+
+- `postgres`
+- `backend`
+- `poscal-price-ingestor`
+- `poscal-notification-worker`
+
+### Local Docker setup
+
+```bash
+cp backend/.env.example backend/.env
+cp push-sender/.env.example push-sender/.env
+
+docker compose up -d --build
+```
+
+Useful commands:
+
+```bash
+docker compose ps
+docker compose logs -f backend
+docker compose logs -f poscal-price-ingestor
+docker compose down
+```
+
+The backend container waits for PostgreSQL, runs pending migrations, and then starts NestJS.
+For the root Docker stack, `DB_AUTO_BOOTSTRAP=true` is set so a fresh empty local database can be initialized from entities once before migrations run.
+
+### Docker on a VPS
+
+Recommended deploy loop:
+
+```bash
+git pull
+docker compose up -d --build
+docker compose ps
+```
+
+This is the simplest beginner-friendly workflow. Avoid trying to sync your local Docker daemon directly to the VPS for automatic live updates.
+
 ## Database Migrations
 
 ```bash

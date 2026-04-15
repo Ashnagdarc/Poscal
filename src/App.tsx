@@ -32,8 +32,6 @@ const Pricing = lazy(() => import("./pages/Pricing"));
 const Upgrade = lazy(() => import("./pages/Upgrade"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
-const AdminPayments = lazy(() => import("./pages/AdminPayments"));
-const AdminWebhookLogs = lazy(() => import("./pages/AdminWebhookLogs"));
 const AdminIngestorHealth = lazy(() => import("./pages/AdminIngestorHealth"));
 const Terms = lazy(() => import("./pages/Terms"));
 const Privacy = lazy(() => import("./pages/Privacy"));
@@ -90,14 +88,6 @@ const AppContent = () => {
               </ProtectedRoute>
             } 
           />
-          <Route 
-            path="/admin/payments" 
-            element={
-              <ProtectedRoute requiresAdmin>
-                <AdminPayments />
-              </ProtectedRoute>
-            } 
-          />
           <Route
             path="/admin/ingestor-health"
             element={
@@ -130,7 +120,7 @@ const App = () => (
       <ErrorBoundary>
         <Toaster />
         <Sonner />
-        <BrowserRouter>
+        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>
             <SubscriptionProvider>
               <CurrencyProvider>

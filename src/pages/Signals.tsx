@@ -20,6 +20,7 @@ import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useNavigate } from 'react-router-dom';
 import { signalsApi } from '@/lib/api';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
+import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
 
 interface TradingSignal {
   id: string;
@@ -48,21 +49,7 @@ interface TradingSignal {
 
 const SIGNALS_PER_PAGE = 5;
 
-const CURRENCY_PAIRS = [
-  'All Pairs',
-  'EUR/USD',
-  'GBP/USD',
-  'USD/JPY',
-  'USD/CHF',
-  'AUD/USD',
-  'USD/CAD',
-  'NZD/USD',
-  'EUR/GBP',
-  'EUR/JPY',
-  'GBP/JPY',
-  'XAU/USD',
-  'BTC/USD',
-];
+const CURRENCY_PAIRS = ['All Pairs', ...FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol)];
 
 const Signals = () => {
   const { isAdmin } = useAdmin();

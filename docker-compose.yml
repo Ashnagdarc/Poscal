@@ -1,0 +1,81 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-poscal_db}
+      POSTGRES_USER: ${POSTGRES_USER:-poscal_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-poscal_user} -d ${POSTGRES_DB:-poscal_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-poscal_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      DB_NAME: ${POSTGRES_DB:-poscal_db}
+      DB_SSL: "false"
+      DB_AUTO_BOOTSTRAP: "true"
+    ports:
+      - "${BACKEND_PORT:-3001}:3001"
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then((res) => process.exit(res.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  poscal-price-ingestor:
+    build:
+      context: ./push-sender
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/price-ingestor.js"]
+    env_file:
+      - ./push-sender/.env
+    environment:
+      NESTJS_API_URL: http://backend:3001
+    depends_on:
+      backend:
+        condition: service_healthy
+
+  poscal-notification-worker:
+    build:
+      context: ./push-sender
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["node", "dist/notification-worker.js"]
+    env_file:
+      - ./push-sender/.env
+    environment:
+      NESTJS_API_URL: http://backend:3001
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  backend_uploads:

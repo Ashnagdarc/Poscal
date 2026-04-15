@@ -10,7 +10,7 @@ import {
   X
 } from "lucide-react";
 import { NumPad } from "./NumPad";
-import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,6 +21,7 @@ import { toast } from "sonner";
 export interface HistoryItem {
   id: string;
   pair: string;
+  direction?: 'buy' | 'sell';
   balance: number;
   risk: number;
   stopLoss: number;
@@ -34,10 +35,11 @@ export const Calculator = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [accountBalance, setAccountBalance] = useState("");
+  const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [riskPercent, setRiskPercent] = useState(1);
   const [stopLossPips, setStopLossPips] = useState("");
   const [takeProfitPips, setTakeProfitPips] = useState("");
-  const [selectedPair, setSelectedPair] = useState<CurrencyPair>(CURRENCY_PAIRS[0]);
+  const [selectedPair, setSelectedPair] = useState<CurrencyPair>(FEATURED_CURRENCY_PAIRS[0]);
   
   // UI State
   const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | null>(null);
@@ -49,6 +51,12 @@ export const Calculator = () => {
   
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
+
+  useEffect(() => {
+    if (!FEATURED_CURRENCY_PAIRS.some((pair) => pair.symbol === selectedPair.symbol)) {
+      setSelectedPair(FEATURED_CURRENCY_PAIRS[0]);
+    }
+  }, [selectedPair.symbol]);
 
   // Memoize the symbols to fetch to prevent infinite re-renders
   const symbolsToFetch = useMemo(() => {
@@ -79,13 +87,31 @@ export const Calculator = () => {
   
   // Use Realtime prices from backend (push-sender fetches every 10 seconds)
   // This reduces API calls 1000x while keeping all users in sync
-  const { prices, askPrices, bidPrices, loading: _pricesLoading } = useRealtimePrices({
+  const {
+    prices,
+    askPrices,
+    bidPrices,
+    priceStatus,
+    updatedAtBySymbol,
+    loading: _pricesLoading,
+    lastUpdated,
+  } = useRealtimePrices({
     symbols: symbolsToFetch,
-    enabled: true
+    enabled: true,
+    pollIntervalMs: 10000,
+    staleAfterMs: 30000,
   });
   
   const currentLivePrice = prices[selectedPair.symbol];
   const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from backend
+  const currentBidPrice = bidPrices[selectedPair.symbol]; // Real bid price from backend
+  const requiredQuoteStatuses = symbolsToFetch.map((symbol) => priceStatus[symbol] ?? 'unavailable');
+  const hasUnavailableRequiredQuote = requiredQuoteStatuses.some((status) => status === 'unavailable');
+  const hasStaleRequiredQuote = requiredQuoteStatuses.some((status) => status === 'stale');
+  const currentPairStatus = hasUnavailableRequiredQuote
+    ? 'unavailable'
+    : (hasStaleRequiredQuote ? 'stale' : (priceStatus[selectedPair.symbol] ?? 'unavailable'));
+  const currentPairUpdatedAt = updatedAtBySymbol[selectedPair.symbol] ?? lastUpdated;
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -106,18 +132,28 @@ export const Calculator = () => {
     const risk = riskPercent;
     const slPips = parseFloat(stopLossPips) || 0;
     const tpPips = parseFloat(takeProfitPips) || 0;
+    const priceSide = tradeDirection === 'buy' ? 'ask' : 'bid';
     
-    // Use real ask price from API for position sizing (the price you'll actually pay)
-    // This matches professional calculators like Stinu app
-    // Falls back to mid-market if ask price not available
-    const priceForCalculation = currentAskPrice || currentLivePrice;
+    // Use the execution side of the book for sizing:
+    // buys fill at ask, sells fill at bid.
+    const priceForCalculation = tradeDirection === 'buy'
+      ? (currentAskPrice ?? currentLivePrice)
+      : (currentBidPrice ?? currentLivePrice);
     
+    if (hasUnavailableRequiredQuote || hasStaleRequiredQuote) {
+      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: 0 };
+    }
+
     const pipVal = getPipValueInUSD(
       selectedPair.symbol,
       'USD',
-      priceForCalculation || undefined,
-      prices, // Pass all prices for cross-pair conversion
-      false // Don't estimate ask price - we're already using real ask price
+      priceForCalculation ?? undefined,
+      {
+        midPrices: prices,
+        askPrices,
+        bidPrices,
+      },
+      priceSide
     );
 
     if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
@@ -131,7 +167,27 @@ export const Calculator = () => {
     const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
 
     return { riskAmount, positionSize, units, riskReward, potentialProfit, pipValue: pipVal };
-  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, currentAskPrice, prices]);
+  }, [
+    accountBalance,
+    riskPercent,
+    stopLossPips,
+    takeProfitPips,
+    selectedPair,
+    tradeDirection,
+    currentLivePrice,
+    currentAskPrice,
+    currentBidPrice,
+    hasUnavailableRequiredQuote,
+    hasStaleRequiredQuote,
+    prices,
+    askPrices,
+    bidPrices,
+  ]);
+
+  const executionPrice = tradeDirection === 'buy'
+    ? (currentAskPrice ?? currentLivePrice)
+    : (currentBidPrice ?? currentLivePrice);
+  const executionLabel = tradeDirection === 'buy' ? 'Ask' : 'Bid';
 
   const saveToHistory = () => {
     if (calculation.positionSize <= 0) return;
@@ -142,6 +198,7 @@ export const Calculator = () => {
     const newItem: HistoryItem = {
       id: Date.now().toString(),
       pair: selectedPair.symbol,
+      direction: tradeDirection,
       balance: parseFloat(accountBalance),
       risk: riskPercent,
       stopLoss: parseFloat(stopLossPips),
@@ -159,6 +216,16 @@ export const Calculator = () => {
   const formatNumber = (num: number, decimals: number = 2) => {
     if (num === 0) return "—";
     return num.toLocaleString("en-US", {
+      minimumFractionDigits: decimals,
+      maximumFractionDigits: decimals,
+    });
+  };
+
+  const formatPrice = (price?: number) => {
+    if (typeof price !== 'number') return "Waiting...";
+
+    const decimals = Math.min(Math.max(selectedPair.pipDecimal + 1, 1), 5);
+    return price.toLocaleString("en-US", {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
@@ -291,6 +358,32 @@ export const Calculator = () => {
           )}
         </div>
 
+        <div className="animate-slide-up" style={{ animationDelay: "125ms" }}>
+          <p className="text-xs text-muted-foreground mb-3 ml-1">Trade Direction</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setTradeDirection('buy')}
+              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
+                tradeDirection === 'buy'
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
+              Buy
+            </button>
+            <button
+              onClick={() => setTradeDirection('sell')}
+              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
+                tradeDirection === 'sell'
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
+              Sell
+            </button>
+          </div>
+        </div>
+
         {/* Stop Loss & Take Profit */}
         <div className="grid grid-cols-2 gap-3">
           <button
@@ -320,6 +413,31 @@ export const Calculator = () => {
               {takeProfitPips ? `${takeProfitPips} pips` : "—"}
             </p>
           </button>
+        </div>
+
+        <div
+          className="bg-secondary/70 rounded-2xl px-4 py-3 animate-slide-up"
+          style={{ animationDelay: "225ms" }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">Execution Price</p>
+              <p className="text-base font-semibold text-foreground">
+                {executionLabel}: {formatPrice(executionPrice)}
+              </p>
+            </div>
+            <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-foreground">
+              {tradeDirection.toUpperCase()}
+            </span>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {currentPairStatus === 'fresh' && `Sizing from the current ${executionLabel.toLowerCase()} feed`}
+            {currentPairStatus === 'stale' && `Execution quote is too old for sizing`}
+            {currentPairStatus === 'unavailable' && "Execution quote unavailable"}
+            {currentPairUpdatedAt
+              ? ` • Updated ${currentPairUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
+              : ""}
+          </p>
         </div>
 
         {/* Result Card */}

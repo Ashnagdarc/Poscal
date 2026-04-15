@@ -15,6 +15,7 @@ import { PricesModule } from './prices/prices.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SystemModule } from './system/system.module';
 import { ForexModule } from './forex/forex.module';
+import { RevenuecatModule } from './revenuecat/revenuecat.module';
 import { HealthController } from './health.controller';
 import { getDatabaseConfig } from './config/database.config';
 
@@ -55,6 +56,7 @@ import { getDatabaseConfig } from './config/database.config';
     NotificationsModule,
     SystemModule,
     ForexModule,
+    RevenuecatModule,
     // Storage is a provider-only module; imported where needed
   ],
   controllers: [HealthController],
