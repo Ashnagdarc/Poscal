@@ -283,11 +283,11 @@ DELETE /accounts/:id
 
 ## Payments Module
 
-### RevenueCat Webhook
+### Paystack Webhook
 ```http
-POST /webhooks/revenuecat
+POST /webhooks/paystack
 ```
-**Description**: Receive RevenueCat subscription webhooks  
+**Description**: Receive Paystack subscription webhooks  
 **Auth Required**: No (signature verification)
 
 ### Get Entitlements
