@@ -10,7 +10,9 @@
 
 import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as prices from "../prices.js";
+import type * as profiles from "../profiles.js";
 import type * as status from "../status.js";
+import type * as tradingJournal from "../tradingJournal.js";
 
 import type {
   ApiFromModules,
@@ -21,7 +23,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   calculatorHistory: typeof calculatorHistory;
   prices: typeof prices;
+  profiles: typeof profiles;
   status: typeof status;
+  tradingJournal: typeof tradingJournal;
 }>;
 
 /**

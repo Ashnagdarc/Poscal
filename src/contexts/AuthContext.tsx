@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import axios from 'axios';
 import { authApi, User } from '@/lib/api';
+import { syncAuthUserToConvex } from '@/lib/convexProfiles';
 
 interface AuthContextType {
   user: User | null;
@@ -31,6 +32,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setSession({ access_token: token });
+        void syncAuthUserToConvex(parsedUser).catch((error) => {
+          console.warn("[auth] Failed to sync stored user to Convex", error);
+        });
       } catch (error) {
         console.error('[auth] Error parsing stored user:', error);
         localStorage.removeItem('auth_token');
@@ -44,6 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
       const { user, token } = await authApi.signUp(email, password, fullName);
+      await syncAuthUserToConvex(user);
       setUser(user);
       setSession({ access_token: token });
       return { error: null };
@@ -59,6 +64,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, password: string) => {
     try {
       const { user, token } = await authApi.signIn(email, password);
+      await syncAuthUserToConvex(user);
       setUser(user);
       setSession({ access_token: token });
       return { error: null };

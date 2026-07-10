@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { getUserProfile, updateUserProfile } from "@/lib/convexProfiles";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -70,7 +71,7 @@ const Profile = () => {
     
     setIsLoading(true);
     try {
-      const data = await usersApi.getProfile();
+      const data = await getUserProfile(user);
       if (data) {
         setProfile({
           id: data.id,
@@ -159,7 +160,15 @@ const Profile = () => {
         try { await uploadsApi.deleteAvatar(resp.previous_id); } catch {}
       }
 
-      // Refresh profile
+      const backendProfile = await usersApi.getProfile();
+      if (backendProfile) {
+        await updateUserProfile(user, {
+          full_name: backendProfile.full_name ?? fullName,
+          avatar_url: backendProfile.avatar_url ?? null,
+          email: backendProfile.email ?? user.email,
+        });
+      }
+
       await fetchProfile();
 
       toast.success("Avatar updated successfully!");
@@ -192,6 +201,7 @@ const Profile = () => {
     
     setIsSaving(true);
     try {
+      await updateUserProfile(user, { full_name: fullName });
       await usersApi.updateProfile({ full_name: fullName });
       toast.success("Profile updated");
       setIsEditing(false);

@@ -3,10 +3,11 @@ import { v } from "convex/values";
 
 const nullableString = v.optional(v.union(v.string(), v.null()));
 const nullableNumber = v.optional(v.union(v.number(), v.null()));
+const nullableAny = v.optional(v.union(v.any(), v.null()));
 
 export default defineSchema({
   profiles: defineTable({
-    externalUserId: nullableString,
+    externalUserId: v.string(),
     email: v.string(),
     fullName: nullableString,
     avatarUrl: nullableString,
@@ -37,26 +38,33 @@ export default defineSchema({
 
   tradingJournal: defineTable({
     userId: v.string(),
-    accountId: nullableString,
     externalId: nullableString,
     pair: v.string(),
     direction: v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short")),
     entryPrice: nullableNumber,
     exitPrice: nullableNumber,
-    stopLossPips: nullableNumber,
-    takeProfitPips: nullableNumber,
+    stopLoss: nullableNumber,
+    takeProfit: nullableNumber,
     riskPercent: nullableNumber,
     riskAmount: nullableNumber,
     positionSize: nullableNumber,
     pnl: nullableNumber,
+    pnlPercent: nullableNumber,
+    status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")),
     notes: nullableString,
-    openedAtMs: nullableNumber,
-    closedAtMs: nullableNumber,
+    journalType: nullableString,
+    richContent: nullableAny,
+    images: nullableAny,
+    links: nullableAny,
+    screenshots: nullableAny,
+    marketCondition: nullableString,
+    tags: nullableString,
+    entryDateMs: nullableNumber,
+    exitDateMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })
     .index("by_user_created", ["userId", "createdAtMs"])
-    .index("by_account_created", ["accountId", "createdAtMs"])
     .index("by_external_id", ["externalId"]),
 
   calculatorHistory: defineTable({

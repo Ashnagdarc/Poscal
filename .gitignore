@@ -61,3 +61,7 @@ exports/
 
 # Vercel
 .vercel
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

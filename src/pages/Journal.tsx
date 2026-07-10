@@ -38,7 +38,8 @@ import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/li
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { tradesApi, uploadsApi } from "@/lib/api";
+import { uploadsApi } from "@/lib/api";
+import { createJournalEntry, deleteJournalEntry, importJournalEntries, listJournalEntries, updateJournalEntry } from "@/lib/convexJournal";
 
 interface Trade {
   id: string;
@@ -61,6 +62,8 @@ interface Trade {
   rich_content?: any;
   images?: Array<{ url: string; caption?: string }>;
   links?: Array<{ url: string; title?: string }>;
+  market_condition?: string | null;
+  tags?: string | null;
 }
 
 const Journal = () => {
@@ -171,7 +174,7 @@ const Journal = () => {
 
     setIsLoading(true);
     try {
-      const data = await tradesApi.getAll();
+      const data = await listJournalEntries(user.id);
       const normalized = (data || []).map(normalizeTrade);
       setTrades(normalized);
     } catch (error) {
@@ -239,7 +242,7 @@ const Journal = () => {
         trade_date: new Date().toISOString().split('T')[0],
       };
 
-      const data = await tradesApi.create(tradeData);
+      const data = await createJournalEntry(user.id, tradeData);
       
       if (selectedScreenshots.length > 0 && data) {
         await uploadScreenshots(data.id);
@@ -295,7 +298,7 @@ const Journal = () => {
         tags: newTrade.tags || null,
       };
 
-      await tradesApi.update(modals.editingTrade.id, updates);
+      await updateJournalEntry(user.id, modals.editingTrade.id, updates);
       toast.success("Trade updated");
       
       // Send push notification for updated log entry
@@ -383,13 +386,7 @@ const Journal = () => {
       entry_date: t.entry_date ? new Date(t.entry_date).toISOString() : new Date().toISOString(),
     }));
 
-    const { error } = await supabase
-      .from('trading_journal')
-      .insert(tradesToInsert);
-
-    if (error) {
-      throw error;
-    }
+    await importJournalEntries(user.id, tradesToInsert);
     
     fetchTrades();
   };
@@ -398,7 +395,7 @@ const Journal = () => {
     if (!user) return;
     
     try {
-      await tradesApi.update(tradeId, { 
+      await updateJournalEntry(user.id, tradeId, { 
         status: 'closed', 
         pnl,
         exit_date: new Date().toISOString() 
@@ -414,7 +411,7 @@ const Journal = () => {
     if (!user) return;
     
     try {
-      await tradesApi.delete(tradeId);
+      await deleteJournalEntry(user.id, tradeId);
       toast.success("Trade deleted");
       
       // Send push notification for deleted log entry
@@ -434,7 +431,7 @@ const Journal = () => {
     if (!user) return;
 
     try {
-      await tradesApi.update(tradeId, {
+      await updateJournalEntry(user.id, tradeId, {
         status: "cancelled",
       });
       toast.success("Journal entry archived");
