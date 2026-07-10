@@ -198,7 +198,15 @@ const Journal = () => {
         logger.error('Screenshot upload failed', err);
       }
     }
-    
+
+    if (urls.length > 0) {
+      const trade = trades.find((item) => item.id === tradeId);
+      const mergedUrls = [...(trade?.screenshot_urls || []), ...urls];
+      await updateJournalEntry(user.id, tradeId, {
+        screenshot_urls: mergedUrls,
+      });
+    }
+
     return urls;
   };
 
@@ -299,6 +307,9 @@ const Journal = () => {
       };
 
       await updateJournalEntry(user.id, modals.editingTrade.id, updates);
+      if (selectedScreenshots.length > 0) {
+        await uploadScreenshots(modals.editingTrade.id);
+      }
       toast.success("Trade updated");
       
       // Send push notification for updated log entry

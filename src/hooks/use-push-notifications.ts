@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import { notificationsApi } from '@/lib/api';
@@ -38,6 +39,7 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
 
 export const usePushNotifications = (): UsePushNotificationsResult => {
   const { user } = useAuth();
+  const authToken = useAuthToken();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
@@ -79,7 +81,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
             logger.log('[push] Browser has subscription:', subscription.endpoint);
             // Verify subscription exists in database
             try {
-              const subscriptions = await notificationsApi.getSubscriptions();
+              const subscriptions = await notificationsApi.getSubscriptions(authToken);
               const found = subscriptions.some(sub => sub.endpoint === subscription.endpoint);
               
               if (found) {
@@ -216,7 +218,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
             endpoint: subJson.endpoint,
             p256dh_key: subJson.keys.p256dh,
             auth_key: subJson.keys.auth,
-          }),
+          }, authToken),
           new Promise((_, reject) => 
             setTimeout(() => reject(new Error('Server request timeout')), 15000)
           )
@@ -239,7 +241,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       setLoading(false);
       return false;
     }
-  }, [isSupported, swRegistration, user?.id]);
+  }, [isSupported, swRegistration, user?.id, authToken]);
 
   const unsubscribe = useCallback(async (): Promise<boolean> => {
     if (!swRegistration) return false;
@@ -248,6 +250,11 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     try {
       const subscription = await swRegistration.pushManager.getSubscription();
       if (subscription) {
+        const subscriptions = await notificationsApi.getSubscriptions(authToken);
+        const matching = subscriptions.find((item) => item.endpoint === subscription.endpoint);
+        if (matching?.id) {
+          await notificationsApi.unsubscribe(matching.id, authToken);
+        }
         await subscription.unsubscribe();
       }
       setIsSubscribed(false);
@@ -258,7 +265,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     } finally {
       setLoading(false);
     }
-  }, [swRegistration]);
+  }, [swRegistration, authToken]);
 
   return {
     isSupported,

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { ArrowLeft, Plus, Trash2, Megaphone, Calendar } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ interface AppUpdate {
 }
 
 const AdminUpdates = () => {
+  const authToken = useAuthToken();
   const navigate = useNavigate();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const [updates, setUpdates] = useState<AppUpdate[]>([]);
@@ -58,7 +60,7 @@ const AdminUpdates = () => {
       fetchUpdates();
       fetchPaidLock();
     }
-  }, [isAdmin]);
+  }, [isAdmin, authToken]);
 
   const fetchPaidLock = async () => {
     try {
@@ -72,7 +74,7 @@ const AdminUpdates = () => {
   const togglePaidLock = async () => {
     try {
       const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
+      const updatedState = await featureFlagApi.setPaidLock(desiredState, authToken);
       setPaidLockEnabled(!!updatedState);
       toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
     } catch (err: any) {
@@ -93,7 +95,7 @@ const AdminUpdates = () => {
       await appUpdatesApi.create({
         title: formData.title.trim(),
         description: formData.description.trim(),
-      });
+      }, authToken);
 
       // Queue push notification for all subscribers
       try {
@@ -103,7 +105,7 @@ const AdminUpdates = () => {
           body: formData.description.trim().slice(0, 100) + (formData.description.length > 100 ? '...' : ''),
           tag: 'app-update',
           data: { type: 'update' },
-        });
+        }, authToken);
         logger.log('✅ Push notification queued successfully');
       } catch (pushError) {
         logger.error('❌ Exception sending push notification:', pushError);
@@ -125,7 +127,7 @@ const AdminUpdates = () => {
 
   const handleDelete = async (id: string) => {
     try {
-      await appUpdatesApi.delete(id);
+      await appUpdatesApi.delete(id, authToken);
       toast.success('Update deleted');
       setUpdates(updates.filter((u) => u.id !== id));
     } catch (error) {

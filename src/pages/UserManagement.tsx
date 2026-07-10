@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useAuthToken } from '@convex-dev/auth/react';
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, RefreshCw, Search, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ interface AdminUserRow {
 const USERS_PER_PAGE = 15;
 
 const UserManagement = () => {
+  const authToken = useAuthToken();
   const navigate = useNavigate();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
@@ -33,7 +35,7 @@ const UserManagement = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const data = await adminUsersApi.getAll();
+      const data = await adminUsersApi.getAll(authToken);
       setUsers(data || []);
     } catch (err) {
       toast.error("Failed to fetch users");
@@ -62,7 +64,7 @@ const UserManagement = () => {
       fetchUsers();
       fetchPaidLock();
     }
-  }, [isAdmin, adminLoading, navigate]);
+  }, [isAdmin, adminLoading, navigate, authToken]);
 
   const filteredUsers = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();

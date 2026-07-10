@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Mail, ArrowLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { authApi } from "@/lib/api";
+import { useAuth } from "@/contexts/AuthContext";
 
 const ForgotPassword = () => {
   const [searchParams] = useSearchParams();
@@ -14,6 +14,7 @@ const ForgotPassword = () => {
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
   const { toast } = useToast();
+  const { resetPassword } = useAuth();
 
   useEffect(() => {
     const emailParam = searchParams.get("email");
@@ -37,20 +38,23 @@ const ForgotPassword = () => {
     setLoading(true);
 
     try {
-      await authApi.requestReset(email);
-      
+      const { error } = await resetPassword(email);
+      if (error) {
+        toast({
+          title: "Password reset unavailable",
+          description: error,
+          variant: "destructive",
+        });
+        return;
+      }
+
       setEmailSent(true);
       toast({
         title: "Reset link sent!",
         description: "If an account exists for this email, you will receive a password reset link shortly.",
       });
-    } catch (err: any) {
-      // Don't reveal if the email exists or not for security
-      setEmailSent(true);
-      toast({
-        title: "Request processed",
-        description: "If an account exists for this email, you will receive a password reset link shortly.",
-      });
+    } catch (error) {
+      console.error("Unexpected password reset error", error);
     }
 
     setLoading(false);

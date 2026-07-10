@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAuthToken } from '@convex-dev/auth/react';
 import { systemApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,6 +18,7 @@ const formatTimestamp = (value: string | null) => {
 };
 
 export default function AdminIngestorHealth() {
+  const authToken = useAuthToken();
   const [health, setHealth] = useState<HealthState | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export default function AdminIngestorHealth() {
     try {
       setLoading(true);
       setError(null);
-      const data = await systemApi.getIngestorHealth();
+      const data = await systemApi.getIngestorHealth(authToken);
       setHealth(data);
     } catch (err: any) {
       setError(err?.message || "Failed to load ingestor health");
@@ -36,7 +38,7 @@ export default function AdminIngestorHealth() {
 
   useEffect(() => {
     void loadHealth();
-  }, []);
+  }, [authToken]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">

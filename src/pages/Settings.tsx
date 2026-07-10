@@ -1,5 +1,6 @@
 // ...existing code...
 import { useState, useEffect } from "react";
+import { useAuthToken } from '@convex-dev/auth/react';
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, FileText, Shield, Users } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
@@ -19,6 +20,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
 };
 
 const Settings = () => {
+  const authToken = useAuthToken();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
   const { isAdmin } = useAdmin();
@@ -59,7 +61,7 @@ const Settings = () => {
   const togglePaidLockFromSettings = async () => {
     try {
       const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
+      const updatedState = await featureFlagApi.setPaidLock(desiredState, authToken);
       setPaidLockEnabled(!!updatedState);
       toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
     } catch (err: unknown) {
@@ -125,7 +127,7 @@ const Settings = () => {
 
     setIsRestoringPurchase(true);
     try {
-      const result = await subscriptionApi.restorePurchase({ userId: user.id });
+      const result = await subscriptionApi.restorePurchase({ userId: user.id }, authToken);
       if (!result?.success) {
         throw new Error(result?.message || 'No eligible purchase found.');
       }

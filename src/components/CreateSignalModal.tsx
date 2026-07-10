@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,7 +11,7 @@ import { calculatePips } from '@/lib/forexCalculations';
 import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
 import { SignalFormSchema } from '@/lib/formValidation';
-import { signalsApi, notificationsApi } from '@/lib/api';
+import { signalsApi } from '@/lib/api';
 import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
 
 const CURRENCY_PAIRS = FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol);
@@ -20,6 +21,7 @@ interface CreateSignalModalProps {
 }
 
 export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) => {
+  const authToken = useAuthToken();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -147,7 +149,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
 
       console.log('📤 Creating signal with data:', JSON.stringify(signalData, null, 2));
 
-      await signalsApi.create(signalData);
+      await signalsApi.create(signalData, authToken);
       console.log('✅ Signal created successfully');
 
       // Queue push notification to all subscribers

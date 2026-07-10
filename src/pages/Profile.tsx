@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useAuthToken } from "@convex-dev/auth/react";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, 
@@ -26,7 +27,6 @@ import { getUserProfile, updateUserProfile } from "@/lib/convexProfiles";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usersApi, uploadsApi } from "@/lib/api";
 
 interface Profile {
   id: string;
@@ -39,6 +39,7 @@ interface Profile {
 const Profile = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const authToken = useAuthToken();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -71,7 +72,7 @@ const Profile = () => {
     
     setIsLoading(true);
     try {
-      const data = await getUserProfile(user);
+      const data = await getUserProfile(user, authToken);
       if (data) {
         setProfile({
           id: data.id,
@@ -152,41 +153,26 @@ const Profile = () => {
     setIsUploadingAvatar(true);
 
     try {
-      // Upload new avatar via backend
-      const resp = await uploadsApi.uploadAvatar(file);
-      
-      // Optionally delete old avatar if backend supports it
-      if (profile?.avatar_url && resp?.previous_id) {
-        try { await uploadsApi.deleteAvatar(resp.previous_id); } catch {}
-      }
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ""));
+        reader.onerror = () => reject(new Error("Could not read image file"));
+        reader.readAsDataURL(file);
+      });
 
-      const backendProfile = await usersApi.getProfile();
-      if (backendProfile) {
-        await updateUserProfile(user, {
-          full_name: backendProfile.full_name ?? fullName,
-          avatar_url: backendProfile.avatar_url ?? null,
-          email: backendProfile.email ?? user.email,
-        });
-      }
+      await updateUserProfile(user, {
+        full_name: fullName || profile?.full_name || user.full_name || null,
+        avatar_url: dataUrl,
+        email: user.email,
+      }, authToken);
 
       await fetchProfile();
 
       toast.success("Avatar updated successfully!");
-    } catch (error: any) {
+    } catch (error: unknown) {
       logger.error('Avatar upload error:', error);
-      
-      // Handle specific error cases
-      if (error?.response?.status === 413) {
-        toast.error("Image file is too large. Please use an image under 1MB.");
-      } else if (error?.response?.status === 401) {
-        toast.error("Session expired. Please sign in again.");
-      } else if (error?.message?.includes('CORS') || error?.message?.includes('Network')) {
-        toast.error("Network error. Please check your connection and try again.");
-      } else if (error?.message?.includes('bucket') || error?.message?.includes('not found')) {
-        toast.error("Storage not configured. Please contact support.");
-      } else {
-        toast.error("Failed to upload avatar. Please try again.");
-      }
+
+      toast.error(error instanceof Error ? error.message : "Failed to upload avatar. Please try again.");
     } finally {
       setIsUploadingAvatar(false);
       // Reset input
@@ -201,12 +187,11 @@ const Profile = () => {
     
     setIsSaving(true);
     try {
-      await updateUserProfile(user, { full_name: fullName });
-      await usersApi.updateProfile({ full_name: fullName });
+      await updateUserProfile(user, { full_name: fullName }, authToken);
       toast.success("Profile updated");
       setIsEditing(false);
       fetchProfile();
-    } catch (error) {
+    } catch {
       toast.error("Failed to update profile");
     }
     setIsSaving(false);

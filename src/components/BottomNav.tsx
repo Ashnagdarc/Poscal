@@ -68,27 +68,17 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
       {/* Liquid Glass Container */}
       <div 
         ref={navRef}
-        className="relative isolate flex justify-around items-center max-w-md mx-auto px-3 py-3.5 rounded-[2rem]
-                   bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))]
-                   dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.02))]
-                   backdrop-blur-[30px] backdrop-saturate-[2]
-                   border border-white/25 dark:border-white/8
-                   shadow-[0_18px_36px_-22px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.32)]
-                   dark:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.1)]"
+        className="relative isolate flex justify-around items-center max-w-[28rem] mx-auto px-3 py-2.5 rounded-[2rem]
+                   bg-[#141414]
+                   border border-white/10
+                   shadow-[0_14px_32px_-24px_rgba(0,0,0,0.85)]"
       >
-        {/* Glass sheen */}
-        <div className="pointer-events-none absolute inset-x-3 top-[3px] h-1/2 rounded-[1.6rem] bg-gradient-to-b from-white/25 via-white/5 to-transparent dark:from-white/12 dark:via-white/3 dark:to-transparent" />
-
-        {/* Floating glow */}
-        <div className="pointer-events-none absolute -inset-1 rounded-[2.2rem] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.22),transparent_60%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_60%)]" />
-
-        {/* Animated active pill */}
+        {/* Animated active orb */}
         <div
-          className={`absolute top-1.5 bottom-1.5 rounded-full
-                     bg-[linear-gradient(180deg,rgba(255,255,255,0.26),rgba(255,255,255,0.12))]
-                     dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.06))]
-                     shadow-[0_4px_16px_-10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]
-                     dark:shadow-[0_6px_20px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.15)]
+          className={`absolute top-1 bottom-1 rounded-[1.75rem]
+                     bg-[#2a2a2a]
+                     border border-white/10
+                     shadow-[0_12px_24px_-18px_rgba(0,0,0,0.95)]
                     ${isInitialized ? 'transition-all duration-500 ease-out' : ''}`}
           style={{
             left: indicatorStyle.left,
@@ -106,22 +96,22 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
               ref={(el) => { buttonRefs.current[index] = el; }}
               onClick={() => navigate(path)}
               aria-label={label}
-              aria-current={isActive ? 'page' : undefined}
-              className={`relative z-10 flex flex-col items-center gap-1 px-3 py-1 rounded-full
+            aria-current={isActive ? 'page' : undefined}
+            className={`relative z-10 flex min-w-[4.7rem] flex-col items-center gap-1 px-2.5 py-1.5 rounded-[1.4rem]
                          transition-all duration-300 ease-out
                          ${isActive
-                           ? 'text-[#0f1115] dark:text-white -translate-y-[1px]'
-                           : 'text-muted-foreground hover:text-foreground/85 active:scale-95'
+                           ? 'text-white -translate-y-[1px]'
+                           : 'text-white/55 hover:text-white/82 active:scale-95'
                          }`}
             >
               <Icon 
                 className={`w-5 h-5 transition-all duration-300 ${
-                  isActive ? 'stroke-[2.3] drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] dark:drop-shadow-[0_1px_4px_rgba(255,255,255,0.35)]' : 'stroke-[1.7]'
+                  isActive ? 'stroke-[2.25] drop-shadow-[0_0_10px_rgba(255,255,255,0.14)]' : 'stroke-[1.8]'
                 }`} 
                 aria-hidden="true" 
               />
-              <span className={`text-[10px] font-medium tracking-[0.01em] transition-all duration-300 ${
-                isActive ? 'opacity-100' : 'opacity-65'
+              <span className={`text-[11px] font-medium tracking-[0.01em] transition-all duration-300 ${
+                isActive ? 'opacity-100 text-white/92' : 'opacity-75 text-white/45'
               }`}>
                 {label}
               </span>

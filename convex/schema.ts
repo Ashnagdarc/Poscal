@@ -1,11 +1,31 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { authTables } from "@convex-dev/auth/server";
 
 const nullableString = v.optional(v.union(v.string(), v.null()));
 const nullableNumber = v.optional(v.union(v.number(), v.null()));
 const nullableAny = v.optional(v.union(v.any(), v.null()));
 
 export default defineSchema({
+  ...authTables,
+  users: defineTable({
+    name: nullableString,
+    fullName: nullableString,
+    image: nullableString,
+    avatarUrl: nullableString,
+    email: v.optional(v.string()),
+    emailVerificationTime: v.optional(v.number()),
+    phone: v.optional(v.string()),
+    phoneVerificationTime: v.optional(v.number()),
+    isAnonymous: v.optional(v.boolean()),
+    role: v.optional(v.string()),
+    paymentStatus: v.optional(v.string()),
+    subscriptionTier: v.optional(v.string()),
+    subscriptionExpiresAtMs: nullableNumber,
+  })
+    .index("email", ["email"])
+    .index("phone", ["phone"]),
+
   profiles: defineTable({
     externalUserId: v.string(),
     email: v.string(),
@@ -98,6 +118,98 @@ export default defineSchema({
     providerTimestampMs: nullableNumber,
     updatedAtMs: v.number(),
   }).index("by_symbol", ["symbol"]),
+
+  signals: defineTable({
+    externalId: nullableString,
+    currencyPair: v.string(),
+    symbol: nullableString,
+    direction: v.union(v.literal("buy"), v.literal("sell")),
+    marketExecution: nullableString,
+    entryPrice: v.number(),
+    stopLoss: v.number(),
+    takeProfit1: v.number(),
+    takeProfit2: nullableNumber,
+    takeProfit3: nullableNumber,
+    takeProfit: nullableNumber,
+    pipsToSl: v.number(),
+    pipsToTp1: v.number(),
+    pipsToTp2: nullableNumber,
+    pipsToTp3: nullableNumber,
+    analysis: nullableString,
+    timeframe: nullableString,
+    expiresAtMs: nullableNumber,
+    status: v.union(v.literal("active"), v.literal("closed"), v.literal("cancelled"), v.literal("expired")),
+    result: v.optional(v.union(v.literal("win"), v.literal("loss"), v.literal("breakeven"), v.null())),
+    tp1Hit: v.boolean(),
+    tp2Hit: v.boolean(),
+    tp3Hit: v.boolean(),
+    notes: nullableString,
+    chartImageUrl: nullableString,
+    confidenceScore: nullableNumber,
+    takenCount: v.number(),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+    closedAtMs: nullableNumber,
+  })
+    .index("by_created", ["createdAtMs"])
+    .index("by_status_created", ["status", "createdAtMs"])
+    .index("by_pair_created", ["currencyPair", "createdAtMs"]),
+
+  appSettings: defineTable({
+    key: v.string(),
+    valueBoolean: v.optional(v.boolean()),
+    valueString: nullableString,
+    valueNumber: nullableNumber,
+    updatedAtMs: v.number(),
+    updatedByUserId: nullableString,
+  }).index("by_key", ["key"]),
+
+  appUpdates: defineTable({
+    title: v.string(),
+    description: v.string(),
+    isActive: v.boolean(),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+    createdByUserId: nullableString,
+  }).index("by_created", ["createdAtMs"]),
+
+  pushSubscriptions: defineTable({
+    userId: nullableString,
+    endpoint: v.string(),
+    p256dhKey: v.string(),
+    authKey: v.string(),
+    isActive: v.boolean(),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+    lastVerifiedAtMs: nullableNumber,
+  })
+    .index("by_user", ["userId"])
+    .index("by_endpoint", ["endpoint"]),
+
+  ingestorHealth: defineTable({
+    key: v.string(),
+    recent401Count: v.number(),
+    last401AtMs: nullableNumber,
+    lastFlushAtMs: nullableNumber,
+    backendReachable: v.boolean(),
+    updatedAtMs: v.number(),
+  }).index("by_key", ["key"]),
+
+  paymentRecords: defineTable({
+    userId: v.string(),
+    reference: v.string(),
+    tier: v.string(),
+    amount: v.number(),
+    currency: v.string(),
+    status: v.string(),
+    expiresAtMs: nullableNumber,
+    paidAtMs: v.number(),
+    metadata: nullableAny,
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+  })
+    .index("by_user_paid", ["userId", "paidAtMs"])
+    .index("by_reference", ["reference"]),
 
   notificationQueue: defineTable({
     userId: nullableString,

@@ -47,8 +47,8 @@ const SignUp = () => {
       return;
     }
 
-    toast.success("Account created! Please check your email to verify.");
-    navigate(`/signin?fromSignup=1&email=${encodeURIComponent(email)}`);
+    toast.success("Account created!");
+    navigate("/");
     setIsLoading(false);
   };
 

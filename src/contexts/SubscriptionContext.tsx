@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { useAuth } from './AuthContext';
-import { subscriptionApi } from '@/lib/api';
+import { getUserProfile } from '@/lib/convexProfiles';
 
 // Subscription tier types
 export type SubscriptionTier = 'free' | 'premium' | 'pro';
@@ -49,6 +50,7 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user } = useAuth();
+  const authToken = useAuthToken();
   const [isLoading, setIsLoading] = useState(true);
   const [subscriptionDetails, setSubscriptionDetails] = useState<SubscriptionDetails>({
     paymentStatus: 'free',
@@ -57,10 +59,6 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     trialEndsAt: null,
     isActive: false,
   });
-
-  // Type guard to validate API response structure before accessing properties
-  const isSubscriptionResponse = (data: unknown): data is Record<string, unknown> =>
-    typeof data === 'object' && data !== null && 'payment_status' in data;
 
   // Fetch user's subscription details from database
   const fetchSubscriptionDetails = async () => {
@@ -78,38 +76,18 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     try {
       setIsLoading(true);
-      
-      // Try RevenueCat entitlements API first
-      try {
-        const entitlements = await subscriptionApi.getEntitlements();
-        
-        if (entitlements && entitlements.subscriptionTier) {
-          setSubscriptionDetails({
-            paymentStatus: entitlements.isActive ? 'paid' : 'free',
-            subscriptionTier: entitlements.subscriptionTier,
-            expiresAt: entitlements.expiresAt ? new Date(entitlements.expiresAt) : null,
-            trialEndsAt: null, // RevenueCat handles this separately
-            isActive: entitlements.isActive,
-          });
-          return;
-        }
-      } catch (entitlementError) {
-        // Fall back to old subscription API if RevenueCat endpoint fails
-        console.warn('RevenueCat entitlements API failed, falling back to subscription API', entitlementError);
-      }
+      const profile = await getUserProfile(user, authToken);
+      const paymentStatus = (profile.payment_status as PaymentStatus | undefined) ?? 'free';
+      const subscriptionTier = (profile.subscription_tier as SubscriptionTier | undefined) ?? 'free';
+      const expiresAt = profile.subscription_expires_at ? new Date(profile.subscription_expires_at) : null;
 
-      // Fallback: Call the old subscription API
-      const data = await subscriptionApi.getDetails();
-
-      if (isSubscriptionResponse(data)) {
-        setSubscriptionDetails({
-          paymentStatus: (data.payment_status as PaymentStatus) || 'free',
-          subscriptionTier: (data.subscription_tier as SubscriptionTier) || 'free',
-          expiresAt: data.expires_at ? new Date(data.expires_at as string) : null,
-          trialEndsAt: data.trial_ends_at ? new Date(data.trial_ends_at as string) : null,
-          isActive: Boolean(data.is_active),
-        });
-      }
+      setSubscriptionDetails({
+        paymentStatus,
+        subscriptionTier,
+        expiresAt,
+        trialEndsAt: null,
+        isActive: subscriptionTier !== 'free' && paymentStatus !== 'expired',
+      });
     } catch (error) {
       console.error('Unexpected error fetching subscription:', error);
     } finally {
@@ -120,7 +98,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
   // Load subscription on mount and when user changes
   useEffect(() => {
     fetchSubscriptionDetails();
-  }, [user?.id]);
+  }, [authToken, user?.id]);
 
   // Check if user can access a specific feature
   const checkFeatureAccess = (feature: string): boolean => {

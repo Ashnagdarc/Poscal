@@ -1,4 +1,6 @@
 import axios, { type AxiosInstance } from 'axios';
+import { api as convexApi } from '../../convex/_generated/api';
+import { convexClient, createAuthenticatedConvexClient } from '@/lib/convexClient';
 import { logger } from '@/lib/logger';
 
 // Use relative path for Vercel serverless functions, fallback to external API for other endpoints
@@ -36,7 +38,8 @@ const addErrorInterceptor = (axiosInstance: AxiosInstance) => {
   axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-      if (error.response?.status === 401) {
+      const hasLegacyToken = !!localStorage.getItem('auth_token');
+      if (hasLegacyToken && error.response?.status === 401) {
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
         // Redirect to signin page, not auth
@@ -81,54 +84,54 @@ const parseFeatureFlagError = (err: unknown): string => {
   return err instanceof Error ? err.message : 'Failed to reach feature flag API';
 };
 
+const parseSignalsError = (err: unknown): string => {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    const apiMessage = err.response?.data?.message as string | undefined;
+
+    if (status === 502 || status === 503 || status === 504) {
+      return 'Signals service is temporarily unavailable.';
+    }
+
+    if (!err.response) {
+      return 'Unable to reach the signals service.';
+    }
+
+    return apiMessage || `Signals request failed (${status ?? 'unknown'})`;
+  }
+
+  return err instanceof Error ? err.message : 'Failed to load signals';
+};
+
 export const featureFlagApi = {
   getPaidLock: async (): Promise<boolean> => {
-    try {
-      logger.log('[feature-flag] Fetching paid lock status...');
-      // Use public endpoint (no auth required) for reading
-      const { data } = await api.get<FeatureFlagResponse>('/public/feature-flag/paid-lock');
-      if (!data?.success) {
-        throw new Error(data?.message || 'Unable to read paid lock flag');
-      }
-      logger.log('[feature-flag] Paid lock status:', data.enabled);
-      return !!data.enabled;
-    } catch (err) {
-      logger.error('[feature-flag] Error:', err);
-      throw new Error(parseFeatureFlagError(err));
-    }
+    return await convexClient.query(convexApi.admin.getPaidLock, {});
   },
 
-  setPaidLock: async (enabled: boolean): Promise<boolean> => {
-    try {
-      logger.log('[feature-flag] Setting paid lock to:', enabled);
-      // Use admin endpoint (requires auth) for writing
-      const { data } = await api.post<FeatureFlagResponse>('/admin/feature-flag', { enabled });
-      if (!data?.success) {
-        throw new Error(data?.message || 'Unable to update paid lock flag');
-      }
-      logger.log('[feature-flag] Update success');
-      return !!data.enabled;
-    } catch (err) {
-      logger.error('[feature-flag] Update error:', err);
-      throw new Error(parseFeatureFlagError(err));
+  setPaidLock: async (enabled: boolean, authToken?: string | null): Promise<boolean> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
     }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.setPaidLock, { enabled });
   },
 };
 
 export const systemApi = {
-  getIngestorHealth: async (): Promise<{
+  getIngestorHealth: async (authToken?: string | null): Promise<{
     recent_401_count: number;
     last_401_at: string | null;
     last_flush_at: string | null;
     backend_reachable: boolean;
   }> => {
-    const { data } = await api.get('/admin/ingestor-health');
-    return data;
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    return await createAuthenticatedConvexClient(authToken).query(convexApi.admin.getIngestorHealth, {});
   },
 };
 
 export const adminUsersApi = {
-  getAll: async (): Promise<Array<{
+  getAll: async (authToken?: string | null): Promise<Array<{
     id: string;
     full_name: string | null;
     email: string;
@@ -138,8 +141,10 @@ export const adminUsersApi = {
     subscription_tier: string;
     subscription_end: string | null;
   }>> => {
-    const { data } = await api.get('/admin/users');
-    return data;
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    return await createAuthenticatedConvexClient(authToken).query(convexApi.admin.listUsers, {});
   },
 };
 
@@ -194,27 +199,114 @@ export const authApi = {
 // Trading Signals API
 export const signalsApi = {
   getAll: async (query?: { status?: string; limit?: number }): Promise<any[]> => {
-    const { data } = await api.get('/signals', { params: query });
-    return data;
+    try {
+      return await convexClient.query(convexApi.signals.list, {
+        status: query?.status ?? null,
+        currencyPair: (query as any)?.currency_pair ?? null,
+        result: (query as any)?.result ?? null,
+        date: (query as any)?.date ?? null,
+      });
+    } catch (error) {
+      throw new Error(parseSignalsError(error));
+    }
   },
 
   getOne: async (id: string): Promise<any> => {
-    const { data } = await api.get(`/signals/${id}`);
-    return data;
+    try {
+      const rows = await convexClient.query(convexApi.signals.list, {
+        status: null,
+        currencyPair: null,
+        result: null,
+        date: null,
+      });
+      return rows.find((row: any) => row.id === id) ?? null;
+    } catch (error) {
+      throw new Error(parseSignalsError(error));
+    }
   },
 
-  create: async (signalData: any): Promise<any> => {
-    const { data } = await api.post('/signals', signalData);
-    return data;
+  create: async (signalData: any, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin to create signals.');
+    }
+
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.signals.create, {
+      externalId: signalData.external_id ?? null,
+      currencyPair: signalData.currency_pair,
+      symbol: signalData.symbol ?? null,
+      direction: signalData.direction,
+      marketExecution: signalData.market_execution ?? null,
+      entryPrice: Number(signalData.entry_price),
+      stopLoss: Number(signalData.stop_loss),
+      takeProfit1: Number(signalData.take_profit_1),
+      takeProfit2: signalData.take_profit_2 ?? null,
+      takeProfit3: signalData.take_profit_3 ?? null,
+      takeProfit: signalData.take_profit ?? null,
+      pipsToSl: Number(signalData.pips_to_sl),
+      pipsToTp1: Number(signalData.pips_to_tp1),
+      pipsToTp2: signalData.pips_to_tp2 ?? null,
+      pipsToTp3: signalData.pips_to_tp3 ?? null,
+      analysis: signalData.analysis ?? null,
+      timeframe: signalData.timeframe ?? null,
+      expiresAtMs: signalData.expires_at ? new Date(signalData.expires_at).getTime() : null,
+      status: signalData.status ?? 'active',
+      result: signalData.result ?? null,
+      tp1Hit: Boolean(signalData.tp1_hit),
+      tp2Hit: Boolean(signalData.tp2_hit),
+      tp3Hit: Boolean(signalData.tp3_hit),
+      notes: signalData.notes ?? null,
+      chartImageUrl: signalData.chart_image_url ?? null,
+      confidenceScore: signalData.confidence_score ?? null,
+      takenCount: Number(signalData.taken_count ?? 0),
+      closedAtMs: signalData.closed_at ? new Date(signalData.closed_at).getTime() : null,
+    });
   },
 
-  update: async (id: string, updates: any): Promise<any> => {
-    const { data } = await api.put(`/signals/${id}`, updates);
-    return data;
+  update: async (id: string, updates: any, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin to update signals.');
+    }
+
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.signals.update, {
+      id: id as any,
+      currencyPair: updates.currency_pair ?? null,
+      symbol: updates.symbol ?? null,
+      direction: updates.direction,
+      marketExecution: updates.market_execution ?? null,
+      entryPrice: updates.entry_price ?? null,
+      stopLoss: updates.stop_loss ?? null,
+      takeProfit1: updates.take_profit_1 ?? null,
+      takeProfit2: updates.take_profit_2 ?? null,
+      takeProfit3: updates.take_profit_3 ?? null,
+      takeProfit: updates.take_profit ?? null,
+      pipsToSl: updates.pips_to_sl ?? null,
+      pipsToTp1: updates.pips_to_tp1 ?? null,
+      pipsToTp2: updates.pips_to_tp2 ?? null,
+      pipsToTp3: updates.pips_to_tp3 ?? null,
+      analysis: updates.analysis ?? null,
+      timeframe: updates.timeframe ?? null,
+      expiresAtMs: updates.expires_at ? new Date(updates.expires_at).getTime() : null,
+      status: updates.status,
+      result: updates.result ?? null,
+      tp1Hit: updates.tp1_hit,
+      tp2Hit: updates.tp2_hit,
+      tp3Hit: updates.tp3_hit,
+      notes: updates.notes ?? null,
+      chartImageUrl: updates.chart_image_url ?? null,
+      confidenceScore: updates.confidence_score ?? null,
+      takenCount: updates.taken_count,
+      closedAtMs: updates.closed_at ? new Date(updates.closed_at).getTime() : null,
+    });
   },
 
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/signals/${id}`);
+  delete: async (id: string, authToken?: string | null): Promise<void> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin to delete signals.');
+    }
+
+    await createAuthenticatedConvexClient(authToken).mutation(convexApi.signals.remove, {
+      id: id as any,
+    });
   },
 };
 
@@ -281,18 +373,24 @@ export const subscriptionApi = {
     return data;
   },
 
-  restorePurchase: async (payload: { userId: string }): Promise<any> => {
-    const { data } = await serverlessApi.post('/api/restore-purchase', payload);
-    return data;
+  restorePurchase: async (payload: { userId: string }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in to restore purchases.');
+    }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.restoreLatestPaymentForUser, {
+      userId: payload.userId,
+    });
   },
 };
 
 // Push Notifications API
 export const notificationsApi = {
   // Get user's push subscriptions
-  getSubscriptions: async (): Promise<any[]> => {
-    const { data } = await api.get('/notifications/push/subscriptions');
-    return data;
+  getSubscriptions: async (authToken?: string | null): Promise<any[]> => {
+    if (!authToken) {
+      return [];
+    }
+    return await createAuthenticatedConvexClient(authToken).query(convexApi.admin.listPushSubscriptions, {});
   },
 
   // Create a new push subscription
@@ -300,14 +398,26 @@ export const notificationsApi = {
     endpoint: string;
     p256dh_key: string;
     auth_key: string;
-  }): Promise<any> => {
-    const { data } = await api.post('/notifications/push/subscribe', subscriptionData);
-    return data;
+  }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in to enable push notifications.');
+    }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.subscribePush, {
+      endpoint: subscriptionData.endpoint,
+      p256dhKey: subscriptionData.p256dh_key,
+      authKey: subscriptionData.auth_key,
+    });
   },
 
   // Delete a push subscription
-  unsubscribe: async (id: string): Promise<void> => {
-    await api.delete(`/notifications/push/subscriptions/${id}`);
+  unsubscribe: async (id: string, authToken?: string | null): Promise<void> => {
+    if (!authToken) {
+      throw new Error('You must be signed in to disable push notifications.');
+    }
+    await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.unsubscribePush, {
+      id: id as any,
+      endpoint: null,
+    });
   },
 
   // Get user's notifications
@@ -323,9 +433,17 @@ export const notificationsApi = {
     body: string;
     tag?: string;
     data?: any;
-  }): Promise<any> => {
-    const { data } = await api.post('/notifications/push', notificationData);
-    return data;
+  }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.queueNotification, {
+      userId: notificationData.user_id ?? null,
+      title: notificationData.title,
+      body: notificationData.body,
+      tag: notificationData.tag ?? null,
+      data: notificationData.data ?? null,
+    });
   },
 
   // Queue an email (admin only)
@@ -343,29 +461,35 @@ export const notificationsApi = {
 // App Updates API (Admin only)
 export const appUpdatesApi = {
   getAll: async (): Promise<any[]> => {
-    // For now, use a placeholder endpoint - backend needs to implement this
-    // TODO: Backend needs /system/updates controller
-    try {
-      const { data } = await api.get('/system/updates');
-      return data;
-    } catch (error) {
-      logger.warn('App updates endpoint not implemented yet');
-      return [];
+    return await convexClient.query(convexApi.admin.listAppUpdates, {});
+  },
+
+  create: async (updateData: { title: string; description: string }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
     }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.createAppUpdate, updateData);
   },
 
-  create: async (updateData: { title: string; description: string }): Promise<any> => {
-    const { data } = await api.post('/system/updates', updateData);
-    return data;
+  delete: async (id: string, authToken?: string | null): Promise<void> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.deleteAppUpdate, {
+      id: id as any,
+    });
   },
 
-  delete: async (id: string): Promise<void> => {
-    await api.delete(`/system/updates/${id}`);
-  },
-
-  update: async (id: string, updates: { is_active?: boolean; title?: string; description?: string }): Promise<any> => {
-    const { data } = await api.patch(`/system/updates/${id}`, updates);
-    return data;
+  update: async (id: string, updates: { is_active?: boolean; title?: string; description?: string }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.admin.updateAppUpdate, {
+      id: id as any,
+      title: updates.title ?? null,
+      description: updates.description ?? null,
+      isActive: updates.is_active,
+    });
   },
 };
 
@@ -400,29 +524,32 @@ export const usersApi = {
 // Uploads API (avatars, trade screenshots)
 export const uploadsApi = {
   uploadAvatar: async (file: File): Promise<any> => {
-    const form = new FormData();
-    form.append('file', file);
-    const { data } = await api.post('/auth/avatar', form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(new Error('Failed to read avatar file'));
+      reader.readAsDataURL(file);
     });
-    return data;
+    return { url };
   },
 
   deleteAvatar: async (pathOrId: string): Promise<void> => {
-    await api.delete('/auth/avatar', { params: { id: pathOrId } });
+    void pathOrId;
   },
 
   uploadTradeScreenshot: async (tradeId: string, file: File): Promise<any> => {
-    const form = new FormData();
-    form.append('file', file);
-    const { data } = await api.post(`/trades/${tradeId}/screenshots`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+    void tradeId;
+    const url = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(typeof reader.result === 'string' ? reader.result : '');
+      reader.onerror = () => reject(new Error('Failed to read screenshot file'));
+      reader.readAsDataURL(file);
     });
-    return data;
+    return { url };
   },
 
   deleteTradeScreenshot: async (screenshotId: string): Promise<void> => {
-    await api.delete(`/trades/screenshots/${screenshotId}`);
+    void screenshotId;
   },
 };
 

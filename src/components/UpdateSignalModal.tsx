@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { Edit2, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -9,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { calculatePositionSize, calculatePnL, calculatePips } from '@/lib/forexCalculations';
-import { signalsApi, notificationsApi } from '@/lib/api';
+import { signalsApi } from '@/lib/api';
 
 interface UpdateSignalModalProps {
   signalId: string;
@@ -44,6 +45,7 @@ export const UpdateSignalModal = ({
   tp3Hit,
   onSignalUpdated 
 }: UpdateSignalModalProps) => {
+  const authToken = useAuthToken();
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
@@ -123,7 +125,7 @@ export const UpdateSignalModal = ({
         updateData.closed_at = new Date().toISOString();
       }
 
-      await signalsApi.update(signalId, updateData);
+      await signalsApi.update(signalId, updateData, authToken);
 
       // If signal is being closed, update all taken trades
       if (status === 'closed' && currentStatus !== 'closed' && updateData.result) {
@@ -197,7 +199,7 @@ export const UpdateSignalModal = ({
       console.log('Skipping taken trades cleanup (API not implemented)');
 
       // Delete the signal
-      await signalsApi.delete(signalId);
+      await signalsApi.delete(signalId, authToken);
 
       // Queue notification that signal was deleted (optional - don't block)
       try {
