@@ -38,10 +38,10 @@ const SignUp = () => {
     const { error } = await signUp(email, password, name);
 
     if (error) {
-      if (error.message.includes("User already registered")) {
+      if (error.includes("User already registered") || error.includes("already exists")) {
         toast.error("An account with this email already exists");
       } else {
-        toast.error(error.message);
+        toast.error(error);
       }
       setIsLoading(false);
       return;

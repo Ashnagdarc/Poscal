@@ -16,6 +16,12 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const syncUserInBackground = (user: User) => {
+  void syncAuthUserToConvex(user).catch((error) => {
+    console.warn("[auth] Failed to sync user to Convex", error);
+  });
+};
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<{ access_token: string } | null>(null);
@@ -32,9 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
         setSession({ access_token: token });
-        void syncAuthUserToConvex(parsedUser).catch((error) => {
-          console.warn("[auth] Failed to sync stored user to Convex", error);
-        });
+        syncUserInBackground(parsedUser);
       } catch (error) {
         console.error('[auth] Error parsing stored user:', error);
         localStorage.removeItem('auth_token');
@@ -48,9 +52,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
       const { user, token } = await authApi.signUp(email, password, fullName);
-      await syncAuthUserToConvex(user);
       setUser(user);
       setSession({ access_token: token });
+      syncUserInBackground(user);
       return { error: null };
     } catch (error: unknown) {
       console.error('[auth] Sign up error:', error);
@@ -64,9 +68,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const signIn = async (email: string, password: string) => {
     try {
       const { user, token } = await authApi.signIn(email, password);
-      await syncAuthUserToConvex(user);
       setUser(user);
       setSession({ access_token: token });
+      syncUserInBackground(user);
       return { error: null };
     } catch (error: unknown) {
       console.error('[auth] Sign in error:', error);
