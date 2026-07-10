@@ -17,6 +17,94 @@
 
 ## 🚀 SUMMARY: CURRENT PROJECT STATUS
 
+## ✅ Convex-First Plan (Added Jul 10, 2026 4:38 PM)
+
+### Convex as Main Source of Truth
+
+Use Convex as the main source of truth for the app.
+
+### What Convex Can Handle Now
+
+- auth
+- profiles
+- subscription state
+- signals
+- journal
+- calculator history
+- admin flags
+- app updates
+- push subscription records
+- payment record storage
+
+### What Is Still Left Before It Is Truly Done
+
+- [ ] Redeploy frontend on Vercel
+  - CSP fix is not live yet
+- [ ] Set payment sync envs
+  - Vercel: `CONVEX_URL`, `PAYMENT_SYNC_SECRET`
+  - Convex: `PAYMENT_SYNC_SECRET`
+- [ ] Test one full payment
+  - Confirm Paystack updates Convex profile to `paid`
+- [ ] Decide price data architecture
+  - Convex stores prices fine
+  - A worker still needs to fetch Finnhub and write into Convex
+- [ ] Decide push/email sending
+  - Convex can store queue/state
+  - Actual delivery worker may still live outside Convex
+- [ ] Clean production env
+  - Confirm `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` are correct
+
+### Do We Need DigitalOcean Now?
+
+Not immediately.
+
+Cheapest simple setup:
+
+- Convex for app/backend/database
+- Vercel for frontend
+- DigitalOcean only later for:
+  - Finnhub polling worker
+  - push/email delivery worker
+  - cron/background jobs if needed
+
+### Best Answer
+
+- Yes, use Convex first
+- DigitalOcean is optional, mainly for background workers
+
+### Best Next Step
+
+- [ ] Redeploy Vercel
+- [ ] Set payment envs
+- [ ] Test payment
+- [ ] Decide if Finnhub polling should live on DigitalOcean or another tiny worker setup
+
+## ✅ Zero-Cost Tiny Worker Setup (Added Jul 10, 2026 4:39 PM)
+
+### Recommendation
+
+- Use Convex cron/scheduled functions first
+- Use Cloudflare Workers only if you need an external poller
+- Do not use GitHub Actions for live price polling
+
+### Best Zero-Cost Setup
+
+- Convex: app backend, DB, auth, signals, journal, history, flags
+- Cloudflare Worker cron: fetch Finnhub prices and send to Convex
+- Vercel: frontend
+
+### Simple Rule
+
+- If the job is inside app logic: Convex
+- If the job is a tiny external poller: Cloudflare Worker
+
+### Decision
+
+- [ ] Avoid DigitalOcean for now
+- [ ] Keep everything in Convex first
+- [ ] Add one Cloudflare Worker cron for market data only
+- [ ] Revisit DigitalOcean only if background workload grows
+
 ### ✅ **What's Deployed & Live Now**
 
 - **Backend (Push-Sender)**: 228 pairs actively streaming prices from Finnhub
