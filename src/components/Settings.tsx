@@ -5,6 +5,7 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { useAuth } from "@/contexts/AuthContext";
+import { clearCalculatorHistory } from "@/lib/calculatorHistory";
 
 interface SettingsProps {
   onClose: () => void;
@@ -50,8 +51,8 @@ export const Settings = ({ onClose }: SettingsProps) => {
     lightTap();
   };
 
-  const clearHistory = () => {
-    localStorage.removeItem("positionSizeHistory");
+  const clearHistory = async () => {
+    await clearCalculatorHistory(user?.id);
     lightTap();
   };
 

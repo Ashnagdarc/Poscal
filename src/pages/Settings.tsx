@@ -12,6 +12,11 @@ import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { featureFlagApi, subscriptionApi } from '@/lib/api';
+import { clearCalculatorHistory } from "@/lib/calculatorHistory";
+
+const getErrorMessage = (error: unknown, fallback: string) => {
+  return error instanceof Error ? error.message : fallback;
+};
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -57,9 +62,9 @@ const Settings = () => {
       const updatedState = await featureFlagApi.setPaidLock(desiredState);
       setPaidLockEnabled(!!updatedState);
       toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('togglePaidLockFromSettings error', err);
-      toast.error(err?.message || 'Failed to toggle paid lock');
+      toast.error(getErrorMessage(err, 'Failed to toggle paid lock'));
     }
   };
 
@@ -83,8 +88,8 @@ const Settings = () => {
     lightTap();
   };
 
-  const clearHistory = () => {
-    localStorage.removeItem("positionSizeHistory");
+  const clearHistory = async () => {
+    await clearCalculatorHistory(user?.id);
     lightTap();
     toast.success("History cleared");
   };
@@ -128,8 +133,8 @@ const Settings = () => {
       const tier = result?.data?.tier || 'premium';
       toast.success(`Purchase restored successfully (${tier}).`);
       navigate('/journal');
-    } catch (error: any) {
-      toast.error(error?.message || 'Restore failed. Please contact support.');
+    } catch (error: unknown) {
+      toast.error(getErrorMessage(error, 'Restore failed. Please contact support.'));
     } finally {
       setIsRestoringPurchase(false);
     }

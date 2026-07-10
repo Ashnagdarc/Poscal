@@ -54,7 +54,10 @@ temp/
 
 # Backups
 backup-tools/backups/
+backups/
+exports/
 *.sql.gz
+*.gpg
 
 # Vercel
 .vercel

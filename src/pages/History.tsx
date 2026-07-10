@@ -6,6 +6,13 @@ import { BottomNav } from "@/components/BottomNav";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { UpgradePrompt } from "@/components/UpgradePrompt";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  clearCalculatorHistory,
+  loadCalculatorHistory,
+  migrateLocalCalculatorHistoryToConvex,
+  type CalculatorHistoryItem,
+} from "@/lib/calculatorHistory";
 
 export interface HistoryItem {
   id: string;
@@ -23,7 +30,8 @@ export interface HistoryItem {
 const History = () => {
   const navigate = useNavigate();
   const { isPaid } = useSubscription();
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const { user } = useAuth();
+  const [history, setHistory] = useState<CalculatorHistoryItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
 
@@ -33,26 +41,38 @@ const History = () => {
   const isHistoryLimited = !isPaid && history.length > FREE_HISTORY_LIMIT;
 
   useEffect(() => {
-    // Intentional: run once on mount to load persisted history from localStorage.
-    // This component is the sole writer of positionSizeHistory, so a one-time read is correct.
-    const timer = setTimeout(() => {
-      const savedHistory = localStorage.getItem("positionSizeHistory");
-      if (savedHistory) {
-        const parsed = JSON.parse(savedHistory);
-        setHistory(parsed.map((item: HistoryItem) => ({
-          ...item,
-          timestamp: new Date(item.timestamp)
-        })));
+    let isMounted = true;
+
+    const loadHistory = async () => {
+      setIsLoading(true);
+      try {
+        await migrateLocalCalculatorHistoryToConvex(user?.id);
+        const items = await loadCalculatorHistory(user?.id);
+        if (isMounted) {
+          setHistory(items);
+        }
+      } catch (error) {
+        console.error("[calculator-history] Failed to load history", error);
+        if (isMounted) {
+          setHistory([]);
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
-      setIsLoading(false);
-    }, 300);
+    };
 
-    return () => clearTimeout(timer);
-  }, []);
+    void loadHistory();
 
-  const clearHistory = () => {
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.id]);
+
+  const clearHistory = async () => {
     setHistory([]);
-    localStorage.removeItem("positionSizeHistory");
+    await clearCalculatorHistory(user?.id);
   };
 
   const formatDate = (date: Date) => {

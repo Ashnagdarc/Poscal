@@ -16,6 +16,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimePrices } from "@/hooks/use-realtime-prices";
 import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
+import { saveCalculatorHistory } from "@/lib/calculatorHistory";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -189,11 +190,8 @@ export const Calculator = () => {
     : (currentBidPrice ?? currentLivePrice);
   const executionLabel = tradeDirection === 'buy' ? 'Ask' : 'Bid';
 
-  const saveToHistory = () => {
+  const saveToHistory = async () => {
     if (calculation.positionSize <= 0) return;
-
-    const savedHistory = localStorage.getItem("positionSizeHistory");
-    const history: HistoryItem[] = savedHistory ? JSON.parse(savedHistory) : [];
 
     const newItem: HistoryItem = {
       id: Date.now().toString(),
@@ -208,9 +206,28 @@ export const Calculator = () => {
       timestamp: new Date()
     };
 
-    const newHistory = [newItem, ...history].slice(0, 20);
-    localStorage.setItem("positionSizeHistory", JSON.stringify(newHistory));
-    toast.success("Saved to history");
+    try {
+      await saveCalculatorHistory({
+        ...newItem,
+        riskAmount: calculation.riskAmount,
+        units: calculation.units,
+        pipValue: calculation.pipValue,
+        priceSource: currentPairStatus === "fresh" ? "backend_price_cache" : "unavailable",
+        spreadPips: null,
+      }, user?.id);
+      toast.success("Saved to history");
+    } catch (error) {
+      console.error("[calculator-history] Failed to save to Convex, falling back to local history", error);
+      await saveCalculatorHistory({
+        ...newItem,
+        riskAmount: calculation.riskAmount,
+        units: calculation.units,
+        pipValue: calculation.pipValue,
+        priceSource: "local_fallback",
+        spreadPips: null,
+      });
+      toast.success("Saved locally");
+    }
   };
 
   const formatNumber = (num: number, decimals: number = 2) => {

@@ -14,6 +14,9 @@ That is the current recommended setup for this repo.
 - [Docker Deployment](./DOCKER_DEPLOYMENT.md)
   - How to run `postgres + backend + workers` with Docker on your Mac or VPS.
 
+- [Server Migration Runbook](./SERVER_MIGRATION_RUNBOOK.md)
+  - How to rebuild a disposable DigitalOcean worker server and restore backups.
+
 - [Backend Switch](./BACKEND_SWITCH.md)
   - Why the app moved away from the older Supabase-centered flow toward NestJS + PostgreSQL.
 
@@ -35,9 +38,4 @@ Poscal uses a centralized cache model:
 3. The backend persists those values in `price_cache`.
 4. Clients read from the backend instead of calling price vendors directly.
 
-In `hybrid` mode:
-
-- OANDA is used for forex and metals
-- Finnhub is used for crypto
-
-This is the current source of truth for live price handling.
+The current worker runtime uses Finnhub. Treat Finnhub prices as market prices and apply the app's spread model for estimated execution-side bid/ask until a broker-grade bid/ask feed is available.
