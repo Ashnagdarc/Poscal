@@ -56,6 +56,35 @@ const getExecutionLabel = (marketExecution: string | null) => {
     .join(' ');
 };
 
+const formatQuoteSourceLabel = (source: string | null | undefined) => {
+  if (!source) return 'No source';
+  return source
+    .split('_')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
+const getTrustBadgeConfig = (status: string | null | undefined, source: string | null | undefined) => {
+  if (status === 'fresh') {
+    return {
+      label: `Fresh • ${formatQuoteSourceLabel(source)}`,
+      className: 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
+    };
+  }
+
+  if (status === 'stale') {
+    return {
+      label: 'Stale • Blocked',
+      className: 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
+    };
+  }
+
+  return {
+    label: 'Unavailable • Blocked',
+    className: 'border-destructive/20 bg-destructive/10 text-destructive',
+  };
+};
+
 const Signals = () => {
   const { isAdmin } = useAdmin();
   const { isPaid } = useSubscription();
@@ -126,10 +155,12 @@ const Signals = () => {
     return [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
   }, [signals]);
   
-  // Use Realtime prices from backend (Twelve Data API, 10-second updates)
-  const { prices, loading: pricesLoading, lastUpdated, refreshPrices } = useRealtimePrices({
+  // Use realtime prices from the shared backend cache
+  const { prices, quoteSourceBySymbol, priceStatus, loading: pricesLoading, lastUpdated, refreshPrices } = useRealtimePrices({
     symbols: activeSymbols,
-    enabled: activeSymbols.length > 0
+    enabled: activeSymbols.length > 0,
+    pollIntervalMs: 20000,
+    staleAfterMs: 45000,
   });
 
   const fetchSignals = async () => {
@@ -254,6 +285,12 @@ const Signals = () => {
     if (signal.result === 'breakeven') return 'border-yellow-500/30 bg-yellow-500/10';
     if (signal.status === 'active') return 'border-primary/20 bg-primary/5';
     return 'border-border/50 bg-secondary';
+  };
+
+  const getLivePriceInsight = (signal: TradingSignal) => {
+    if (isPriceNearEntry(signal)) return 'Near entry';
+    if (isNearStopLoss(signal)) return 'Near stop loss';
+    return 'Tracking live market';
   };
 
   // Group signals by date (most recent first)
@@ -515,7 +552,7 @@ const Signals = () => {
                     <X className="w-3 h-3 mr-1" /> Clear Filters
                   </Button>
                 ) : (
-                  <Button variant="outline" size="sm" onClick={fetchSignals}>
+            <Button variant="outline" size="sm" onClick={fetchSignals}>
                     <RefreshCw className="w-3 h-3 mr-1" /> Refresh
                   </Button>
                 )}
@@ -547,19 +584,45 @@ const Signals = () => {
                   />
                 </button>
 
+                {group.signals.some((signal) => signal.status === 'active') ? (
+                  <div className="px-6 -mt-1">
+                    <div className="flex flex-wrap gap-2">
+                      {group.signals
+                        .filter((signal) => signal.status === 'active')
+                        .slice(0, 3)
+                        .map((signal) => {
+                          const trustBadge = getTrustBadgeConfig(
+                            priceStatus[signal.currency_pair],
+                            quoteSourceBySymbol[signal.currency_pair],
+                          );
+
+                          return (
+                            <Badge
+                              key={signal.id}
+                              variant="outline"
+                              className={`text-[11px] ${trustBadge.className}`}
+                            >
+                              {signal.currency_pair} • {trustBadge.label}
+                            </Badge>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ) : null}
+
                 {/* Signals for this date */}
                 {expandedDates.has(group.date) && (
                   <div className="space-y-3 px-6">
                     {group.signals.map((signal) => (
                       <div
                         key={signal.id}
-                        className={`rounded-3xl p-4 sm:p-5 border shadow-sm transition-colors ${getSignalProgressTone(signal)}`}
+                        className={`overflow-hidden rounded-3xl border p-4 shadow-sm transition-colors sm:p-5 ${getSignalProgressTone(signal)}`}
                       >
                 {/* Header */}
-                <div className="flex items-start justify-between gap-3 mb-4">
-                  <div className="flex items-start gap-3 min-w-0">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
                     <div
-                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl ${
                         signal.direction === 'buy'
                           ? 'bg-emerald-500/20'
                           : 'bg-red-500/20'
@@ -572,17 +635,24 @@ const Signals = () => {
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
-                        <span className="font-semibold text-foreground text-base sm:text-lg">{signal.currency_pair}</span>
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <span className="text-base font-semibold text-foreground sm:text-lg">{signal.currency_pair}</span>
                         <span
                           className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
-                            signal.direction === 'buy' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
+                            signal.direction === 'buy'
+                              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                              : 'bg-red-500/10 text-red-700 dark:text-red-400'
                           }`}
                         >
                           {signal.direction}
                         </span>
+                        {signal.status === 'active' && (
+                          <Badge variant="outline" className="text-[11px]">
+                            Live setup
+                          </Badge>
+                        )}
                       </div>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-xs leading-relaxed text-muted-foreground">
                         {signal.status === 'active'
                           ? 'Trade idea is currently active.'
                           : signal.result === 'win'
@@ -594,15 +664,15 @@ const Signals = () => {
                                 : 'Signal archived.'}
                       </p>
                       {signal.market_execution && (
-                        <div className="inline-flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-full border border-primary/20 mt-2">
-                          <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1">
+                          <span className="text-[11px] font-semibold uppercase tracking-wide text-primary">
                             {getExecutionLabel(signal.market_execution)}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+                  <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
                     {getResultBadge(signal.result)}
                     <Badge className={getStatusColor(signal.status)}>{signal.status}</Badge>
                   </div>
@@ -610,113 +680,163 @@ const Signals = () => {
 
                 {/* Live Price for Active Signals */}
                 {signal.status === 'active' && prices[signal.currency_pair] && (
-                  <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-3 flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <Wifi className="w-3.5 h-3.5 text-primary animate-pulse shrink-0" />
-                      <div>
-                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground block">Live Price</span>
+                  <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 p-3 sm:p-4">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="mb-1 flex items-center gap-2">
+                          <Wifi className="h-3.5 w-3.5 shrink-0 animate-pulse text-primary" />
+                          <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Live Price</span>
+                        </div>
                         <span className="text-xs text-muted-foreground">
-                          {isPriceNearEntry(signal) ? 'Near entry' : isNearStopLoss(signal) ? 'Near stop loss' : 'Tracking live market'}
+                          {getLivePriceInsight(signal)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-start gap-1 sm:items-end">
+                        <Badge
+                          variant="outline"
+                          className={`text-[11px] ${getTrustBadgeConfig(
+                            priceStatus[signal.currency_pair],
+                            quoteSourceBySymbol[signal.currency_pair],
+                          ).className}`}
+                        >
+                          {getTrustBadgeConfig(
+                            priceStatus[signal.currency_pair],
+                            quoteSourceBySymbol[signal.currency_pair],
+                          ).label}
+                        </Badge>
+                        <span className="text-[11px] text-muted-foreground">
+                          {lastUpdated ? `Updated ${format(lastUpdated, 'HH:mm:ss')}` : 'Waiting for refresh'}
                         </span>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <span className={`text-base font-bold block ${
-                      signal.direction === 'buy'
-                        ? prices[signal.currency_pair] > toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
-                        : prices[signal.currency_pair] < toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
-                    }`}>
-                      {formatPrice(prices[signal.currency_pair])}
-                      </span>
-                      <span className={`text-xs ${getCurrentProfit(signal) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
-                        {getCurrentProfit(signal) >= 0 ? '+' : ''}
-                        {formatPrice(Math.abs(getCurrentProfit(signal)))}
-                      </span>
+                    <div className="flex items-end justify-between gap-3">
+                      <div className="min-w-0">
+                        <span className={`block text-xl font-bold sm:text-2xl ${
+                          signal.direction === 'buy'
+                            ? prices[signal.currency_pair] > toNumber(signal.entry_price)
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-red-700 dark:text-red-400'
+                            : prices[signal.currency_pair] < toNumber(signal.entry_price)
+                              ? 'text-emerald-700 dark:text-emerald-400'
+                              : 'text-red-700 dark:text-red-400'
+                        }`}>
+                          {formatPrice(prices[signal.currency_pair])}
+                        </span>
+                        <span className="text-xs text-muted-foreground">Current market price</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="block text-[11px] uppercase tracking-wide text-muted-foreground">Move from entry</span>
+                        <span className={`text-sm font-semibold ${getCurrentProfit(signal) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                          {getCurrentProfit(signal) >= 0 ? '+' : '-'}
+                          {formatPrice(Math.abs(getCurrentProfit(signal)))}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
 
                 {/* Price Levels */}
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="bg-background/60 rounded-2xl p-3 border border-border/40">
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground block mb-1">Entry</span>
-                    <span className="text-base font-semibold text-foreground">
-                      {formatPrice(signal.entry_price)}
-                    </span>
+                <div className="mb-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Price Levels</span>
                   </div>
-                  <div className="bg-red-500/10 rounded-2xl p-3 border border-red-500/20">
-                    <span className="text-[11px] uppercase tracking-wide text-red-700 dark:text-red-400 block mb-1">Stop Loss</span>
-                    <span className="text-base font-semibold text-red-700 dark:text-red-400">
-                      {formatPrice(signal.stop_loss)}
-                    </span>
-                    <span className="text-xs text-muted-foreground ml-1">
-                      ({signal.pips_to_sl} pips)
-                    </span>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl border border-border/40 bg-background/60 p-3">
+                      <span className="mb-1 block text-[11px] uppercase tracking-wide text-muted-foreground">Entry</span>
+                      <span className="text-base font-semibold text-foreground">
+                        {formatPrice(signal.entry_price)}
+                      </span>
+                    </div>
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-3">
+                      <span className="mb-1 block text-[11px] uppercase tracking-wide text-red-700 dark:text-red-400">Stop Loss</span>
+                      <span className="text-base font-semibold text-red-700 dark:text-red-400">
+                        {formatPrice(signal.stop_loss)}
+                      </span>
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({signal.pips_to_sl} pips)
+                      </span>
+                    </div>
                   </div>
                 </div>
 
                 {/* Take Profits */}
-                <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className={`rounded-2xl p-3 relative border ${signal.tp1_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                    {signal.tp1_hit && (
-                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-                        <Check className="w-3 h-3 text-white" />
-                      </div>
-                    )}
-                    <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP1</span>
-                    <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
-                      {formatPrice(signal.take_profit_1)}
-                    </span>
-                    <span className="text-xs text-muted-foreground block">
-                      {signal.pips_to_tp1}p
-                    </span>
+                <div className="mb-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Targets</span>
                   </div>
-                  {signal.take_profit_2 && (
-                    <div className={`rounded-2xl p-3 relative border ${signal.tp2_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                      {signal.tp2_hit && (
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-                          <Check className="w-3 h-3 text-white" />
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      {
+                        label: 'TP1',
+                        price: signal.take_profit_1,
+                        pips: signal.pips_to_tp1,
+                        hit: signal.tp1_hit,
+                      },
+                      signal.take_profit_2
+                        ? {
+                            label: 'TP2',
+                            price: signal.take_profit_2,
+                            pips: signal.pips_to_tp2,
+                            hit: signal.tp2_hit,
+                          }
+                        : null,
+                      signal.take_profit_3
+                        ? {
+                            label: 'TP3',
+                            price: signal.take_profit_3,
+                            pips: signal.pips_to_tp3,
+                            hit: signal.tp3_hit,
+                          }
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .map((target) => (
+                        <div
+                          key={target.label}
+                          className={`relative rounded-2xl border p-3 ${
+                            target.hit
+                              ? 'border-emerald-500/40 bg-emerald-500/30 ring-1 ring-emerald-500/50'
+                              : 'border-emerald-500/20 bg-emerald-500/10'
+                          }`}
+                        >
+                          {target.hit && (
+                            <div className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-emerald-500">
+                              <Check className="h-3 w-3 text-white" />
+                            </div>
+                          )}
+                          <div className="mb-1 flex items-center justify-between gap-2">
+                            <span className="block text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                              {target.label}
+                            </span>
+                            {target.hit && (
+                              <span className="text-[10px] font-semibold uppercase tracking-wide text-emerald-700 dark:text-emerald-400">
+                                Hit
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400 sm:text-base">
+                            {formatPrice(target.price)}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {target.pips}p
+                          </span>
                         </div>
-                      )}
-                      <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP2</span>
-                      <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
-                        {formatPrice(signal.take_profit_2)}
-                      </span>
-                      <span className="text-xs text-muted-foreground block">
-                        {signal.pips_to_tp2}p
-                      </span>
-                    </div>
-                  )}
-                  {signal.take_profit_3 && (
-                    <div className={`rounded-2xl p-3 relative border ${signal.tp3_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
-                      {signal.tp3_hit && (
-                        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
-                          <Check className="w-3 h-3 text-white" />
-                        </div>
-                      )}
-                      <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP3</span>
-                      <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
-                        {formatPrice(signal.take_profit_3)}
-                      </span>
-                      <span className="text-xs text-muted-foreground block">
-                        {signal.pips_to_tp3}p
-                      </span>
-                    </div>
-                  )}
+                      ))}
+                  </div>
                 </div>
 
                 {/* Market Execution Time & Notes & Admin Actions */}
-                <div className="space-y-2 mb-3">
-                  <div className="bg-background/50 rounded-2xl p-3 flex items-center justify-between">
+                <div className="mb-3 space-y-2">
+                  <div className="rounded-2xl bg-background/50 p-3">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Clock className="w-4 h-4 text-primary" />
+                        <Clock className="h-4 w-4 text-primary" />
                         <span className="font-semibold">Signal Created:</span>
                         <span className="text-foreground font-medium">{format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}</span>
                       </div>
                       {signal.closed_at && (
                         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <Clock className="w-4 h-4 text-yellow-500" />
+                          <Clock className="h-4 w-4 text-yellow-500" />
                           <span className="font-semibold">Closed:</span>
                           <span className="text-foreground font-medium">{format(parseISO(signal.closed_at), 'MMM d, yyyy h:mm a')}</span>
                         </div>

@@ -4,7 +4,7 @@ import { loadPriceIngestorConfig, PriceIngestorConfig } from '../lib/config';
 import { createNestApi } from '../lib/nestApi';
 import { logger } from '../lib/logger';
 import { withRetry } from '../lib/retry';
-import { partitionSymbolMappings } from '../lib/symbols';
+import { getSymbolMappingsForSymbols } from '../lib/symbols';
 import { PriceBatchItem, FinnhubTradeMessage } from '../types';
 
 const FINNHUB_WS_URL = 'wss://ws.finnhub.io';
@@ -102,11 +102,7 @@ export class PriceIngestor {
       baseUrl: this.config.nestApiUrl,
       serviceToken: this.config.serviceToken,
     });
-    const { oanda, nonOanda } = partitionSymbolMappings(this.config.liveForexSymbolLimit);
-    this.finnhubSymbolMappings = {
-      ...oanda,
-      ...nonOanda,
-    };
+    this.finnhubSymbolMappings = getSymbolMappingsForSymbols(this.config.liveSymbols);
     this.reverseSymbolMap = buildReverseSymbolMap(this.finnhubSymbolMappings);
   }
 
@@ -116,7 +112,7 @@ export class PriceIngestor {
       providerMode: this.config.priceProviderMode,
       batchIntervalMs: this.config.batchIntervalMs,
       finnhubSubscriptions: this.reverseSymbolMap.size,
-      liveForexSymbols: Object.keys(partitionSymbolMappings(this.config.liveForexSymbolLimit).oanda).length,
+      liveSymbols: this.config.liveSymbols,
     });
     this.connect();
 

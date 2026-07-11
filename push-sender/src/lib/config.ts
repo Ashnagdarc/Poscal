@@ -18,6 +18,7 @@ export interface PriceIngestorConfig extends BaseConfig {
   oandaInstrumentChunkSize: number;
   liveForexSymbolLimit: number;
   batchIntervalMs: number;
+  liveSymbols: string[];
 }
 
 export interface NotificationWorkerConfig extends BaseConfig {
@@ -79,6 +80,40 @@ function getNumericEnv(key: string, fallback: number): number {
   return parsed;
 }
 
+const DEFAULT_PRODUCTION_LIVE_SYMBOLS = [
+  'EUR/USD',
+  'GBP/USD',
+  'USD/JPY',
+  'USD/CHF',
+  'AUD/USD',
+  'USD/CAD',
+  'NZD/USD',
+  'EUR/GBP',
+  'EUR/JPY',
+  'GBP/JPY',
+  'AUD/JPY',
+  'EUR/CHF',
+  'GBP/CHF',
+  'XAU/USD',
+  'XAG/USD',
+  'BTC/USD',
+  'ETH/USD',
+] as const;
+
+function getLiveSymbolsEnv(): string[] {
+  const raw = process.env.LIVE_SYMBOLS?.trim();
+  if (!raw) {
+    return [...DEFAULT_PRODUCTION_LIVE_SYMBOLS];
+  }
+
+  const parsed = raw
+    .split(',')
+    .map((item) => item.trim().toUpperCase())
+    .filter(Boolean);
+
+  return parsed.length > 0 ? parsed : [...DEFAULT_PRODUCTION_LIVE_SYMBOLS];
+}
+
 function getPriceProviderModeEnv(): PriceProviderMode {
   const raw = (process.env.PRICE_PROVIDER_MODE || process.env.PRICE_PROVIDER || 'finnhub').toLowerCase();
   if (raw === 'finnhub') {
@@ -123,7 +158,8 @@ export function loadPriceIngestorConfig(): PriceIngestorConfig {
     oandaApiUrl: process.env.OANDA_API_URL || defaultOandaApiUrl,
     oandaInstrumentChunkSize: getNumericEnv('OANDA_INSTRUMENT_CHUNK_SIZE', 25),
     liveForexSymbolLimit: getNumericEnv('LIVE_FOREX_SYMBOL_LIMIT', 50),
-    batchIntervalMs: getNumericEnv('BATCH_INTERVAL', 10000),
+    batchIntervalMs: getNumericEnv('BATCH_INTERVAL', 20000),
+    liveSymbols: getLiveSymbolsEnv(),
   };
 }
 

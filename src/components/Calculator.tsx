@@ -19,6 +19,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useRealtimePrices } from "@/hooks/use-realtime-prices";
 import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
 import { saveCalculatorHistory } from "@/lib/calculatorHistory";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -94,6 +95,7 @@ export const Calculator = () => {
     prices,
     askPrices,
     bidPrices,
+    quoteSourceBySymbol,
     priceStatus,
     updatedAtBySymbol,
     loading: _pricesLoading,
@@ -101,8 +103,9 @@ export const Calculator = () => {
   } = useRealtimePrices({
     symbols: symbolsToFetch,
     enabled: true,
-    pollIntervalMs: 10000,
-    staleAfterMs: 30000,
+    pollIntervalMs: 20000,
+    staleAfterMs: 45000,
+    allowFallback: false,
   });
   
   const currentLivePrice = prices[selectedPair.symbol];
@@ -115,12 +118,17 @@ export const Calculator = () => {
     ? 'unavailable'
     : (hasStaleRequiredQuote ? 'stale' : (priceStatus[selectedPair.symbol] ?? 'unavailable'));
   const currentPairUpdatedAt = updatedAtBySymbol[selectedPair.symbol] ?? lastUpdated;
+  const currentPairSource = quoteSourceBySymbol[selectedPair.symbol];
   const hasAnyExecutionPrice = typeof currentLivePrice === "number" || typeof currentAskPrice === "number" || typeof currentBidPrice === "number";
   const hasEnoughQuoteDataForSizing = symbolsToFetch.every((symbol) =>
     typeof prices[symbol] === "number" ||
     typeof askPrices[symbol] === "number" ||
     typeof bidPrices[symbol] === "number"
   );
+  const hasTrustedLiveQuotes =
+    currentPairStatus === "fresh" &&
+    hasEnoughQuoteDataForSizing &&
+    symbolsToFetch.every((symbol) => priceStatus[symbol] === "fresh");
   const stopLossLoading = _pricesLoading && !hasEnoughQuoteDataForSizing;
 
   const riskPresets = [0.5, 1, 2, 3];
@@ -150,7 +158,7 @@ export const Calculator = () => {
       ? (currentAskPrice ?? currentLivePrice)
       : (currentBidPrice ?? currentLivePrice);
     
-    if (!hasEnoughQuoteDataForSizing && !hasAnyExecutionPrice) {
+    if (!hasTrustedLiveQuotes || !hasAnyExecutionPrice) {
       return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: 0 };
     }
 
@@ -187,6 +195,7 @@ export const Calculator = () => {
     currentLivePrice,
     currentAskPrice,
     currentBidPrice,
+    hasTrustedLiveQuotes,
     hasEnoughQuoteDataForSizing,
     hasAnyExecutionPrice,
     prices,
@@ -198,9 +207,26 @@ export const Calculator = () => {
     ? (currentAskPrice ?? currentLivePrice)
     : (currentBidPrice ?? currentLivePrice);
   const executionLabel = tradeDirection === 'buy' ? 'Ask' : 'Bid';
+  const executionSourceLabel = currentPairSource
+    ? currentPairSource.replaceAll('_', ' ')
+    : 'no source';
+  const trustBadge = hasTrustedLiveQuotes
+    ? {
+        label: `Fresh • ${executionSourceLabel}`,
+        className: "border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+      }
+    : currentPairStatus === "stale"
+      ? {
+          label: "Stale • Blocked",
+          className: "border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+        }
+      : {
+          label: "Unavailable • Blocked",
+          className: "border-destructive/20 bg-destructive/10 text-destructive",
+        };
 
   const saveToHistory = async () => {
-    if (calculation.positionSize <= 0) return;
+    if (calculation.positionSize <= 0 || !hasTrustedLiveQuotes) return;
 
     const newItem: HistoryItem = {
       id: Date.now().toString(),
@@ -221,21 +247,13 @@ export const Calculator = () => {
         riskAmount: calculation.riskAmount,
         units: calculation.units,
         pipValue: calculation.pipValue,
-        priceSource: currentPairStatus === "fresh" ? "backend_price_cache" : "unavailable",
+        priceSource: "backend_price_cache",
         spreadPips: null,
       }, user?.id);
       toast.success("Saved to history");
     } catch (error) {
       console.error("[calculator-history] Failed to save to Convex, falling back to local history", error);
-      await saveCalculatorHistory({
-        ...newItem,
-        riskAmount: calculation.riskAmount,
-        units: calculation.units,
-        pipValue: calculation.pipValue,
-        priceSource: "local_fallback",
-        spreadPips: null,
-      });
-      toast.success("Saved locally");
+      toast.error("Could not save sizing history");
     }
   };
 
@@ -459,14 +477,20 @@ export const Calculator = () => {
                 {executionLabel}: {formatPrice(executionPrice)}
               </p>
             </div>
-            <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-foreground">
-              {tradeDirection.toUpperCase()}
-            </span>
+            <div className="flex flex-col items-end gap-2">
+              <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-foreground">
+                {tradeDirection.toUpperCase()}
+              </span>
+              <Badge variant="outline" className={trustBadge.className}>
+                {trustBadge.label}
+              </Badge>
+            </div>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {currentPairStatus === 'fresh' && `Sizing from the current ${executionLabel.toLowerCase()} feed`}
-            {currentPairStatus === 'stale' && `Using cached ${executionLabel.toLowerCase()} data while live quotes refresh`}
-            {currentPairStatus === 'unavailable' && "Fetching execution quote…"}
+            {currentPairStatus === 'stale' && `Live-trade sizing paused until a fresh ${executionLabel.toLowerCase()} quote arrives`}
+            {currentPairStatus === 'unavailable' && "Live-trade sizing is blocked until a provider quote arrives"}
+            {currentPairSource ? ` • Source ${executionSourceLabel}` : ''}
             {currentPairUpdatedAt
               ? ` • Updated ${currentPairUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
               : ""}
@@ -532,10 +556,10 @@ export const Calculator = () => {
           {/* Save Button */}
           <button
             onClick={saveToHistory}
-            disabled={calculation.positionSize <= 0}
+            disabled={calculation.positionSize <= 0 || !hasTrustedLiveQuotes}
             className="w-full mt-4 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Save to History
+            {hasTrustedLiveQuotes ? "Save to History" : "Waiting for Live Quote"}
           </button>
         </div>
       </main>

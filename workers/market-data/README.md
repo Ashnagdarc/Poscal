@@ -42,12 +42,12 @@ Optional vars:
 
 Recommended production setup for this repo:
 
-- Use the Worker for a very small shared symbol set with stable Finnhub coverage
-- Use frontend fallback/shared cache for forex-heavy lot-size calculations
-- Keep `XAU/USD` active in the frontend live symbol set even if it is not written by this Worker
+- Use the backend shared cache as the main live-price path for the curated 17-symbol production set
+- Keep the Cloudflare Worker as a narrow backup/secondary ingestion path
+- Use strict fresh-quote gating for live-trade sizing
 - If one provider quote fails or is rate-limited, the Worker ingests the symbols that succeeded instead of failing the whole run
 
-The current Finnhub key on this project returns `403` for `OANDA:*` forex symbols and can also hit `429` when the polled set is too broad. The checked-in Worker default is intentionally limited to `BTC/USD` and `ETH/USD` so the shared ingestion path stays reliable for 100-1000 users.
+The checked-in Worker default is intentionally limited to `BTC/USD` and `ETH/USD`. The main app live-price path is the backend shared cache, which should be configured with the curated production symbol set and a safe shared flush cadence.
 
 ## Public route behavior
 

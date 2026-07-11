@@ -17,6 +17,9 @@ export class PriceCache {
   @Column({ type: 'decimal', precision: 15, scale: 6 })
   mid_price: number;
 
+  @Column({ type: 'varchar', length: 32, default: 'unknown' })
+  source: string;
+
   @Column({ type: 'bigint', nullable: true })
   timestamp: number | null;
 

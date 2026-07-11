@@ -255,3 +255,13 @@ export function partitionSymbolMappings(liveOandaLimit = 50): {
     nonOanda: getSymbolMappingsExcludingPrefix('OANDA'),
   };
 }
+
+export function getSymbolMappingsForSymbols(symbols: string[]): Record<string, string> {
+  return symbols.reduce<Record<string, string>>((acc, symbol) => {
+    const providerSymbol = SYMBOL_MAPPINGS[symbol];
+    if (providerSymbol) {
+      acc[symbol] = providerSymbol;
+    }
+    return acc;
+  }, {});
+}

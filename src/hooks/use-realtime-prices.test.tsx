@@ -22,6 +22,7 @@ describe('useRealtimePrices', () => {
             mid_price: 68000,
             ask_price: 68004,
             bid_price: 67996,
+            source: 'finnhub',
             timestamp: '2026-04-13T09:59:45.000Z',
           },
         ]),
@@ -38,6 +39,7 @@ describe('useRealtimePrices', () => {
     expect(fetchSpy).toHaveBeenCalledWith('/api/prices/multiple?symbols=BTC%2FUSD');
     expect(result.current.prices['BTC/USD']).toBe(68000);
     expect(result.current.priceStatus['BTC/USD']).toBe('fresh');
+    expect(result.current.quoteSourceBySymbol['BTC/USD']).toBe('finnhub');
   });
 
   it('marks old cached quotes as stale', async () => {
@@ -96,5 +98,26 @@ describe('useRealtimePrices', () => {
     expect(fetchSpy).toHaveBeenCalledWith('https://open.er-api.com/v6/latest/USD');
     expect(result.current.priceStatus['USD/JPY']).toBe('fresh');
     expect(result.current.prices['USD/JPY']).toBe(157);
+  });
+
+  it('does not fall back to public market data when fallback is disabled', async () => {
+    const symbols = ['USD/JPY'];
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (input === '/api/prices/multiple?symbols=USD%2FJPY') {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
+
+    const { result } = renderHook(() =>
+      useRealtimePrices({ symbols, enabled: true, allowFallback: false }),
+    );
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(fetchSpy).not.toHaveBeenCalledWith('https://open.er-api.com/v6/latest/USD');
+    expect(result.current.priceStatus['USD/JPY']).toBe('unavailable');
+    expect(result.current.prices['USD/JPY']).toBeUndefined();
   });
 });

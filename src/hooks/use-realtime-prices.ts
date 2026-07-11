@@ -11,6 +11,7 @@ interface PriceData {
   ask_price: number;
   mid_price: number;
   timestamp: string;
+  source?: string;
 }
 
 interface UseRealtimePricesOptions {
@@ -18,12 +19,14 @@ interface UseRealtimePricesOptions {
   enabled?: boolean;
   pollIntervalMs?: number;
   staleAfterMs?: number;
+  allowFallback?: boolean;
 }
 
 interface UseRealtimePricesResult {
   prices: Record<string, number>;
   askPrices: Record<string, number>;
   bidPrices: Record<string, number>;
+  quoteSourceBySymbol: Record<string, string | null>;
   priceStatus: Record<string, 'fresh' | 'stale' | 'unavailable'>;
   updatedAtBySymbol: Record<string, Date | null>;
   loading: boolean;
@@ -102,10 +105,12 @@ export const useRealtimePrices = ({
   enabled = true,
   pollIntervalMs = INTERVALS.LIVE_PRICE_REFRESH,
   staleAfterMs,
+  allowFallback = true,
 }: UseRealtimePricesOptions): UseRealtimePricesResult => {
   const [prices, setPrices] = useState<Record<string, number>>({});
   const [askPrices, setAskPrices] = useState<Record<string, number>>({});
   const [bidPrices, setBidPrices] = useState<Record<string, number>>({});
+  const [quoteSourceBySymbol, setQuoteSourceBySymbol] = useState<Record<string, string | null>>({});
   const [priceStatus, setPriceStatus] = useState<Record<string, 'fresh' | 'stale' | 'unavailable'>>({});
   const [updatedAtBySymbol, setUpdatedAtBySymbol] = useState<Record<string, Date | null>>({});
   const [loading, setLoading] = useState(true);
@@ -140,6 +145,25 @@ export const useRealtimePrices = ({
       const data = await res.json();
       if (!data || data.length === 0) {
         console.warn('⚠️  No prices returned yet - waiting for backend updates...');
+        if (!allowFallback) {
+          const unavailableStatuses = Object.fromEntries(
+            symbols.map((symbol) => [symbol, 'unavailable' as const]),
+          );
+          const unavailableUpdatedAt = Object.fromEntries(
+            symbols.map((symbol) => [symbol, null]),
+          );
+
+          setPrices({});
+          setAskPrices({});
+          setBidPrices({});
+          setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
+          setPriceStatus(unavailableStatuses);
+          setUpdatedAtBySymbol(unavailableUpdatedAt);
+          setLastUpdated(null);
+          setLoading(false);
+          return;
+        }
+
         const fallbackData = await fetchFallbackMarketPrices(symbols);
         const fallbackStatuses = Object.fromEntries(
           symbols.map((symbol) => {
@@ -159,6 +183,7 @@ export const useRealtimePrices = ({
         setPrices(fallbackData.prices);
         setAskPrices(fallbackData.askPrices);
         setBidPrices(fallbackData.bidPrices);
+        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, 'fallback_public_market_data'])));
         setPriceStatus(fallbackStatuses);
         setUpdatedAtBySymbol(fallbackUpdatedAt);
         setLastUpdated(fallbackLastUpdated);
@@ -169,6 +194,7 @@ export const useRealtimePrices = ({
       const newPrices: Record<string, number> = {};
       const newAskPrices: Record<string, number> = {};
       const newBidPrices: Record<string, number> = {};
+      const newQuoteSourceBySymbol: Record<string, string | null> = {};
       const newPriceStatus: Record<string, 'fresh' | 'stale' | 'unavailable'> = {};
       const newUpdatedAtBySymbol: Record<string, Date | null> = {};
       let newestTimestamp: Date | null = null;
@@ -185,6 +211,7 @@ export const useRealtimePrices = ({
         if (typeof mid === 'number') newPrices[symbol] = mid;
         if (typeof ask === 'number') newAskPrices[symbol] = ask;
         if (typeof bid === 'number') newBidPrices[symbol] = bid;
+        newQuoteSourceBySymbol[symbol] = typeof item.source === 'string' ? item.source : null;
         const hasPrice = typeof mid === 'number' || typeof ask === 'number' || typeof bid === 'number';
         newUpdatedAtBySymbol[symbol] = parsedTimestamp;
         newPriceStatus[symbol] = getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs);
@@ -200,11 +227,12 @@ export const useRealtimePrices = ({
         if (!(symbol in newPriceStatus)) {
           newPriceStatus[symbol] = 'unavailable';
           newUpdatedAtBySymbol[symbol] = null;
+          newQuoteSourceBySymbol[symbol] = null;
         }
       });
 
       const missingSymbols = symbols.filter((symbol) => newPriceStatus[symbol] === 'unavailable');
-      if (missingSymbols.length > 0) {
+      if (allowFallback && missingSymbols.length > 0) {
         const fallbackData = await fetchFallbackMarketPrices(missingSymbols);
         missingSymbols.forEach((symbol) => {
           const mid = fallbackData.prices[symbol];
@@ -215,6 +243,7 @@ export const useRealtimePrices = ({
           if (typeof mid === 'number') newPrices[symbol] = mid;
           if (typeof ask === 'number') newAskPrices[symbol] = ask;
           if (typeof bid === 'number') newBidPrices[symbol] = bid;
+          newQuoteSourceBySymbol[symbol] = 'fallback_public_market_data';
 
           const hasPrice = typeof mid === 'number' || typeof ask === 'number' || typeof bid === 'number';
           newUpdatedAtBySymbol[symbol] = parsedTimestamp;
@@ -229,6 +258,7 @@ export const useRealtimePrices = ({
       setPrices(newPrices);
       setAskPrices(newAskPrices);
       setBidPrices(newBidPrices);
+      setQuoteSourceBySymbol(newQuoteSourceBySymbol);
       setPriceStatus(newPriceStatus);
       setUpdatedAtBySymbol(newUpdatedAtBySymbol);
       setLastUpdated(newestTimestamp);
@@ -236,6 +266,26 @@ export const useRealtimePrices = ({
       setLoading(false);
     } catch (err) {
       console.error('❌ Error in fetchInitialPrices:', err);
+
+      if (!allowFallback) {
+        const unavailableStatuses = Object.fromEntries(
+          symbols.map((symbol) => [symbol, 'unavailable' as const]),
+        );
+        const unavailableUpdatedAt = Object.fromEntries(
+          symbols.map((symbol) => [symbol, null]),
+        );
+
+        setPrices({});
+        setAskPrices({});
+        setBidPrices({});
+        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
+        setPriceStatus(unavailableStatuses);
+        setUpdatedAtBySymbol(unavailableUpdatedAt);
+        setLastUpdated(null);
+        setError(err instanceof Error ? err.message : 'Failed to fetch prices');
+        setLoading(false);
+        return;
+      }
 
       try {
         const fallbackData = await fetchFallbackMarketPrices(symbols);
@@ -257,6 +307,7 @@ export const useRealtimePrices = ({
         setPrices(fallbackData.prices);
         setAskPrices(fallbackData.askPrices);
         setBidPrices(fallbackData.bidPrices);
+        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, 'fallback_public_market_data'])));
         setPriceStatus(fallbackStatuses);
         setUpdatedAtBySymbol(fallbackUpdatedAt);
         setLastUpdated(fallbackLastUpdated);
@@ -269,7 +320,7 @@ export const useRealtimePrices = ({
     } finally {
       pendingRequest.current = false; // Always release the lock
     }
-  }, [enabled, symbols, effectiveStaleAfterMs]);
+  }, [allowFallback, enabled, symbols, effectiveStaleAfterMs]);
 
   // Setup polling (temporary) and optional WS hookup if available
   useEffect(() => {
@@ -299,6 +350,7 @@ export const useRealtimePrices = ({
     prices,
     askPrices,
     bidPrices,
+    quoteSourceBySymbol,
     priceStatus,
     updatedAtBySymbol,
     loading,

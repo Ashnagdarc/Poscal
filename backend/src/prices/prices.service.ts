@@ -55,20 +55,21 @@ export class PricesService {
     // Build parameterized query — never concatenate user-supplied values into SQL
     const params: (string | number | null)[] = [];
     const valuePlaceholders = prices.map((p, i) => {
-      const base = i * 5;
+      const base = i * 6;
       const midPrice = p.mid_price ?? p.price ?? p.ask_price ?? p.bid_price ?? 0;
-      params.push(p.symbol, p.bid_price ?? null, p.ask_price ?? null, midPrice, p.timestamp ?? null);
-      return `($${base + 1}::varchar, $${base + 2}::numeric, $${base + 3}::numeric, $${base + 4}::numeric, NOW(), NOW(), $${base + 5}::bigint)`;
+      params.push(p.symbol, p.bid_price ?? null, p.ask_price ?? null, midPrice, p.source ?? 'unknown', p.timestamp ?? null);
+      return `($${base + 1}::varchar, $${base + 2}::numeric, $${base + 3}::numeric, $${base + 4}::numeric, $${base + 5}::varchar, NOW(), NOW(), $${base + 6}::bigint)`;
     });
 
     const sql = `
-      INSERT INTO price_cache (symbol, bid_price, ask_price, mid_price, created_at, updated_at, timestamp)
+      INSERT INTO price_cache (symbol, bid_price, ask_price, mid_price, source, created_at, updated_at, timestamp)
       VALUES ${valuePlaceholders.join(',')}
       ON CONFLICT (symbol)
       DO UPDATE SET
         bid_price = EXCLUDED.bid_price,
         ask_price = EXCLUDED.ask_price,
         mid_price = EXCLUDED.mid_price,
+        source = EXCLUDED.source,
         updated_at = EXCLUDED.updated_at,
         timestamp = EXCLUDED.timestamp
     `;

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 
-import { partitionSymbolMappings } from '../lib/symbols';
+import { getSymbolMappingsForSymbols, partitionSymbolMappings } from '../lib/symbols';
 import { normalizeFinnhubTradeMessage, PriceIngestor } from './priceIngestor';
 
 const ORIGINAL_ENV = { ...process.env };
@@ -39,6 +39,30 @@ describe('price ingestor helpers', () => {
     assert.equal(items[0]?.symbol, 'BTC/USD');
     assert.equal(items[0]?.source, 'finnhub');
     assert.ok(items[0]?.ask_price && items[0]?.bid_price);
+  });
+
+  it('builds provider mappings for the curated production symbol set only', () => {
+    const mappings = getSymbolMappingsForSymbols([
+      'EUR/USD',
+      'GBP/JPY',
+      'XAU/USD',
+      'BTC/USD',
+      'ETH/USD',
+      'UNKNOWN/PAIR',
+    ]);
+
+    assert.deepEqual(Object.keys(mappings), [
+      'EUR/USD',
+      'GBP/JPY',
+      'XAU/USD',
+      'BTC/USD',
+      'ETH/USD',
+    ]);
+    assert.equal(mappings['EUR/USD'], 'OANDA:EUR_USD');
+    assert.equal(mappings['GBP/JPY'], 'OANDA:GBP_JPY');
+    assert.equal(mappings['XAU/USD'], 'OANDA:XAU_USD');
+    assert.equal(mappings['BTC/USD'], 'BINANCE:BTCUSDT');
+    assert.equal(mappings['ETH/USD'], 'BINANCE:ETHUSDT');
   });
 });
 

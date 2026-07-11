@@ -41,9 +41,10 @@ describe('PricesService', () => {
     expect(repository.query).toHaveBeenCalledTimes(1);
     const [sql, params] = repository.query.mock.calls[0];
     expect(sql).toContain('INSERT INTO price_cache');
+    expect(sql).toContain('source = EXCLUDED.source');
     expect(params).toEqual([
-      'EUR/USD', 1.08995, 1.09005, 1.09, 1713000000000,
-      'BTC/USD', 67996, 68004, 68000, 1713000001000,
+      'EUR/USD', 1.08995, 1.09005, 1.09, 'oanda', 1713000000000,
+      'BTC/USD', 67996, 68004, 68000, 'finnhub', 1713000001000,
     ]);
   });
 
@@ -69,6 +70,7 @@ describe('PricesService', () => {
       bid_price: 1.08995,
       ask_price: 1.09005,
       mid_price: 1.09,
+      source: 'finnhub',
       updated_at: new Date('2026-04-13T09:00:00.000Z'),
       timestamp: 1712998800000,
     };
