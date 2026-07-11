@@ -28,6 +28,7 @@ Other required Worker secrets/vars:
 - `CONVEX_SITE_URL`
 - `FINNHUB_API_KEY`
 - `NOTIFICATION_WORKER_SECRET`
+- `WORKER_TRIGGER_SECRET` for authenticated manual POST runs
 
 Optional vars:
 
@@ -47,6 +48,12 @@ Recommended production setup for this repo:
 - If one provider quote fails or is rate-limited, the Worker ingests the symbols that succeeded instead of failing the whole run
 
 The current Finnhub key on this project returns `403` for `OANDA:*` forex symbols and can also hit `429` when the polled set is too broad. The checked-in Worker default is intentionally limited to `BTC/USD` and `ETH/USD` so the shared ingestion path stays reliable for 100-1000 users.
+
+## Public route behavior
+
+- `GET /` returns a health payload only and does **not** call Finnhub
+- `POST /` runs a manual ingestion pass only when `Authorization: Bearer <WORKER_TRIGGER_SECRET>` or `x-worker-trigger-secret` matches
+- Cron remains the normal production ingestion path
 
 ## Commands
 

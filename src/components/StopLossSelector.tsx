@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { Loader2, Search } from "lucide-react";
 
 interface StopLossSelectorProps {
   selectedStopLoss: number | null;
@@ -8,6 +8,7 @@ interface StopLossSelectorProps {
   riskPercent: number;
   pipValue: number;
   currency: { symbol: string };
+  loading?: boolean;
 }
 
 export const StopLossSelector = ({
@@ -16,7 +17,8 @@ export const StopLossSelector = ({
   accountBalance,
   riskPercent,
   pipValue,
-  currency
+  currency,
+  loading = false,
 }: StopLossSelectorProps) => {
   const [customInput, setCustomInput] = useState("");
   
@@ -48,6 +50,18 @@ export const StopLossSelector = ({
     
     return options;
   }, [accountBalance, riskPercent, pipValue]);
+
+  if (loading) {
+    return (
+      <div className="h-full flex flex-col items-center justify-center gap-3 text-center text-muted-foreground px-6">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        <div className="space-y-1">
+          <p className="text-sm font-medium text-foreground">Loading market data</p>
+          <p className="text-xs">Calculating stop loss pips and lot sizes…</p>
+        </div>
+      </div>
+    );
+  }
 
   if (stopLossOptions.length === 0) {
     return (

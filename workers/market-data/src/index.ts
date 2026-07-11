@@ -4,8 +4,18 @@ type Env = {
   FINNHUB_API_KEY: string;
   NOTIFICATION_WORKER_SECRET?: string;
   PRICE_INGEST_SECRET: string;
+  WORKER_TRIGGER_SECRET?: string;
   POLL_SYMBOLS?: string;
   ESTIMATED_SPREAD_BPS?: string;
+};
+
+type ScheduledController = {
+  scheduledTime: number;
+  cron: string;
+};
+
+type ExecutionContext = {
+  waitUntil(promise: Promise<unknown>): void;
 };
 
 type QuoteResponse = {
@@ -143,6 +153,20 @@ function getConvexSiteUrl(env: Env) {
   return env.CONVEX_URL.replace(".convex.cloud", ".convex.site");
 }
 
+function getBearerToken(request: Request) {
+  const authorization = request.headers.get("authorization");
+  if (!authorization) {
+    return null;
+  }
+
+  const [scheme, token] = authorization.split(" ");
+  if (scheme?.toLowerCase() !== "bearer" || !token) {
+    return null;
+  }
+
+  return token;
+}
+
 async function processNotifications(env: Env) {
   if (!env.NOTIFICATION_WORKER_SECRET) {
     return { skipped: true, reason: "NOTIFICATION_WORKER_SECRET is not configured" };
@@ -175,13 +199,49 @@ export default {
     );
   },
 
-  async fetch(_request: Request, env: Env) {
+  async fetch(request: Request, env: Env) {
+    const url = new URL(request.url);
+
+    if (request.method === "GET") {
+      return Response.json({
+        ok: true,
+        worker: "poscal-market-data",
+        mode: "health",
+        cron: "*/5 * * * *",
+        symbols: parseSymbolConfig(env.POLL_SYMBOLS).map((item) => item.displaySymbol),
+        notificationsEnabled: Boolean(env.NOTIFICATION_WORKER_SECRET),
+      });
+    }
+
+    if (request.method !== "POST") {
+      return Response.json(
+        { ok: false, error: "Method not allowed" },
+        { status: 405 },
+      );
+    }
+
+    const expectedSecret = env.WORKER_TRIGGER_SECRET;
+    const providedSecret = getBearerToken(request) ?? request.headers.get("x-worker-trigger-secret");
+
+    if (!expectedSecret || providedSecret !== expectedSecret) {
+      return Response.json(
+        { ok: false, error: "Unauthorized" },
+        { status: 401 },
+      );
+    }
+
     try {
       const [priceResult, notificationResult] = await Promise.all([
         ingestPrices(env),
         processNotifications(env),
       ]);
-      return Response.json({ ok: true, prices: priceResult, notifications: notificationResult });
+      return Response.json({
+        ok: true,
+        mode: "manual-trigger",
+        path: url.pathname,
+        prices: priceResult,
+        notifications: notificationResult,
+      });
     } catch (error) {
       return Response.json(
         { ok: false, error: error instanceof Error ? error.message : "Unknown error" },

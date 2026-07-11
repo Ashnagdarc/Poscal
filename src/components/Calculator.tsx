@@ -7,7 +7,8 @@ import {
   ChevronRight,
   Target,
   User,
-  X
+  X,
+  Loader2,
 } from "lucide-react";
 import { NumPad } from "./NumPad";
 import { CurrencyGrid, FEATURED_CURRENCY_PAIRS } from "./CurrencyGrid";
@@ -114,6 +115,13 @@ export const Calculator = () => {
     ? 'unavailable'
     : (hasStaleRequiredQuote ? 'stale' : (priceStatus[selectedPair.symbol] ?? 'unavailable'));
   const currentPairUpdatedAt = updatedAtBySymbol[selectedPair.symbol] ?? lastUpdated;
+  const hasAnyExecutionPrice = typeof currentLivePrice === "number" || typeof currentAskPrice === "number" || typeof currentBidPrice === "number";
+  const hasEnoughQuoteDataForSizing = symbolsToFetch.every((symbol) =>
+    typeof prices[symbol] === "number" ||
+    typeof askPrices[symbol] === "number" ||
+    typeof bidPrices[symbol] === "number"
+  );
+  const stopLossLoading = _pricesLoading && !hasEnoughQuoteDataForSizing;
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -142,7 +150,7 @@ export const Calculator = () => {
       ? (currentAskPrice ?? currentLivePrice)
       : (currentBidPrice ?? currentLivePrice);
     
-    if (hasUnavailableRequiredQuote || hasStaleRequiredQuote) {
+    if (!hasEnoughQuoteDataForSizing && !hasAnyExecutionPrice) {
       return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: 0 };
     }
 
@@ -179,8 +187,8 @@ export const Calculator = () => {
     currentLivePrice,
     currentAskPrice,
     currentBidPrice,
-    hasUnavailableRequiredQuote,
-    hasStaleRequiredQuote,
+    hasEnoughQuoteDataForSizing,
+    hasAnyExecutionPrice,
     prices,
     askPrices,
     bidPrices,
@@ -404,19 +412,26 @@ export const Calculator = () => {
 
         {/* Stop Loss & Take Profit */}
         <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setShowStopLossSelector(true)}
-            className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-            style={{ animationDelay: "150ms" }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingDown className="w-4 h-4 text-destructive" />
-              <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
+        <button
+          onClick={() => setShowStopLossSelector(true)}
+          className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+          style={{ animationDelay: "150ms" }}
+        >
+          <div className="flex items-center gap-2 mb-1">
+            <TrendingDown className="w-4 h-4 text-destructive" />
+            <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
+          </div>
+          {stopLossLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span>Loading…</span>
             </div>
+          ) : (
             <p className="text-lg font-bold text-foreground">
               {stopLossPips ? `${stopLossPips} pips` : "—"}
             </p>
-          </button>
+          )}
+        </button>
 
           <button
             onClick={() => openNumPad("takeProfit")}
@@ -450,8 +465,8 @@ export const Calculator = () => {
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
             {currentPairStatus === 'fresh' && `Sizing from the current ${executionLabel.toLowerCase()} feed`}
-            {currentPairStatus === 'stale' && `Execution quote is too old for sizing`}
-            {currentPairStatus === 'unavailable' && "Execution quote unavailable"}
+            {currentPairStatus === 'stale' && `Using cached ${executionLabel.toLowerCase()} data while live quotes refresh`}
+            {currentPairStatus === 'unavailable' && "Fetching execution quote…"}
             {currentPairUpdatedAt
               ? ` • Updated ${currentPairUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
               : ""}
@@ -580,6 +595,7 @@ export const Calculator = () => {
               riskPercent={riskPercent}
               pipValue={calculation.pipValue}
               currency={currency}
+              loading={stopLossLoading}
             />
           </div>
         </div>

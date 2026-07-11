@@ -170,33 +170,3 @@ export const queueEmail = mutation({
     return { id, success: true };
   },
 });
-
-export const enqueuePushForSystemTest = internalMutation({
-  args: {
-    userId: nullableStringArg,
-    title: v.string(),
-    body: v.string(),
-    tag: nullableStringArg,
-    data: nullableAnyArg,
-  },
-  handler: async (ctx, args) => {
-    const id = await ctx.db.insert("notificationQueue", {
-      userId: args.userId ?? null,
-      channel: "push",
-      title: args.title,
-      body: args.body,
-      status: "pending",
-      recipientEmail: null,
-      tag: args.tag ?? "system-test",
-      data: args.data ?? null,
-      scheduledForMs: null,
-      processingStartedAtMs: null,
-      attempts: 0,
-      errorMessage: null,
-      createdAtMs: Date.now(),
-      updatedAtMs: Date.now(),
-    });
-
-    return { id, success: true };
-  },
-});

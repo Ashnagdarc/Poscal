@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
+import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown, X, Calendar, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { logger } from '@/lib/logger';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { format, parseISO } from 'date-fns';
 import { useAdmin } from '@/hooks/use-admin';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
@@ -48,6 +47,15 @@ const SIGNALS_PER_PAGE = 5;
 const CURRENCY_PAIRS = ['All Pairs', ...FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol)];
 const AVAILABLE_LIVE_SYMBOLS = getLiveSymbolLabels();
 
+const getExecutionLabel = (marketExecution: string | null) => {
+  if (!marketExecution) return null;
+  if (marketExecution === 'instant') return 'Market Execution';
+  return marketExecution
+    .split('-')
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 const Signals = () => {
   const { isAdmin } = useAdmin();
   const { isPaid } = useSubscription();
@@ -73,8 +81,6 @@ const Signals = () => {
   // Date grouping and collapsible sections
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set([new Date().toISOString().split('T')[0]]));
   
-  // Image modal
-  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const isSignalsServiceUnavailable = error === 'Signals service is temporarily unavailable.' || error === 'Unable to reach the signals service.';
   
   // Helper: Convert price to number
@@ -240,6 +246,14 @@ const Signals = () => {
     const numPrice = typeof price === 'string' ? parseFloat(price) : price;
     if (isNaN(numPrice)) return '—';
     return numPrice.toFixed(numPrice >= 100 ? 2 : 5);
+  };
+
+  const getSignalProgressTone = (signal: TradingSignal) => {
+    if (signal.result === 'win') return 'border-emerald-500/30 bg-emerald-500/10';
+    if (signal.result === 'loss') return 'border-red-500/30 bg-red-500/10';
+    if (signal.result === 'breakeven') return 'border-yellow-500/30 bg-yellow-500/10';
+    if (signal.status === 'active') return 'border-primary/20 bg-primary/5';
+    return 'border-border/50 bg-secondary';
   };
 
   // Group signals by date (most recent first)
@@ -486,14 +500,6 @@ const Signals = () => {
           </div>
         ) : signals.length === 0 ? (
           <>
-            {/* Trading Chart - Coming Soon */}
-            <div className="mb-6 bg-secondary rounded-2xl p-6 text-center border border-border/50">
-              <h3 className="text-lg font-semibold text-foreground mb-2">Advanced Charting Coming Soon</h3>
-              <p className="text-sm text-muted-foreground">
-                We are upgrading the chart experience. This feature is temporarily hidden while improvements are completed.
-              </p>
-            </div>
-
             {/* No Signals Found */}
             <div className="bg-secondary rounded-2xl p-6 text-center">
               <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
@@ -547,13 +553,13 @@ const Signals = () => {
                     {group.signals.map((signal) => (
                       <div
                         key={signal.id}
-                        className="bg-secondary rounded-2xl p-4 border border-border/50 hover:border-foreground/20 transition-colors"
+                        className={`rounded-3xl p-4 sm:p-5 border shadow-sm transition-colors ${getSignalProgressTone(signal)}`}
                       >
                 {/* Header */}
-                <div className="flex items-center justify-between mb-3">
-                  <div className="flex items-center gap-2">
+                <div className="flex items-start justify-between gap-3 mb-4">
+                  <div className="flex items-start gap-3 min-w-0">
                     <div
-                      className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                      className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
                         signal.direction === 'buy'
                           ? 'bg-emerald-500/20'
                           : 'bg-red-500/20'
@@ -565,34 +571,38 @@ const Signals = () => {
                         <TrendingDown className="w-4 h-4 text-red-700 dark:text-red-400" />
                       )}
                     </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="font-semibold text-foreground text-base">{signal.currency_pair}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className="font-semibold text-foreground text-base sm:text-lg">{signal.currency_pair}</span>
                         <span
-                          className={`text-xs font-semibold uppercase ${
+                          className={`inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide ${
                             signal.direction === 'buy' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                           }`}
                         >
                           {signal.direction}
                         </span>
                       </div>
+                      <p className="text-xs text-muted-foreground">
+                        {signal.status === 'active'
+                          ? 'Trade idea is currently active.'
+                          : signal.result === 'win'
+                            ? 'Closed in profit.'
+                            : signal.result === 'loss'
+                              ? 'Closed at loss.'
+                              : signal.result === 'breakeven'
+                                ? 'Closed at break-even.'
+                                : 'Signal archived.'}
+                      </p>
                       {signal.market_execution && (
-                        <div className="inline-flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-lg border border-primary/20">
-                          <span className="text-xs font-semibold text-primary uppercase tracking-wide">
-                            {signal.market_execution === 'instant' ? 'Market Execution' : 
-                             signal.market_execution === 'buy-limit' ? 'Buy Limit' :
-                             signal.market_execution === 'sell-limit' ? 'Sell Limit' :
-                             signal.market_execution === 'buy-stop' ? 'Buy Stop' :
-                             signal.market_execution === 'sell-stop' ? 'Sell Stop' :
-                             signal.market_execution === 'buy-stop-limit' ? 'Buy Stop Limit' :
-                             signal.market_execution === 'sell-stop-limit' ? 'Sell Stop Limit' :
-                             signal.market_execution}
+                        <div className="inline-flex items-center gap-1.5 bg-primary/10 px-3 py-1 rounded-full border border-primary/20 mt-2">
+                          <span className="text-[11px] font-semibold text-primary uppercase tracking-wide">
+                            {getExecutionLabel(signal.market_execution)}
                           </span>
                         </div>
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
                     {getResultBadge(signal.result)}
                     <Badge className={getStatusColor(signal.status)}>{signal.status}</Badge>
                   </div>
@@ -600,32 +610,43 @@ const Signals = () => {
 
                 {/* Live Price for Active Signals */}
                 {signal.status === 'active' && prices[signal.currency_pair] && (
-                  <div className="mb-3 bg-primary/10 rounded-lg p-2 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <Wifi className="w-3 h-3 text-primary animate-pulse" />
-                      <span className="text-xs text-muted-foreground">Live Price</span>
+                  <div className="mb-4 rounded-2xl border border-primary/20 bg-primary/10 px-3 py-3 flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Wifi className="w-3.5 h-3.5 text-primary animate-pulse shrink-0" />
+                      <div>
+                        <span className="text-[11px] uppercase tracking-wide text-muted-foreground block">Live Price</span>
+                        <span className="text-xs text-muted-foreground">
+                          {isPriceNearEntry(signal) ? 'Near entry' : isNearStopLoss(signal) ? 'Near stop loss' : 'Tracking live market'}
+                        </span>
+                      </div>
                     </div>
-                    <span className={`text-sm font-bold ${
+                    <div className="text-right">
+                      <span className={`text-base font-bold block ${
                       signal.direction === 'buy'
                         ? prices[signal.currency_pair] > toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                         : prices[signal.currency_pair] < toNumber(signal.entry_price) ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'
                     }`}>
                       {formatPrice(prices[signal.currency_pair])}
-                    </span>
+                      </span>
+                      <span className={`text-xs ${getCurrentProfit(signal) >= 0 ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'}`}>
+                        {getCurrentProfit(signal) >= 0 ? '+' : ''}
+                        {formatPrice(Math.abs(getCurrentProfit(signal)))}
+                      </span>
+                    </div>
                   </div>
                 )}
 
                 {/* Price Levels */}
                 <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div className="bg-background/50 rounded-lg p-2">
-                    <span className="text-xs text-muted-foreground block">Entry</span>
-                    <span className="text-sm font-semibold text-foreground">
+                  <div className="bg-background/60 rounded-2xl p-3 border border-border/40">
+                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground block mb-1">Entry</span>
+                    <span className="text-base font-semibold text-foreground">
                       {formatPrice(signal.entry_price)}
                     </span>
                   </div>
-                  <div className="bg-red-500/10 rounded-lg p-2">
-                    <span className="text-xs text-red-700 dark:text-red-400 block">Stop Loss</span>
-                    <span className="text-sm font-semibold text-red-700 dark:text-red-400">
+                  <div className="bg-red-500/10 rounded-2xl p-3 border border-red-500/20">
+                    <span className="text-[11px] uppercase tracking-wide text-red-700 dark:text-red-400 block mb-1">Stop Loss</span>
+                    <span className="text-base font-semibold text-red-700 dark:text-red-400">
                       {formatPrice(signal.stop_loss)}
                     </span>
                     <span className="text-xs text-muted-foreground ml-1">
@@ -636,14 +657,14 @@ const Signals = () => {
 
                 {/* Take Profits */}
                 <div className="grid grid-cols-3 gap-2 mb-3">
-                  <div className={`rounded-lg p-2 relative ${signal.tp1_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                  <div className={`rounded-2xl p-3 relative border ${signal.tp1_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
                     {signal.tp1_hit && (
                       <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                         <Check className="w-3 h-3 text-white" />
                       </div>
                     )}
-                    <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP1</span>
-                    <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP1</span>
+                    <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
                       {formatPrice(signal.take_profit_1)}
                     </span>
                     <span className="text-xs text-muted-foreground block">
@@ -651,14 +672,14 @@ const Signals = () => {
                     </span>
                   </div>
                   {signal.take_profit_2 && (
-                    <div className={`rounded-lg p-2 relative ${signal.tp2_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                    <div className={`rounded-2xl p-3 relative border ${signal.tp2_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
                       {signal.tp2_hit && (
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
-                      <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP2</span>
-                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                      <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP2</span>
+                      <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
                         {formatPrice(signal.take_profit_2)}
                       </span>
                       <span className="text-xs text-muted-foreground block">
@@ -667,14 +688,14 @@ const Signals = () => {
                     </div>
                   )}
                   {signal.take_profit_3 && (
-                    <div className={`rounded-lg p-2 relative ${signal.tp3_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50' : 'bg-emerald-500/10'}`}>
+                    <div className={`rounded-2xl p-3 relative border ${signal.tp3_hit ? 'bg-emerald-500/30 ring-1 ring-emerald-500/50 border-emerald-500/40' : 'bg-emerald-500/10 border-emerald-500/20'}`}>
                       {signal.tp3_hit && (
                         <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 rounded-full flex items-center justify-center">
                           <Check className="w-3 h-3 text-white" />
                         </div>
                       )}
-                      <span className="text-xs text-emerald-700 dark:text-emerald-400 block">TP3</span>
-                      <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                      <span className="text-[11px] uppercase tracking-wide text-emerald-700 dark:text-emerald-400 block">TP3</span>
+                      <span className="text-sm sm:text-base font-semibold text-emerald-700 dark:text-emerald-400">
                         {formatPrice(signal.take_profit_3)}
                       </span>
                       <span className="text-xs text-muted-foreground block">
@@ -684,9 +705,9 @@ const Signals = () => {
                   )}
                 </div>
 
-                {/* Market Execution Time & Notes & Chart & Admin Actions */}
+                {/* Market Execution Time & Notes & Admin Actions */}
                 <div className="space-y-2 mb-3">
-                  <div className="bg-background/50 rounded-lg p-2 flex items-center justify-between">
+                  <div className="bg-background/50 rounded-2xl p-3 flex items-center justify-between">
                     <div className="flex flex-col gap-1">
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Clock className="w-4 h-4 text-primary" />
@@ -704,19 +725,8 @@ const Signals = () => {
                   </div>
                 </div>
 
-                {/* Chart & Admin Actions */}
+                {/* Admin Actions */}
                 <div className="flex items-center gap-2 justify-end">
-                    {signal.chart_image_url && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setSelectedImage(signal.chart_image_url)}
-                        className="h-7 text-xs"
-                      >
-                        <ImageIcon className="w-3 h-3 mr-1" />
-                        Chart
-                      </Button>
-                    )}
                     {isAdmin && (
                       <UpdateSignalModal
                         signalId={signal.id}
@@ -738,9 +748,10 @@ const Signals = () => {
                 </div>
 
                 {signal.notes && (
-                  <p className="mt-2 text-xs text-muted-foreground bg-background/40 rounded-lg p-2">
-                    {signal.notes}
-                  </p>
+                  <div className="mt-3 rounded-2xl bg-background/40 px-3 py-3 border border-border/30">
+                    <p className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Notes</p>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{signal.notes}</p>
+                  </div>
                 )}
               </div>
                     ))}
@@ -791,22 +802,6 @@ const Signals = () => {
           </>
         )}
       </main>
-
-      {/* Chart Image Modal */}
-      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Chart Analysis</DialogTitle>
-          </DialogHeader>
-          {selectedImage && (
-            <img
-              src={selectedImage}
-              alt="Trading chart"
-              className="w-full rounded-lg"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Admin Create Button */}
       {isAdmin && <CreateSignalModal onSignalCreated={fetchSignals} />}
