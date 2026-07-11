@@ -449,12 +449,27 @@ export const notificationsApi = {
   // Queue an email (admin only)
   queueEmail: async (emailData: {
     user_id?: string;
+    recipient_email?: string;
     subject: string;
     body: string;
-    template?: string;
-  }): Promise<any> => {
-    const { data } = await api.post('/notifications/email', emailData);
-    return data;
+    html?: string;
+    from_email?: string;
+    scheduled_for_ms?: number | null;
+    data?: any;
+  }, authToken?: string | null): Promise<any> => {
+    if (!authToken) {
+      throw new Error('You must be signed in as an admin.');
+    }
+    return await createAuthenticatedConvexClient(authToken).mutation(convexApi.notifications.queueEmail, {
+      userId: emailData.user_id ?? null,
+      recipientEmail: emailData.recipient_email ?? null,
+      subject: emailData.subject,
+      body: emailData.body,
+      html: emailData.html ?? null,
+      fromEmail: emailData.from_email ?? null,
+      scheduledForMs: emailData.scheduled_for_ms ?? null,
+      data: emailData.data ?? null,
+    });
   },
 };
 

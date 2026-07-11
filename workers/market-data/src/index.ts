@@ -1,6 +1,8 @@
 type Env = {
   CONVEX_URL: string;
+  CONVEX_SITE_URL?: string;
   FINNHUB_API_KEY: string;
+  NOTIFICATION_WORKER_SECRET?: string;
   PRICE_INGEST_SECRET: string;
   POLL_SYMBOLS?: string;
   ESTIMATED_SPREAD_BPS?: string;
@@ -66,7 +68,7 @@ async function ingestPrices(env: Env) {
   const symbols = parseSymbolConfig(env.POLL_SYMBOLS);
   const spreadBps = parseSpreadBps(env.ESTIMATED_SPREAD_BPS);
 
-  const quotes = await Promise.all(
+  const quoteResults = await Promise.allSettled(
     symbols.map(async ({ displaySymbol, providerSymbol }) => {
       const payload = await fetchQuote(providerSymbol, env);
       const midPrice = payload.c as number;
@@ -83,6 +85,26 @@ async function ingestPrices(env: Env) {
       };
     }),
   );
+
+  const quotes = quoteResults
+    .filter((result): result is PromiseFulfilledResult<{
+      symbol: string;
+      midPrice: number;
+      bidPrice: number;
+      askPrice: number;
+      source: string;
+      isEstimatedBidAsk: boolean;
+      providerTimestampMs: number | null;
+    }> => result.status === "fulfilled")
+    .map((result) => result.value);
+
+  const errors = quoteResults
+    .filter((result): result is PromiseRejectedResult => result.status === "rejected")
+    .map((result) => result.reason instanceof Error ? result.reason.message : "Unknown provider error");
+
+  if (quotes.length === 0) {
+    throw new Error(errors[0] ?? "No quotes fetched");
+  }
 
   const response = await fetch(new URL("/api/mutation", env.CONVEX_URL).toString(), {
     method: "POST",
@@ -111,18 +133,55 @@ async function ingestPrices(env: Env) {
     throw new Error(`Convex ingest failed: ${payload.errorMessage}`);
   }
 
-  return { count: quotes.length };
+  return { count: quotes.length, failedCount: errors.length, errors };
+}
+
+function getConvexSiteUrl(env: Env) {
+  if (env.CONVEX_SITE_URL) {
+    return env.CONVEX_SITE_URL;
+  }
+  return env.CONVEX_URL.replace(".convex.cloud", ".convex.site");
+}
+
+async function processNotifications(env: Env) {
+  if (!env.NOTIFICATION_WORKER_SECRET) {
+    return { skipped: true, reason: "NOTIFICATION_WORKER_SECRET is not configured" };
+  }
+
+  const response = await fetch(new URL("/notifications/process", getConvexSiteUrl(env)).toString(), {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${env.NOTIFICATION_WORKER_SECRET}`,
+    },
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Convex notification processing failed: ${response.status} ${body}`);
+  }
+
+  return await response.json();
 }
 
 export default {
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(ingestPrices(env));
+    ctx.waitUntil(
+      Promise.allSettled([ingestPrices(env), processNotifications(env)]).then((results) => {
+        const rejected = results.find((result) => result.status === "rejected");
+        if (rejected?.status === "rejected") {
+          throw rejected.reason;
+        }
+      }),
+    );
   },
 
   async fetch(_request: Request, env: Env) {
     try {
-      const result = await ingestPrices(env);
-      return Response.json({ ok: true, ...result });
+      const [priceResult, notificationResult] = await Promise.all([
+        ingestPrices(env),
+        processNotifications(env),
+      ]);
+      return Response.json({ ok: true, prices: priceResult, notifications: notificationResult });
     } catch (error) {
       return Response.json(
         { ok: false, error: error instanceof Error ? error.message : "Unknown error" },

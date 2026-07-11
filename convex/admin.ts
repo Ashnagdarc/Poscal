@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -30,6 +30,14 @@ const requireAdmin = async (ctx: any) => {
 
   return { userId, user, profile, role };
 };
+
+export const requireAdminForInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const { userId } = await requireAdmin(ctx);
+    return { userId };
+  },
+});
 
 export const getPaidLock = query({
   args: {},
@@ -327,21 +335,7 @@ export const queueNotification = mutation({
     data: nullableAnyArg,
   },
   handler: async (ctx, args) => {
-    const actorId = await getAuthUserId(ctx);
-    if (!actorId) {
-      throw new Error("Not authenticated");
-    }
-
-    const actor = await ctx.db.get(actorId);
-    const profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q: any) => q.eq("externalUserId", actorId))
-      .first();
-    const role = profile?.role ?? actor?.role ?? "user";
-
-    if (!isElevatedRole(role)) {
-      throw new Error("Admin access required");
-    }
+    await requireAdmin(ctx);
 
     const id = await ctx.db.insert("notificationQueue", {
       userId: args.userId ?? null,
@@ -349,7 +343,11 @@ export const queueNotification = mutation({
       title: args.title,
       body: args.body,
       status: "pending",
+      recipientEmail: null,
+      tag: args.tag ?? null,
+      data: args.data ?? null,
       scheduledForMs: null,
+      processingStartedAtMs: null,
       attempts: 0,
       errorMessage: null,
       createdAtMs: Date.now(),

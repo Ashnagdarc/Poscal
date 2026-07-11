@@ -11,7 +11,11 @@
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as calculatorHistory from "../calculatorHistory.js";
+import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as notifications from "../notifications.js";
+import type * as notificationsHttp from "../notificationsHttp.js";
+import type * as notificationsNode from "../notificationsNode.js";
 import type * as prices from "../prices.js";
 import type * as pricesHttp from "../pricesHttp.js";
 import type * as profiles from "../profiles.js";
@@ -30,7 +34,11 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auth: typeof auth;
   calculatorHistory: typeof calculatorHistory;
+  crons: typeof crons;
   http: typeof http;
+  notifications: typeof notifications;
+  notificationsHttp: typeof notificationsHttp;
+  notificationsNode: typeof notificationsNode;
   prices: typeof prices;
   pricesHttp: typeof pricesHttp;
   profiles: typeof profiles;

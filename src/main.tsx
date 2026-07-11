@@ -8,7 +8,9 @@ import "./index.css";
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
 
 // Register service worker for push notifications if enabled
-const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
+const ENABLE_SW = import.meta.env.DEV
+  ? import.meta.env.VITE_ENABLE_SW === "true"
+  : import.meta.env.VITE_ENABLE_SW !== "false";
 if (ENABLE_SW && "serviceWorker" in navigator) {
   const registerServiceWorker = async () => {
     try {
