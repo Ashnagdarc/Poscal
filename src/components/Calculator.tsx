@@ -10,7 +10,8 @@ import {
   X
 } from "lucide-react";
 import { NumPad } from "./NumPad";
-import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+import { CurrencyGrid, FEATURED_CURRENCY_PAIRS } from "./CurrencyGrid";
+import type { CurrencyPair } from "@/lib/currencyPairs";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";

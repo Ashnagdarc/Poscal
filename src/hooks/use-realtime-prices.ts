@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { INTERVALS } from '@/lib/constants';
+import { fetchFallbackMarketPrices } from '@/lib/marketDataFallback';
 
 // Type definition for realtime channel (replaces Supabase import)
 type RealtimeChannel = any;
@@ -139,18 +140,28 @@ export const useRealtimePrices = ({
       const data = await res.json();
       if (!data || data.length === 0) {
         console.warn('⚠️  No prices returned yet - waiting for backend updates...');
-        const unavailableStatus = Object.fromEntries(
-          symbols.map((symbol) => [symbol, 'unavailable' as const]),
+        const fallbackData = await fetchFallbackMarketPrices(symbols);
+        const fallbackStatuses = Object.fromEntries(
+          symbols.map((symbol) => {
+            const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
+            const hasPrice = typeof fallbackData.prices[symbol] === 'number';
+            return [symbol, getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs)];
+          }),
         );
-        const missingUpdatedAt = Object.fromEntries(
-          symbols.map((symbol) => [symbol, null]),
+        const fallbackUpdatedAt = Object.fromEntries(
+          symbols.map((symbol) => [symbol, toDate(fallbackData.timestamps[symbol])]),
         );
-        setPrices({});
-        setAskPrices({});
-        setBidPrices({});
-        setPriceStatus(unavailableStatus);
-        setUpdatedAtBySymbol(missingUpdatedAt);
-        setLastUpdated(null);
+        const fallbackLastUpdated = symbols
+          .map((symbol) => toDate(fallbackData.timestamps[symbol]))
+          .filter((value): value is Date => value instanceof Date)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+
+        setPrices(fallbackData.prices);
+        setAskPrices(fallbackData.askPrices);
+        setBidPrices(fallbackData.bidPrices);
+        setPriceStatus(fallbackStatuses);
+        setUpdatedAtBySymbol(fallbackUpdatedAt);
+        setLastUpdated(fallbackLastUpdated);
         setLoading(false);
         return;
       }
@@ -192,6 +203,29 @@ export const useRealtimePrices = ({
         }
       });
 
+      const missingSymbols = symbols.filter((symbol) => newPriceStatus[symbol] === 'unavailable');
+      if (missingSymbols.length > 0) {
+        const fallbackData = await fetchFallbackMarketPrices(missingSymbols);
+        missingSymbols.forEach((symbol) => {
+          const mid = fallbackData.prices[symbol];
+          const ask = fallbackData.askPrices[symbol];
+          const bid = fallbackData.bidPrices[symbol];
+          const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
+
+          if (typeof mid === 'number') newPrices[symbol] = mid;
+          if (typeof ask === 'number') newAskPrices[symbol] = ask;
+          if (typeof bid === 'number') newBidPrices[symbol] = bid;
+
+          const hasPrice = typeof mid === 'number' || typeof ask === 'number' || typeof bid === 'number';
+          newUpdatedAtBySymbol[symbol] = parsedTimestamp;
+          newPriceStatus[symbol] = getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs);
+
+          if (parsedTimestamp && (!newestTimestamp || parsedTimestamp > newestTimestamp)) {
+            newestTimestamp = parsedTimestamp;
+          }
+        });
+      }
+
       setPrices(newPrices);
       setAskPrices(newAskPrices);
       setBidPrices(newBidPrices);
@@ -202,8 +236,36 @@ export const useRealtimePrices = ({
       setLoading(false);
     } catch (err) {
       console.error('❌ Error in fetchInitialPrices:', err);
-      setError(err instanceof Error ? err.message : 'Failed to fetch prices');
-      setLoading(false);
+
+      try {
+        const fallbackData = await fetchFallbackMarketPrices(symbols);
+        const fallbackStatuses = Object.fromEntries(
+          symbols.map((symbol) => {
+            const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
+            const hasPrice = typeof fallbackData.prices[symbol] === 'number';
+            return [symbol, getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs)];
+          }),
+        );
+        const fallbackUpdatedAt = Object.fromEntries(
+          symbols.map((symbol) => [symbol, toDate(fallbackData.timestamps[symbol])]),
+        );
+        const fallbackLastUpdated = symbols
+          .map((symbol) => toDate(fallbackData.timestamps[symbol]))
+          .filter((value): value is Date => value instanceof Date)
+          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+
+        setPrices(fallbackData.prices);
+        setAskPrices(fallbackData.askPrices);
+        setBidPrices(fallbackData.bidPrices);
+        setPriceStatus(fallbackStatuses);
+        setUpdatedAtBySymbol(fallbackUpdatedAt);
+        setLastUpdated(fallbackLastUpdated);
+        setError(null);
+      } catch (fallbackError) {
+        setError(fallbackError instanceof Error ? fallbackError.message : 'Failed to fetch prices');
+      } finally {
+        setLoading(false);
+      }
     } finally {
       pendingRequest.current = false; // Always release the lock
     }

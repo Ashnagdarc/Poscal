@@ -87,6 +87,13 @@ Create a `.env.local` file in the project root:
 VITE_API_URL=http://localhost:3001
 VITE_WS_URL=ws://localhost:3001
 
+# Convex Frontend Configuration
+VITE_CONVEX_URL=https://helpful-sturgeon-546.convex.cloud
+VITE_CONVEX_SITE_URL=https://helpful-sturgeon-546.convex.site
+
+# Explicit live symbol set used by the frontend picker/signals views
+VITE_LIVE_SYMBOLS=EUR/USD,GBP/USD,USD/JPY,USD/CHF,AUD/USD,USD/CAD,NZD/USD,EUR/GBP,EUR/JPY,GBP/JPY,AUD/JPY,EUR/CHF,GBP/CHF,XAU/USD,XAG/USD,BTC/USD,ETH/USD
+
 # Subscription Configuration (Paystack)
 VITE_PAYSTACK_PUBLIC_KEY=pk_test_your_paystack_public_key
 ```
@@ -134,6 +141,13 @@ Legacy handlers in `api/` use server-only environment variables documented in `.
 - Set these in the Vercel dashboard for production.
 - For local `vercel dev`, place the needed values in a local `.env` or `.env.local`.
 - Do not put these values in `.env.production` because that file is bundled into the browser build.
+
+#### Frontend Production Env (Vercel build-time)
+Frontend build-time variables are documented in `.env.frontend.example`.
+
+- Set `VITE_CONVEX_URL` to your Convex production URL.
+- Set `VITE_CONVEX_SITE_URL` to your Convex production site URL.
+- Set `VITE_LIVE_SYMBOLS` to the exact production symbol set you want surfaced in the app UI.
 
 ### 5. Run Database Migrations
 

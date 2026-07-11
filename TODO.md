@@ -53,6 +53,7 @@ Use Convex as the main source of truth for the app.
   - Actual delivery worker may still live outside Convex
 - [ ] Clean production env
   - Confirm `VITE_CONVEX_URL` and `VITE_CONVEX_SITE_URL` are correct
+  - Set `VITE_LIVE_SYMBOLS` explicitly for frontend production
 
 ### Do We Need DigitalOcean Now?
 

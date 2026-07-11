@@ -17,7 +17,9 @@
     "convex:deploy": "convex deploy",
     "convex:codegen": "convex codegen",
     "convex:data": "convex data",
-    "convex:export": "convex export"
+    "convex:export": "convex export",
+    "worker:prices:dev": "npx wrangler dev -c workers/market-data/wrangler.jsonc",
+    "worker:prices:deploy": "npx wrangler deploy -c workers/market-data/wrangler.jsonc"
   },
   "dependencies": {
     "@auth/core": "^0.41.1",

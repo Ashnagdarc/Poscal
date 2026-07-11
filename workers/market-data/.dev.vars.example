@@ -1,0 +1,5 @@
+CONVEX_URL=https://valuable-axolotl-815.convex.cloud
+FINNHUB_API_KEY=replace_with_finnhub_api_key
+PRICE_INGEST_SECRET=replace_with_same_secret_as_convex
+POLL_SYMBOLS=BTC/USD,ETH/USD
+ESTIMATED_SPREAD_BPS=1

@@ -16,6 +16,7 @@ import { useRealtimePrices } from '@/hooks/use-realtime-prices';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { signalsApi } from '@/lib/api';
 import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
+import { getLiveSymbolLabels } from '@/lib/liveSymbols';
 
 interface TradingSignal {
   id: string;
@@ -45,6 +46,7 @@ interface TradingSignal {
 const SIGNALS_PER_PAGE = 5;
 
 const CURRENCY_PAIRS = ['All Pairs', ...FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol)];
+const AVAILABLE_LIVE_SYMBOLS = getLiveSymbolLabels();
 
 const Signals = () => {
   const { isAdmin } = useAdmin();
@@ -288,6 +290,9 @@ const Signals = () => {
               <h1 className="text-2xl font-bold text-foreground tracking-tight">Trading Signals</h1>
               <p className="text-sm text-muted-foreground">
                 {totalCount} signal{totalCount !== 1 ? 's' : ''} available
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Live symbols: {AVAILABLE_LIVE_SYMBOLS.join(', ')}
               </p>
             </div>
           </div>

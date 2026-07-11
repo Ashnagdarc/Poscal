@@ -13,6 +13,7 @@ import type * as auth from "../auth.js";
 import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as http from "../http.js";
 import type * as prices from "../prices.js";
+import type * as pricesHttp from "../pricesHttp.js";
 import type * as profiles from "../profiles.js";
 import type * as signals from "../signals.js";
 import type * as status from "../status.js";
@@ -31,6 +32,7 @@ declare const fullApi: ApiFromModules<{
   calculatorHistory: typeof calculatorHistory;
   http: typeof http;
   prices: typeof prices;
+  pricesHttp: typeof pricesHttp;
   profiles: typeof profiles;
   signals: typeof signals;
   status: typeof status;

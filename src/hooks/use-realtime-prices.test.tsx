@@ -66,11 +66,26 @@ describe('useRealtimePrices', () => {
     expect(result.current.priceStatus['EUR/USD']).toBe('stale');
   });
 
-  it('marks missing symbols as unavailable', async () => {
+  it('falls back to public market data when backend has no symbol', async () => {
     const symbols = ['USD/JPY'];
-    vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
-      new Response(JSON.stringify([]), { status: 200 }),
-    );
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (input === '/api/prices/multiple?symbols=USD%2FJPY') {
+        return new Response(JSON.stringify([]), { status: 200 });
+      }
+
+      if (input === 'https://open.er-api.com/v6/latest/USD') {
+        return new Response(
+          JSON.stringify({
+            rates: {
+              JPY: 157,
+            },
+          }),
+          { status: 200 },
+        );
+      }
+
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
 
     const { result } = renderHook(() =>
       useRealtimePrices({ symbols, enabled: true }),
@@ -78,7 +93,8 @@ describe('useRealtimePrices', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false));
 
-    expect(result.current.priceStatus['USD/JPY']).toBe('unavailable');
-    expect(result.current.prices['USD/JPY']).toBeUndefined();
+    expect(fetchSpy).toHaveBeenCalledWith('https://open.er-api.com/v6/latest/USD');
+    expect(result.current.priceStatus['USD/JPY']).toBe('fresh');
+    expect(result.current.prices['USD/JPY']).toBe(157);
   });
 });
