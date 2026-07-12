@@ -1,7 +1,8 @@
 import { createContext, useContext, ReactNode } from 'react';
-import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react';
+import { useAuthActions, useAuthToken, useConvexAuth } from '@convex-dev/auth/react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
+import { isConvexEnabled } from '@/lib/convexClient';
 
 interface AuthContextType {
   user: User | null;
@@ -23,9 +24,23 @@ export interface User {
   email_verified: boolean;
 }
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+const DisabledAuthProvider = ({ children }: { children: ReactNode }) => {
+  const signIn = async () => ({ error: 'Sign in is unavailable until Convex is configured.' });
+  const signUp = async () => ({ error: 'Sign up is unavailable until Convex is configured.' });
+  const resetPassword = async () => ({ error: 'Password reset is unavailable until Convex is configured.' });
+  const signOut = async () => {};
+
+  return (
+    <AuthContext.Provider value={{ user: null, session: null, loading: false, isConfigured: false, signUp, signIn, signOut, resetPassword }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const EnabledAuthProvider = ({ children }: { children: ReactNode }) => {
   const { signIn: convexSignIn, signOut: convexSignOut } = useAuthActions();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const authToken = useAuthToken();
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
 
   const user: User | null = viewer
@@ -37,7 +52,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
     : null;
 
-  const session = user ? { access_token: "convex-auth" } : null;
+  const session = user && authToken ? { access_token: authToken } : null;
   const loading = authLoading || (isAuthenticated && viewer === undefined);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
@@ -85,6 +100,14 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  if (!isConvexEnabled()) {
+    return <DisabledAuthProvider>{children}</DisabledAuthProvider>;
+  }
+
+  return <EnabledAuthProvider>{children}</EnabledAuthProvider>;
 };
 
 export const useAuth = () => {

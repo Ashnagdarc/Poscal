@@ -10,15 +10,8 @@ import {
   LogOut,
   Settings as SettingsIcon,
   Loader2,
-  Crown,
-  Bell,
-  Download,
   Moon,
   Sun,
-  Zap,
-  Eye,
-  EyeOff,
-  Trash2,
   Shield
 } from "lucide-react";
 import { toast } from "sonner";
@@ -46,10 +39,6 @@ const Profile = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
-  const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -82,14 +71,6 @@ const Profile = () => {
           created_at: data.created_at || new Date().toISOString(),
         });
         setFullName(data.full_name || "");
-        
-        // Try to get subscription info
-        if (data.subscription_tier) {
-          setSubscriptionTier(data.subscription_tier);
-        }
-        if (data.subscription_expires_at) {
-          setSubscriptionExpiry(data.subscription_expires_at);
-        }
       }
     } catch (error) {
       logger.error('Error fetching profile:', error);
@@ -98,34 +79,8 @@ const Profile = () => {
   };
 
   const loadPreferences = () => {
-    // Load from localStorage
     const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark';
     setTheme(savedTheme);
-    
-    const saved = localStorage.getItem('notificationsEnabled');
-    if (saved !== null) setNotificationsEnabled(saved === 'true');
-  };
-
-  const savePreferences = () => {
-    localStorage.setItem('notificationsEnabled', String(notificationsEnabled));
-    toast.success("Preferences saved!");
-  };
-
-  const handleExportData = () => {
-    // Generate CSV with trades data
-    toast.info("Export feature coming soon!");
-    // TODO: Implement CSV export
-  };
-
-  const handleDeleteAccount = async () => {
-    if (!showDeleteConfirm) {
-      setShowDeleteConfirm(true);
-      return;
-    }
-    
-    toast.error("Account deletion coming soon!");
-    // TODO: Implement account deletion
-    setShowDeleteConfirm(false);
   };
 
   const handleAvatarClick = () => {
@@ -289,22 +244,9 @@ const Profile = () => {
             />
           </div>
           <h2 className="text-2xl font-bold text-foreground mt-4">
-            {profile?.full_name || "Trader"}
+            {profile?.full_name || "User"}
           </h2>
           <p className="text-muted-foreground">{profile?.email || user?.email}</p>
-          
-          {/* Subscription Badge */}
-          {subscriptionTier !== 'free' && (
-            <div className="mt-3 flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-black px-3 py-1 rounded-full text-sm font-semibold">
-              <Crown className="w-4 h-4" />
-              {subscriptionTier === 'premium' ? 'Premium' : 'Pro'}
-              {subscriptionExpiry && (
-                <span className="text-xs ml-1">
-                  • Expires {new Date(subscriptionExpiry).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Profile Info */}
@@ -350,7 +292,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Preferences Section */}
         <div className="space-y-3 pt-2">
           <h3 className="text-sm font-semibold text-muted-foreground px-2">PREFERENCES</h3>
           
@@ -379,53 +320,10 @@ const Profile = () => {
             </button>
           </div>
 
-          {/* Notifications Toggle */}
-          <div className="bg-secondary rounded-2xl p-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              <div>
-                <span className="text-sm font-medium text-foreground">Notifications</span>
-                <p className="text-xs text-muted-foreground">{notificationsEnabled ? 'Enabled' : 'Disabled'}</p>
-              </div>
-            </div>
-            <button
-              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                notificationsEnabled ? 'bg-green-500/20' : 'bg-background'
-              }`}
-            >
-              {notificationsEnabled ? (
-                <Eye className="w-5 h-5 text-green-500" />
-              ) : (
-                <EyeOff className="w-5 h-5 text-muted-foreground" />
-              )}
-            </button>
-          </div>
         </div>
 
-        {/* Account Actions */}
         <div className="space-y-3 pt-2">
           <h3 className="text-sm font-semibold text-muted-foreground px-2">ACCOUNT</h3>
-          
-          {/* Save Preferences Button */}
-          <button
-            onClick={savePreferences}
-            className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
-          >
-            <Zap className="w-5 h-5" />
-            Save Preferences
-          </button>
-
-          {/* Export Data Button */}
-          <button
-            onClick={handleExportData}
-            className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
-          >
-            <Download className="w-5 h-5" />
-            Export Trading Data
-          </button>
-
-          {/* Change Password Button */}
           <button
             onClick={() => navigate("/settings")}
             className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
@@ -469,22 +367,6 @@ const Profile = () => {
             <LogOut className="w-5 h-5" />
             Sign Out
           </button>
-
-          {/* Delete Account Button */}
-          <button
-            onClick={handleDeleteAccount}
-            className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-[0.98] ${
-              showDeleteConfirm
-                ? 'bg-red-500/20 text-red-500'
-                : 'bg-destructive/5 text-destructive/60 hover:bg-destructive/10'
-            }`}
-          >
-            <Trash2 className="w-5 h-5" />
-            {showDeleteConfirm ? 'Confirm Delete Account?' : 'Delete Account'}
-          </button>
-          {showDeleteConfirm && (
-            <p className="text-xs text-red-500/70 text-center">This action cannot be undone</p>
-          )}
         </div>
       </main>
 

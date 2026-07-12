@@ -1,78 +1,33 @@
 # Poscal
 
-Poscal is a trading journal and signal platform with a Vite/React frontend, a NestJS backend, PostgreSQL, and background workers for live prices and push notifications.
+Poscal is an open source position size calculator.
 
-## Recommended Hosting
+## Product Scope
 
-- Frontend: Vercel
-- Backend + PostgreSQL + workers: Docker on your VPS
+- Deterministic position sizing
+- Required inputs: broker, symbol, balance, risk percent, entry, stop loss, take profit
+- Optional live quotes for market orders only
+- Optional authenticated storage for settings, broker profiles, profile, and saved calculations via Convex
 
-That split keeps frontend deploys fast and simple while giving you full control over pricing, notifications, and the database.
-
-## Current Architecture
+## Repository Scope
 
 - `src/`: React frontend
-- `backend/`: NestJS API + TypeORM
-- `push-sender/`: price ingestor + notification worker
-- `docker-compose.yml`: local/VPS Docker stack for backend services
-- `api/`: legacy Vercel compatibility routes
-- `docs/`: setup and architecture notes
+- `src/domain/`: pure TypeScript calculation and instrument modules
+- `convex/`: minimal auth, profile, and calculator-history backend
 
-## Live Pricing Model
-
-Poscal now uses a backend cache model for market data:
-
-1. One worker fetches prices from vendors.
-2. The worker normalizes `bid_price`, `ask_price`, `mid_price`, and `timestamp`.
-3. The worker writes those values into the backend `price_cache`.
-4. All users read from the backend/database cache instead of hitting vendors directly.
-
-In `PRICE_PROVIDER_MODE=hybrid`:
-
-- OANDA provides real forex/metals bid/ask quotes
-- Finnhub provides crypto prices
-
-This keeps the system low-cost and scalable for many users while improving position-sizing accuracy.
-
-## Quick Start
-
-### Frontend
+## Development
 
 ```bash
 npm install
+npm run convex:codegen
 npm run dev
 ```
 
-### Backend Stack With Docker
+If you do not want authenticated storage locally, omit `VITE_CONVEX_URL` and the app runs in local-only mode.
+
+## Validation
 
 ```bash
-cp backend/.env.example backend/.env
-cp push-sender/.env.example push-sender/.env
-
-docker compose up -d --build
-docker compose ps
+npm test
+npm run build
 ```
-
-Useful logs:
-
-```bash
-docker compose logs -f backend
-docker compose logs -f poscal-price-ingestor
-docker compose logs -f poscal-notification-worker
-```
-
-## Local URLs
-
-- Frontend: `http://localhost:5173`
-- Backend: `http://localhost:3001`
-- Health: `http://localhost:3001/health`
-- Swagger: `http://localhost:3001/api/docs`
-
-## Docs
-
-- [Docs Index](./docs/README.md)
-- [Docker Deployment](./docs/DOCKER_DEPLOYMENT.md)
-- [Backend Switch](./docs/BACKEND_SWITCH.md)
-- [Ask Price Implementation](./docs/ASK_PRICE_IMPLEMENTATION.md)
-- [Backend README](./backend/README.md)
-- [Push Sender README](./push-sender/README.md)

@@ -1,8 +1,0 @@
-{
-  "name": "poscal-market-data",
-  "main": "src/index.ts",
-  "compatibility_date": "2026-07-10",
-  "triggers": {
-    "crons": ["*/5 * * * *"]
-  }
-}

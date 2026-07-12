@@ -24,10 +24,6 @@ export const viewer = query({
       fullName: user.fullName ?? user.name ?? null,
       avatarUrl: user.avatarUrl ?? user.image ?? null,
       emailVerified: user.emailVerificationTime !== undefined,
-      role: user.role ?? "user",
-      paymentStatus: user.paymentStatus ?? "free",
-      subscriptionTier: user.subscriptionTier ?? "free",
-      subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
       createdAt: user._creationTime,
     };
   },
@@ -52,10 +48,6 @@ export const viewerProfile = query({
         email: profile.email,
         full_name: profile.fullName ?? null,
         avatar_url: profile.avatarUrl ?? null,
-        role: profile.role ?? "user",
-        payment_status: profile.paymentStatus ?? "free",
-        subscription_tier: profile.subscriptionTier ?? "free",
-        subscription_expires_at: profile.subscriptionExpiresAtMs ?? null,
         created_at: profile.createdAtMs,
       };
     }
@@ -70,10 +62,6 @@ export const viewerProfile = query({
       email: user.email ?? null,
       full_name: user.fullName ?? user.name ?? null,
       avatar_url: user.avatarUrl ?? user.image ?? null,
-      role: user.role ?? "user",
-      payment_status: user.paymentStatus ?? "free",
-      subscription_tier: user.subscriptionTier ?? "free",
-      subscription_expires_at: user.subscriptionExpiresAtMs ?? null,
       created_at: user._creationTime,
     };
   },

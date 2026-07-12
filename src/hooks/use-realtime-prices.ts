@@ -1,18 +1,7 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { INTERVALS } from '@/lib/constants';
-import { fetchFallbackMarketPrices } from '@/lib/marketDataFallback';
+import { useCallback, useEffect, useRef, useState } from "react";
 
-// Type definition for realtime channel (replaces Supabase import)
-type RealtimeChannel = any;
-
-interface PriceData {
-  symbol: string;
-  bid_price: number;
-  ask_price: number;
-  mid_price: number;
-  timestamp: string;
-  source?: string;
-}
+import { INTERVALS } from "@/lib/constants";
+import { fetchFallbackMarketPrices } from "@/lib/marketDataFallback";
 
 interface UseRealtimePricesOptions {
   symbols: string[];
@@ -27,7 +16,7 @@ interface UseRealtimePricesResult {
   askPrices: Record<string, number>;
   bidPrices: Record<string, number>;
   quoteSourceBySymbol: Record<string, string | null>;
-  priceStatus: Record<string, 'fresh' | 'stale' | 'unavailable'>;
+  priceStatus: Record<string, "fresh" | "stale" | "unavailable">;
   updatedAtBySymbol: Record<string, Date | null>;
   loading: boolean;
   error: string | null;
@@ -37,36 +26,12 @@ interface UseRealtimePricesResult {
 
 export const PRICE_STALE_AFTER_MS = INTERVALS.LIVE_PRICE_REFRESH * 3;
 
-const toNumber = (value: unknown): number | undefined => {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value === 'string' && value.trim() !== '') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : undefined;
-  }
-
-  return undefined;
-};
-
 const toDate = (value: unknown): Date | null => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value;
   }
 
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  }
-
-  if (typeof value === 'string' && value.trim() !== '') {
-    const numeric = Number(value);
-    if (Number.isFinite(numeric)) {
-      const date = new Date(numeric);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-
+  if (typeof value === "number" || typeof value === "string") {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
   }
@@ -78,28 +43,18 @@ const getPriceStatus = (
   hasPrice: boolean,
   timestamp: Date | null,
   staleAfterMs: number,
-): 'fresh' | 'stale' | 'unavailable' => {
+): "fresh" | "stale" | "unavailable" => {
   if (!hasPrice) {
-    return 'unavailable';
+    return "unavailable";
   }
 
   if (!timestamp) {
-    return 'stale';
+    return "stale";
   }
 
-  return Date.now() - timestamp.getTime() > staleAfterMs ? 'stale' : 'fresh';
+  return Date.now() - timestamp.getTime() > staleAfterMs ? "stale" : "fresh";
 };
 
-/**
- * Hook for real-time price updates via Supabase Realtime
- * Backend (push-sender) fetches prices every 10 seconds from Twelve Data API
- * All users listen via Realtime - single source of truth
- * 
- * Reduces API calls from 360,000/hour (1000 users @ 10sec) to 360/hour
- * - 1000x reduction in API costs
- * - Accurate prices for all users simultaneously
- * - Scalable to unlimited users
- */
 export const useRealtimePrices = ({
   symbols,
   enabled = true,
@@ -111,240 +66,136 @@ export const useRealtimePrices = ({
   const [askPrices, setAskPrices] = useState<Record<string, number>>({});
   const [bidPrices, setBidPrices] = useState<Record<string, number>>({});
   const [quoteSourceBySymbol, setQuoteSourceBySymbol] = useState<Record<string, string | null>>({});
-  const [priceStatus, setPriceStatus] = useState<Record<string, 'fresh' | 'stale' | 'unavailable'>>({});
+  const [priceStatus, setPriceStatus] = useState<Record<string, "fresh" | "stale" | "unavailable">>({});
   const [updatedAtBySymbol, setUpdatedAtBySymbol] = useState<Record<string, Date | null>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled && symbols.length > 0);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const pendingRequest = useRef(false);
   const pollTimer = useRef<number | null>(null);
-  const pendingRequest = useRef<boolean>(false); // Prevent duplicate requests
-  const effectiveStaleAfterMs = staleAfterMs ?? Math.max(pollIntervalMs * 3, INTERVALS.LIVE_PRICE_REFRESH);
-  // Use relative API path so Vercel proxy handles HTTPS securely
-  const apiBase = '/api';
+  const isActive = useRef(true);
+  const effectiveStaleAfterMs = staleAfterMs ?? Math.max(pollIntervalMs * 3, PRICE_STALE_AFTER_MS);
 
-  // Fetch initial prices from backend REST API (NestJS)
-  const fetchInitialPrices = useCallback(async () => {
-    if (!enabled || symbols.length === 0) {
-      setLoading(false);
+  const clearPollTimer = () => {
+    if (pollTimer.current !== null) {
+      window.clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+    }
+  };
+
+  const markUnavailable = useCallback(() => {
+    setPrices({});
+    setAskPrices({});
+    setBidPrices({});
+    setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
+    setPriceStatus(Object.fromEntries(symbols.map((symbol) => [symbol, "unavailable" as const])));
+    setUpdatedAtBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
+    setLastUpdated(null);
+  }, [symbols]);
+
+  const refreshPrices = useCallback(async () => {
+    if (!enabled || symbols.length === 0 || pendingRequest.current) {
+      if (isActive.current) {
+        setLoading(false);
+      }
       return;
     }
 
-    // Prevent duplicate simultaneous requests
-    if (pendingRequest.current) {
-      console.log('⏭️  Skipping fetch - request already in progress');
-      return;
+    pendingRequest.current = true;
+    if (isActive.current) {
+      setLoading(true);
+      setError(null);
     }
 
     try {
-      pendingRequest.current = true;
-      const query = encodeURIComponent(symbols.join(','));
-      const res = await fetch(`${apiBase}/prices/multiple?symbols=${query}`);
-      if (!res.ok) {
-        throw new Error(`API error ${res.status}`);
-      }
-      const data = await res.json();
-      if (!data || data.length === 0) {
-        console.warn('⚠️  No prices returned yet - waiting for backend updates...');
-        if (!allowFallback) {
-          const unavailableStatuses = Object.fromEntries(
-            symbols.map((symbol) => [symbol, 'unavailable' as const]),
-          );
-          const unavailableUpdatedAt = Object.fromEntries(
-            symbols.map((symbol) => [symbol, null]),
-          );
-
-          setPrices({});
-          setAskPrices({});
-          setBidPrices({});
-          setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
-          setPriceStatus(unavailableStatuses);
-          setUpdatedAtBySymbol(unavailableUpdatedAt);
-          setLastUpdated(null);
-          setLoading(false);
-          return;
-        }
-
-        const fallbackData = await fetchFallbackMarketPrices(symbols);
-        const fallbackStatuses = Object.fromEntries(
-          symbols.map((symbol) => {
-            const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
-            const hasPrice = typeof fallbackData.prices[symbol] === 'number';
-            return [symbol, getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs)];
-          }),
-        );
-        const fallbackUpdatedAt = Object.fromEntries(
-          symbols.map((symbol) => [symbol, toDate(fallbackData.timestamps[symbol])]),
-        );
-        const fallbackLastUpdated = symbols
-          .map((symbol) => toDate(fallbackData.timestamps[symbol]))
-          .filter((value): value is Date => value instanceof Date)
-          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
-
-        setPrices(fallbackData.prices);
-        setAskPrices(fallbackData.askPrices);
-        setBidPrices(fallbackData.bidPrices);
-        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, 'fallback_public_market_data'])));
-        setPriceStatus(fallbackStatuses);
-        setUpdatedAtBySymbol(fallbackUpdatedAt);
-        setLastUpdated(fallbackLastUpdated);
-        setLoading(false);
-        return;
-      }
-
-      const newPrices: Record<string, number> = {};
-      const newAskPrices: Record<string, number> = {};
-      const newBidPrices: Record<string, number> = {};
-      const newQuoteSourceBySymbol: Record<string, string | null> = {};
-      const newPriceStatus: Record<string, 'fresh' | 'stale' | 'unavailable'> = {};
-      const newUpdatedAtBySymbol: Record<string, Date | null> = {};
-      let newestTimestamp: Date | null = null;
-
-      data.forEach((item: any) => {
-        // Support both snake_case and camelCase from backend
-        const symbol = item.symbol;
-        const mid = toNumber(item.mid_price ?? item.midPrice ?? item.price ?? item.last);
-        const ask = toNumber(item.ask_price ?? item.askPrice ?? item.ask);
-        const bid = toNumber(item.bid_price ?? item.bidPrice ?? item.bid);
-        const ts = item.timestamp ?? item.updated_at ?? item.updatedAt ?? new Date().toISOString();
-        const parsedTimestamp = toDate(ts);
-
-        if (typeof mid === 'number') newPrices[symbol] = mid;
-        if (typeof ask === 'number') newAskPrices[symbol] = ask;
-        if (typeof bid === 'number') newBidPrices[symbol] = bid;
-        newQuoteSourceBySymbol[symbol] = typeof item.source === 'string' ? item.source : null;
-        const hasPrice = typeof mid === 'number' || typeof ask === 'number' || typeof bid === 'number';
-        newUpdatedAtBySymbol[symbol] = parsedTimestamp;
-        newPriceStatus[symbol] = getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs);
-
-        if (parsedTimestamp) {
-          if (!newestTimestamp || parsedTimestamp > newestTimestamp) {
-            newestTimestamp = parsedTimestamp;
-          }
-        }
-      });
-
-      symbols.forEach((symbol) => {
-        if (!(symbol in newPriceStatus)) {
-          newPriceStatus[symbol] = 'unavailable';
-          newUpdatedAtBySymbol[symbol] = null;
-          newQuoteSourceBySymbol[symbol] = null;
-        }
-      });
-
-      const missingSymbols = symbols.filter((symbol) => newPriceStatus[symbol] === 'unavailable');
-      if (allowFallback && missingSymbols.length > 0) {
-        const fallbackData = await fetchFallbackMarketPrices(missingSymbols);
-        missingSymbols.forEach((symbol) => {
-          const mid = fallbackData.prices[symbol];
-          const ask = fallbackData.askPrices[symbol];
-          const bid = fallbackData.bidPrices[symbol];
-          const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
-
-          if (typeof mid === 'number') newPrices[symbol] = mid;
-          if (typeof ask === 'number') newAskPrices[symbol] = ask;
-          if (typeof bid === 'number') newBidPrices[symbol] = bid;
-          newQuoteSourceBySymbol[symbol] = 'fallback_public_market_data';
-
-          const hasPrice = typeof mid === 'number' || typeof ask === 'number' || typeof bid === 'number';
-          newUpdatedAtBySymbol[symbol] = parsedTimestamp;
-          newPriceStatus[symbol] = getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs);
-
-          if (parsedTimestamp && (!newestTimestamp || parsedTimestamp > newestTimestamp)) {
-            newestTimestamp = parsedTimestamp;
-          }
-        });
-      }
-
-      setPrices(newPrices);
-      setAskPrices(newAskPrices);
-      setBidPrices(newBidPrices);
-      setQuoteSourceBySymbol(newQuoteSourceBySymbol);
-      setPriceStatus(newPriceStatus);
-      setUpdatedAtBySymbol(newUpdatedAtBySymbol);
-      setLastUpdated(newestTimestamp);
-      setError(null);
-      setLoading(false);
-    } catch (err) {
-      console.error('❌ Error in fetchInitialPrices:', err);
-
       if (!allowFallback) {
-        const unavailableStatuses = Object.fromEntries(
-          symbols.map((symbol) => [symbol, 'unavailable' as const]),
-        );
-        const unavailableUpdatedAt = Object.fromEntries(
-          symbols.map((symbol) => [symbol, null]),
-        );
-
-        setPrices({});
-        setAskPrices({});
-        setBidPrices({});
-        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, null])));
-        setPriceStatus(unavailableStatuses);
-        setUpdatedAtBySymbol(unavailableUpdatedAt);
-        setLastUpdated(null);
-        setError(err instanceof Error ? err.message : 'Failed to fetch prices');
-        setLoading(false);
+        markUnavailable();
         return;
       }
 
-      try {
-        const fallbackData = await fetchFallbackMarketPrices(symbols);
-        const fallbackStatuses = Object.fromEntries(
-          symbols.map((symbol) => {
-            const parsedTimestamp = toDate(fallbackData.timestamps[symbol]);
-            const hasPrice = typeof fallbackData.prices[symbol] === 'number';
-            return [symbol, getPriceStatus(hasPrice, parsedTimestamp, effectiveStaleAfterMs)];
-          }),
-        );
-        const fallbackUpdatedAt = Object.fromEntries(
-          symbols.map((symbol) => [symbol, toDate(fallbackData.timestamps[symbol])]),
-        );
-        const fallbackLastUpdated = symbols
-          .map((symbol) => toDate(fallbackData.timestamps[symbol]))
-          .filter((value): value is Date => value instanceof Date)
-          .sort((a, b) => b.getTime() - a.getTime())[0] ?? null;
+      const fallbackData = await fetchFallbackMarketPrices(symbols);
+      const nextUpdatedAt = Object.fromEntries(
+        symbols.map((symbol) => [symbol, toDate(fallbackData.timestamps[symbol])]),
+      );
+      const nextStatus = Object.fromEntries(
+        symbols.map((symbol) => {
+          const timestamp = nextUpdatedAt[symbol];
+          const hasPrice = typeof fallbackData.prices[symbol] === "number";
+          return [symbol, getPriceStatus(hasPrice, timestamp, effectiveStaleAfterMs)];
+        }),
+      );
 
-        setPrices(fallbackData.prices);
-        setAskPrices(fallbackData.askPrices);
-        setBidPrices(fallbackData.bidPrices);
-        setQuoteSourceBySymbol(Object.fromEntries(symbols.map((symbol) => [symbol, 'fallback_public_market_data'])));
-        setPriceStatus(fallbackStatuses);
-        setUpdatedAtBySymbol(fallbackUpdatedAt);
-        setLastUpdated(fallbackLastUpdated);
-        setError(null);
-      } catch (fallbackError) {
-        setError(fallbackError instanceof Error ? fallbackError.message : 'Failed to fetch prices');
-      } finally {
+      if (!isActive.current) {
+        return;
+      }
+
+      setPrices(fallbackData.prices);
+      setAskPrices(fallbackData.askPrices);
+      setBidPrices(fallbackData.bidPrices);
+      setQuoteSourceBySymbol(
+        Object.fromEntries(
+          symbols.map((symbol) => [
+            symbol,
+            typeof fallbackData.prices[symbol] === "number" ? "public_market_data" : null,
+          ]),
+        ),
+      );
+      setUpdatedAtBySymbol(nextUpdatedAt);
+      setPriceStatus(nextStatus);
+
+      const freshestTimestamp = Object.values(nextUpdatedAt)
+        .filter((value): value is Date => value instanceof Date)
+        .sort((left, right) => right.getTime() - left.getTime())[0] ?? null;
+      setLastUpdated(freshestTimestamp);
+    } catch (caughtError) {
+      if (!isActive.current) {
+        return;
+      }
+
+      markUnavailable();
+      setError(caughtError instanceof Error ? caughtError.message : "Could not load market data.");
+    } finally {
+      pendingRequest.current = false;
+      if (isActive.current) {
         setLoading(false);
       }
-    } finally {
-      pendingRequest.current = false; // Always release the lock
     }
-  }, [allowFallback, enabled, symbols, effectiveStaleAfterMs]);
+  }, [allowFallback, effectiveStaleAfterMs, enabled, markUnavailable, symbols]);
 
-  // Setup polling (temporary) and optional WS hookup if available
   useEffect(() => {
+    isActive.current = true;
+    clearPollTimer();
+
     if (!enabled || symbols.length === 0) {
+      markUnavailable();
       setLoading(false);
       return;
     }
 
-    console.log('🔄 Starting price polling for symbols:', symbols);
-    fetchInitialPrices();
+    void refreshPrices();
 
-    // Poll at the active screen cadence. The calculator uses a shorter cadence than other screens.
-    pollTimer.current = window.setInterval(() => {
-      fetchInitialPrices();
+    if (pollIntervalMs <= 0) {
+      return () => {
+        isActive.current = false;
+        clearPollTimer();
+      };
+    }
+
+    pollTimer.current = window.setTimeout(function scheduleNextRefresh() {
+      void refreshPrices().finally(() => {
+        if (!isActive.current) {
+          return;
+        }
+
+        pollTimer.current = window.setTimeout(scheduleNextRefresh, pollIntervalMs);
+      });
     }, pollIntervalMs);
 
     return () => {
-      if (pollTimer.current) {
-        window.clearInterval(pollTimer.current);
-        pollTimer.current = null;
-        console.log('🧹 Stopped price polling for:', symbols);
-      }
+      isActive.current = false;
+      clearPollTimer();
     };
-  }, [enabled, symbols, fetchInitialPrices, pollIntervalMs]);
+  }, [enabled, markUnavailable, pollIntervalMs, refreshPrices, symbols.length]);
 
   return {
     prices,
@@ -356,6 +207,6 @@ export const useRealtimePrices = ({
     loading,
     error,
     lastUpdated,
-    refreshPrices: fetchInitialPrices,
+    refreshPrices,
   };
 };

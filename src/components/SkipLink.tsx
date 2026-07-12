@@ -1,3 +1,5 @@
+import * as React from "react";
+
 /**
  * Skip Link component for keyboard navigation
  * Allows users to skip directly to main content

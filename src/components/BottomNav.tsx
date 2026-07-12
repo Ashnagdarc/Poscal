@@ -1,11 +1,9 @@
-import { Calculator, BookOpen, Radio, History, Settings } from 'lucide-react';
+import { Calculator, History, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useLayoutEffect, useRef, useState, useCallback } from 'react';
 
 const navItems = [
   { path: '/', icon: Calculator, label: 'Calculate' },
-  { path: '/signals', icon: Radio, label: 'Signals' },
-  { path: '/journal', icon: BookOpen, label: 'Journal' },
   { path: '/history', icon: History, label: 'History' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];

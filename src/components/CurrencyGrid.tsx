@@ -2,21 +2,20 @@ import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { CURRENCY_PAIRS, type CurrencyPair } from "@/lib/currencyPairs";
-import { getLivePairsConfig } from "@/lib/liveSymbols";
 
-export const FEATURED_CURRENCY_PAIRS = getLivePairsConfig();
-
-const featuredPairSymbols = new Set(FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol));
+export const FEATURED_CURRENCY_PAIRS = CURRENCY_PAIRS;
 
 interface CurrencyGridProps {
   selectedPair: CurrencyPair;
+  pairs?: CurrencyPair[];
   onSelect: (pair: CurrencyPair) => void;
   onBack: () => void;
 }
 
-export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridProps) => {
+export const CurrencyGrid = ({ selectedPair, pairs = FEATURED_CURRENCY_PAIRS, onSelect, onBack }: CurrencyGridProps) => {
   const [showCustomInput, setShowCustomInput] = useState(false);
   const [customSymbol, setCustomSymbol] = useState("");
+  const availableSymbols = new Set(pairs.map((pair) => pair.symbol));
 
   // Auto-detect pip decimal based on currency pair
   const detectPipDecimal = (symbol: string): number => {
@@ -45,7 +44,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
   const handleCustomSubmit = () => {
     if (customSymbol.trim()) {
       const normalizedSymbol = customSymbol.toUpperCase();
-      if (!featuredPairSymbols.has(normalizedSymbol)) {
+      if (!availableSymbols.has(normalizedSymbol)) {
         toast.error(`${normalizedSymbol} is coming soon`);
         return;
       }
@@ -127,7 +126,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
         )}
 
         <div className="grid grid-cols-3 gap-3">
-          {FEATURED_CURRENCY_PAIRS.map((pair) => {
+          {pairs.map((pair) => {
             const isSelected = selectedPair.symbol === pair.symbol;
             return (
               <button
@@ -156,7 +155,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
           })}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Showing {FEATURED_CURRENCY_PAIRS.length} live symbols for production. Forex, metals, and crypto update when market data is available.
+          Showing {pairs.length} locally supported instruments from the production catalog.
         </p>
       </div>
     </div>

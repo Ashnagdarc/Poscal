@@ -11,10 +11,6 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         return {
           email,
           ...(rawName ? { name: rawName, fullName: rawName } : {}),
-          role: "user",
-          paymentStatus: "free",
-          subscriptionTier: "free",
-          subscriptionExpiresAtMs: null,
           avatarUrl: null,
           image: null,
         };
@@ -38,10 +34,6 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         email: user.email,
         fullName: user.fullName ?? user.name ?? null,
         avatarUrl: user.avatarUrl ?? user.image ?? null,
-        role: user.role ?? "user",
-        paymentStatus: user.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? "free",
-        subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
         updatedAtMs: Date.now(),
       };
 

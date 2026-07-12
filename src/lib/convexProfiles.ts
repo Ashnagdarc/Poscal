@@ -8,10 +8,6 @@ export interface AppProfile {
   full_name: string | null;
   avatar_url: string | null;
   created_at: string;
-  role?: string | null;
-  payment_status?: string | null;
-  subscription_tier?: string | null;
-  subscription_expires_at?: string | null;
 }
 
 const toIsoString = (value?: number | null) => {
@@ -32,10 +28,6 @@ export const getUserProfile = async (user: User, authToken?: string | null): Pro
         full_name: row.full_name ?? null,
         avatar_url: row.avatar_url ?? null,
         created_at: toIsoString(row.created_at),
-        role: row.role ?? "user",
-        payment_status: row.payment_status ?? "free",
-        subscription_tier: row.subscription_tier ?? "free",
-        subscription_expires_at: row.subscription_expires_at ? toIsoString(row.subscription_expires_at) : null,
       };
     }
   }
@@ -46,10 +38,6 @@ export const getUserProfile = async (user: User, authToken?: string | null): Pro
     full_name: user.full_name ?? null,
     avatar_url: null,
     created_at: new Date().toISOString(),
-    role: "user",
-    payment_status: "free",
-    subscription_tier: "free",
-    subscription_expires_at: null,
   };
 };
 
