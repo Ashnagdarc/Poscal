@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useAuthToken } from '@convex-dev/auth/react';
 import { useAuth } from '@/contexts/AuthContext';
-import { adminApi } from '@/lib/api';
+import { getUserProfile } from '@/lib/convexProfiles';
 
 export const useAdmin = () => {
   const { user } = useAuth();
+  const authToken = useAuthToken();
   const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -16,8 +18,8 @@ export const useAdmin = () => {
       }
 
       try {
-        const hasAdminRole = await adminApi.hasRole('admin');
-        setIsAdmin(hasAdminRole);
+        const profile = await getUserProfile(user, authToken);
+        setIsAdmin(profile.role === 'admin' || profile.role === 'super_admin');
       } catch (err) {
         console.error('Error checking admin status:', err);
         setIsAdmin(false);
@@ -27,7 +29,7 @@ export const useAdmin = () => {
     };
 
     checkAdminStatus();
-  }, [user]);
+  }, [authToken, user]);
 
   return { isAdmin, loading };
 };

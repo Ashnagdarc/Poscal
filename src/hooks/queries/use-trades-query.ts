@@ -1,30 +1,16 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
-import { logger } from '@/lib/logger';
-import { tradesApi } from '@/lib/api';
-
-interface Trade {
-  id: string;
-  pair: string;
-  direction: 'long' | 'short';
-  entry_price: number | null;
-  exit_price: number | null;
-  stop_loss: number | null;
-  take_profit: number | null;
-  position_size: number | null;
-  risk_percent: number | null;
-  pnl: number | null;
-  pnl_percent: number | null;
-  status: 'open' | 'closed' | 'cancelled';
-  notes: string | null;
-  entry_date: string | null;
-  exit_date: string | null;
-  created_at: string;
-  user_id: string;
-  screenshot_urls?: string[];
-}
+import {
+  createJournalEntry,
+  deleteJournalEntry,
+  listJournalEntries,
+  updateJournalEntry,
+  type JournalTrade,
+} from '@/lib/convexJournal';
 
 export const TRADES_QUERY_KEY = ['trades'] as const;
+
+type Trade = JournalTrade;
 
 export const useTradesQuery = () => {
   const { user } = useAuth();
@@ -32,43 +18,21 @@ export const useTradesQuery = () => {
   return useQuery({
     queryKey: [...TRADES_QUERY_KEY, user?.id],
     queryFn: async (): Promise<Trade[]> => {
-      if (!user) throw new Error('User not authenticated');
-
-      try {
-        const data = await tradesApi.getAll();
-        return data || [];
-      } catch (error) {
-        logger.error('Error fetching trades:', error);
-        throw error;
-      }
-    },
-        .select(`
-          *,
-          trading_accounts!left(account_name)
-        `)
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        logger.error('Error fetching trades:', error);
-        throw error;
+      if (!user) {
+        throw new Error('User not authenticated');
       }
 
-      // Map the data to include account_name from the join
-      return (data || []).map(trade => ({
-        ...trade,
-        account_name: trade.trading_accounts?.account_name || 'No Account',
-      }));
+      return await listJournalEntries(user.id);
     },
     enabled: !!user,
-    staleTime: 1000 * 30, // Consider data fresh for 30 seconds
-    gcTime: 1000 * 60 * 5, // Keep in cache for 5 minutes (formerly cacheTime)
+    staleTime: 1000 * 30,
+    gcTime: 1000 * 60 * 5,
   });
 };
 
 interface AddTradeData {
   pair: string;
-  direction: 'long' | 'short';
+  direction: 'buy' | 'sell' | 'long' | 'short';
   entry_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
@@ -83,23 +47,17 @@ export const useAddTradeMutation = () => {
 
   return useMutation({
     mutationFn: async (newTrade: AddTradeData) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      const tradeData = {
+      return await createJournalEntry(user.id, {
         ...newTrade,
         status: 'open',
         entry_date: new Date().toISOString(),
-      };
-
-      const data = await tradesApi.create(tradeData);
-      return data;
-        .single();
-
-      if (error) throw error;
-      return data;
+      });
     },
     onSuccess: () => {
-      // Invalidate and refetch trades
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
     },
   });
@@ -108,7 +66,7 @@ export const useAddTradeMutation = () => {
 interface UpdateTradeData {
   id: string;
   pair: string;
-  direction: 'long' | 'short';
+  direction: 'buy' | 'sell' | 'long' | 'short';
   entry_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
@@ -123,10 +81,11 @@ export const useUpdateTradeMutation = () => {
 
   return useMutation({
     mutationFn: async ({ id, ...updates }: UpdateTradeData) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      const data = await tradesApi.update(id, updates);
-      return data;
+      return await updateJournalEntry(user.id, id, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
@@ -140,19 +99,15 @@ export const useCloseTradeMutation = () => {
 
   return useMutation({
     mutationFn: async ({ tradeId, pnl }: { tradeId: string; pnl: number }) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      const { error } = await supabase
-        .from('trading_journal')
-        .update({
-          status: 'closed',
-          pnl,
-          exit_date: new Date().toISOString(),
-        })
-        .eq('id', tradeId)
-        .eq('user_id', user.id);
-
-      if (error) throw error;
+      return await updateJournalEntry(user.id, tradeId, {
+        status: 'closed',
+        pnl,
+        exit_date: new Date().toISOString(),
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
@@ -166,9 +121,11 @@ export const useDeleteTradeMutation = () => {
 
   return useMutation({
     mutationFn: async (tradeId: string) => {
-      if (!user) throw new Error('User not authenticated');
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
 
-      await tradesApi.delete(id);
+      await deleteJournalEntry(user.id, tradeId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });

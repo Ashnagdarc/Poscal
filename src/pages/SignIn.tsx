@@ -49,12 +49,12 @@ const SignIn = () => {
     const { error } = await signIn(email, password);
 
     if (error) {
-      if (error.message.includes("Invalid login credentials")) {
+      if (error.includes("Invalid credentials") || error.includes("Invalid login credentials")) {
         toast.error("Invalid email or password");
-      } else if (error.message.includes("Email not confirmed")) {
+      } else if (error.includes("Email not confirmed")) {
         toast.error("Please check your email to confirm your account");
       } else {
-        toast.error(error.message);
+        toast.error(error);
       }
       setIsLoading(false);
       return;

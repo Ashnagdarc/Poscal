@@ -1,6 +1,7 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import axios from 'axios';
-import { authApi, User } from '@/lib/api';
+import { createContext, useContext, ReactNode } from 'react';
+import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 interface AuthContextType {
   user: User | null;
@@ -15,79 +16,68 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+export interface User {
+  id: string;
+  email: string;
+  full_name: string | null;
+  email_verified: boolean;
+}
+
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<{ access_token: string } | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { signIn: convexSignIn, signOut: convexSignOut } = useAuthActions();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
 
-  useEffect(() => {
-    // Check for existing session on mount.
-    // TODO: Migrate to httpOnly cookies to prevent XSS token theft (requires backend Set-Cookie changes).
-    const token = localStorage.getItem('auth_token');
-    const storedUser = localStorage.getItem('user');
-
-    if (token && storedUser) {
-      try {
-        const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser);
-        setSession({ access_token: token });
-      } catch (error) {
-        console.error('[auth] Error parsing stored user:', error);
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user');
+  const user: User | null = viewer
+    ? {
+        id: viewer.id,
+        email: viewer.email ?? "",
+        full_name: viewer.fullName ?? null,
+        email_verified: viewer.emailVerified,
       }
-    }
+    : null;
 
-    setLoading(false);
-  }, []);
+  const session = user ? { access_token: "convex-auth" } : null;
+  const loading = authLoading || (isAuthenticated && viewer === undefined);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {
-      const { user, token } = await authApi.signUp(email, password, fullName);
-      setUser(user);
-      setSession({ access_token: token });
+      await convexSignIn("password", {
+        flow: "signUp",
+        email,
+        password,
+        ...(fullName?.trim() ? { name: fullName.trim() } : {}),
+      });
       return { error: null };
     } catch (error: unknown) {
       console.error('[auth] Sign up error:', error);
-      const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : error instanceof Error ? error.message : 'Sign up failed';
+      const msg = error instanceof Error ? error.message : 'Sign up failed';
       return { error: msg };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { user, token } = await authApi.signIn(email, password);
-      setUser(user);
-      setSession({ access_token: token });
+      await convexSignIn("password", {
+        flow: "signIn",
+        email,
+        password,
+      });
       return { error: null };
     } catch (error: unknown) {
       console.error('[auth] Sign in error:', error);
-      const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : error instanceof Error ? error.message : 'Sign in failed';
+      const msg = error instanceof Error ? error.message : 'Sign in failed';
       return { error: msg };
     }
   };
 
   const resetPassword = async (email: string) => {
-    try {
-      await authApi.requestReset(email);
-      return { error: null };
-    } catch (error: unknown) {
-      console.error('[auth] Reset password error:', error);
-      const msg = axios.isAxiosError(error)
-        ? error.response?.data?.message || error.message
-        : error instanceof Error ? error.message : 'Failed to request password reset';
-      return { error: msg };
-    }
+    void email;
+    return { error: 'Password reset is not configured yet.' };
   };
 
   const signOut = async () => {
-    await authApi.signOut();
-    setUser(null);
-    setSession(null);
+    await convexSignOut();
   };
 
   return (
