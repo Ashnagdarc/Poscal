@@ -21,8 +21,6 @@ import { BottomNav } from "@/components/BottomNav";
 const Welcome = lazy(() => import("./pages/Welcome"));
 const SignIn = lazy(() => import("./pages/SignIn"));
 const SignUp = lazy(() => import("./pages/SignUp"));
-const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
-const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Journal = lazy(() => import("./pages/Journal"));
 const History = lazy(() => import("./pages/History"));
@@ -41,7 +39,7 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
-  const hideBottomNavOn = ['/signin', '/signup', '/forgot-password', '/reset-password', '/welcome', '/terms', '/privacy'];
+  const hideBottomNavOn = ['/signin', '/signup', '/welcome', '/terms', '/privacy'];
   const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
 
   return (
@@ -56,8 +54,6 @@ const AppContent = () => {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
           <Route path="/history" element={<ProtectedRoute requiresPremium>{<History />}</ProtectedRoute>} />
           <Route path="/settings" element={<Settings />} />

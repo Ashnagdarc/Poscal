@@ -139,7 +139,7 @@ export interface BrokerAdapter {
 - Demo connections are stored with `connection_type = 'demo'` and tagged in UI.
 - Sync demo first; compare imported trades to expected results.
 - Require a successful demo sync before enabling a live connection for the same broker/account.
-- Keep demo data segregated (filter by connection_type in queries and charts).
+- Keep demo data segregated (filter by connection_type in queries and reports).
 
 ## 10) Testing Strategy
 - **Unit:** Adapter auth/parsing; encryption/decryption helpers; timezone normalization.

@@ -17,7 +17,7 @@ const steps: OnboardingStep[] = [
   },
   {
     title: "Trading Journal",
-    description: "Track all your trades, analyze your performance with charts, and learn from your history.",
+    description: "Track all your trades, review your performance, and learn from your history.",
   },
   {
     title: "Improve Your Trading",

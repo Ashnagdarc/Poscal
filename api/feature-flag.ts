@@ -1,71 +1,52 @@
-// Proxy to Contabo backend for feature flags
-const BACKEND_URL = process.env.BACKEND_URL || 'https://api.poscalfx.com';
-const BACKEND_TOKEN = process.env.BACKEND_SERVICE_TOKEN;
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { convexServerClient, createConvexServerClient, api } from "./_convex.js";
 
-export default async function handler(req: any, res: any) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+function getBearerToken(req: VercelRequest) {
+  const header = req.headers.authorization;
+  if (!header?.startsWith("Bearer ")) {
+    return null;
+  }
+  return header.slice("Bearer ".length);
+}
 
-  if (req.method === 'OPTIONS') return res.status(200).send('ok');
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (!BACKEND_URL) {
-    return res.status(500).json({ success: false, message: 'Backend URL not configured' });
+  if (req.method === "OPTIONS") {
+    return res.status(200).send("ok");
   }
 
   try {
-    const headers: any = {
-      'Content-Type': 'application/json',
-    };
-
-    // Add service token if available
-    if (BACKEND_TOKEN) {
-      headers['Authorization'] = `Bearer ${BACKEND_TOKEN}`;
+    if (req.method === "GET") {
+      const enabled = await convexServerClient.query(api.admin.getPaidLock, {});
+      return res.status(200).json({ success: true, key: "paid-lock", enabled: !!enabled });
     }
 
-    if (req.method === 'GET') {
-      // Forward GET request to backend
-      const response = await fetch(`${BACKEND_URL}/admin/feature-flag`, {
-        method: 'GET',
-        headers,
-      });
-
-      if (!response.ok) {
-        console.error('[feature-flag] backend error', response.status);
-        return res.status(response.status).json({ success: false, message: 'Failed to read feature flag' });
+    if (req.method === "POST") {
+      const token = getBearerToken(req);
+      if (!token) {
+        return res.status(401).json({ success: false, message: "Missing authorization token" });
       }
 
-      const data = await response.json();
-      return res.status(200).json(data);
+      const body = typeof req.body === "string" ? JSON.parse(req.body || "{}") : req.body || {};
+      if (typeof body.enabled !== "boolean") {
+        return res.status(400).json({ success: false, message: "Missing or invalid enabled boolean in body" });
+      }
+
+      const client = createConvexServerClient(token);
+      await client.mutation(api.admin.setPaidLock, { enabled: body.enabled });
+
+      return res.status(200).json({ success: true, key: "paid-lock", enabled: body.enabled });
     }
 
-    if (req.method === 'POST') {
-      const body = typeof req.body === 'string' ? JSON.parse(req.body || '{}') : (req.body || {});
-      const { enabled } = body;
-      
-      if (typeof enabled !== 'boolean') {
-        return res.status(400).json({ success: false, message: 'Missing or invalid `enabled` boolean in body' });
-      }
-
-      // Forward POST request to backend
-      const response = await fetch(`${BACKEND_URL}/admin/feature-flag`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ enabled }),
-      });
-
-      if (!response.ok) {
-        console.error('[feature-flag] backend error', response.status);
-        return res.status(response.status).json({ success: false, message: 'Failed to set feature flag' });
-      }
-
-      const data = await response.json();
-      return res.status(200).json(data);
-    }
-
-    return res.status(405).json({ success: false, message: 'Method not allowed' });
-  } catch (err: any) {
-    console.error('[feature-flag] unexpected error', err);
-    return res.status(500).json({ success: false, message: err?.message || String(err) });
+    return res.status(405).json({ success: false, message: "Method not allowed" });
+  } catch (error) {
+    console.error("[feature-flag] unexpected error", error);
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : "Unknown error",
+    });
   }
 }

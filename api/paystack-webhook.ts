@@ -1,9 +1,8 @@
 import crypto from 'crypto';
-import { createClient } from '@supabase/supabase-js';
+import { convexServerClient, api } from './_convex.js';
 
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET;
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
 
 export const config = {
   api: {
@@ -25,11 +24,10 @@ export default async function handler(req: any, res: any) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  if (!PAYSTACK_WEBHOOK_SECRET || !SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+  if (!PAYSTACK_WEBHOOK_SECRET || !PAYMENT_SYNC_SECRET) {
     const missing = [
       !PAYSTACK_WEBHOOK_SECRET ? 'PAYSTACK_WEBHOOK_SECRET' : null,
-      !SUPABASE_URL ? 'SUPABASE_URL' : null,
-      !SUPABASE_SERVICE_ROLE_KEY ? 'SUPABASE_SERVICE_ROLE_KEY' : null,
+      !PAYMENT_SYNC_SECRET ? 'PAYMENT_SYNC_SECRET' : null,
     ].filter(Boolean);
 
     return res.status(500).json({
@@ -53,21 +51,7 @@ export default async function handler(req: any, res: any) {
 
     const event = JSON.parse(rawBody.toString('utf8'));
 
-    // Initialize Supabase admin client
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    // Log webhook event (best effort)
-    await supabase.from('paystack_webhook_logs').insert({
-      event_type: event?.event,
-      reference: event?.data?.reference,
-      status: event?.data?.status,
-      payload: event,
-    });
-
     if (event?.event === 'charge.success' && event?.data?.status === 'success') {
-      // Reference format: poscal_{userId}_{tier}_{timestamp}
       const refParts = (event?.data?.reference || '').split('_');
       const userId = refParts[1];
       const tier = refParts[2];
@@ -76,50 +60,37 @@ export default async function handler(req: any, res: any) {
         return res.status(400).json({ error: 'Invalid reference format' });
       }
 
-      const expiryDate = new Date();
-      expiryDate.setDate(expiryDate.getDate() + 30);
-
-      const { error: updateError } = await supabase
-        .from('profiles')
-        .update({
-          payment_status: 'paid',
-          subscription_tier: tier,
-          subscription_expires_at: expiryDate.toISOString(),
-          payment_reference: event?.data?.reference,
-          payment_date: new Date().toISOString(),
-          paystack_customer_code: event?.data?.customer?.customer_code,
-        })
-        .eq('id', userId);
-
-      if (updateError) {
-        return res.status(500).json({ error: 'Database update failed' });
+      const paidAt = Date.now();
+      const expiryDate = new Date(paidAt);
+      if (tier === 'yearly' || tier === 'pro') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
+      } else if (tier === 'lifetime') {
+        expiryDate.setFullYear(expiryDate.getFullYear() + 100);
+      } else {
+        expiryDate.setMonth(expiryDate.getMonth() + 1);
       }
 
-      const { error: paymentError } = await supabase.from('payments').insert({
-        user_id: userId,
-        amount: (event?.data?.amount || 0) / 100,
+      await convexServerClient.mutation(api.admin.syncSubscriptionFromPayment, {
+        secret: PAYMENT_SYNC_SECRET,
+        userId,
+        reference: event?.data?.reference,
+        tier,
+        amount: Number(event?.data?.amount || 0) / 100,
         currency: event?.data?.currency || 'NGN',
         status: 'success',
-        payment_method: 'paystack',
-        paystack_reference: event?.data?.reference,
-        paystack_customer_code: event?.data?.customer?.customer_code,
-        tier,
-        subscription_start: new Date().toISOString(),
-        subscription_end: expiryDate.toISOString(),
+        expiresAtMs: expiryDate.getTime(),
+        paidAtMs: paidAt,
         metadata: {
+          source: 'paystack-webhook',
           channel: event?.data?.channel,
           ip_address: event?.data?.ip_address,
           fees: event?.data?.fees || 0,
+          customer_code: event?.data?.customer?.customer_code || null,
           authorization: event?.data?.authorization,
           gateway_response: event?.data?.gateway_response,
           webhook_event: event?.event,
         },
       });
-
-      if (paymentError) {
-        console.error('[paystack-webhook] payment insert error', paymentError);
-        // Do not fail response since subscription already updated
-      }
     }
 
     return res.status(200).json({ success: true });

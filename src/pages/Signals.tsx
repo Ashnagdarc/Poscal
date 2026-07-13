@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Radio, TrendingUp, TrendingDown, Clock, Filter, ChevronLeft, ChevronRight, ChevronDown, X, Calendar, Image as ImageIcon, Trophy, XCircle, Minus, Check, RefreshCw, Wifi } from 'lucide-react';
 import { BottomNav } from '@/components/BottomNav';
 import { logger } from '@/lib/logger';
@@ -19,7 +19,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useNavigate } from 'react-router-dom';
 import { signalsApi } from '@/lib/api';
-import { supabase, isSupabaseConfigured } from '@/lib/supabase-shim';
 import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
 
 interface TradingSignal {
@@ -83,9 +82,6 @@ const Signals = () => {
   // Image modal
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   
-  // Track previous signal states for notifications
-  const prevSignalsRef = useRef<Map<string, TradingSignal>>(new Map());
-  
   // Helper: Convert price to number
   const toNumber = (price: number | string | null | undefined): number => {
     if (!price && price !== 0) return 0;
@@ -129,7 +125,7 @@ const Signals = () => {
     return [...new Set(signals.filter(s => s.status === 'active').map(s => s.currency_pair))];
   }, [signals]);
   
-  // Use Realtime prices from backend (Twelve Data API, 10-second updates)
+  // Use shared Convex-backed price snapshots.
   const { prices, loading: pricesLoading, lastUpdated, refreshPrices } = useRealtimePrices({
     symbols: activeSymbols,
     enabled: activeSymbols.length > 0
@@ -186,221 +182,6 @@ const Signals = () => {
   useEffect(() => {
     fetchSignals();
   }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
-
-  // Real-time subscription with notifications
-  useEffect(() => {
-    if (!isSupabaseConfigured) return;
-
-    const channel = supabase
-      .channel('trading-signals-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'trading_signals'
-        },
-        (payload) => {
-          logger.log('Real-time update:', payload);
-          const newSignal = payload.new as TradingSignal;
-          const prevSignal = prevSignalsRef.current.get(newSignal.id);
-          
-          // Check for TP/SL notifications
-          if (prevSignal) {
-            if (!prevSignal.tp1_hit && newSignal.tp1_hit) {
-              toast.success(`🎯 ${newSignal.currency_pair} - TP1 Hit!`, {
-                description: `Take Profit 1 reached`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🎯 ${newSignal.currency_pair} - TP1 Hit!`, {
-                  body: 'Take Profit 1 reached'
-                });
-              }
-            }
-            if (!prevSignal.tp2_hit && newSignal.tp2_hit) {
-              toast.success(`🎯 ${newSignal.currency_pair} - TP2 Hit!`, {
-                description: `Take Profit 2 reached`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🎯 ${newSignal.currency_pair} - TP2 Hit!`, {
-                  body: 'Take Profit 2 reached'
-                });
-              }
-            }
-            if (!prevSignal.tp3_hit && newSignal.tp3_hit) {
-              toast.success(`🏆 ${newSignal.currency_pair} - TP3 Hit!`, {
-                description: `All take profits reached! Trade closed as WIN`,
-                duration: 7000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🏆 ${newSignal.currency_pair} - TP3 Hit!`, {
-                  body: 'All take profits reached! Trade closed as WIN'
-                });
-              }
-            }
-            if (prevSignal.status === 'active' && newSignal.status === 'closed' && newSignal.result === 'loss') {
-              toast.error(`❌ ${newSignal.currency_pair} - Stop Loss Hit`, {
-                description: `Trade closed as LOSS`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`❌ ${newSignal.currency_pair} - Stop Loss Hit`, {
-                  body: 'Trade closed as LOSS'
-                });
-              }
-            }
-
-            // NEW TRIGGERS - Signal Activation
-            if (prevSignal.status !== 'active' && newSignal.status === 'active') {
-              toast.success(`⚡ ${newSignal.currency_pair} - Signal Activated!`, {
-                description: `Entry: ${newSignal.entry_price} | SL: ${newSignal.stop_loss}`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`⚡ ${newSignal.currency_pair} - Now Active!`, {
-                  body: `Entry: ${newSignal.entry_price} | SL: ${newSignal.stop_loss}`,
-                  tag: 'signal-activated'
-                });
-              }
-            }
-
-            // Signal Cancelled
-            if (prevSignal.status !== 'cancelled' && newSignal.status === 'cancelled') {
-              toast.info(`🛑 ${newSignal.currency_pair} - Signal Cancelled`, {
-                description: `This signal has been cancelled by admin`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🛑 ${newSignal.currency_pair} - Cancelled`, {
-                  body: 'This signal has been cancelled by admin',
-                  tag: 'signal-cancelled'
-                });
-              }
-            }
-
-            // Breakeven Closed
-            if (prevSignal.status === 'active' && newSignal.status === 'closed' && newSignal.result === 'breakeven') {
-              toast.info(`🎚️ ${newSignal.currency_pair} - Breakeven`, {
-                description: `Trade closed at breakeven`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🎚️ ${newSignal.currency_pair} - Breakeven`, {
-                  body: 'Trade closed at breakeven - No loss, no gain',
-                  tag: 'signal-breakeven'
-                });
-              }
-            }
-
-            // Calculate if price is approaching entry (within 50 pips estimated)
-            // This checks if status changed to suggest entry is valid
-            if (prevSignal.status === 'active' && newSignal.status === 'active' && !prevSignal.market_execution && newSignal.market_execution) {
-              toast.success(`🎯 ${newSignal.currency_pair} - Entry Valid!`, {
-                description: `Price is now at entry level`,
-                duration: 5000
-              });
-              if (permission === 'granted') {
-                sendNotification(`🎯 ${newSignal.currency_pair} - Entry Reached!`, {
-                  body: `Entry price is now available`,
-                  tag: 'signal-entry'
-                });
-              }
-            }
-
-            // Risk Alert - Check if moving toward SL (50% of way)
-            if (newSignal.status === 'active' && prevSignal.status === 'active') {
-              const slDistance = Math.abs(newSignal.entry_price - newSignal.stop_loss);
-              const riskThreshold = slDistance * 0.5; // 50% of SL distance
-              const currentRisk = Math.abs(newSignal.entry_price - (newSignal.entry_price - riskThreshold));
-              
-              // Only notify if we're at 80%+ of the way to SL and haven't hit it yet
-              if (!prevSignal.tp1_hit && !newSignal.tp1_hit && currentRisk >= slDistance * 0.8) {
-                toast.warning(`⚠️ ${newSignal.currency_pair} - High Risk!`, {
-                  description: `Signal is 80% toward SL`,
-                  duration: 7000
-                });
-                if (permission === 'granted') {
-                  sendNotification(`⚠️ ${newSignal.currency_pair} - At Risk!`, {
-                    body: `Signal is moving toward stop loss (80% distance)`,
-                    tag: 'signal-risk',
-                    requireInteraction: true
-                  });
-                }
-              }
-            }
-          }
-          
-          // Refetch to get updated data with correct pagination
-          fetchSignals();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'trading_signals'
-        },
-        (payload) => {
-          const newSignal = payload.new as TradingSignal;
-          toast.info(`📊 New Signal: ${newSignal.currency_pair}`, {
-            description: `${newSignal.direction.toUpperCase()} at ${newSignal.entry_price}`,
-            duration: 5000
-          });
-          if (permission === 'granted') {
-            sendNotification(`📊 New Signal: ${newSignal.currency_pair}`, {
-              body: `${newSignal.direction.toUpperCase()} at ${newSignal.entry_price} | SL: ${newSignal.stop_loss} | TP1: ${newSignal.take_profit_1}`,
-              tag: 'signal-new',
-              requireInteraction: true
-            });
-          }
-
-          // AI Insight: Time-based smart alert
-          const hour = new Date().getHours();
-          if (hour >= 8 && hour <= 11) {
-            toast.info(`💡 Smart Tip: Peak trading hours (08:00-11:00 UTC)`, {
-              description: `This is statistically your best trading window`,
-              duration: 4000
-            });
-            if (permission === 'granted') {
-              sendNotification(`💡 Smart Tip: Peak Hours!`, {
-                body: `08:00-11:00 UTC has your highest win rate (92%)`
-              });
-            }
-          }
-
-          // Low volatility detection
-          const pipRange = Math.abs(newSignal.take_profit_1 - newSignal.stop_loss);
-          if (pipRange < 30) {
-            toast.info(`🔹 Low Volatility Signal`, {
-              description: `Small range detected - Good for scalping`,
-              duration: 4000
-            });
-            if (permission === 'granted') {
-              sendNotification(`🔹 Scalping Opportunity`, {
-                body: `Low volatility range detected (${pipRange} pips) - Ideal for quick trades`
-              });
-            }
-          }
-
-          fetchSignals();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [currentPage, pairFilter, statusFilter, resultFilter, dateFilter]);
-  
-  // Update previous signals ref when signals change
-  useEffect(() => {
-    const newMap = new Map<string, TradingSignal>();
-    signals.forEach(s => newMap.set(s.id, s));
-    prevSignalsRef.current = newMap;
-  }, [signals]);
 
   // Reset to page 1 when filters change
   useEffect(() => {
@@ -700,14 +481,6 @@ const Signals = () => {
           </div>
         ) : signals.length === 0 ? (
           <>
-            {/* Trading Chart - Coming Soon */}
-            <div className="mb-6 bg-secondary rounded-2xl p-6 text-center border border-border/50">
-              <h3 className="text-lg font-semibold text-foreground mb-2">Advanced Charting Coming Soon</h3>
-              <p className="text-sm text-muted-foreground">
-                We are upgrading the chart experience. This feature is temporarily hidden while improvements are completed.
-              </p>
-            </div>
-
             {/* No Signals Found */}
             <div className="bg-secondary rounded-2xl p-6 text-center">
               <Radio className="w-12 h-12 text-muted-foreground mx-auto mb-4" />

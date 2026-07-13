@@ -27,8 +27,6 @@ copy_if_exists() {
 copy_if_exists ".env" ".env"
 copy_if_exists ".env.local" ".env.local"
 copy_if_exists ".env.production" ".env.production"
-copy_if_exists "backend/.env" "backend/.env"
-copy_if_exists "push-sender/.env" "push-sender/.env"
 
 if [[ -z "$(find "$WORK_DIR" -type f -print -quit)" ]]; then
   echo "No env files found to back up" >&2

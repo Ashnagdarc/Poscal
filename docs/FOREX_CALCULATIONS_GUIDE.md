@@ -216,7 +216,6 @@ Your specific trade validates the system:
 4. 🔜 **TODO**: Add position size calculator to TakeSignalModal
 5. 🔜 **TODO**: Show expected P&L for each TP level
 6. 🔜 **TODO**: Add risk calculator widget in trading interface
-7. 🔜 **TODO**: Update monitor-signals Edge Function to use new calculations
 
 ## Technical Notes
 
@@ -224,7 +223,7 @@ Your specific trade validates the system:
 
 Currently using static pip values from pair configs. For production:
 
-- Could integrate Twelve Data API for live rates
+- Could integrate the shared live price snapshot feed for live rates
 - Important for cross pairs (EUR/GBP needs GBP/USD rate)
 - USD pairs are stable enough for most cases
 

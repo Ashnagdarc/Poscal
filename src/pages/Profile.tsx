@@ -1,14 +1,12 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, 
-  Camera, 
   User as UserIcon, 
   Mail, 
   Calendar,
   LogOut,
   Settings as SettingsIcon,
-  Loader2,
   Crown,
   Bell,
   Download,
@@ -25,7 +23,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
-import { usersApi, uploadsApi } from "@/lib/api";
+import { usersApi } from "@/lib/api";
 
 interface Profile {
   id: string;
@@ -43,14 +41,11 @@ const Profile = () => {
   const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   const toggleTheme = () => {
     const newTheme = theme === 'dark' ? 'light' : 'dark';
     setTheme(newTheme);
@@ -124,67 +119,6 @@ const Profile = () => {
     toast.error("Account deletion coming soon!");
     // TODO: Implement account deletion
     setShowDeleteConfirm(false);
-  };
-
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !user) return;
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast.error("Please select an image file (PNG, JPG, etc.)");
-      return;
-    }
-
-    // Strict file size validation (1MB limit for better compatibility)
-    const maxSize = 1 * 1024 * 1024; // 1MB
-    if (file.size > maxSize) {
-      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-      toast.error(`Image is too large (${sizeMB}MB). Please choose an image under 1MB.`);
-      return;
-    }
-
-    setIsUploadingAvatar(true);
-
-    try {
-      // Upload new avatar via backend
-      const resp = await uploadsApi.uploadAvatar(file);
-      
-      // Optionally delete old avatar if backend supports it
-      if (profile?.avatar_url && resp?.previous_id) {
-        try { await uploadsApi.deleteAvatar(resp.previous_id); } catch {}
-      }
-
-      // Refresh profile
-      await fetchProfile();
-
-      toast.success("Avatar updated successfully!");
-    } catch (error: any) {
-      logger.error('Avatar upload error:', error);
-      
-      // Handle specific error cases
-      if (error?.response?.status === 413) {
-        toast.error("Image file is too large. Please use an image under 1MB.");
-      } else if (error?.response?.status === 401) {
-        toast.error("Session expired. Please sign in again.");
-      } else if (error?.message?.includes('CORS') || error?.message?.includes('Network')) {
-        toast.error("Network error. Please check your connection and try again.");
-      } else if (error?.message?.includes('bucket') || error?.message?.includes('not found')) {
-        toast.error("Storage not configured. Please contact support.");
-      } else {
-        toast.error("Failed to upload avatar. Please try again.");
-      }
-    } finally {
-      setIsUploadingAvatar(false);
-      // Reset input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
   };
 
   const handleSave = async () => {
@@ -266,9 +200,7 @@ const Profile = () => {
         <div className="flex flex-col items-center">
           <div className="relative">
             <div className="w-24 h-24 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
-              {isUploadingAvatar ? (
-                <Loader2 className="w-8 h-8 text-muted-foreground animate-spin" />
-              ) : profile?.avatar_url ? (
+              {profile?.avatar_url ? (
                 <img 
                   src={profile.avatar_url} 
                   alt="Avatar" 
@@ -278,20 +210,6 @@ const Profile = () => {
                 <UserIcon className="w-12 h-12 text-muted-foreground" />
               )}
             </div>
-            <button 
-              onClick={handleAvatarClick}
-              disabled={isUploadingAvatar}
-              className="absolute bottom-0 right-0 w-8 h-8 bg-foreground rounded-full flex items-center justify-center transition-all duration-200 active:scale-95 disabled:opacity-50"
-            >
-              <Camera className="w-4 h-4 text-background" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarChange}
-              className="hidden"
-            />
           </div>
           <h2 className="text-2xl font-bold text-foreground mt-4">
             {profile?.full_name || "Trader"}

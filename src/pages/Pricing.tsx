@@ -272,7 +272,7 @@ const Pricing = () => {
               </div>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>✓ Free: Basic stats</li>
-                <li>✓ Premium: Advanced charts</li>
+                <li>✓ Premium: Deeper journal insights</li>
                 <li>✓ Position calculator</li>
                 <li>✓ CSV export</li>
               </ul>

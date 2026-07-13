@@ -1,6 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-
-const BACKEND_URL = process.env.BACKEND_URL || 'https://api.poscalfx.com';
+import { convexServerClient, api } from '../_convex.js';
 
 export const config = {
   maxDuration: 30,
@@ -14,22 +13,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       return res.status(400).json({ error: 'symbols parameter required' });
     }
 
-    const url = `${BACKEND_URL}/prices/multiple?symbols=${encodeURIComponent(String(symbols))}`;
-    console.log(`[API] Fetching from backend: ${url}`);
-    
-    const backendRes = await Promise.race([
-      fetch(url),
-      new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Backend timeout')), 8000)
-      ),
-    ]) as Response;
-    
-    if (!backendRes.ok) {
-      console.error(`[API] Backend returned ${backendRes.status}`);
-      return res.status(backendRes.status).json({ error: 'Backend error' });
-    }
-    
-    const data = await backendRes.json();
+    const data = await convexServerClient.query(api.prices.listLatest, {
+      symbols: String(symbols).split(',').map((symbol) => symbol.trim()).filter(Boolean),
+    });
     
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'public, max-age=2');

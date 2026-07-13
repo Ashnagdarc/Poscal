@@ -65,30 +65,16 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
       role="navigation"
       aria-label="Main navigation"
     >
-      {/* Liquid Glass Container */}
       <div 
         ref={navRef}
-        className="relative isolate flex justify-around items-center max-w-md mx-auto px-3 py-3.5 rounded-[2rem]
-                   bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(255,255,255,0.04))]
-                   dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.09),rgba(255,255,255,0.02))]
-                   backdrop-blur-[30px] backdrop-saturate-[2]
-                   border border-white/25 dark:border-white/8
-                   shadow-[0_18px_36px_-22px_rgba(0,0,0,0.45),inset_0_1px_0_rgba(255,255,255,0.32)]
-                   dark:shadow-[0_20px_44px_-24px_rgba(0,0,0,0.85),inset_0_1px_0_rgba(255,255,255,0.1)]"
+        className="relative flex justify-around items-center max-w-md mx-auto px-2 py-2 rounded-[1.75rem]
+                   border border-border/70 bg-background/95
+                   shadow-[0_14px_34px_-20px_rgba(0,0,0,0.65)]"
       >
-        {/* Glass sheen */}
-        <div className="pointer-events-none absolute inset-x-3 top-[3px] h-1/2 rounded-[1.6rem] bg-gradient-to-b from-white/25 via-white/5 to-transparent dark:from-white/12 dark:via-white/3 dark:to-transparent" />
-
-        {/* Floating glow */}
-        <div className="pointer-events-none absolute -inset-1 rounded-[2.2rem] bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.22),transparent_60%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.08),transparent_60%)]" />
-
-        {/* Animated active pill */}
         <div
-          className={`absolute top-1.5 bottom-1.5 rounded-full
-                     bg-[linear-gradient(180deg,rgba(255,255,255,0.26),rgba(255,255,255,0.12))]
-                     dark:bg-[linear-gradient(180deg,rgba(255,255,255,0.14),rgba(255,255,255,0.06))]
-                     shadow-[0_4px_16px_-10px_rgba(0,0,0,0.35),inset_0_1px_0_rgba(255,255,255,0.35)]
-                     dark:shadow-[0_6px_20px_-12px_rgba(0,0,0,0.9),inset_0_1px_0_rgba(255,255,255,0.15)]
+          className={`absolute top-2 bottom-2 rounded-[1.2rem] border border-border/80
+                     bg-secondary
+                     shadow-[0_8px_18px_-14px_rgba(0,0,0,0.6)]
                     ${isInitialized ? 'transition-all duration-500 ease-out' : ''}`}
           style={{
             left: indicatorStyle.left,
@@ -107,21 +93,21 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
               onClick={() => navigate(path)}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
-              className={`relative z-10 flex flex-col items-center gap-1 px-3 py-1 rounded-full
+              className={`relative z-10 flex min-w-0 flex-col items-center gap-1 px-3 py-2 rounded-[1.2rem]
                          transition-all duration-300 ease-out
                          ${isActive
-                           ? 'text-[#0f1115] dark:text-white -translate-y-[1px]'
+                           ? 'text-foreground'
                            : 'text-muted-foreground hover:text-foreground/85 active:scale-95'
                          }`}
             >
               <Icon 
                 className={`w-5 h-5 transition-all duration-300 ${
-                  isActive ? 'stroke-[2.3] drop-shadow-[0_1px_1px_rgba(255,255,255,0.35)] dark:drop-shadow-[0_1px_4px_rgba(255,255,255,0.35)]' : 'stroke-[1.7]'
+                  isActive ? 'stroke-[2.2]' : 'stroke-[1.8]'
                 }`} 
                 aria-hidden="true" 
               />
-              <span className={`text-[10px] font-medium tracking-[0.01em] transition-all duration-300 ${
-                isActive ? 'opacity-100' : 'opacity-65'
+              <span className={`text-[10px] font-medium transition-all duration-300 ${
+                isActive ? 'opacity-100' : 'opacity-70'
               }`}>
                 {label}
               </span>

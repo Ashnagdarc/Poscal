@@ -86,8 +86,7 @@ export const Calculator = () => {
     return Array.from(requiredPairs);
   }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
   
-  // Use Realtime prices from backend (push-sender fetches every 10 seconds)
-  // This reduces API calls 1000x while keeping all users in sync
+  // Use shared Convex-backed price snapshots so all users read the same market cache.
   const {
     prices,
     askPrices,

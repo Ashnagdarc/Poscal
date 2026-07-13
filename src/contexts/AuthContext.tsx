@@ -1,5 +1,5 @@
-import { createContext, useContext, ReactNode } from 'react';
-import { useAuthActions, useConvexAuth } from '@convex-dev/auth/react';
+import { createContext, useContext, ReactNode, useEffect } from 'react';
+import { useAuthActions, useAuthToken, useConvexAuth } from '@convex-dev/auth/react';
 import { useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 
@@ -26,6 +26,7 @@ export interface User {
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { signIn: convexSignIn, signOut: convexSignOut } = useAuthActions();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const authToken = useAuthToken();
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
 
   const user: User | null = viewer
@@ -39,6 +40,17 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const session = user ? { access_token: "convex-auth" } : null;
   const loading = authLoading || (isAuthenticated && viewer === undefined);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    if (authToken) {
+      window.localStorage.setItem("convex_auth_token", authToken);
+    } else {
+      window.localStorage.removeItem("convex_auth_token");
+    }
+  }, [authToken]);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
     try {

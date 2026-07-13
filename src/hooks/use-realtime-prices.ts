@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { api as convexApi } from '../../convex/_generated/api';
 import { INTERVALS } from '@/lib/constants';
-
-// Type definition for realtime channel (replaces Supabase import)
-type RealtimeChannel = any;
+import { convexClient } from '@/lib/convexClient';
 
 interface PriceData {
   symbol: string;
@@ -87,14 +86,7 @@ const getPriceStatus = (
 };
 
 /**
- * Hook for real-time price updates via Supabase Realtime
- * Backend (push-sender) fetches prices every 10 seconds from Twelve Data API
- * All users listen via Realtime - single source of truth
- * 
- * Reduces API calls from 360,000/hour (1000 users @ 10sec) to 360/hour
- * - 1000x reduction in API costs
- * - Accurate prices for all users simultaneously
- * - Scalable to unlimited users
+ * Reads the latest shared price snapshots from Convex and refreshes them on an interval.
  */
 export const useRealtimePrices = ({
   symbols,
@@ -113,10 +105,7 @@ export const useRealtimePrices = ({
   const pollTimer = useRef<number | null>(null);
   const pendingRequest = useRef<boolean>(false); // Prevent duplicate requests
   const effectiveStaleAfterMs = staleAfterMs ?? Math.max(pollIntervalMs * 3, INTERVALS.LIVE_PRICE_REFRESH);
-  // Use relative API path so Vercel proxy handles HTTPS securely
-  const apiBase = '/api';
-
-  // Fetch initial prices from backend REST API (NestJS)
+  // Fetch initial prices from Convex snapshots
   const fetchInitialPrices = useCallback(async () => {
     if (!enabled || symbols.length === 0) {
       setLoading(false);
@@ -131,12 +120,9 @@ export const useRealtimePrices = ({
 
     try {
       pendingRequest.current = true;
-      const query = encodeURIComponent(symbols.join(','));
-      const res = await fetch(`${apiBase}/prices/multiple?symbols=${query}`);
-      if (!res.ok) {
-        throw new Error(`API error ${res.status}`);
-      }
-      const data = await res.json();
+      const data = await convexClient.query(convexApi.prices.listLatest, {
+        symbols,
+      });
       if (!data || data.length === 0) {
         console.warn('⚠️  No prices returned yet - waiting for backend updates...');
         const unavailableStatus = Object.fromEntries(
@@ -163,12 +149,11 @@ export const useRealtimePrices = ({
       let newestTimestamp: Date | null = null;
 
       data.forEach((item: any) => {
-        // Support both snake_case and camelCase from backend
         const symbol = item.symbol;
         const mid = toNumber(item.mid_price ?? item.midPrice ?? item.price ?? item.last);
         const ask = toNumber(item.ask_price ?? item.askPrice ?? item.ask);
         const bid = toNumber(item.bid_price ?? item.bidPrice ?? item.bid);
-        const ts = item.timestamp ?? item.updated_at ?? item.updatedAt ?? new Date().toISOString();
+        const ts = item.timestamp ?? item.updated_at ?? item.updatedAt ?? item.updatedAtMs ?? new Date().toISOString();
         const parsedTimestamp = toDate(ts);
 
         if (typeof mid === 'number') newPrices[symbol] = mid;
@@ -209,7 +194,7 @@ export const useRealtimePrices = ({
     }
   }, [enabled, symbols, effectiveStaleAfterMs]);
 
-  // Setup polling (temporary) and optional WS hookup if available
+  // Poll the shared Convex snapshot feed while the screen is active.
   useEffect(() => {
     if (!enabled || symbols.length === 0) {
       setLoading(false);

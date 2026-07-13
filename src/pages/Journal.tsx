@@ -14,7 +14,6 @@ import {
   Trash2,
   BarChart3,
   Upload,
-  Image as ImageIcon,
   Search,
   Download,
   Edit2,
@@ -38,7 +37,7 @@ import { validateTrades, MAX_TRADES_PER_IMPORT, type ValidatedTrade } from "@/li
 import { filtersReducer, initialFiltersState, modalReducer, initialModalState } from "@/lib/journalReducers";
 import { useKeyboardShortcut } from "@/hooks/use-keyboard-shortcut";
 import { useFocusTrap } from "@/hooks/use-focus-trap";
-import { tradesApi, uploadsApi } from "@/lib/api";
+import { tradesApi } from "@/lib/api";
 
 interface Trade {
   id: string;
@@ -70,7 +69,6 @@ const Journal = () => {
   const { sendNotification, permission } = useNotifications();
   const [trades, setTrades] = useState<Trade[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [selectedScreenshots, setSelectedScreenshots] = useState<File[]>([]);
   const [showLimitBanner, setShowLimitBanner] = useState(true);
   const swipeStartXRef = useRef<number | null>(null);
   const swipeStartYRef = useRef<number | null>(null);
@@ -182,23 +180,6 @@ const Journal = () => {
     }
   };
 
-  const uploadScreenshots = async (tradeId: string): Promise<string[]> => {
-    if (!user || selectedScreenshots.length === 0) return [];
-    
-    const urls: string[] = [];
-    
-    for (const file of selectedScreenshots) {
-      try {
-        const resp = await uploadsApi.uploadTradeScreenshot(tradeId, file);
-        if (resp?.url) urls.push(resp.url);
-      } catch (err) {
-        logger.error('Screenshot upload failed', err);
-      }
-    }
-    
-    return urls;
-  };
-
   const hasMeaningfulJournalContent = (content: any, fallbackText: string) => {
     const html = convertRichContentToHTML(content);
     const plainText = html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").trim();
@@ -239,11 +220,7 @@ const Journal = () => {
         trade_date: new Date().toISOString().split('T')[0],
       };
 
-      const data = await tradesApi.create(tradeData);
-      
-      if (selectedScreenshots.length > 0 && data) {
-        await uploadScreenshots(data.id);
-      }
+      await tradesApi.create(tradeData);
       
       toast.success("Trade added");
       
@@ -325,7 +302,6 @@ const Journal = () => {
       sentiment: "",
       tags: "",
     });
-    setSelectedScreenshots([]);
   };
 
   const openEditModal = (trade: Trade) => {
@@ -383,13 +359,7 @@ const Journal = () => {
       entry_date: t.entry_date ? new Date(t.entry_date).toISOString() : new Date().toISOString(),
     }));
 
-    const { error } = await supabase
-      .from('trading_journal')
-      .insert(tradesToInsert);
-
-    if (error) {
-      throw error;
-    }
+    await Promise.all(tradesToInsert.map((trade) => tradesApi.create(trade)));
     
     fetchTrades();
   };
@@ -566,24 +536,6 @@ const Journal = () => {
     a.click();
     URL.revokeObjectURL(url);
     toast.success("Journal exported");
-  };
-
-  const handleScreenshotSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (files) {
-      const validFiles = Array.from(files).filter(f => {
-        if (!f.type.startsWith('image/')) {
-          toast.error(`${f.name} is not an image`);
-          return false;
-        }
-        if (f.size > 5 * 1024 * 1024) {
-          toast.error(`${f.name} is too large (max 5MB)`);
-          return false;
-        }
-        return true;
-      });
-      setSelectedScreenshots(prev => [...prev, ...validFiles]);
-    }
   };
 
   const filteredTrades = useMemo(() => {
@@ -1054,7 +1006,6 @@ const Journal = () => {
               onClick={() => {
                 dispatchModals({ type: 'CLOSE_ADD_TRADE' });
                 dispatchModals({ type: 'SET_EDITING_TRADE', payload: null });
-                setSelectedScreenshots([]);
               }}
               aria-label="Close dialog (Esc)"
               className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center"
@@ -1125,45 +1076,6 @@ const Journal = () => {
                   </div>
                 </div>
             </div>
-
-            {/* Screenshots Section */}
-            {!modals.editingTrade && (
-              <div>
-                <label className="block text-sm text-muted-foreground mb-2">Screenshots</label>
-                <div className="space-y-2">
-                  {selectedScreenshots.length > 0 && (
-                    <div className="grid grid-cols-3 gap-2">
-                      {selectedScreenshots.map((file, i) => (
-                        <div key={i} className="relative aspect-video bg-secondary rounded-xl overflow-hidden">
-                          <img 
-                            src={URL.createObjectURL(file)} 
-                            alt={`Preview ${i + 1}`} 
-                            className="w-full h-full object-cover"
-                          />
-                          <button
-                            onClick={() => setSelectedScreenshots(prev => prev.filter((_, idx) => idx !== i))}
-                            className="absolute top-1 right-1 w-6 h-6 bg-destructive text-background rounded-full flex items-center justify-center"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <label className="block border border-dashed border-border rounded-2xl p-6 text-center cursor-pointer hover:border-foreground/25 transition-colors bg-card">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleScreenshotSelect}
-                      className="hidden"
-                    />
-                    <ImageIcon className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-                    <p className="text-sm text-muted-foreground">Tap to add screenshots</p>
-                  </label>
-                </div>
-              </div>
-            )}
           </div>
 
           <div className="px-6 pb-8">

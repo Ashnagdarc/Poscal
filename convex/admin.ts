@@ -1,7 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query } from "./_generated/server";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -30,6 +30,14 @@ const requireAdmin = async (ctx: any) => {
 
   return { userId, user, profile, role };
 };
+
+export const requireAdminForInternal = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireAdmin(ctx);
+    return { success: true };
+  },
+});
 
 export const getPaidLock = query({
   args: {},
@@ -349,7 +357,11 @@ export const queueNotification = mutation({
       title: args.title,
       body: args.body,
       status: "pending",
+      recipientEmail: null,
+      tag: args.tag ?? null,
+      data: args.data ?? null,
       scheduledForMs: null,
+      processingStartedAtMs: null,
       attempts: 0,
       errorMessage: null,
       createdAtMs: Date.now(),
@@ -357,6 +369,83 @@ export const queueNotification = mutation({
     });
 
     return { id, success: true, tag: args.tag ?? null, data: args.data ?? null };
+  },
+});
+
+export const listExpiringSubscriptions = mutation({
+  args: {
+    secret: v.string(),
+    fromMs: v.number(),
+    toMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const expected = process.env.PAYMENT_SYNC_SECRET;
+    if (!expected || args.secret !== expected) {
+      throw new Error("Invalid payment sync secret");
+    }
+
+    const profiles = await ctx.db.query("profiles").collect();
+
+    return profiles
+      .filter((profile) => {
+        const expiresAtMs = profile.subscriptionExpiresAtMs ?? null;
+        return (
+          profile.paymentStatus === "paid" &&
+          typeof expiresAtMs === "number" &&
+          expiresAtMs >= args.fromMs &&
+          expiresAtMs <= args.toMs
+        );
+      })
+      .map((profile) => ({
+        userId: profile.externalUserId,
+        email: profile.email,
+        fullName: profile.fullName ?? null,
+        subscriptionExpiresAtMs: profile.subscriptionExpiresAtMs ?? null,
+      }));
+  },
+});
+
+export const expireSubscriptionsBefore = mutation({
+  args: {
+    secret: v.string(),
+    beforeMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const expected = process.env.PAYMENT_SYNC_SECRET;
+    if (!expected || args.secret !== expected) {
+      throw new Error("Invalid payment sync secret");
+    }
+
+    const now = Date.now();
+    const profiles = await ctx.db.query("profiles").collect();
+    let expiredCount = 0;
+
+    for (const profile of profiles) {
+      const expiresAtMs = profile.subscriptionExpiresAtMs ?? null;
+      if (
+        profile.paymentStatus === "paid" &&
+        typeof expiresAtMs === "number" &&
+        expiresAtMs < args.beforeMs
+      ) {
+        await ctx.db.patch(profile._id, {
+          paymentStatus: "free",
+          subscriptionTier: "free",
+          updatedAtMs: now,
+        });
+
+        const user = await ctx.db.get(profile.externalUserId as any);
+        if (user) {
+          await ctx.db.patch(profile.externalUserId as any, {
+            paymentStatus: "free",
+            subscriptionTier: "free",
+          });
+        }
+
+        expiredCount += 1;
+      }
+    }
+
+    return { success: true, expiredCount };
   },
 });
 

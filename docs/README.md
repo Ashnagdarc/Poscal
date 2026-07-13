@@ -1,41 +1,40 @@
 # Poscal Docs
 
-This folder holds the current architecture, deployment, and feature notes for Poscal.
+This folder now tracks the current Convex + Vercel + worker architecture.
 
-## Recommended Deployment Shape
+## Read These First
 
-- Frontend on Vercel
-- Backend, PostgreSQL, and workers on Docker
-
-That is the current recommended setup for this repo.
-
-## Key Docs
-
-- [Docker Deployment](./DOCKER_DEPLOYMENT.md)
-  - How to run `postgres + backend + workers` with Docker on your Mac or VPS.
+- [Architecture](./ARCHITECTURE.md)
+  - current stack, source of truth, and data flow
 
 - [Server Migration Runbook](./SERVER_MIGRATION_RUNBOOK.md)
-  - How to rebuild a disposable DigitalOcean worker server and restore backups.
+  - how to recover fast if a worker host dies
 
-- [Backend Switch](./BACKEND_SWITCH.md)
-  - Why the app moved away from the older Supabase-centered flow toward NestJS + PostgreSQL.
+- [Cloudflare Worker Setup](./CLOUDFARE_WORKER_SETUP.md)
+  - what the small worker layer should do
 
-- [Ask Price Implementation](./ASK_PRICE_IMPLEMENTATION.md)
-  - How the calculator now uses execution-side prices and the backend price cache.
+## Calculator Docs
 
-- [API Endpoints](./API_ENDPOINTS.md)
-  - Backend and compatibility route reference.
+- [Forex Calculations Guide](./FOREX_CALCULATIONS_GUIDE.md)
+- [Position Size Accuracy Fix](./POSITION_SIZE_ACCURACY_FIX.md)
 
-- [Push Notification Deployment](./PUSH_NOTIFICATION_DEPLOYMENT.md)
-  - Web push setup and worker deployment notes.
+## Legacy Migration Notes
 
-## Current Price Architecture
+- [Convex Migration Map](./CONVEX_MIGRATION_MAP.md)
+  - only needed if importing old Postgres-era data into Convex
 
-Poscal uses a centralized cache model:
+## Future Planning
 
-1. `push-sender` fetches market data.
-2. It writes `bid_price`, `ask_price`, `mid_price`, and `timestamp` into the backend.
-3. The backend persists those values in `price_cache`.
-4. Clients read from the backend instead of calling price vendors directly.
+- [MT5 Integration Plan](./MT5_INTEGRATION_PLAN.md)
 
-The current worker runtime uses Finnhub. Treat Finnhub prices as market prices and apply the app's spread model for estimated execution-side bid/ask until a broker-grade bid/ask feed is available.
+## Docs Policy
+
+If a doc describes:
+
+- Supabase auth/database/realtime
+- NestJS backend runtime
+- Docker Compose app stack
+- `push-sender` runtime
+- deleted UI routes/features
+
+it should not be treated as current operating guidance.

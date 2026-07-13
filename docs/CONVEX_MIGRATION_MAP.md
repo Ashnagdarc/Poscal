@@ -1,6 +1,6 @@
 # Convex Migration Map
 
-This is the source-of-truth map for moving Poscal data from the current Postgres/Nest stack into Convex.
+This is now a legacy import note for old Postgres-era data.
 
 ## Migration Order
 

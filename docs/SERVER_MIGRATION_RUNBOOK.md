@@ -1,195 +1,129 @@
 # Poscal Server Migration Runbook
 
-Use DigitalOcean as a disposable worker server. Important app data must live outside the droplet, preferably in Convex or another hosted database. If a droplet expires, rebuild it from this document instead of trying to rescue the old server.
+Use worker hosts as disposable infrastructure.
 
-## What DigitalOcean Runs
+If a server expires:
 
-- Finnhub price ingestor
-- push notification worker
-- optional email worker
-- optional Nest API during migration
-- Docker Compose, logs, and health checks
+- rebuild the worker
+- restore secrets
+- redeploy jobs
 
-Do not make the droplet the only copy of users, journals, accounts, payments, saved trades, or important settings.
+Do not treat the worker host as the primary copy of user data.
 
 ## Source Of Truth
 
-- Code: GitHub repository
-- User data: Convex or hosted database
-- Disposable price cache: DigitalOcean worker/backend cache
-- Secrets: encrypted env backup stored off-server
-- Temporary Postgres data: daily `pg_dump` stored off-server
+- Code: GitHub
+- Frontend: Vercel
+- App data/auth/backend logic: Convex
+- Secrets backup: encrypted env export stored off-server
 
-## New Droplet Setup
+## What A Worker Host Is Allowed To Own
 
-1. Create a DigitalOcean Ubuntu droplet.
+- temporary logs
+- temporary local cache
+- running job processes
+- market-data polling
+- notification/email delivery
+
+## What A Worker Host Must Not Own
+
+- users
+- profiles
+- journal/history
+- subscription state
+- payment records
+- push subscription records
+
+Those belong in Convex.
+
+## Preferred Shape
+
+Use Cloudflare Workers first.
+
+Use DigitalOcean only if you need:
+
+- a long-running process
+- custom binaries
+- simpler debugging with SSH
+
+## DigitalOcean Recovery Flow
+
+1. Create a new Ubuntu droplet.
 2. Add your SSH key.
-3. SSH into it:
+3. SSH into it.
+4. Install the runtime you need.
+5. Clone the repo.
+6. restore env values
+7. start the worker process
+8. verify price ingest or notification processing
+
+## Minimal Droplet Bootstrap
 
 ```bash
 ssh root@YOUR_DROPLET_IP
-```
-
-4. Install Docker:
-
-```bash
 apt update
-apt install -y ca-certificates curl git gnupg
-install -m 0755 -d /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
-chmod a+r /etc/apt/keyrings/docker.gpg
-echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
-apt update
-apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
-```
-
-5. Clone the repo:
-
-```bash
+apt install -y curl git unzip
+curl -fsSL https://deb.nodesource.com/setup_lts.x | bash -
+apt install -y nodejs
 mkdir -p /opt/poscal
 cd /opt/poscal
 git clone YOUR_GITHUB_REPO_URL .
+npm install
 ```
 
-6. Create env files:
+## Secrets To Restore
 
-```bash
-cp backend/.env.example backend/.env
-cp docs/env/worker.env.example push-sender/.env
-```
+Typical secrets:
 
-7. Edit secrets:
+- `CONVEX_SITE_URL`
+- `FINNHUB_API_KEY`
+- `PRICE_INGEST_SECRET`
+- `NOTIFICATION_WORKER_SECRET`
+- `VAPID_PUBLIC_KEY`
+- `VAPID_PRIVATE_KEY`
+- provider email secret if email sending is enabled
 
-```bash
-nano backend/.env
-nano push-sender/.env
-```
-
-Make sure `backend/.env` `SERVICE_TOKEN` matches `push-sender/.env` `NESTJS_SERVICE_TOKEN`.
-
-8. Start services:
-
-```bash
-docker compose up -d --build
-docker compose ps
-```
-
-## Verification
-
-Backend:
-
-```bash
-curl http://127.0.0.1:3001/health
-docker compose logs --tail=100 backend
-```
-
-Price worker:
-
-```bash
-docker compose logs --tail=100 poscal-price-ingestor
-curl "http://127.0.0.1:3001/prices/multiple?symbols=EUR/USD,USD/JPY"
-```
-
-Push worker:
-
-```bash
-docker compose logs --tail=100 poscal-notification-worker
-```
-
-Database, if temporary Postgres is still running on DigitalOcean:
-
-```bash
-docker compose exec postgres psql -U poscal_user -d poscal_db -c "select count(*) from price_cache;"
-```
-
-## Backup Setup
-
-Run this only if Postgres is temporarily kept on DigitalOcean:
-
-```bash
-chmod +x scripts/backup-postgres-to-drive.sh
-mkdir -p /opt/poscal-backups
-```
-
-Optional Google Drive upload uses `rclone`. Configure a Drive remote once:
-
-```bash
-apt install -y rclone
-rclone config
-```
-
-Example backup env:
-
-```bash
-export BACKUP_DIR=/opt/poscal-backups
-export RCLONE_REMOTE="gdrive:Poscal/backups/postgres"
-export GPG_PASSPHRASE="use-a-long-private-passphrase"
-```
-
-Test backup:
-
-```bash
-./scripts/backup-postgres-to-drive.sh
-```
-
-Schedule daily backup at 2 AM:
-
-```bash
-crontab -e
-```
-
-Add:
-
-```cron
-0 2 * * * cd /opt/poscal && BACKUP_DIR=/opt/poscal-backups RCLONE_REMOTE="gdrive:Poscal/backups/postgres" GPG_PASSPHRASE="YOUR_LONG_PASSPHRASE" ./scripts/backup-postgres-to-drive.sh >> /var/log/poscal-backup.log 2>&1
-```
+Keep these in your encrypted env backup, not on the old server only.
 
 ## Encrypted Env Backup
 
-After the env files are correct, create an encrypted copy:
+Create one after secrets are correct:
 
 ```bash
 chmod +x scripts/export-encrypted-env-backup.sh
 GPG_PASSPHRASE="YOUR_LONG_PASSPHRASE" ./scripts/export-encrypted-env-backup.sh
 ```
 
-Upload the generated `.tar.gz.gpg` file to Google Drive or another off-server location. Do not commit real env files to Git.
+Store the `.gpg` output off-server.
 
-## Moving To A New Droplet
+## Verification
 
-1. Create the new droplet.
-2. Install Docker.
-3. Clone the repo.
-4. Download the encrypted env backup.
-5. Decrypt it:
+### Price Ingest
 
-```bash
-gpg --batch --yes --passphrase "YOUR_LONG_PASSPHRASE" -o poscal-env-backup.tar.gz -d poscal-env-backup.tar.gz.gpg
-tar -xzf poscal-env-backup.tar.gz
-```
+Confirm:
 
-6. Copy env files into `backend/.env` and `push-sender/.env`.
-7. Run:
+- the worker can reach Finnhub
+- the worker can call Convex HTTP actions
+- fresh price snapshots appear in Convex
 
-```bash
-docker compose up -d --build
-docker compose ps
-```
+### Notifications
 
-8. Verify backend, price worker, and push worker.
-9. Update DNS, Vercel `BACKEND_URL`, or any API proxy to point to the new server.
-10. Shut down the old droplet after the new one is healthy.
+Confirm:
 
-## Restore Temporary Postgres
+- queued notifications can be claimed
+- push send succeeds
+- email send succeeds if enabled
+- queue status updates in Convex
 
-Only needed if app data is still in Postgres on DigitalOcean:
+## If Rebuilding On Cloudflare Instead
 
-```bash
-gpg --batch --yes --passphrase "YOUR_LONG_PASSPHRASE" -o backup.sql.gz -d backup.sql.gz.gpg
-gunzip backup.sql.gz
-docker compose exec -T postgres psql -U poscal_user -d poscal_db < backup.sql
-```
+1. restore Cloudflare secrets
+2. redeploy the Worker
+3. verify cron triggers
+4. confirm Convex HTTP actions respond
 
-## Convex Rule
+## Operational Rule
 
-When Convex becomes the source of truth, do not write high-frequency price ticks into Convex. Store only the latest price snapshot or user-facing state there. High-frequency price cache can be rebuilt and can live on the worker server.
+Losing the worker host should be annoying, not catastrophic.
+
+If losing the box loses user state, the architecture is wrong.

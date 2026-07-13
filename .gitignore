@@ -61,3 +61,4 @@ exports/
 
 # Vercel
 .vercel
+.env*

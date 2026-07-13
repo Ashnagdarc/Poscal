@@ -18,9 +18,6 @@ const SignIn = () => {
     if (searchParams.get("fromSignup") === "1") {
       return "Account created. Verify your email, then sign in.";
     }
-    if (searchParams.get("reset") === "sent") {
-      return "Reset link sent. Check your email and follow the instructions.";
-    }
     return "";
   }, [searchParams]);
 
@@ -123,15 +120,6 @@ const SignIn = () => {
               {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
             </button>
           </div>
-        </div>
-
-        <div className="flex items-center justify-end">
-          <Link
-            to={`/forgot-password${email ? `?email=${encodeURIComponent(email)}` : ""}`}
-            className="text-sm font-medium text-primary hover:text-primary/80 transition-colors"
-          >
-            Forgot password?
-          </Link>
         </div>
 
         <button
