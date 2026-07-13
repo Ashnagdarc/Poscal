@@ -1,453 +1,593 @@
-import { useState, useMemo, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  Calculator as CalculatorIcon, 
-  TrendingDown, 
-  TrendingUp,
+import {
+  ArrowUpRight,
+  Calculator as CalculatorIcon,
   ChevronRight,
+  Loader2,
+  Radio,
   Target,
   User,
-  X
 } from "lucide-react";
-import { NumPad } from "./NumPad";
-import { CurrencyGrid, CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+
+import { CurrencyGrid } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
-import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { type CurrencyPair } from "@/lib/currencyPairs";
 import { useRealtimePrices } from "@/hooks/use-realtime-prices";
-import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
+import {
+  saveCalculatorHistory,
+  type SaveCalculatorHistoryInput,
+} from "@/lib/calculatorHistory";
+import { BROKER_PROFILES, resolveInstrumentForBroker } from "@/domain/brokers";
+import { listSupportedInstruments } from "@/domain/instruments";
+import { calculatePositionSize } from "@/domain/positionSizing";
+import type { OrderType, ResolvedInstrument, TradeSide } from "@/domain/types";
+import { loadUserSettings } from "@/lib/convexUserSettings";
+import {
+  clearPendingSignal,
+  inferSignalDirection,
+  readPendingSignal,
+  type TradeSignal,
+} from "@/lib/signals";
 import { toast } from "sonner";
 
-export interface HistoryItem {
-  id: string;
-  pair: string;
-  balance: number;
-  risk: number;
-  stopLoss: number;
-  takeProfit: number;
-  positionSize: number;
-  riskReward: number;
-  timestamp: Date;
-}
+const CALCULATOR_PAIRS: CurrencyPair[] = listSupportedInstruments()
+  .filter(
+    (instrument) =>
+      instrument.quoteCurrency === "USD" || instrument.baseCurrency === "USD",
+  )
+  .map((instrument) => ({
+    symbol: instrument.symbol,
+    pipDecimal: instrument.pipPrecision,
+  }));
+
+const DEFAULT_PAIR = CALCULATOR_PAIRS[0];
+
+const toNumber = (value: string) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const formatShortTime = (date: Date) =>
+  date.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
 export const Calculator = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, session } = useAuth();
+
+  const [selectedPair, setSelectedPair] = useState<CurrencyPair>(DEFAULT_PAIR);
+  const [orderType, setOrderType] = useState<OrderType>("limit");
+  const [tradeDirection, setTradeDirection] = useState<TradeSide>("buy");
   const [accountBalance, setAccountBalance] = useState("");
-  const [riskPercent, setRiskPercent] = useState(1);
-  const [stopLossPips, setStopLossPips] = useState("");
-  const [takeProfitPips, setTakeProfitPips] = useState("");
-  const [selectedPair, setSelectedPair] = useState<CurrencyPair>(CURRENCY_PAIRS[0]);
-  
-  // UI State
-  const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | null>(null);
+  const [riskPercent, setRiskPercent] = useState("1");
+  const [entryPrice, setEntryPrice] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [takeProfitPrice, setTakeProfitPrice] = useState("");
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
-  const [showStopLossSelector, setShowStopLossSelector] = useState(false);
-  const [numPadValue, setNumPadValue] = useState("");
+  const [appliedSignal, setAppliedSignal] = useState<TradeSignal | null>(null);
 
-  const { currency } = useCurrency();
-  
-  const [showCustomRisk, setShowCustomRisk] = useState(false);
-  const [customRiskInput, setCustomRiskInput] = useState("");
+  const broker = BROKER_PROFILES[0];
+  const riskPresets = ["0.5", "1", "2", "3"];
 
-  // Memoize the symbols to fetch to prevent infinite re-renders
-  const symbolsToFetch = useMemo(() => {
-    const [base, quote] = selectedPair.symbol.split('/');
-    const requiredPairs = new Set<string>([selectedPair.symbol]);
-    
-    // If neither base nor quote is USD, we need conversion rates
-    if (base !== 'USD' && quote !== 'USD') {
-      // For cross pairs, we need either base/USD or quote/USD
-      // Example: For GBP/JPY, we need USD/JPY
-      // Example: For EUR/GBP, we need GBP/USD
-      
-      if (quote === 'JPY') {
-        requiredPairs.add('USD/JPY');
-      } else if (quote) {
-        requiredPairs.add(`${quote}/USD`);
-      }
-      
-      // Also add base/USD if available (helps with some conversions)
-      if (base && base !== 'XAU' && base !== 'XAG' && base !== 'BTC' && base !== 'ETH') {
-        requiredPairs.add(`${base}/USD`);
-      }
-    }
-    
-    // For USD-base pairs (USD/XXX), we just need the pair itself
-    return Array.from(requiredPairs);
-  }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
-  
-  // Use Realtime prices from backend (push-sender fetches every 10 seconds)
-  // This reduces API calls 1000x while keeping all users in sync
-  const { prices, askPrices, bidPrices, loading: _pricesLoading } = useRealtimePrices({
-    symbols: symbolsToFetch,
-    enabled: true
-  });
-  
-  const currentLivePrice = prices[selectedPair.symbol];
-  const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from backend
-
-  const riskPresets = [0.5, 1, 2, 3];
-
-  // Load saved settings
   useEffect(() => {
-    const savedRisk = localStorage.getItem("defaultRisk");
-    if (savedRisk) setRiskPercent(parseFloat(savedRisk));
-
-    // Apply saved theme
-    const savedTheme = localStorage.getItem("theme");
-    if (savedTheme === "dark") {
-      document.documentElement.classList.add("dark");
+    const pendingSignal = readPendingSignal();
+    if (!pendingSignal) {
+      return;
     }
+
+    const matchingPair = CALCULATOR_PAIRS.find(
+      (pair) => pair.symbol === pendingSignal.symbol,
+    );
+    if (matchingPair) {
+      setSelectedPair(matchingPair);
+    }
+
+    setOrderType(pendingSignal.orderType);
+    setEntryPrice(String(pendingSignal.entry));
+    setStopLossPrice(String(pendingSignal.stopLoss));
+    setTakeProfitPrice(String(pendingSignal.takeProfit));
+
+    const inferredDirection = inferSignalDirection(pendingSignal);
+    if (inferredDirection) {
+      setTradeDirection(inferredDirection);
+    }
+
+    setAppliedSignal(pendingSignal);
+    clearPendingSignal();
   }, []);
 
-  const calculation = useMemo(() => {
-    const balance = parseFloat(accountBalance) || 0;
-    const risk = riskPercent;
-    const slPips = parseFloat(stopLossPips) || 0;
-    const tpPips = parseFloat(takeProfitPips) || 0;
-    
-    // Use real ask price from API for position sizing (the price you'll actually pay)
-    // This matches professional calculators like Stinu app
-    // Falls back to mid-market if ask price not available
-    const priceForCalculation = currentAskPrice || currentLivePrice;
-    
-    const pipVal = getPipValueInUSD(
-      selectedPair.symbol,
-      'USD',
-      priceForCalculation || undefined,
-      prices, // Pass all prices for cross-pair conversion
-      false // Don't estimate ask price - we're already using real ask price
-    );
-
-    if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
-      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: pipVal };
-    }
-
-    const riskAmount = (balance * risk) / 100;
-    const positionSize = riskAmount / (slPips * pipVal);
-    const units = positionSize * STANDARD_LOT_SIZE;
-    const riskReward = tpPips > 0 ? tpPips / slPips : 0;
-    const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
-
-    return { riskAmount, positionSize, units, riskReward, potentialProfit, pipValue: pipVal };
-  }, [accountBalance, riskPercent, stopLossPips, takeProfitPips, selectedPair, currentLivePrice, currentAskPrice, prices]);
-
-  const saveToHistory = () => {
-    if (calculation.positionSize <= 0) return;
-
-    const savedHistory = localStorage.getItem("positionSizeHistory");
-    const history: HistoryItem[] = savedHistory ? JSON.parse(savedHistory) : [];
-
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      pair: selectedPair.symbol,
-      balance: parseFloat(accountBalance),
-      risk: riskPercent,
-      stopLoss: parseFloat(stopLossPips),
-      takeProfit: parseFloat(takeProfitPips) || 0,
-      positionSize: calculation.positionSize,
-      riskReward: calculation.riskReward,
-      timestamp: new Date()
+  useEffect(() => {
+    const syncCalculatorDefaults = async () => {
+      const settings = await loadUserSettings(session?.access_token);
+      if (
+        typeof settings.defaultRiskPercent === "number" &&
+        settings.defaultRiskPercent > 0
+      ) {
+        setRiskPercent(String(settings.defaultRiskPercent));
+      }
     };
 
-    const newHistory = [newItem, ...history].slice(0, 20);
-    localStorage.setItem("positionSizeHistory", JSON.stringify(newHistory));
-    toast.success("Saved to history");
+    void syncCalculatorDefaults();
+  }, [session?.access_token]);
+
+  const instrument = useMemo<ResolvedInstrument>(
+    () => resolveInstrumentForBroker(broker, selectedPair.symbol),
+    [broker, selectedPair.symbol],
+  );
+
+  const liveQuoteEnabled = orderType === "market";
+  const {
+    prices,
+    askPrices,
+    bidPrices,
+    quoteSourceBySymbol,
+    priceStatus,
+    updatedAtBySymbol,
+    loading: pricesLoading,
+    error: pricesError,
+  } = useRealtimePrices({
+    symbols: liveQuoteEnabled ? [selectedPair.symbol] : [],
+    enabled: liveQuoteEnabled,
+    pollIntervalMs: 20000,
+    staleAfterMs: 45000,
+    allowFallback: true,
+  });
+
+  const currentMidPrice = prices[selectedPair.symbol];
+  const currentAskPrice = askPrices[selectedPair.symbol];
+  const currentBidPrice = bidPrices[selectedPair.symbol];
+  const currentPairStatus = liveQuoteEnabled
+    ? (priceStatus[selectedPair.symbol] ?? "unavailable")
+    : "fresh";
+  const currentPairSource = liveQuoteEnabled
+    ? quoteSourceBySymbol[selectedPair.symbol]
+    : "manual";
+  const currentPairUpdatedAt = liveQuoteEnabled
+    ? updatedAtBySymbol[selectedPair.symbol]
+    : null;
+
+  const calculation = useMemo(() => {
+    try {
+      return calculatePositionSize({
+        broker,
+        instrument,
+        accountBalance: toNumber(accountBalance),
+        riskPercent: toNumber(riskPercent),
+        entryPrice: orderType === "limit" ? toNumber(entryPrice) : undefined,
+        stopLossPrice: toNumber(stopLossPrice),
+        takeProfitPrice: toNumber(takeProfitPrice),
+        side: tradeDirection,
+        orderType,
+        marketQuote:
+          orderType === "market"
+            ? {
+                bid: currentBidPrice,
+                ask: currentAskPrice,
+                mid: currentMidPrice,
+              }
+            : undefined,
+      });
+    } catch {
+      return null;
+    }
+  }, [
+    accountBalance,
+    broker,
+    currentAskPrice,
+    currentBidPrice,
+    currentMidPrice,
+    entryPrice,
+    instrument,
+    orderType,
+    riskPercent,
+    stopLossPrice,
+    takeProfitPrice,
+    tradeDirection,
+  ]);
+
+  const canSave = calculation !== null && calculation.lots > 0;
+  const executionPrice = calculation?.entryPrice;
+  const saveLabel = user ? "Save to Journal" : "Save Locally";
+  const quoteStatusMessage =
+    orderType === "market"
+      ? currentPairStatus === "fresh"
+        ? "Optional market quote is available."
+        : currentPairStatus === "stale"
+          ? "Quote is stale. Confirm before trading."
+          : "Quote is unavailable. Use manual mode to size offline."
+      : "Manual mode is fully offline and deterministic.";
+
+  const formatPrice = (value?: number) => {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return "—";
+    }
+
+    return value.toLocaleString("en-US", {
+      minimumFractionDigits: instrument.pricePrecision,
+      maximumFractionDigits: instrument.pricePrecision,
+    });
   };
 
-  const formatNumber = (num: number, decimals: number = 2) => {
-    if (num === 0) return "—";
-    return num.toLocaleString("en-US", {
+  const formatNumber = (value?: number, decimals = 2) => {
+    if (typeof value !== "number" || Number.isNaN(value)) {
+      return "—";
+    }
+
+    return value.toLocaleString("en-US", {
       minimumFractionDigits: decimals,
       maximumFractionDigits: decimals,
     });
   };
 
-  const openNumPad = (type: "balance" | "takeProfit") => {
-    const values = { balance: accountBalance, takeProfit: takeProfitPips };
-    setNumPadValue(values[type]);
-    setShowNumPad(type);
+  const saveToHistory = async () => {
+    if (!calculation) {
+      return;
+    }
+
+    const item: SaveCalculatorHistoryInput = {
+      id: Date.now().toString(),
+      pair: selectedPair.symbol,
+      direction: tradeDirection,
+      balance: toNumber(accountBalance),
+      risk: toNumber(riskPercent),
+      stopLoss: calculation.stopDistancePips,
+      takeProfit: calculation.rewardDistancePips,
+      positionSize: calculation.lots,
+      riskReward: calculation.rewardRiskRatio,
+      timestamp: new Date(),
+      riskAmount: calculation.actualRiskAmount,
+      units: calculation.units,
+      pipValue: calculation.pipValueInAccountCurrency,
+      priceSource: orderType === "market" ? "live_market_quote" : "manual_entry",
+      spreadPips: null,
+    };
+
+    try {
+      await saveCalculatorHistory(item, user?.id);
+      toast.success("Calculation saved");
+    } catch (error) {
+      console.error("[calculator-history] Failed to save sizing history", error);
+      toast.error("Could not save sizing history");
+    }
   };
 
-  const handleNumPadDone = () => {
-    if (showNumPad === "balance") setAccountBalance(numPadValue);
-    else if (showNumPad === "takeProfit") setTakeProfitPips(numPadValue);
-    setShowNumPad(null);
-    setNumPadValue("");
-  };
+  const resultSummary = [
+    {
+      label: "Risk Amount",
+      value: formatNumber(calculation?.actualRiskAmount, 2),
+    },
+    {
+      label: "R:R",
+      value: calculation
+        ? `1:${formatNumber(calculation.rewardRiskRatio, 2)}`
+        : "—",
+    },
+    {
+      label: "Stop Loss",
+      value: `${formatNumber(calculation?.stopDistancePips, 1)} pips`,
+    },
+    {
+      label: "Pip Value",
+      value: formatNumber(calculation?.pipValueInAccountCurrency, 2),
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="pt-12 pb-6 px-6 animate-fade-in">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center">
-              <CalculatorIcon className="w-5 h-5 text-background" />
+    <div className="min-h-screen bg-[#050505] pb-32 text-white">
+      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.07),_transparent_32%),radial-gradient(circle_at_bottom_right,_rgba(255,255,255,0.04),_transparent_22%)]" />
+
+      <main className="relative mx-auto max-w-[32rem] px-4 pb-8 pt-10">
+        <header className="mb-7 flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-white text-black shadow-[0_16px_34px_-20px_rgba(255,255,255,0.7)]">
+              <CalculatorIcon className="h-8 w-8" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Position Size</h1>
-              <p className="text-sm text-muted-foreground">Calculator</p>
+              <h1 className="text-[2.45rem] font-semibold tracking-[-0.05em] text-white">
+                Position Size
+              </h1>
+              <p className="text-lg text-white/55">Calculator</p>
             </div>
           </div>
+
           <button
-            onClick={() => navigate(user ? '/profile' : '/signin')}
-            className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all active:scale-95"
+            onClick={() => navigate(user ? "/profile" : "/signin")}
+            className="mt-2 flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.08] text-white/85 transition active:scale-95"
+            aria-label={user ? "Open profile" : "Open sign in"}
           >
-            <User className="w-5 h-5 text-foreground" />
+            <User className="h-7 w-7" />
           </button>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="flex-1 px-6 pb-8 space-y-4">
-        {/* Currency Pair Selector */}
-        <button
-          onClick={() => setShowCurrencyGrid(true)}
-          className="w-full bg-secondary rounded-2xl p-4 flex items-center justify-between transition-all duration-200 active:scale-[0.98] animate-slide-up"
-        >
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Currency Pair</p>
-            <p className="text-lg font-bold text-foreground">{selectedPair.symbol}</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </button>
+        {appliedSignal ? (
+          <button
+            onClick={() => setAppliedSignal(null)}
+            className="mb-4 flex w-full items-center justify-between rounded-[1.8rem] border border-emerald-500/10 bg-emerald-500/8 px-5 py-4 text-left"
+          >
+            <div>
+              <p className="text-sm font-semibold text-emerald-300">Signal Applied</p>
+              <p className="mt-1 text-sm text-white/70">
+                {appliedSignal.symbol} pre-filled the calculator.
+              </p>
+            </div>
+            <span className="text-xs uppercase tracking-[0.18em] text-white/45">Dismiss</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => navigate("/signals")}
+            className="mb-4 flex w-full items-center justify-between rounded-[1.8rem] border border-white/10 bg-white/[0.05] px-5 py-4 text-left transition active:scale-[0.99]"
+          >
+            <div className="flex items-center gap-3">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-black">
+                <Radio className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">Trading Signals</p>
+                <p className="text-sm text-white/55">Apply a signal to pre-fill this calculator</p>
+              </div>
+            </div>
+            <ChevronRight className="h-5 w-5 text-white/45" />
+          </button>
+        )}
 
-        {/* Account Balance */}
-        <button
-          onClick={() => openNumPad("balance")}
-          className="w-full bg-secondary rounded-2xl p-4 flex items-center justify-between transition-all duration-200 active:scale-[0.98] animate-slide-up"
-          style={{ animationDelay: "50ms" }}
-        >
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Account Balance</p>
-            <p className="text-lg font-bold text-foreground">
-              {accountBalance ? `${currency.symbol}${parseFloat(accountBalance).toLocaleString()}` : "Tap to enter"}
-            </p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </button>
+        <section className="space-y-4">
+          <button
+            onClick={() => setShowCurrencyGrid(true)}
+            className="flex w-full items-center justify-between rounded-[2rem] border border-white/10 bg-white/[0.07] px-5 py-5 text-left shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)] transition active:scale-[0.99]"
+          >
+            <div>
+              <p className="text-[1rem] text-white/45">Currency Pair</p>
+              <p className="mt-2 text-[2.1rem] font-semibold tracking-[-0.05em] text-white">
+                {selectedPair.symbol}
+              </p>
+            </div>
+            <ChevronRight className="h-6 w-6 text-white/45" />
+          </button>
 
-        {/* Risk Percentage */}
-        <div className="animate-slide-up" style={{ animationDelay: "100ms" }}>
-          <p className="text-xs text-muted-foreground mb-3 ml-1">Risk Percentage</p>
-          <div className="flex gap-2">
-            {riskPresets.map((preset) => (
+          <label className="block rounded-[2rem] border border-white/10 bg-white/[0.07] px-5 py-5 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)]">
+            <span className="text-[1rem] text-white/45">Account Balance</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={accountBalance}
+              onChange={(event) => setAccountBalance(event.target.value)}
+              placeholder="Tap to enter"
+              className="mt-2 h-11 w-full bg-transparent text-[2.1rem] font-semibold tracking-[-0.05em] text-white outline-none placeholder:text-white/35"
+            />
+          </label>
+
+          <section>
+            <p className="mb-3 text-[1rem] text-white/55">Risk Percentage</p>
+            <div className="grid grid-cols-5 gap-3">
+              {riskPresets.map((preset) => {
+                const active = riskPercent === preset;
+                return (
+                  <button
+                    key={preset}
+                    onClick={() => setRiskPercent(preset)}
+                    className={`min-h-[4.4rem] rounded-[1.55rem] text-xl font-semibold transition active:scale-95 ${
+                      active
+                        ? "bg-white text-black"
+                        : "bg-white/[0.08] text-white"
+                    }`}
+                  >
+                    {preset}%
+                  </button>
+                );
+              })}
               <button
-                key={preset}
-                onClick={() => {
-                  setRiskPercent(preset);
-                  setShowCustomRisk(false);
-                }}
-                className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                  riskPercent === preset && !showCustomRisk
-                    ? "bg-foreground text-background"
-                    : "bg-secondary text-foreground"
+                className={`min-h-[4.4rem] rounded-[1.55rem] text-xl font-semibold transition ${
+                  !riskPresets.includes(riskPercent) ? "bg-white text-black" : "bg-white/[0.08] text-white"
                 }`}
               >
-                {preset}%
-              </button>
-            ))}
-            <button
-              onClick={() => setShowCustomRisk(true)}
-              className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                showCustomRisk || !riskPresets.includes(riskPercent)
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              {showCustomRisk || !riskPresets.includes(riskPercent) ? `${riskPercent}%` : "Custom"}
-            </button>
-          </div>
-          {showCustomRisk && (
-            <div className="mt-3 flex gap-2">
-              <input
-                type="number"
-                value={customRiskInput}
-                onChange={(e) => setCustomRiskInput(e.target.value)}
-                placeholder="Enter risk %"
-                className="flex-1 h-12 px-4 bg-secondary text-foreground rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
-                autoFocus
-                min="0.1"
-                max="100"
-                step="0.1"
-              />
-              <button
-                onClick={() => {
-                  const value = parseFloat(customRiskInput);
-                  if (value > 0 && value <= 100) {
-                    setRiskPercent(value);
-                    setShowCustomRisk(false);
-                    setCustomRiskInput("");
-                  }
-                }}
-                disabled={!customRiskInput || parseFloat(customRiskInput) <= 0}
-                className="px-6 h-12 bg-foreground text-background rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
-              >
-                Set
+                Custom
               </button>
             </div>
-          )}
-        </div>
+          </section>
 
-        {/* Stop Loss & Take Profit */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setShowStopLossSelector(true)}
-            className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-            style={{ animationDelay: "150ms" }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingDown className="w-4 h-4 text-destructive" />
-              <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
+          <section>
+            <p className="mb-3 text-[1rem] text-white/55">Trade Direction</p>
+            <div className="grid grid-cols-2 gap-3">
+              {(["buy", "sell"] as const).map((side) => (
+                <button
+                  key={side}
+                  onClick={() => setTradeDirection(side)}
+                  className={`min-h-[4.8rem] rounded-[1.75rem] text-[2rem] font-semibold tracking-[-0.04em] transition active:scale-95 ${
+                    tradeDirection === side
+                      ? "bg-white text-black"
+                      : "bg-white/[0.08] text-white"
+                  }`}
+                >
+                  {side[0].toUpperCase() + side.slice(1)}
+                </button>
+              ))}
             </div>
-            <p className="text-lg font-bold text-foreground">
-              {stopLossPips ? `${stopLossPips} pips` : "—"}
-            </p>
-          </button>
+          </section>
 
-          <button
-            onClick={() => openNumPad("takeProfit")}
-            className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-            style={{ animationDelay: "200ms" }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-foreground" />
-              <p className="text-xs text-muted-foreground">Take Profit (pips)</p>
-            </div>
-            <p className="text-lg font-bold text-foreground">
-              {takeProfitPips ? `${takeProfitPips} pips` : "—"}
-            </p>
-          </button>
-        </div>
-
-        {/* Result Card */}
-        <div 
-          className="mt-4 animate-scale-in" 
-          style={{ animationDelay: "250ms" }}
-        >
-          <div className="bg-foreground text-background rounded-3xl p-6">
-            <div className="text-center mb-5">
-              <p className="text-sm font-medium opacity-60 mb-1">Position Size</p>
-              <p className="text-5xl font-bold tracking-tight">
-                {formatNumber(calculation.positionSize)}
-              </p>
-              <p className="text-lg font-medium opacity-80 mt-1">lots</p>
-            </div>
-
-            <div className="h-px bg-background/20 my-4" />
-
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-xs font-medium opacity-60 mb-1">Risk Amount</p>
-                <p className="text-xl font-semibold">
-                  {currency.symbol}{formatNumber(calculation.riskAmount, 0)}
+          <section className="rounded-[2rem] border border-white/10 bg-white/[0.07] p-5 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)]">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[1rem] text-white/45">Order Mode</p>
+                <p className="text-sm text-white/55">
+                  Manual works offline. Market uses optional live quotes.
                 </p>
               </div>
-              <div className="text-center">
-                <p className="text-xs font-medium opacity-60 mb-1">Units</p>
-                <p className="text-xl font-semibold">
-                  {formatNumber(calculation.units, 0)}
-                </p>
+              <div className="grid grid-cols-2 gap-2 rounded-full bg-black/25 p-1">
+                {(["limit", "market"] as const).map((value) => (
+                  <button
+                    key={value}
+                    onClick={() => setOrderType(value)}
+                    className={`rounded-full px-4 py-2 text-sm font-medium transition ${
+                      orderType === value ? "bg-white text-black" : "text-white/60"
+                    }`}
+                  >
+                    {value === "limit" ? "Manual" : "Market"}
+                  </button>
+                ))}
               </div>
             </div>
 
-            {/* Risk/Reward Section */}
-            {calculation.riskReward > 0 && (
-              <>
-                <div className="h-px bg-background/20 my-4" />
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Target className="w-3 h-3 opacity-60" />
-                      <p className="text-xs font-medium opacity-60">R:R Ratio</p>
-                    </div>
-                    <p className="text-xl font-semibold">
-                      1:{formatNumber(calculation.riskReward, 1)}
+            {orderType === "limit" ? (
+              <label className="mb-4 block rounded-[1.7rem] border border-white/10 bg-black/20 p-4">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">
+                  Entry Price
+                </span>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  min="0"
+                  step={instrument.pipSize}
+                  value={entryPrice}
+                  onChange={(event) => setEntryPrice(event.target.value)}
+                  placeholder={formatPrice(currentMidPrice)}
+                  className="mt-3 h-11 w-full bg-transparent text-[2rem] font-semibold tracking-[-0.05em] text-white outline-none placeholder:text-white/20"
+                />
+              </label>
+            ) : (
+              <div className="mb-4 rounded-[1.7rem] border border-white/10 bg-black/20 p-4">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-[1rem] text-white/45">Execution Price</p>
+                    <p className="mt-2 text-[2rem] font-semibold tracking-[-0.05em] text-white">
+                      {tradeDirection === "buy" ? "Ask" : "Bid"}: {formatPrice(executionPrice)}
                     </p>
                   </div>
-                  <div className="text-center">
-                    <p className="text-xs font-medium opacity-60 mb-1">Potential Profit</p>
-                    <p className="text-xl font-semibold">
-                      +{currency.symbol}{formatNumber(calculation.potentialProfit, 0)}
-                    </p>
-                  </div>
+                  <span className="rounded-full bg-white/[0.08] px-4 py-2 text-sm font-semibold uppercase text-white">
+                    {tradeDirection}
+                  </span>
                 </div>
-              </>
+                <div className="flex items-center gap-2 text-sm text-white/55">
+                  {pricesLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                  <span>
+                    {quoteStatusMessage}
+                    {currentPairUpdatedAt ? ` • ${formatShortTime(currentPairUpdatedAt)}` : ""}
+                  </span>
+                </div>
+                {pricesError ? (
+                  <p className="mt-2 text-sm text-red-300/80">{pricesError}</p>
+                ) : null}
+              </div>
             )}
-          </div>
 
-          {/* Save Button */}
-          <button
-            onClick={saveToHistory}
-            disabled={calculation.positionSize <= 0}
-            className="w-full mt-4 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Save to History
-          </button>
-        </div>
+            <div className="grid grid-cols-2 gap-3">
+              <StopLossSelector
+                label="Stop Loss"
+                value={stopLossPrice}
+                onChange={setStopLossPrice}
+                placeholder="—"
+                step={instrument.pipSize}
+                accent="danger"
+              />
+              <StopLossSelector
+                label="Take Profit"
+                value={takeProfitPrice}
+                onChange={setTakeProfitPrice}
+                placeholder="—"
+                step={instrument.pipSize}
+              />
+            </div>
+          </section>
+
+          <section className="rounded-[2.4rem] bg-white p-6 text-black shadow-[0_22px_55px_-30px_rgba(255,255,255,0.28)]">
+            <div className="text-center">
+              <p className="text-[1rem] text-black/55">Position Size</p>
+              <p className="mt-3 text-[3.3rem] font-semibold tracking-[-0.07em]">
+                {formatNumber(calculation?.lots)}
+              </p>
+              <p className="text-sm font-medium text-black/55">lots</p>
+            </div>
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              {resultSummary.map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-[1.4rem] bg-black/[0.04] p-4"
+                >
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-black/45">
+                    {item.label}
+                  </p>
+                  <p className="mt-2 text-lg font-semibold tracking-[-0.04em]">
+                    {item.value}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-5 rounded-[1.5rem] bg-black/[0.04] p-4 text-sm leading-6 text-black/60">
+              {calculation
+                ? calculation.isBelowMinimumLot
+                  ? "Risk is below the broker minimum lot size for this instrument."
+                  : `Sizing uses ${currentPairSource ?? "manual"} data and ${instrument.name}.`
+                : "Enter balance, risk, and price levels to calculate the trade size."}
+            </div>
+
+            <button
+              onClick={saveToHistory}
+              disabled={!canSave}
+              className="mt-5 flex h-14 w-full items-center justify-center rounded-[1.6rem] bg-black text-lg font-semibold text-white transition active:scale-[0.99] disabled:opacity-40"
+            >
+              {canSave ? saveLabel : "Complete Required Inputs"}
+            </button>
+
+            <div className="mt-4 flex items-center justify-between gap-3 text-sm text-black/55">
+              <span>{quoteStatusMessage}</span>
+              <button
+                onClick={() => navigate("/journal")}
+                className="inline-flex items-center gap-1 font-medium text-black"
+              >
+                Journal
+                <ArrowUpRight className="h-4 w-4" />
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-white/10 bg-white/[0.05] p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <Target className="h-5 w-5 text-white/70" />
+              <p className="text-sm font-semibold text-white">Instrument Details</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 text-sm text-white/60">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Model</p>
+                <p className="mt-1 text-base font-medium text-white">{instrument.name}</p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Contract</p>
+                <p className="mt-1 text-base font-medium text-white">
+                  {formatNumber(instrument.contractSize, 0)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Min Lot</p>
+                <p className="mt-1 text-base font-medium text-white">
+                  {formatNumber(instrument.minLot, 2)}
+                </p>
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-white/40">Quote Status</p>
+                <p className="mt-1 text-base font-medium capitalize text-white">
+                  {currentPairStatus}
+                </p>
+              </div>
+            </div>
+          </section>
+        </section>
       </main>
 
-      {/* NumPad Overlay */}
-      {showNumPad && (
-        <NumPad
-          value={numPadValue}
-          onChange={setNumPadValue}
-          onDone={handleNumPadDone}
-          label={
-            showNumPad === "balance" ? "Account Balance" : "Take Profit"
-          }
-          suffix={showNumPad === "balance" ? currency.code : "pips"}
-        />
-      )}
-
-      {/* Currency Grid Overlay */}
-      {showCurrencyGrid && (
+      {showCurrencyGrid ? (
         <CurrencyGrid
           selectedPair={selectedPair}
+          pairs={CALCULATOR_PAIRS}
           onSelect={setSelectedPair}
           onBack={() => setShowCurrencyGrid(false)}
         />
-      )}
-
-      {/* Stop Loss Selector Modal */}
-      {showStopLossSelector && (
-        <div className="fixed inset-0 bg-background z-50 flex flex-col animate-slide-up">
-          {/* Header */}
-          <header className="pt-12 pb-4 px-6 border-b border-border">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-foreground">Select Stop Loss</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Risk: {currency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} ({riskPercent}%)
-                </p>
-              </div>
-              <button
-                onClick={() => setShowStopLossSelector(false)}
-                className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center transition-all active:scale-95"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </header>
-
-          {/* Stop Loss List */}
-          <div className="flex-1 overflow-hidden">
-            <StopLossSelector
-              selectedStopLoss={parseFloat(stopLossPips) || null}
-              onSelect={(sl) => {
-                setStopLossPips(sl.toString());
-                setShowStopLossSelector(false);
-              }}
-              accountBalance={parseFloat(accountBalance) || 0}
-              riskPercent={riskPercent}
-              pipValue={calculation.pipValue}
-              currency={currency}
-            />
-          </div>
-        </div>
-      )}
+      ) : null}
     </div>
   );
 };

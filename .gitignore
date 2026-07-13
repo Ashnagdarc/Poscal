@@ -17,6 +17,10 @@ dist-ssr
 .env.local
 .env.production
 .env.development
+.env.vercel
+.env*.local
+.dev.vars
+workers/**/.dev.vars
 
 # Editor directories and files
 .vscode/*
@@ -29,20 +33,37 @@ dist-ssr
 *.sln
 *.sw?
 
-# Supabase
-supabase/.temp/
+# AI tool configs - local only, not for repo
+.agent/
+.continue/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Binary archives
+*.tar.gz
+*.zip
+*.gz
+
 *-old.ts
-# Temporary files - keep in temp/ folder only
+
+# Temporary files
 temp/
 *.tmp
 *.bak
 
-# Backups - never commit database backups
+# Backups
 backup-tools/backups/
-*.sql
+backups/
+exports/
 *.sql.gz
+*.gpg
 
-# Ensure proper folder structure
-# Documentation files must be in docs/
-# SQL files must be in sql/ (except supabase/migrations/)
-# Configuration files must be in config/
+# Vercel
+.vercel
+
+
+#Ignore vscode AI rules
+.github/instructions/codacy.instructions.md

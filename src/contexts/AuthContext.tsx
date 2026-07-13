@@ -1,138 +1,113 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '@/integrations/supabase/client';
+import { createContext, useContext, ReactNode } from 'react';
+import { useAuthActions, useAuthToken, useConvexAuth } from '@convex-dev/auth/react';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
+import { isConvexEnabled } from '@/lib/convexClient';
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  session: { access_token: string } | null;
   loading: boolean;
   isConfigured: boolean;
-  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: Error | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, fullName?: string) => Promise<{ error: string | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
-  resetPassword: (email: string) => Promise<{ error: Error | null }>;
+  resetPassword: (email: string) => Promise<{ error: string | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
-  const [loading, setLoading] = useState(true);
+export interface User {
+  id: string;
+  email: string;
+  full_name: string | null;
+  email_verified: boolean;
+}
 
-  useEffect(() => {
-    if (!isSupabaseConfigured) {
-      setLoading(false);
-      return;
-    }
+const DisabledAuthProvider = ({ children }: { children: ReactNode }) => {
+  const signIn = async () => ({ error: 'Sign in is unavailable until Convex is configured.' });
+  const signUp = async () => ({ error: 'Sign up is unavailable until Convex is configured.' });
+  const resetPassword = async () => ({ error: 'Password reset is unavailable until Convex is configured.' });
+  const signOut = async () => {};
 
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        // If it's a password recovery event, redirect to reset password page
-        if (event === 'PASSWORD_RECOVERY') {
-          window.location.href = '/reset-password';
-          return;
-        }
-        
-        // Log token refresh errors for debugging
-        if (event === 'TOKEN_REFRESHED') {
-          console.log('[auth] Token refreshed successfully');
-        }
-        
-        setSession(session);
-        setUser(session?.user ?? null);
-        setLoading(false);
+  return (
+    <AuthContext.Provider value={{ user: null, session: null, loading: false, isConfigured: false, signUp, signIn, signOut, resetPassword }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const EnabledAuthProvider = ({ children }: { children: ReactNode }) => {
+  const { signIn: convexSignIn, signOut: convexSignOut } = useAuthActions();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const authToken = useAuthToken();
+  const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
+
+  const user: User | null = viewer
+    ? {
+        id: viewer.id,
+        email: viewer.email ?? "",
+        full_name: viewer.fullName ?? null,
+        email_verified: viewer.emailVerified,
       }
-    );
+    : null;
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        console.error('[auth] Error getting session:', error);
-        // Clear potentially corrupted session
-        setSession(null);
-        setUser(null);
-      } else {
-        setSession(session);
-        setUser(session?.user ?? null);
-      }
-      setLoading(false);
-    }).catch((err) => {
-      console.error('[auth] Exception getting session:', err);
-      setLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
-  }, []);
+  const session = user && authToken ? { access_token: authToken } : null;
+  const loading = authLoading || (isAuthenticated && viewer === undefined);
 
   const signUp = async (email: string, password: string, fullName?: string) => {
-    if (!isSupabaseConfigured) {
-      return { error: new Error('Supabase is not configured. Please connect Supabase first.') };
+    try {
+      await convexSignIn("password", {
+        flow: "signUp",
+        email,
+        password,
+        ...(fullName?.trim() ? { name: fullName.trim() } : {}),
+      });
+      return { error: null };
+    } catch (error: unknown) {
+      console.error('[auth] Sign up error:', error);
+      const msg = error instanceof Error ? error.message : 'Sign up failed';
+      return { error: msg };
     }
-
-    const redirectUrl = `${window.location.origin}/`;
-    
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName || '',
-        },
-      },
-    });
-    
-    return { error: error as Error | null };
   };
 
   const signIn = async (email: string, password: string) => {
-    if (!isSupabaseConfigured) {
-      return { error: new Error('Supabase is not configured. Please connect Supabase first.') };
-    }
-
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      await convexSignIn("password", {
+        flow: "signIn",
         email,
         password,
       });
-      
-      if (error) {
-        console.error('[auth] Sign in error:', error.message, error.status);
-      }
-      
-      return { error: error as Error | null };
-    } catch (err) {
-      console.error('[auth] Sign in exception:', err);
-      return { error: err as Error };
+      return { error: null };
+    } catch (error: unknown) {
+      console.error('[auth] Sign in error:', error);
+      const msg = error instanceof Error ? error.message : 'Sign in failed';
+      return { error: msg };
     }
   };
 
   const resetPassword = async (email: string) => {
-    if (!isSupabaseConfigured) {
-      return { error: new Error('Supabase is not configured. Please connect Supabase first.') };
-    }
-
-    const redirectUrl = `${window.location.origin}/reset-password`;
-    
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: redirectUrl,
-    });
-    
-    return { error: error as Error | null };
+    void email;
+    return { error: 'Password reset is not configured yet.' };
   };
 
   const signOut = async () => {
-    if (!isSupabaseConfigured) return;
-    await supabase.auth.signOut();
+    await convexSignOut();
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, isConfigured: isSupabaseConfigured, signUp, signIn, signOut, resetPassword }}>
+    <AuthContext.Provider value={{ user, session, loading, isConfigured: true, signUp, signIn, signOut, resetPassword }}>
       {children}
     </AuthContext.Provider>
   );
+};
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  if (!isConvexEnabled()) {
+    return <DisabledAuthProvider>{children}</DisabledAuthProvider>;
+  }
+
+  return <EnabledAuthProvider>{children}</EnabledAuthProvider>;
 };
 
 export const useAuth = () => {
