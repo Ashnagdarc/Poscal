@@ -3,175 +3,98 @@ import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { calculatePips } from '@/lib/forexCalculations';
 import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
 import { SignalFormSchema } from '@/lib/formValidation';
-import { signalsApi, notificationsApi } from '@/lib/api';
-import { FEATURED_CURRENCY_PAIRS } from '@/components/CurrencyGrid';
+import { notificationsApi, signalsApi } from '@/lib/api';
+import { CURRENCY_PAIRS } from './CurrencyGrid';
 
-const CURRENCY_PAIRS = FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol);
+type SignalOrderType = 'buy' | 'sell' | 'buy_limit' | 'sell_limit' | 'buy_stop' | 'sell_stop';
+
+const ORDER_TYPES: Array<{ value: SignalOrderType; label: string }> = [
+  { value: 'buy', label: 'Buy' },
+  { value: 'sell', label: 'Sell' },
+  { value: 'buy_limit', label: 'Buy Limit' },
+  { value: 'sell_limit', label: 'Sell Limit' },
+  { value: 'buy_stop', label: 'Buy Stop' },
+  { value: 'sell_stop', label: 'Sell Stop' },
+];
 
 interface CreateSignalModalProps {
   onSignalCreated: () => void;
 }
 
+const initialFormData = {
+  currency_pair: '',
+  order_type: 'buy' as SignalOrderType,
+  entry_price: '',
+  stop_loss: '',
+  take_profit_1: '',
+};
+
+const normalizeSymbol = (value: string) => value.trim().toUpperCase();
+
+const toNumber = (value: string) => Number.parseFloat(value);
+
+const orderTypeLabel = (value: SignalOrderType) =>
+  ORDER_TYPES.find((type) => type.value === value)?.label ?? value;
+
 export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    currency_pair: '',
-    direction: 'buy' as 'buy' | 'sell',
-    entry_price: '',
-    stop_loss: '',
-    take_profit_1: '',
-    take_profit_2: '',
-    take_profit_3: '',
-    chart_image_url: '',
-    notes: '',
-    market_execution: 'instant' as 'buy-limit' | 'sell-stop' | 'buy-stop' | 'sell-stop-limit' | 'buy-stop-limit' | 'instant',
-  });
-
-  const validateLevels = (
-    direction: 'buy' | 'sell',
-    entry: number,
-    sl: number,
-    tp1: number,
-    tp2: number | null,
-    tp3: number | null
-  ): string | null => {
-    if (direction === 'buy') {
-      // For BUY: SL must be below entry, TPs must be above entry
-      if (sl >= entry) {
-        return 'Stop Loss must be below Entry Price for a BUY trade';
-      }
-      if (tp1 <= entry) {
-        return 'Take Profit 1 must be above Entry Price for a BUY trade';
-      }
-      if (tp2 !== null && tp2 <= entry) {
-        return 'Take Profit 2 must be above Entry Price for a BUY trade';
-      }
-      if (tp3 !== null && tp3 <= entry) {
-        return 'Take Profit 3 must be above Entry Price for a BUY trade';
-      }
-      // TPs should be in ascending order
-      if (tp2 !== null && tp2 <= tp1) {
-        return 'Take Profit 2 must be higher than Take Profit 1';
-      }
-      if (tp3 !== null && tp2 !== null && tp3 <= tp2) {
-        return 'Take Profit 3 must be higher than Take Profit 2';
-      }
-    } else {
-      // For SELL: SL must be above entry, TPs must be below entry
-      if (sl <= entry) {
-        return 'Stop Loss must be above Entry Price for a SELL trade';
-      }
-      if (tp1 >= entry) {
-        return 'Take Profit 1 must be below Entry Price for a SELL trade';
-      }
-      if (tp2 !== null && tp2 >= entry) {
-        return 'Take Profit 2 must be below Entry Price for a SELL trade';
-      }
-      if (tp3 !== null && tp3 >= entry) {
-        return 'Take Profit 3 must be below Entry Price for a SELL trade';
-      }
-      // TPs should be in descending order (lower is better for SELL)
-      if (tp2 !== null && tp2 >= tp1) {
-        return 'Take Profit 2 must be lower than Take Profit 1';
-      }
-      if (tp3 !== null && tp2 !== null && tp3 >= tp2) {
-        return 'Take Profit 3 must be lower than Take Profit 2';
-      }
-    }
-    return null; // All validations passed
-  };
+  const [formData, setFormData] = useState(initialFormData);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      // First validate with Zod schema
-      const validation = SignalFormSchema.safeParse(formData);
+      const normalizedForm = {
+        ...formData,
+        currency_pair: normalizeSymbol(formData.currency_pair),
+      };
+      const validation = SignalFormSchema.safeParse(normalizedForm);
       if (!validation.success) {
-        const firstError = validation.error.errors[0];
-        toast.error(firstError.message);
+        toast.error(validation.error.errors[0]?.message ?? 'Invalid signal');
         setLoading(false);
         return;
       }
 
-      const entry = parseFloat(formData.entry_price);
-      const sl = parseFloat(formData.stop_loss);
-      const tp1 = parseFloat(formData.take_profit_1);
-      const tp2 = formData.take_profit_2 ? parseFloat(formData.take_profit_2) : null;
-      const tp3 = formData.take_profit_3 ? parseFloat(formData.take_profit_3) : null;
-
-      // Validate levels
-      const validationError = validateLevels(formData.direction, entry, sl, tp1, tp2, tp3);
-      if (validationError) {
-        toast.error(validationError);
-        setLoading(false);
-        return;
-      }
-
-      const signalData: any = {
-        currency_pair: formData.currency_pair,
-        direction: formData.direction,
-        entry_price: entry,
-        stop_loss: sl,
-        take_profit_1: tp1,
-        pips_to_sl: Math.round(calculatePips(entry, sl, formData.currency_pair)),
-        pips_to_tp1: Math.round(calculatePips(entry, tp1, formData.currency_pair)),
+      const signalData = {
+        currency_pair: normalizedForm.currency_pair,
+        order_type: normalizedForm.order_type,
+        entry_price: normalizedForm.entry_price ? toNumber(normalizedForm.entry_price) : null,
+        stop_loss: toNumber(normalizedForm.stop_loss),
+        take_profit_1: toNumber(normalizedForm.take_profit_1),
+        take_profit_2: null,
+        take_profit_3: null,
+        trading_view_url: null,
+        notes: null,
         status: 'active',
-        market_execution: formData.market_execution,
       };
 
-      // Add optional fields only if they have values
-      if (tp2) {
-        signalData.take_profit_2 = tp2;
-        signalData.pips_to_tp2 = Math.round(calculatePips(entry, tp2, formData.currency_pair));
-      }
-      if (tp3) {
-        signalData.take_profit_3 = tp3;
-        signalData.pips_to_tp3 = Math.round(calculatePips(entry, tp3, formData.currency_pair));
-      }
-      if (formData.chart_image_url) {
-        signalData.chart_image_url = formData.chart_image_url;
-      }
-      if (formData.notes) {
-        signalData.notes = formData.notes;
-      }
+      const createdSignal = await signalsApi.create(signalData);
 
-      console.log('📤 Creating signal with data:', JSON.stringify(signalData, null, 2));
-
-      await signalsApi.create(signalData);
-      console.log('✅ Signal created successfully');
-
-      // Queue push notification to all subscribers
       try {
-        // Note: Notification queuing skipped (requires broadcast support)
-        console.log('Signal creation notification skipped (requires broadcast support)');
+        await notificationsApi.queueNotification({
+          title: `New Signal: ${signalData.currency_pair}`,
+          body: `${orderTypeLabel(signalData.order_type)} | SL ${signalData.stop_loss} | TP ${signalData.take_profit_1}`,
+          tag: `signal-${createdSignal?.id ?? Date.now()}`,
+          data: {
+            type: 'signal',
+            signalId: createdSignal?.id ?? null,
+            path: '/signals',
+          },
+        });
       } catch (pushError) {
-        // Don't fail the signal creation if push fails
+        logger.warn('Signal created, but push notification queueing failed:', pushError);
       }
 
-      toast.success('Signal created successfully!');
+      toast.success('Signal created successfully');
       setOpen(false);
-      setFormData({
-        currency_pair: '',
-        direction: 'buy',
-        entry_price: '',
-        stop_loss: '',
-        take_profit_1: '',
-        take_profit_2: '',
-        take_profit_3: '',
-        chart_image_url: '',
-        notes: '',
-        market_execution: 'instant',
-      });
+      setFormData(initialFormData);
       onSignalCreated();
     } catch (error) {
       logger.error('Error creating signal:', error);
@@ -193,61 +116,44 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
       </DialogTrigger>
       <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create New Signal</DialogTitle>
+          <DialogTitle>Create Signal</DialogTitle>
           <DialogDescription>
-            Add a new trading signal with entry, stop loss, and take profit levels.
+            Post a trade setup for users to apply in their calculator.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Currency Pair</Label>
+              <Label>Symbol</Label>
               <Select
                 value={formData.currency_pair}
-                onValueChange={(v) => setFormData({ ...formData, currency_pair: v })}
-                required
+                onValueChange={(value) => setFormData({ ...formData, currency_pair: value })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select pair" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="max-h-72">
                   {CURRENCY_PAIRS.map((pair) => (
-                    <SelectItem key={pair} value={pair}>{pair}</SelectItem>
+                    <SelectItem key={pair.symbol} value={pair.symbol}>
+                      {pair.symbol}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Direction</Label>
+              <Label>Order Type</Label>
               <Select
-                value={formData.direction}
-                onValueChange={(v) => setFormData({ ...formData, direction: v as 'buy' | 'sell' })}
+                value={formData.order_type}
+                onValueChange={(value) => setFormData({ ...formData, order_type: value as SignalOrderType })}
               >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="buy">Buy</SelectItem>
-                  <SelectItem value="sell">Sell</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label>Market Execution</Label>
-              <Select
-                value={formData.market_execution}
-                onValueChange={(v) => setFormData({ ...formData, market_execution: v as any })}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="buy-limit">Buy Limit</SelectItem>
-                  <SelectItem value="sell-stop">Sell Stop</SelectItem>
-                  <SelectItem value="buy-stop">Buy Stop</SelectItem>
-                  <SelectItem value="sell-stop-limit">Sell Stop Limit</SelectItem>
-                  <SelectItem value="buy-stop-limit">Buy Stop Limit</SelectItem>
-                  <SelectItem value="instant">Instant Execution</SelectItem>
+                  {ORDER_TYPES.map((type) => (
+                    <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -255,13 +161,13 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>Entry Price</Label>
+              <Label>Entry</Label>
               <Input
                 type="number"
                 step="any"
                 value={formData.entry_price}
                 onChange={(e) => setFormData({ ...formData, entry_price: e.target.value })}
-                required
+                placeholder="Optional"
               />
             </div>
             <div className="space-y-2">
@@ -276,56 +182,14 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-2">
-              <Label>TP1</Label>
-              <Input
-                type="number"
-                step="any"
-                value={formData.take_profit_1}
-                onChange={(e) => setFormData({ ...formData, take_profit_1: e.target.value })}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>TP2</Label>
-              <Input
-                type="number"
-                step="any"
-                value={formData.take_profit_2}
-                onChange={(e) => setFormData({ ...formData, take_profit_2: e.target.value })}
-                placeholder="Optional"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>TP3</Label>
-              <Input
-                type="number"
-                step="any"
-                value={formData.take_profit_3}
-                onChange={(e) => setFormData({ ...formData, take_profit_3: e.target.value })}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
-
           <div className="space-y-2">
-            <Label>Chart Image URL</Label>
+            <Label>Take Profit</Label>
             <Input
-              type="url"
-              value={formData.chart_image_url}
-              onChange={(e) => setFormData({ ...formData, chart_image_url: e.target.value })}
-              placeholder="https://..."
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label>Notes</Label>
-            <Textarea
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Analysis notes..."
-              rows={3}
+              type="number"
+              step="any"
+              value={formData.take_profit_1}
+              onChange={(e) => setFormData({ ...formData, take_profit_1: e.target.value })}
+              required
             />
           </div>
 

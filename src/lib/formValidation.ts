@@ -35,31 +35,28 @@ export const NewTradeFormSchema = z.object({
   notes: z.string().max(1000, "Notes too long (max 1000 characters)").optional(),
 });
 
+const SignalPriceField = z.union([z.string(), z.number()])
+  .refine(val => String(val).trim().length > 0, "Price is required")
+  .refine(val => !isNaN(parseFloat(String(val))), "Must be a valid number")
+  .refine(val => parseFloat(String(val)) > 0, "Must be greater than 0");
+
+const OptionalSignalPriceField = z.union([z.string(), z.number()])
+  .optional()
+  .refine(val => val === undefined || String(val).trim() === '' || !isNaN(parseFloat(String(val))), "Must be a valid number")
+  .refine(val => val === undefined || String(val).trim() === '' || parseFloat(String(val)) > 0, "Must be greater than 0");
+
 export const SignalFormSchema = z.object({
   currency_pair: z.string()
     .min(1, "Currency pair is required")
     .max(20, "Pair name too long"),
-  direction: z.enum(['buy', 'sell']),
-  entry_price: z.string()
-    .min(1, "Entry price is required")
-    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
-    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
-  stop_loss: z.string()
-    .min(1, "Stop loss is required")
-    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
-    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
-  take_profit_1: z.string()
-    .min(1, "TP1 is required")
-    .refine(val => !isNaN(parseFloat(val)), "Must be a valid number")
-    .refine(val => parseFloat(val) > 0, "Must be greater than 0"),
-  take_profit_2: z.string()
-    .optional()
-    .refine(val => !val || val === '' || !isNaN(parseFloat(val)), "Must be a valid number")
-    .refine(val => !val || val === '' || parseFloat(val) > 0, "Must be greater than 0"),
-  take_profit_3: z.string()
-    .optional()
-    .refine(val => !val || val === '' || !isNaN(parseFloat(val)), "Must be a valid number")
-    .refine(val => !val || val === '' || parseFloat(val) > 0, "Must be greater than 0"),
+  order_type: z.enum(['buy', 'sell', 'buy_limit', 'sell_limit', 'buy_stop', 'sell_stop']).optional(),
+  direction: z.enum(['buy', 'sell']).optional(),
+  entry_price: OptionalSignalPriceField,
+  stop_loss: SignalPriceField,
+  take_profit_1: SignalPriceField,
+  take_profit_2: OptionalSignalPriceField,
+  take_profit_3: OptionalSignalPriceField,
+  trading_view_url: z.string().url("Must be a valid URL").or(z.literal('')).optional(),
   chart_image_url: z.string().optional(),
   notes: z.string().max(1000, "Notes too long").optional(),
 });

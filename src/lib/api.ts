@@ -135,12 +135,12 @@ export const adminUsersApi = {
 
 // Trading Signals API
 export const signalsApi = {
-  getAll: async (query?: { status?: string; limit?: number }): Promise<any[]> => {
+  getAll: async (query?: { status?: string; currency_pair?: string; date?: string; limit?: number }): Promise<any[]> => {
     return await convexClient.query(convexApi.signals.list, {
       status: query?.status ?? null,
-      currencyPair: null,
+      currencyPair: query?.currency_pair ?? null,
       result: null,
-      date: null,
+      date: query?.date ?? null,
     });
   },
 
@@ -157,33 +157,16 @@ export const signalsApi = {
   create: async (signalData: any): Promise<any> => {
     return await getAuthenticatedConvexClient().mutation(convexApi.signals.create, {
       currencyPair: signalData.currency_pair,
-      direction: signalData.direction,
+      orderType: signalData.order_type,
       entryPrice: signalData.entry_price,
       stopLoss: signalData.stop_loss,
       takeProfit1: signalData.take_profit_1,
       takeProfit2: signalData.take_profit_2 ?? null,
       takeProfit3: signalData.take_profit_3 ?? null,
-      takeProfit: signalData.take_profit ?? signalData.take_profit_1 ?? null,
-      pipsToSl: signalData.pips_to_sl,
-      pipsToTp1: signalData.pips_to_tp1,
-      pipsToTp2: signalData.pips_to_tp2 ?? null,
-      pipsToTp3: signalData.pips_to_tp3 ?? null,
       status: signalData.status ?? 'active',
-      marketExecution: signalData.market_execution ?? null,
-      analysis: signalData.analysis ?? null,
-      timeframe: signalData.timeframe ?? null,
-      expiresAtMs: signalData.expires_at ? new Date(signalData.expires_at).getTime() : null,
-      result: signalData.result ?? null,
-      tp1Hit: signalData.tp1_hit ?? false,
-      tp2Hit: signalData.tp2_hit ?? false,
-      tp3Hit: signalData.tp3_hit ?? false,
       notes: signalData.notes ?? null,
+      tradingViewUrl: signalData.trading_view_url ?? null,
       chartImageUrl: signalData.chart_image_url ?? null,
-      confidenceScore: signalData.confidence_score ?? null,
-      takenCount: signalData.taken_count ?? 0,
-      externalId: signalData.external_id ?? null,
-      symbol: signalData.symbol ?? null,
-      closedAtMs: signalData.closed_at ? new Date(signalData.closed_at).getTime() : null,
     });
   },
 
@@ -191,32 +174,16 @@ export const signalsApi = {
     return await getAuthenticatedConvexClient().mutation(convexApi.signals.update, {
       id: id as any,
       currencyPair: updates.currency_pair ?? null,
-      symbol: updates.symbol ?? null,
-      direction: updates.direction,
-      marketExecution: updates.market_execution ?? null,
+      orderType: updates.order_type,
       entryPrice: updates.entry_price ?? null,
       stopLoss: updates.stop_loss ?? null,
       takeProfit1: updates.take_profit_1 ?? null,
       takeProfit2: updates.take_profit_2 ?? null,
       takeProfit3: updates.take_profit_3 ?? null,
-      takeProfit: updates.take_profit ?? null,
-      pipsToSl: updates.pips_to_sl ?? null,
-      pipsToTp1: updates.pips_to_tp1 ?? null,
-      pipsToTp2: updates.pips_to_tp2 ?? null,
-      pipsToTp3: updates.pips_to_tp3 ?? null,
-      analysis: updates.analysis ?? null,
-      timeframe: updates.timeframe ?? null,
-      expiresAtMs: updates.expires_at ? new Date(updates.expires_at).getTime() : null,
       status: updates.status,
-      result: updates.result ?? null,
-      tp1Hit: updates.tp1_hit,
-      tp2Hit: updates.tp2_hit,
-      tp3Hit: updates.tp3_hit,
       notes: updates.notes ?? null,
+      tradingViewUrl: updates.trading_view_url ?? null,
       chartImageUrl: updates.chart_image_url ?? null,
-      confidenceScore: updates.confidence_score ?? null,
-      takenCount: updates.taken_count,
-      closedAtMs: updates.closed_at ? new Date(updates.closed_at).getTime() : null,
     });
   },
 

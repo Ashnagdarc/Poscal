@@ -6,44 +6,79 @@ import { mutation, query } from "./_generated/server";
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 
+const orderTypeArg = v.union(
+  v.literal("buy"),
+  v.literal("sell"),
+  v.literal("buy_limit"),
+  v.literal("sell_limit"),
+  v.literal("buy_stop"),
+  v.literal("sell_stop"),
+);
+
+const signalStatusArg = v.union(
+  v.literal("active"),
+  v.literal("hit_tp"),
+  v.literal("hit_sl"),
+  v.literal("cancelled"),
+);
+
 const signalShape = {
-  externalId: nullableStringArg,
   currencyPair: v.string(),
-  symbol: nullableStringArg,
-  direction: v.union(v.literal("buy"), v.literal("sell")),
-  marketExecution: nullableStringArg,
-  entryPrice: v.number(),
+  orderType: orderTypeArg,
+  entryPrice: nullableNumberArg,
   stopLoss: v.number(),
   takeProfit1: v.number(),
   takeProfit2: nullableNumberArg,
   takeProfit3: nullableNumberArg,
-  takeProfit: nullableNumberArg,
-  pipsToSl: v.number(),
-  pipsToTp1: v.number(),
-  pipsToTp2: nullableNumberArg,
-  pipsToTp3: nullableNumberArg,
-  analysis: nullableStringArg,
-  timeframe: nullableStringArg,
-  expiresAtMs: nullableNumberArg,
-  status: v.union(v.literal("active"), v.literal("closed"), v.literal("cancelled"), v.literal("expired")),
-  result: v.optional(v.union(v.literal("win"), v.literal("loss"), v.literal("breakeven"), v.null())),
-  tp1Hit: v.boolean(),
-  tp2Hit: v.boolean(),
-  tp3Hit: v.boolean(),
   notes: nullableStringArg,
+  tradingViewUrl: nullableStringArg,
   chartImageUrl: nullableStringArg,
-  confidenceScore: nullableNumberArg,
-  takenCount: v.number(),
-  closedAtMs: nullableNumberArg,
+  status: v.optional(signalStatusArg),
 };
 
 const isSameUtcDate = (timestampMs: number, isoDate: string) =>
   new Date(timestampMs).toISOString().slice(0, 10) === isoDate;
 
+const getDirectionFromOrderType = (orderType: string): "buy" | "sell" =>
+  orderType.startsWith("sell") ? "sell" : "buy";
+
+const toLegacyMarketExecution = (orderType: string) => {
+  if (orderType === "buy" || orderType === "sell") return "instant";
+  return orderType.replace("_", "-");
+};
+
+const fromLegacyMarketExecution = (value: string | null | undefined, direction: "buy" | "sell") => {
+  if (!value || value === "instant") return direction;
+  const normalized = value.replace(/-/g, "_");
+  if (
+    normalized === "buy_limit" ||
+    normalized === "sell_limit" ||
+    normalized === "buy_stop" ||
+    normalized === "sell_stop"
+  ) {
+    return normalized;
+  }
+  return direction;
+};
+
+const toPublicStatus = (row: any) => {
+  if (row.status === "hit_tp" || row.status === "hit_sl" || row.status === "cancelled" || row.status === "active") {
+    return row.status;
+  }
+
+  if (row.status === "closed") {
+    if (row.result === "loss") return "hit_sl";
+    if (row.result === "win") return "hit_tp";
+  }
+
+  return row.status === "cancelled" ? "cancelled" : "active";
+};
+
 const toPublicSignal = (row: any) => ({
   id: row._id,
   currency_pair: row.currencyPair,
   symbol: row.symbol ?? null,
+  order_type: row.orderType ?? fromLegacyMarketExecution(row.marketExecution, row.direction),
   direction: row.direction,
   market_execution: row.marketExecution ?? null,
   entry_price: row.entryPrice,
@@ -52,25 +87,12 @@ const toPublicSignal = (row: any) => ({
   take_profit_2: row.takeProfit2 ?? null,
   take_profit_3: row.takeProfit3 ?? null,
   take_profit: row.takeProfit ?? null,
-  pips_to_sl: row.pipsToSl,
-  pips_to_tp1: row.pipsToTp1,
-  pips_to_tp2: row.pipsToTp2 ?? null,
-  pips_to_tp3: row.pipsToTp3 ?? null,
-  analysis: row.analysis ?? null,
-  timeframe: row.timeframe ?? null,
-  expires_at: row.expiresAtMs ? new Date(row.expiresAtMs).toISOString() : null,
-  status: row.status,
-  result: row.result ?? null,
-  tp1_hit: row.tp1Hit,
-  tp2_hit: row.tp2Hit,
-  tp3_hit: row.tp3Hit,
+  status: toPublicStatus(row),
   notes: row.notes ?? null,
+  trading_view_url: row.tradingViewUrl ?? null,
   chart_image_url: row.chartImageUrl ?? null,
-  confidence_score: row.confidenceScore ?? null,
-  taken_count: row.takenCount,
   created_at: new Date(row.createdAtMs).toISOString(),
   updated_at: new Date(row.updatedAtMs).toISOString(),
-  closed_at: row.closedAtMs ? new Date(row.closedAtMs).toISOString() : null,
 });
 
 const requireAdmin = async (ctx: any) => {
@@ -113,22 +135,12 @@ export const list = query({
 
     return rows
       .filter((row) => {
-        if (args.status && args.status !== "all" && row.status !== args.status) {
+        if (args.status && args.status !== "all" && toPublicStatus(row) !== args.status) {
           return false;
         }
 
         if (args.currencyPair && args.currencyPair !== "All Pairs" && row.currencyPair !== args.currencyPair) {
           return false;
-        }
-
-        if (args.result && args.result !== "all") {
-          if (args.result === "null") {
-            if (row.result !== null && row.result !== undefined) {
-              return false;
-            }
-          } else if (row.result !== args.result) {
-            return false;
-          }
         }
 
         if (args.date && !isSameUtcDate(row.createdAtMs, args.date)) {
@@ -146,25 +158,39 @@ export const create = mutation({
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
     const now = Date.now();
+    const direction = getDirectionFromOrderType(args.orderType);
 
     const id = await ctx.db.insert("signals", {
-      ...args,
-      externalId: args.externalId ?? null,
-      symbol: args.symbol ?? null,
-      marketExecution: args.marketExecution ?? null,
+      currencyPair: args.currencyPair,
+      symbol: args.currencyPair,
+      orderType: args.orderType,
+      direction,
+      marketExecution: toLegacyMarketExecution(args.orderType),
+      entryPrice: args.entryPrice ?? null,
+      stopLoss: args.stopLoss,
+      takeProfit1: args.takeProfit1,
       takeProfit2: args.takeProfit2 ?? null,
       takeProfit3: args.takeProfit3 ?? null,
-      takeProfit: args.takeProfit ?? null,
-      pipsToTp2: args.pipsToTp2 ?? null,
-      pipsToTp3: args.pipsToTp3 ?? null,
-      analysis: args.analysis ?? null,
-      timeframe: args.timeframe ?? null,
-      expiresAtMs: args.expiresAtMs ?? null,
-      result: args.result ?? null,
+      takeProfit: args.takeProfit1,
+      pipsToSl: 0,
+      pipsToTp1: 0,
+      pipsToTp2: null,
+      pipsToTp3: null,
+      status: args.status ?? "active",
+      externalId: null,
+      analysis: null,
+      timeframe: null,
+      expiresAtMs: null,
+      result: null,
+      tp1Hit: false,
+      tp2Hit: false,
+      tp3Hit: false,
       notes: args.notes ?? null,
+      tradingViewUrl: args.tradingViewUrl ?? null,
       chartImageUrl: args.chartImageUrl ?? null,
-      confidenceScore: args.confidenceScore ?? null,
-      closedAtMs: args.closedAtMs ?? null,
+      confidenceScore: null,
+      takenCount: 0,
+      closedAtMs: null,
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -177,32 +203,16 @@ export const update = mutation({
   args: {
     id: v.id("signals"),
     currencyPair: nullableStringArg,
-    symbol: nullableStringArg,
-    direction: v.optional(v.union(v.literal("buy"), v.literal("sell"))),
-    marketExecution: nullableStringArg,
+    orderType: v.optional(orderTypeArg),
     entryPrice: nullableNumberArg,
     stopLoss: nullableNumberArg,
     takeProfit1: nullableNumberArg,
     takeProfit2: nullableNumberArg,
     takeProfit3: nullableNumberArg,
-    takeProfit: nullableNumberArg,
-    pipsToSl: nullableNumberArg,
-    pipsToTp1: nullableNumberArg,
-    pipsToTp2: nullableNumberArg,
-    pipsToTp3: nullableNumberArg,
-    analysis: nullableStringArg,
-    timeframe: nullableStringArg,
-    expiresAtMs: nullableNumberArg,
-    status: v.optional(v.union(v.literal("active"), v.literal("closed"), v.literal("cancelled"), v.literal("expired"))),
-    result: v.optional(v.union(v.literal("win"), v.literal("loss"), v.literal("breakeven"), v.null())),
-    tp1Hit: v.optional(v.boolean()),
-    tp2Hit: v.optional(v.boolean()),
-    tp3Hit: v.optional(v.boolean()),
+    status: v.optional(signalStatusArg),
     notes: nullableStringArg,
+    tradingViewUrl: nullableStringArg,
     chartImageUrl: nullableStringArg,
-    confidenceScore: nullableNumberArg,
-    takenCount: v.optional(v.number()),
-    closedAtMs: nullableNumberArg,
   },
   handler: async (ctx, args) => {
     await requireAdmin(ctx);
@@ -212,34 +222,26 @@ export const update = mutation({
     }
 
     const { id, ...rest } = args;
+    const hasPatchValue = (key: string) => Object.prototype.hasOwnProperty.call(rest, key);
+    const orderType = rest.orderType ?? existing.orderType ?? fromLegacyMarketExecution(existing.marketExecution, existing.direction);
+    const direction = getDirectionFromOrderType(orderType);
     await ctx.db.patch(id, {
       currencyPair: rest.currencyPair ?? existing.currencyPair,
-      symbol: rest.symbol ?? existing.symbol ?? null,
-      direction: rest.direction ?? existing.direction,
-      marketExecution: rest.marketExecution ?? existing.marketExecution ?? null,
-      entryPrice: rest.entryPrice ?? existing.entryPrice,
+      symbol: rest.currencyPair ?? existing.symbol ?? null,
+      orderType,
+      direction,
+      marketExecution: toLegacyMarketExecution(orderType),
+      entryPrice: hasPatchValue("entryPrice") ? rest.entryPrice ?? null : existing.entryPrice ?? null,
       stopLoss: rest.stopLoss ?? existing.stopLoss,
       takeProfit1: rest.takeProfit1 ?? existing.takeProfit1,
-      takeProfit2: rest.takeProfit2 ?? existing.takeProfit2 ?? null,
-      takeProfit3: rest.takeProfit3 ?? existing.takeProfit3 ?? null,
-      takeProfit: rest.takeProfit ?? existing.takeProfit ?? null,
-      pipsToSl: rest.pipsToSl ?? existing.pipsToSl,
-      pipsToTp1: rest.pipsToTp1 ?? existing.pipsToTp1,
-      pipsToTp2: rest.pipsToTp2 ?? existing.pipsToTp2 ?? null,
-      pipsToTp3: rest.pipsToTp3 ?? existing.pipsToTp3 ?? null,
-      analysis: rest.analysis ?? existing.analysis ?? null,
-      timeframe: rest.timeframe ?? existing.timeframe ?? null,
-      expiresAtMs: rest.expiresAtMs ?? existing.expiresAtMs ?? null,
+      takeProfit2: hasPatchValue("takeProfit2") ? rest.takeProfit2 ?? null : existing.takeProfit2 ?? null,
+      takeProfit3: hasPatchValue("takeProfit3") ? rest.takeProfit3 ?? null : existing.takeProfit3 ?? null,
+      takeProfit: rest.takeProfit1 ?? existing.takeProfit ?? null,
       status: rest.status ?? existing.status,
-      result: rest.result !== undefined ? rest.result : existing.result ?? null,
-      tp1Hit: rest.tp1Hit ?? existing.tp1Hit,
-      tp2Hit: rest.tp2Hit ?? existing.tp2Hit,
-      tp3Hit: rest.tp3Hit ?? existing.tp3Hit,
-      notes: rest.notes ?? existing.notes ?? null,
-      chartImageUrl: rest.chartImageUrl ?? existing.chartImageUrl ?? null,
-      confidenceScore: rest.confidenceScore ?? existing.confidenceScore ?? null,
-      takenCount: rest.takenCount ?? existing.takenCount,
-      closedAtMs: rest.closedAtMs ?? existing.closedAtMs ?? null,
+      notes: hasPatchValue("notes") ? rest.notes ?? null : existing.notes ?? null,
+      tradingViewUrl: hasPatchValue("tradingViewUrl") ? rest.tradingViewUrl ?? null : existing.tradingViewUrl ?? null,
+      chartImageUrl: hasPatchValue("chartImageUrl") ? rest.chartImageUrl ?? null : existing.chartImageUrl ?? null,
+      closedAtMs: rest.status && rest.status !== "active" ? Date.now() : existing.closedAtMs ?? null,
       updatedAtMs: Date.now(),
     });
 

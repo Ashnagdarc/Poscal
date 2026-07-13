@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { 
   Calculator as CalculatorIcon, 
   TrendingDown, 
@@ -15,7 +15,7 @@ import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveCalculatorHistory } from "@/lib/calculatorHistory";
-import { calculatePositionSize } from "@/lib/positionSizeCalculator";
+import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalculator";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -31,8 +31,25 @@ export interface HistoryItem {
   timestamp: Date;
 }
 
+const normalizePrefillSymbol = (symbol: string) => {
+  const normalized = symbol.trim().toUpperCase().replace(/-/g, "/");
+  if (normalized.includes("/")) return normalized;
+  if (normalized.length === 6) return `${normalized.slice(0, 3)}/${normalized.slice(3)}`;
+  return normalized;
+};
+
+const detectPipDecimal = (symbol: string): number => {
+  const upperSymbol = symbol.toUpperCase();
+  if (upperSymbol.includes("JPY")) return 2;
+  if (upperSymbol.includes("XAG")) return 3;
+  if (upperSymbol.includes("XAU") || upperSymbol.includes("BTC") || upperSymbol.includes("ETH")) return 2;
+  if (upperSymbol.includes("US30") || upperSymbol.includes("US100") || upperSymbol.includes("US500")) return 0;
+  return 4;
+};
+
 export const Calculator = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user } = useAuth();
   const [accountBalance, setAccountBalance] = useState("");
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
@@ -57,10 +74,34 @@ export const Calculator = () => {
   const [customRiskInput, setCustomRiskInput] = useState("");
 
   useEffect(() => {
-    if (!FEATURED_CURRENCY_PAIRS.some((pair) => pair.symbol === selectedPair.symbol)) {
+    if (
+      !FEATURED_CURRENCY_PAIRS.some((pair) => pair.symbol === selectedPair.symbol) &&
+      !getInstrumentSpec(selectedPair.symbol)
+    ) {
       setSelectedPair(FEATURED_CURRENCY_PAIRS[0]);
     }
   }, [selectedPair.symbol]);
+
+  useEffect(() => {
+    const symbol = searchParams.get("symbol");
+    const entry = searchParams.get("entry");
+    const sl = searchParams.get("stopLoss");
+    const tp = searchParams.get("takeProfit");
+    const orderType = searchParams.get("orderType");
+
+    if (!symbol || !sl) return;
+
+    const normalizedSymbol = normalizePrefillSymbol(symbol);
+    setSelectedPair({
+      symbol: normalizedSymbol,
+      pipDecimal: detectPipDecimal(normalizedSymbol),
+    });
+    setCalculationMode("price");
+    setEntryPrice(entry ?? "");
+    setStopLossPrice(sl);
+    setTakeProfitPrice(tp ?? "");
+    setTradeDirection(orderType?.startsWith("sell") ? "sell" : "buy");
+  }, [searchParams]);
 
   const riskPresets = [0.5, 1, 2, 3];
 
