@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -11,47 +9,47 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 8%;
+    --background: 0 0% 98%;
+    --foreground: 0 0% 6%;
 
-    --card: 0 0% 98%;
-    --card-foreground: 0 0% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 6%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 8%;
+    --popover-foreground: 0 0% 6%;
 
     --primary: 0 0% 8%;
-    --primary-foreground: 0 0% 100%;
+    --primary-foreground: 0 0% 98%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 8%;
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 10%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 8%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 10%;
 
-    --destructive: 0 84% 60%;
-    --destructive-foreground: 0 0% 100%;
+    --destructive: 0 0% 18%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 0 0% 92%;
-    --input: 0 0% 92%;
-    --ring: 0 0% 8%;
+    --border: 0 0% 88%;
+    --input: 0 0% 88%;
+    --ring: 0 0% 20%;
 
-    --radius: 1rem;
+    --radius: 0.9rem;
 
     /* Custom tokens */
-    --shadow-soft: 0 4px 24px -4px hsl(0 0% 0% / 0.08);
-    --shadow-medium: 0 8px 32px -8px hsl(0 0% 0% / 0.12);
+    --shadow-soft: 0 2px 14px -6px hsl(0 0% 0% / 0.08);
+    --shadow-medium: 0 10px 28px -16px hsl(0 0% 0% / 0.16);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     
     /* Liquid Glass tokens */
-    --glass-blur: 20px;
-    --glass-opacity: 0.7;
-    --glass-border: hsl(0 0% 100% / 0.2);
-    --glass-shadow: 0 8px 32px -8px hsl(0 0% 0% / 0.12), 0 4px 16px -4px hsl(0 0% 0% / 0.08);
-    --glass-inner-glow: inset 0 1px 0 hsl(0 0% 100% / 0.4);
+    --glass-blur: 16px;
+    --glass-opacity: 0.72;
+    --glass-border: hsl(0 0% 0% / 0.08);
+    --glass-shadow: 0 8px 24px -16px hsl(0 0% 0% / 0.16);
+    --glass-inner-glow: inset 0 1px 0 hsl(0 0% 0% / 0.04);
   }
 
   .dark {
@@ -76,8 +74,8 @@
     --accent: 0 0% 14%;
     --accent-foreground: 0 0% 98%;
 
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 98%;
+    --destructive: 0 0% 86%;
+    --destructive-foreground: 0 0% 4%;
 
     --border: 0 0% 18%;
     --input: 0 0% 18%;
@@ -91,8 +89,13 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    @apply min-h-screen bg-background text-foreground font-sans antialiased;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    letter-spacing: -0.01em;
+  }
+
+  #root {
+    min-height: 100vh;
   }
 
   /* Custom scrollbar */

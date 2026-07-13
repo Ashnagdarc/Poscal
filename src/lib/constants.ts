@@ -34,6 +34,12 @@ export const STORAGE_KEYS = {
   HAPTICS: 'hapticsEnabled',
   THEME: 'theme',
   POSITION_HISTORY: 'positionSizeHistory',
+  JOURNAL_ENTRIES: 'journalEntries',
+  SIGNALS: 'signals',
+  PENDING_SIGNAL: 'pendingSignal',
+  PUSH_ENABLED: 'pushEnabled',
+  IN_APP_TOASTS: 'inAppToasts',
+  SHOW_WELCOME: 'showWelcomeScreens',
 } as const;
 
 // Animation Durations (in milliseconds)

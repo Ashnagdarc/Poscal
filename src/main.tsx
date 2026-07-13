@@ -5,6 +5,12 @@ import App from "./App.tsx";
 import { convexReactClient } from "@/lib/convexClient";
 import "./index.css";
 
+const savedTheme = localStorage.getItem("theme");
+document.documentElement.classList.toggle(
+  "dark",
+  savedTheme ? savedTheme === "dark" : true,
+);
+
 const root = (
   <StrictMode>
     {convexReactClient ? (

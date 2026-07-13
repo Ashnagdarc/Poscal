@@ -9,19 +9,6 @@
   ],
   "headers": [
     {
-      "source": "/sw.js",
-      "headers": [
-        {
-          "key": "Service-Worker-Allowed",
-          "value": "/"
-        },
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
-    },
-    {
       "source": "/assets/(.*)",
       "headers": [
         {
@@ -47,7 +34,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://js.paystack.co https://*.paystack.co https://*.paystack.com https://storage.googleapis.com; connect-src 'self' https://api.poscalfx.com wss://api.poscalfx.com https://finnhub.io https://*.paystack.co https://*.paystack.com wss://*.paystack.co https://*.convex.cloud wss://*.convex.cloud https://*.convex.site wss://*.convex.site; frame-src 'self' https://*.paystack.co https://*.paystack.com; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' *.vercel.com *.gstatic.com vercel.live *.vercel.sh r2cdn.perplexity.ai data:;"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self' https://open.er-api.com https://api.coingecko.com https://metals-api.com https://*.convex.cloud wss://*.convex.cloud https://*.convex.site wss://*.convex.site; img-src 'self' data: blob: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; frame-src 'self';"
         }
       ]
     }

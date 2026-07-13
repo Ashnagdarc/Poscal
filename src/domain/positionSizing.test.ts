@@ -45,6 +45,26 @@ describe("position sizing domain", () => {
     expect(result.entryPrice).toBe(1.1);
   });
 
+  it("uses bid price for market sells", () => {
+    const broker = findBrokerProfile("generic-forex")!;
+    const instrument = resolveInstrumentForBroker(broker, "EUR/USD");
+
+    const result = calculatePositionSize({
+      broker,
+      instrument,
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPrice: 1.105,
+      takeProfitPrice: 1.09,
+      side: "sell",
+      orderType: "market",
+      marketQuote: { bid: 1.1, ask: 1.1002, mid: 1.1001 },
+    });
+
+    expect(result.entryPrice).toBe(1.1);
+    expect(result.stopDistancePips).toBeCloseTo(50, 6);
+  });
+
   it("converts JPY pip value into USD using an inverse rate", () => {
     const broker = findBrokerProfile("generic-forex")!;
     const instrument = resolveInstrumentForBroker(broker, "GBP/JPY");
@@ -124,5 +144,24 @@ describe("position sizing domain", () => {
     expect(result.rawLots).toBeGreaterThan(0);
     expect(result.lots).toBe(0);
     expect(result.isBelowMinimumLot).toBe(true);
+  });
+
+  it("throws when a cross-currency conversion rate is missing", () => {
+    const broker = findBrokerProfile("generic-forex")!;
+    const instrument = resolveInstrumentForBroker(broker, "EUR/GBP");
+
+    expect(() =>
+      calculatePositionSize({
+        broker,
+        instrument,
+        accountBalance: 10000,
+        riskPercent: 1,
+        entryPrice: 0.85,
+        stopLossPrice: 0.84,
+        takeProfitPrice: 0.87,
+        side: "buy",
+        orderType: "limit",
+      }),
+    ).toThrow("Missing conversion rate");
   });
 });
