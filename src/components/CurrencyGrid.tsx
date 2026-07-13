@@ -434,7 +434,7 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
           })}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Showing {FEATURED_CURRENCY_PAIRS.length} live pairs. Other pairs are coming soon.
+          Showing {FEATURED_CURRENCY_PAIRS.length} available symbols. Other pairs are coming soon.
         </p>
       </div>
     </div>

@@ -1,53 +1,77 @@
 import { useMemo, useState } from "react";
 import { Search } from "lucide-react";
+import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalculator";
 
 interface StopLossSelectorProps {
+  symbol: string;
   selectedStopLoss: number | null;
   onSelect: (stopLoss: number) => void;
   accountBalance: number;
   riskPercent: number;
-  pipValue: number;
-  currency: { symbol: string };
 }
 
 export const StopLossSelector = ({
+  symbol,
   selectedStopLoss,
   onSelect,
   accountBalance,
-  riskPercent,
-  pipValue,
-  currency
+  riskPercent
 }: StopLossSelectorProps) => {
   const [customInput, setCustomInput] = useState("");
+  const hasInstrumentSpec = !!getInstrumentSpec(symbol);
   
   // Generate stop loss range with calculated lot sizes
   const stopLossOptions = useMemo(() => {
-    if (accountBalance <= 0 || pipValue <= 0) return [];
+    if (!hasInstrumentSpec || accountBalance <= 0) return [];
     
-    const riskAmount = (accountBalance * riskPercent) / 100;
     const options: { stopLoss: number; lotSize: number }[] = [];
     
     // Generate range with smart increments similar to Stinu
     // Small values: 0.1 increments (10 to 30)
     for (let sl = 10; sl <= 30; sl += 0.1) {
-      const lotSize = riskAmount / (sl * pipValue);
-      options.push({ stopLoss: Math.round(sl * 10) / 10, lotSize });
+      const stopLoss = Math.round(sl * 10) / 10;
+      const lotSize = calculatePositionSize({
+        symbol,
+        accountBalance,
+        riskPercent,
+        stopLossPips: stopLoss,
+      }).positionSize;
+      options.push({ stopLoss, lotSize });
     }
     
     // Medium values: 0.5 increments (30.5 to 50)
     for (let sl = 30.5; sl <= 50; sl += 0.5) {
-      const lotSize = riskAmount / (sl * pipValue);
-      options.push({ stopLoss: Math.round(sl * 10) / 10, lotSize });
+      const stopLoss = Math.round(sl * 10) / 10;
+      const lotSize = calculatePositionSize({
+        symbol,
+        accountBalance,
+        riskPercent,
+        stopLossPips: stopLoss,
+      }).positionSize;
+      options.push({ stopLoss, lotSize });
     }
     
     // Large values: 1.0 increments (51 to 100)
     for (let sl = 51; sl <= 100; sl += 1) {
-      const lotSize = riskAmount / (sl * pipValue);
+      const lotSize = calculatePositionSize({
+        symbol,
+        accountBalance,
+        riskPercent,
+        stopLossPips: sl,
+      }).positionSize;
       options.push({ stopLoss: sl, lotSize });
     }
     
     return options;
-  }, [accountBalance, riskPercent, pipValue]);
+  }, [accountBalance, hasInstrumentSpec, riskPercent, symbol]);
+
+  if (!hasInstrumentSpec) {
+    return (
+      <div className="text-center py-12 text-muted-foreground">
+        <p className="text-sm">Local instrument spec is not available for {symbol}</p>
+      </div>
+    );
+  }
 
   if (stopLossOptions.length === 0) {
     return (

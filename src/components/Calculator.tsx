@@ -14,9 +14,8 @@ import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyG
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRealtimePrices } from "@/hooks/use-realtime-prices";
-import { getPipValueInUSD, STANDARD_LOT_SIZE } from "@/lib/forexCalculations";
 import { saveCalculatorHistory } from "@/lib/calculatorHistory";
+import { calculatePositionSize } from "@/lib/positionSizeCalculator";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -40,10 +39,14 @@ export const Calculator = () => {
   const [riskPercent, setRiskPercent] = useState(1);
   const [stopLossPips, setStopLossPips] = useState("");
   const [takeProfitPips, setTakeProfitPips] = useState("");
+  const [calculationMode, setCalculationMode] = useState<"pips" | "price">("pips");
+  const [entryPrice, setEntryPrice] = useState("");
+  const [stopLossPrice, setStopLossPrice] = useState("");
+  const [takeProfitPrice, setTakeProfitPrice] = useState("");
   const [selectedPair, setSelectedPair] = useState<CurrencyPair>(FEATURED_CURRENCY_PAIRS[0]);
   
   // UI State
-  const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | null>(null);
+  const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | "entryPrice" | "stopLossPrice" | "takeProfitPrice" | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
   const [showStopLossSelector, setShowStopLossSelector] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
@@ -58,60 +61,6 @@ export const Calculator = () => {
       setSelectedPair(FEATURED_CURRENCY_PAIRS[0]);
     }
   }, [selectedPair.symbol]);
-
-  // Memoize the symbols to fetch to prevent infinite re-renders
-  const symbolsToFetch = useMemo(() => {
-    const [base, quote] = selectedPair.symbol.split('/');
-    const requiredPairs = new Set<string>([selectedPair.symbol]);
-    
-    // If neither base nor quote is USD, we need conversion rates
-    if (base !== 'USD' && quote !== 'USD') {
-      // For cross pairs, we need either base/USD or quote/USD
-      // Example: For GBP/JPY, we need USD/JPY
-      // Example: For EUR/GBP, we need GBP/USD
-      
-      if (quote === 'JPY') {
-        requiredPairs.add('USD/JPY');
-      } else if (quote) {
-        requiredPairs.add(`${quote}/USD`);
-      }
-      
-      // Also add base/USD if available (helps with some conversions)
-      if (base && base !== 'XAU' && base !== 'XAG' && base !== 'BTC' && base !== 'ETH') {
-        requiredPairs.add(`${base}/USD`);
-      }
-    }
-    
-    // For USD-base pairs (USD/XXX), we just need the pair itself
-    return Array.from(requiredPairs);
-  }, [selectedPair.symbol]); // Only recalculate when the selected pair changes
-  
-  // Use shared Convex-backed price snapshots so all users read the same market cache.
-  const {
-    prices,
-    askPrices,
-    bidPrices,
-    priceStatus,
-    updatedAtBySymbol,
-    loading: _pricesLoading,
-    lastUpdated,
-  } = useRealtimePrices({
-    symbols: symbolsToFetch,
-    enabled: true,
-    pollIntervalMs: 10000,
-    staleAfterMs: 30000,
-  });
-  
-  const currentLivePrice = prices[selectedPair.symbol];
-  const currentAskPrice = askPrices[selectedPair.symbol]; // Real ask price from backend
-  const currentBidPrice = bidPrices[selectedPair.symbol]; // Real bid price from backend
-  const requiredQuoteStatuses = symbolsToFetch.map((symbol) => priceStatus[symbol] ?? 'unavailable');
-  const hasUnavailableRequiredQuote = requiredQuoteStatuses.some((status) => status === 'unavailable');
-  const hasStaleRequiredQuote = requiredQuoteStatuses.some((status) => status === 'stale');
-  const currentPairStatus = hasUnavailableRequiredQuote
-    ? 'unavailable'
-    : (hasStaleRequiredQuote ? 'stale' : (priceStatus[selectedPair.symbol] ?? 'unavailable'));
-  const currentPairUpdatedAt = updatedAtBySymbol[selectedPair.symbol] ?? lastUpdated;
 
   const riskPresets = [0.5, 1, 2, 3];
 
@@ -129,68 +78,30 @@ export const Calculator = () => {
 
   const calculation = useMemo(() => {
     const balance = parseFloat(accountBalance) || 0;
-    const risk = riskPercent;
-    const slPips = parseFloat(stopLossPips) || 0;
-    const tpPips = parseFloat(takeProfitPips) || 0;
-    const priceSide = tradeDirection === 'buy' ? 'ask' : 'bid';
-    
-    // Use the execution side of the book for sizing:
-    // buys fill at ask, sells fill at bid.
-    const priceForCalculation = tradeDirection === 'buy'
-      ? (currentAskPrice ?? currentLivePrice)
-      : (currentBidPrice ?? currentLivePrice);
-    
-    if (hasUnavailableRequiredQuote || hasStaleRequiredQuote) {
-      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: 0 };
-    }
-
-    const pipVal = getPipValueInUSD(
-      selectedPair.symbol,
-      'USD',
-      priceForCalculation ?? undefined,
-      {
-        midPrices: prices,
-        askPrices,
-        bidPrices,
-      },
-      priceSide
-    );
-
-    if (balance <= 0 || slPips <= 0 || pipVal <= 0) {
-      return { riskAmount: 0, positionSize: 0, units: 0, riskReward: 0, potentialProfit: 0, pipValue: pipVal };
-    }
-
-    const riskAmount = (balance * risk) / 100;
-    const positionSize = riskAmount / (slPips * pipVal);
-    const units = positionSize * STANDARD_LOT_SIZE;
-    const riskReward = tpPips > 0 ? tpPips / slPips : 0;
-    const potentialProfit = tpPips > 0 ? riskAmount * riskReward : 0;
-
-    return { riskAmount, positionSize, units, riskReward, potentialProfit, pipValue: pipVal };
+    return calculatePositionSize({
+      symbol: selectedPair.symbol,
+      accountBalance: balance,
+      riskPercent,
+      stopLossPips: calculationMode === "pips" ? parseFloat(stopLossPips) || null : null,
+      takeProfitPips: calculationMode === "pips" ? parseFloat(takeProfitPips) || null : null,
+      entryPrice: calculationMode === "price" ? parseFloat(entryPrice) || null : null,
+      stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
+      takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
+    });
   }, [
     accountBalance,
     riskPercent,
     stopLossPips,
     takeProfitPips,
+    calculationMode,
+    entryPrice,
+    stopLossPrice,
+    takeProfitPrice,
     selectedPair,
-    tradeDirection,
-    currentLivePrice,
-    currentAskPrice,
-    currentBidPrice,
-    hasUnavailableRequiredQuote,
-    hasStaleRequiredQuote,
-    prices,
-    askPrices,
-    bidPrices,
   ]);
 
-  const executionPrice = tradeDirection === 'buy'
-    ? (currentAskPrice ?? currentLivePrice)
-    : (currentBidPrice ?? currentLivePrice);
-  const executionLabel = tradeDirection === 'buy' ? 'Ask' : 'Bid';
-
   const saveToHistory = async () => {
-    if (calculation.positionSize <= 0) return;
+    if (!calculation.isValid || calculation.positionSize <= 0) return;
 
     const newItem: HistoryItem = {
       id: Date.now().toString(),
@@ -198,10 +109,12 @@ export const Calculator = () => {
       direction: tradeDirection,
       balance: parseFloat(accountBalance),
       risk: riskPercent,
-      stopLoss: parseFloat(stopLossPips),
-      takeProfit: parseFloat(takeProfitPips) || 0,
+      stopLoss: calculation.stopLossPips,
+      takeProfit: calculationMode === "pips"
+        ? parseFloat(takeProfitPips) || 0
+        : calculation.rewardToRisk > 0 ? calculation.stopLossPips * calculation.rewardToRisk : 0,
       positionSize: calculation.positionSize,
-      riskReward: calculation.riskReward,
+      riskReward: calculation.rewardToRisk,
       timestamp: new Date()
     };
 
@@ -211,7 +124,7 @@ export const Calculator = () => {
         riskAmount: calculation.riskAmount,
         units: calculation.units,
         pipValue: calculation.pipValue,
-        priceSource: currentPairStatus === "fresh" ? "backend_price_cache" : "unavailable",
+        priceSource: "local_instrument_spec",
         spreadPips: null,
       }, user?.id);
       toast.success("Saved to history");
@@ -222,7 +135,7 @@ export const Calculator = () => {
         riskAmount: calculation.riskAmount,
         units: calculation.units,
         pipValue: calculation.pipValue,
-        priceSource: "local_fallback",
+        priceSource: "local_instrument_spec",
         spreadPips: null,
       });
       toast.success("Saved locally");
@@ -237,28 +150,44 @@ export const Calculator = () => {
     });
   };
 
-  const formatPrice = (price?: number) => {
-    if (typeof price !== 'number') return "Waiting...";
-
-    const decimals = Math.min(Math.max(selectedPair.pipDecimal + 1, 1), 5);
-    return price.toLocaleString("en-US", {
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    });
-  };
-
-  const openNumPad = (type: "balance" | "takeProfit") => {
-    const values = { balance: accountBalance, takeProfit: takeProfitPips };
+  const openNumPad = (type: "balance" | "takeProfit" | "entryPrice" | "stopLossPrice" | "takeProfitPrice") => {
+    const values = {
+      balance: accountBalance,
+      takeProfit: calculationMode === "pips" ? takeProfitPips : takeProfitPrice,
+      entryPrice,
+      stopLossPrice,
+      takeProfitPrice,
+    };
     setNumPadValue(values[type]);
     setShowNumPad(type);
   };
 
   const handleNumPadDone = () => {
     if (showNumPad === "balance") setAccountBalance(numPadValue);
-    else if (showNumPad === "takeProfit") setTakeProfitPips(numPadValue);
+    else if (showNumPad === "takeProfit") {
+      if (calculationMode === "pips") setTakeProfitPips(numPadValue);
+      else setTakeProfitPrice(numPadValue);
+    }
+    else if (showNumPad === "entryPrice") setEntryPrice(numPadValue);
+    else if (showNumPad === "stopLossPrice") setStopLossPrice(numPadValue);
+    else if (showNumPad === "takeProfitPrice") setTakeProfitPrice(numPadValue);
     setShowNumPad(null);
     setNumPadValue("");
   };
+
+  const numPadLabel = {
+    balance: "Account Balance",
+    takeProfit: calculationMode === "pips" ? "Take Profit" : "Take Profit Price",
+    entryPrice: "Entry Price",
+    stopLossPrice: "Stop-Loss Price",
+    takeProfitPrice: "Take Profit Price",
+  }[showNumPad ?? "balance"];
+
+  const numPadSuffix = showNumPad === "balance"
+    ? currency.code
+    : showNumPad === "takeProfit" && calculationMode === "pips"
+      ? "pips"
+      : "";
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -400,36 +329,108 @@ export const Calculator = () => {
           </div>
         </div>
 
-        {/* Stop Loss & Take Profit */}
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            onClick={() => setShowStopLossSelector(true)}
-            className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-            style={{ animationDelay: "150ms" }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingDown className="w-4 h-4 text-destructive" />
-              <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
-            </div>
-            <p className="text-lg font-bold text-foreground">
-              {stopLossPips ? `${stopLossPips} pips` : "—"}
-            </p>
-          </button>
-
-          <button
-            onClick={() => openNumPad("takeProfit")}
-            className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-            style={{ animationDelay: "200ms" }}
-          >
-            <div className="flex items-center gap-2 mb-1">
-              <TrendingUp className="w-4 h-4 text-foreground" />
-              <p className="text-xs text-muted-foreground">Take Profit (pips)</p>
-            </div>
-            <p className="text-lg font-bold text-foreground">
-              {takeProfitPips ? `${takeProfitPips} pips` : "—"}
-            </p>
-          </button>
+        <div className="animate-slide-up" style={{ animationDelay: "135ms" }}>
+          <p className="text-xs text-muted-foreground mb-3 ml-1">Stop Loss Input</p>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setCalculationMode("pips")}
+              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
+                calculationMode === "pips"
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
+              Pips
+            </button>
+            <button
+              onClick={() => setCalculationMode("price")}
+              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
+                calculationMode === "price"
+                  ? "bg-foreground text-background"
+                  : "bg-secondary text-foreground"
+              }`}
+            >
+              Entry / SL
+            </button>
+          </div>
         </div>
+
+        {/* Stop Loss & Take Profit */}
+        {calculationMode === "pips" ? (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setShowStopLossSelector(true)}
+              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+              style={{ animationDelay: "150ms" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingDown className="w-4 h-4 text-destructive" />
+                <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
+              </div>
+              <p className="text-lg font-bold text-foreground">
+                {stopLossPips ? `${stopLossPips} pips` : "—"}
+              </p>
+            </button>
+
+            <button
+              onClick={() => openNumPad("takeProfit")}
+              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+              style={{ animationDelay: "200ms" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-foreground" />
+                <p className="text-xs text-muted-foreground">Take Profit (pips)</p>
+              </div>
+              <p className="text-lg font-bold text-foreground">
+                {takeProfitPips ? `${takeProfitPips} pips` : "—"}
+              </p>
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => openNumPad("entryPrice")}
+              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+              style={{ animationDelay: "150ms" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingUp className="w-4 h-4 text-foreground" />
+                <p className="text-xs text-muted-foreground">Entry Price</p>
+              </div>
+              <p className="text-lg font-bold text-foreground">
+                {entryPrice || "—"}
+              </p>
+            </button>
+
+            <button
+              onClick={() => openNumPad("stopLossPrice")}
+              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+              style={{ animationDelay: "200ms" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <TrendingDown className="w-4 h-4 text-destructive" />
+                <p className="text-xs text-muted-foreground">Stop-Loss Price</p>
+              </div>
+              <p className="text-lg font-bold text-foreground">
+                {stopLossPrice || "—"}
+              </p>
+            </button>
+
+            <button
+              onClick={() => openNumPad("takeProfitPrice")}
+              className="col-span-2 bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
+              style={{ animationDelay: "225ms" }}
+            >
+              <div className="flex items-center gap-2 mb-1">
+                <Target className="w-4 h-4 text-foreground" />
+                <p className="text-xs text-muted-foreground">Take Profit Price</p>
+              </div>
+              <p className="text-lg font-bold text-foreground">
+                {takeProfitPrice || "—"}
+              </p>
+            </button>
+          </div>
+        )}
 
         <div
           className="bg-secondary/70 rounded-2xl px-4 py-3 animate-slide-up"
@@ -437,22 +438,20 @@ export const Calculator = () => {
         >
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="text-xs text-muted-foreground mb-1">Execution Price</p>
+              <p className="text-xs text-muted-foreground mb-1">Instrument Spec</p>
               <p className="text-base font-semibold text-foreground">
-                {executionLabel}: {formatPrice(executionPrice)}
+                {calculation.spec
+                  ? `${calculation.spec.displayName} • ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / pip`
+                  : "Unsupported instrument"}
               </p>
             </div>
             <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-foreground">
-              {tradeDirection.toUpperCase()}
+              LOCAL
             </span>
           </div>
           <p className="mt-2 text-xs text-muted-foreground">
-            {currentPairStatus === 'fresh' && `Sizing from the current ${executionLabel.toLowerCase()} feed`}
-            {currentPairStatus === 'stale' && `Execution quote is too old for sizing`}
-            {currentPairStatus === 'unavailable' && "Execution quote unavailable"}
-            {currentPairUpdatedAt
-              ? ` • Updated ${currentPairUpdatedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`
-              : ""}
+            Estimated using local instrument spec
+            {calculation.warning ? ` • ${calculation.warning}` : ""}
           </p>
         </div>
 
@@ -476,7 +475,7 @@ export const Calculator = () => {
               <div className="text-center">
                 <p className="text-xs font-medium opacity-60 mb-1">Risk Amount</p>
                 <p className="text-xl font-semibold">
-                  {currency.symbol}{formatNumber(calculation.riskAmount, 0)}
+                  {currency.symbol}{formatNumber(calculation.actualRisk || calculation.riskAmount, 0)}
                 </p>
               </div>
               <div className="text-center">
@@ -488,7 +487,7 @@ export const Calculator = () => {
             </div>
 
             {/* Risk/Reward Section */}
-            {calculation.riskReward > 0 && (
+            {calculation.rewardToRisk > 0 && (
               <>
                 <div className="h-px bg-background/20 my-4" />
                 <div className="grid grid-cols-2 gap-4">
@@ -498,7 +497,7 @@ export const Calculator = () => {
                       <p className="text-xs font-medium opacity-60">R:R Ratio</p>
                     </div>
                     <p className="text-xl font-semibold">
-                      1:{formatNumber(calculation.riskReward, 1)}
+                      1:{formatNumber(calculation.rewardToRisk, 1)}
                     </p>
                   </div>
                   <div className="text-center">
@@ -515,7 +514,7 @@ export const Calculator = () => {
           {/* Save Button */}
           <button
             onClick={saveToHistory}
-            disabled={calculation.positionSize <= 0}
+            disabled={!calculation.isValid || calculation.positionSize <= 0}
             className="w-full mt-4 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Save to History
@@ -529,10 +528,8 @@ export const Calculator = () => {
           value={numPadValue}
           onChange={setNumPadValue}
           onDone={handleNumPadDone}
-          label={
-            showNumPad === "balance" ? "Account Balance" : "Take Profit"
-          }
-          suffix={showNumPad === "balance" ? currency.code : "pips"}
+          label={numPadLabel}
+          suffix={numPadSuffix}
         />
       )}
 
@@ -569,6 +566,7 @@ export const Calculator = () => {
           {/* Stop Loss List */}
           <div className="flex-1 overflow-hidden">
             <StopLossSelector
+              symbol={selectedPair.symbol}
               selectedStopLoss={parseFloat(stopLossPips) || null}
               onSelect={(sl) => {
                 setStopLossPips(sl.toString());
@@ -576,8 +574,6 @@ export const Calculator = () => {
               }}
               accountBalance={parseFloat(accountBalance) || 0}
               riskPercent={riskPercent}
-              pipValue={calculation.pipValue}
-              currency={currency}
             />
           </div>
         </div>
