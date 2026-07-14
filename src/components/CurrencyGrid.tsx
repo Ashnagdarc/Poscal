@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Check, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { COMMON_PAIRS } from "@/lib/constants";
 
 export interface CurrencyPair {
   symbol: string;
@@ -276,13 +277,9 @@ export const CURRENCY_PAIRS: CurrencyPair[] = [
   { symbol: "GBP/AED", pipDecimal: 4 },
 ];
 
-const DEFAULT_LIVE_PAIR_LIMIT = 50;
-const parsedLivePairLimit = Number(import.meta.env.VITE_LIVE_PAIR_LIMIT || DEFAULT_LIVE_PAIR_LIMIT);
-const livePairLimit = Number.isFinite(parsedLivePairLimit)
-  ? Math.min(Math.max(Math.floor(parsedLivePairLimit), 1), CURRENCY_PAIRS.length)
-  : DEFAULT_LIVE_PAIR_LIMIT;
-
-export const FEATURED_CURRENCY_PAIRS = CURRENCY_PAIRS.slice(0, livePairLimit);
+export const FEATURED_CURRENCY_PAIRS = COMMON_PAIRS
+  .map((symbol) => CURRENCY_PAIRS.find((pair) => pair.symbol === symbol))
+  .filter((pair): pair is CurrencyPair => Boolean(pair));
 
 const featuredPairSymbols = new Set(FEATURED_CURRENCY_PAIRS.map((pair) => pair.symbol));
 
