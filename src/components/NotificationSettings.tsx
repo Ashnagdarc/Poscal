@@ -1,4 +1,4 @@
-import { Bell, BellOff, BellRing, Check, Loader2 } from 'lucide-react';
+import { Bell, BellOff, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
@@ -33,18 +33,6 @@ export const NotificationSettings = () => {
     }
   };
 
-  const handleTestNotification = () => {
-    // For testing, we just show a local notification
-    if ('Notification' in window && Notification.permission === 'granted') {
-      new Notification('Test Signal Alert 📊', {
-        body: 'EUR/USD - TP1 Hit! Take Profit 1 reached.',
-        icon: '/pwa-192x192.png',
-        badge: '/favicon.png',
-      });
-      toast.success('Test notification sent!');
-    }
-  };
-
   if (!isSupported) {
     return (
       <Card className="bg-secondary border-border">
@@ -69,7 +57,7 @@ export const NotificationSettings = () => {
           Push Notifications
         </CardTitle>
         <CardDescription>
-          Get alerts for new trading signals and app updates, even when the app is closed.
+          Get alerts for new trading signals and important app updates, even when the app is closed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -79,26 +67,15 @@ export const NotificationSettings = () => {
               <Check className="w-4 h-4" />
               <span>Push notifications are enabled</span>
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleTestNotification}
-                className="flex-1"
-              >
-                <BellRing className="w-4 h-4 mr-2" />
-                Test
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDisableNotifications}
-                disabled={loading}
-                className="flex-1 text-muted-foreground"
-              >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disable'}
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDisableNotifications}
+              disabled={loading}
+              className="w-full text-muted-foreground"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disable'}
+            </Button>
           </div>
         ) : permission === 'denied' ? (
           <div className="space-y-2">

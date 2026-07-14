@@ -14,7 +14,7 @@ import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyG
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
-import { saveCalculatorHistory } from "@/lib/calculatorHistory";
+import { saveJournalEntry } from "@/lib/calculatorHistory";
 import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalculator";
 import { toast } from "sonner";
 
@@ -56,6 +56,28 @@ const getDirectionFromOrderType = (orderType: string | null): "buy" | "sell" => 
     .toLowerCase();
 
   return normalized.startsWith("sell") ? "sell" : "buy";
+};
+
+const normalizeOrderType = (value: string | null): "buy" | "sell" | "buy_limit" | "sell_limit" | "buy_stop" | "sell_stop" | null => {
+  if (!value) return null;
+
+  const normalized = value
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toLowerCase();
+
+  switch (normalized) {
+    case "buy":
+    case "sell":
+    case "buy_limit":
+    case "sell_limit":
+    case "buy_stop":
+    case "sell_stop":
+      return normalized;
+    default:
+      return null;
+  }
 };
 
 export const Calculator = () => {
@@ -155,6 +177,14 @@ export const Calculator = () => {
   const saveToHistory = async () => {
     if (!calculation.isValid || calculation.positionSize <= 0) return;
 
+    const source = searchParams.get("fromSignal") === "true" ? "signal" : "manual";
+    const signalId = searchParams.get("signalId");
+    const prefilledOrderType = normalizeOrderType(searchParams.get("orderType"));
+    const orderType = prefilledOrderType ?? tradeDirection;
+    const resolvedEntryPrice = calculationMode === "price" ? parseFloat(entryPrice) || null : null;
+    const resolvedStopLossPrice = calculationMode === "price" ? parseFloat(stopLossPrice) || null : null;
+    const resolvedTakeProfitPrice = calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null;
+
     const newItem: HistoryItem = {
       id: Date.now().toString(),
       pair: selectedPair.symbol,
@@ -171,26 +201,38 @@ export const Calculator = () => {
     };
 
     try {
-      await saveCalculatorHistory({
+      await saveJournalEntry({
         ...newItem,
         riskAmount: calculation.riskAmount,
-        units: calculation.units,
-        pipValue: calculation.pipValue,
-        priceSource: "local_instrument_spec",
-        spreadPips: null,
+        symbol: selectedPair.symbol,
+        orderType,
+        entryPrice: resolvedEntryPrice,
+        stopLossPrice: resolvedStopLossPrice,
+        takeProfitPrice: resolvedTakeProfitPrice,
+        lotSize: calculation.positionSize,
+        actualRisk: calculation.actualRisk,
+        potentialProfit: calculation.potentialProfit > 0 ? calculation.potentialProfit : null,
+        source,
+        signalId,
       }, user?.id);
-      toast.success("Saved to history");
+      toast.success("Saved to journal");
     } catch (error) {
       console.error("[calculator-history] Failed to save to Convex, falling back to local history", error);
-      await saveCalculatorHistory({
+      await saveJournalEntry({
         ...newItem,
         riskAmount: calculation.riskAmount,
-        units: calculation.units,
-        pipValue: calculation.pipValue,
-        priceSource: "local_instrument_spec",
-        spreadPips: null,
+        symbol: selectedPair.symbol,
+        orderType,
+        entryPrice: resolvedEntryPrice,
+        stopLossPrice: resolvedStopLossPrice,
+        takeProfitPrice: resolvedTakeProfitPrice,
+        lotSize: calculation.positionSize,
+        actualRisk: calculation.actualRisk,
+        potentialProfit: calculation.potentialProfit > 0 ? calculation.potentialProfit : null,
+        source,
+        signalId,
       });
-      toast.success("Saved locally");
+      toast.success("Saved to journal");
     }
   };
 
@@ -569,7 +611,7 @@ export const Calculator = () => {
             disabled={!calculation.isValid || calculation.positionSize <= 0}
             className="w-full mt-4 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
           >
-            Save to History
+            Save to Journal
           </button>
         </div>
       </main>

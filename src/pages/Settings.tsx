@@ -1,10 +1,11 @@
 // ...existing code...
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Bell, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, FileText, Shield, Users } from "lucide-react";
+import { ArrowLeft, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, FileText, Shield, Users } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { BottomNav } from "@/components/BottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
@@ -12,18 +13,32 @@ import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { featureFlagApi, subscriptionApi } from '@/lib/api';
-import { clearCalculatorHistory } from "@/lib/calculatorHistory";
+import { clearJournalEntries } from "@/lib/calculatorHistory";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   return error instanceof Error ? error.message : fallback;
 };
 
+const getSubscriptionLabel = ({
+  isPaid,
+  isTrial,
+  subscriptionTier,
+}: {
+  isPaid: boolean;
+  isTrial: boolean;
+  subscriptionTier: string;
+}) => {
+  if (isTrial) return "Trial";
+  if (isPaid) return subscriptionTier === "pro" ? "Pro" : "Premium";
+  return "Free";
+};
+
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { isPaid, isTrial, subscriptionTier, expiresAt, refreshSubscription } = useSubscription();
   const { isAdmin } = useAdmin();
   const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
-  const [notifications, setNotifications] = useState(true);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
@@ -31,13 +46,11 @@ const Settings = () => {
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { currency, setCurrency } = useCurrency();
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
+  const supportsHaptics = typeof isSupported === "function" ? isSupported() : !!isSupported;
 
   useEffect(() => {
     const savedRisk = localStorage.getItem("defaultRisk");
     if (savedRisk) setDefaultRisk(savedRisk);
-    
-    const savedNotif = localStorage.getItem("notifications");
-    if (savedNotif) setNotifications(savedNotif === "true");
 
     const savedHaptics = localStorage.getItem("hapticsEnabled");
     setHapticsEnabled(savedHaptics !== "false");
@@ -68,13 +81,6 @@ const Settings = () => {
     }
   };
 
-  const toggleNotifications = () => {
-    const newValue = !notifications;
-    setNotifications(newValue);
-    localStorage.setItem("notifications", String(newValue));
-    lightTap();
-  };
-
   const toggleHaptics = () => {
     const newValue = !hapticsEnabled;
     setHapticsEnabled(newValue);
@@ -89,9 +95,9 @@ const Settings = () => {
   };
 
   const clearHistory = async () => {
-    await clearCalculatorHistory(user?.id);
+    await clearJournalEntries(user?.id);
     lightTap();
-    toast.success("History cleared");
+    toast.success("Journal cleared");
   };
 
   const resetOnboarding = () => {
@@ -130,9 +136,9 @@ const Settings = () => {
         throw new Error(result?.message || 'No eligible purchase found.');
       }
 
+      await refreshSubscription();
       const tier = result?.data?.tier || 'premium';
       toast.success(`Purchase restored successfully (${tier}).`);
-      navigate('/journal');
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, 'Restore failed. Please contact support.'));
     } finally {
@@ -195,40 +201,70 @@ const Settings = () => {
               </button>
             )}
 
-            <button
-              onClick={() => navigate('/upgrade?tier=premium&redirectPath=/settings')}
-              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
-                  <Wallet className="w-4.5 h-4.5 text-primary" />
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-medium text-foreground">Upgrade to Premium</p>
-                  <p className="text-xs text-muted-foreground">Open payment wall and choose a plan</p>
+            {user && (
+              <div className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 border border-border/50">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-4.5 h-4.5 text-primary" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className="font-medium text-foreground">Subscription</p>
+                    <p className="text-xs text-muted-foreground">
+                      {getSubscriptionLabel({ isPaid, isTrial, subscriptionTier })}
+                      {expiresAt ? ` • Expires ${expiresAt.toLocaleDateString()}` : ""}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-xs px-2.5 py-1 rounded-full font-medium ${
+                      isPaid || isTrial
+                        ? "bg-primary/15 text-primary"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {getSubscriptionLabel({ isPaid, isTrial, subscriptionTier })}
+                  </span>
                 </div>
               </div>
-              <ChevronRight className="w-5 h-5 text-muted-foreground" />
-            </button>
+            )}
 
-            <button
-              onClick={handleRestorePurchase}
-              disabled={isRestoringPurchase}
-              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
-                  <RotateCcw className="w-4.5 h-4.5 text-foreground" />
+            {!isPaid && !isTrial && (
+              <button
+                onClick={() => navigate('/upgrade?tier=premium&redirectPath=/settings')}
+                className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
+                    <Wallet className="w-4.5 h-4.5 text-primary" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className="font-medium text-foreground">Upgrade to Premium</p>
+                    <p className="text-xs text-muted-foreground">Open payment wall and choose a plan</p>
+                  </div>
                 </div>
-                <div className="text-left flex-1">
-                  <p className="font-medium text-foreground">Restore Purchase</p>
-                  <p className="text-xs text-muted-foreground">Recover your existing subscription</p>
+                <ChevronRight className="w-5 h-5 text-muted-foreground" />
+              </button>
+            )}
+
+            {user && !isPaid && !isTrial && (
+              <button
+                onClick={handleRestorePurchase}
+                disabled={isRestoringPurchase}
+                className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98] disabled:opacity-60"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
+                    <RotateCcw className="w-4.5 h-4.5 text-foreground" />
+                  </div>
+                  <div className="text-left flex-1">
+                    <p className="font-medium text-foreground">Restore Purchase</p>
+                    <p className="text-xs text-muted-foreground">Recover an existing subscription on this account</p>
+                  </div>
                 </div>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {isRestoringPurchase ? 'Restoring...' : 'Run'}
-              </span>
-            </button>
+                <span className="text-xs text-muted-foreground">
+                  {isRestoringPurchase ? 'Restoring...' : 'Run'}
+                </span>
+              </button>
+            )}
           </div>
         </section>
 
@@ -295,22 +331,6 @@ const Settings = () => {
                 </div>
               )}
 
-              {/* Admin Ingestor Health */}
-              {isAdmin && (
-                <button
-                  onClick={() => navigate('/admin/ingestor-health')}
-                  className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center justify-between border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center">
-                      <Shield className="w-4.5 h-4.5 text-primary" />
-                    </div>
-                    <span className="font-medium text-foreground">Ingestor Health</span>
-                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">Admin</span>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-muted-foreground" />
-                </button>
-              )}
             </div>
           </section>
         )}
@@ -382,7 +402,7 @@ const Settings = () => {
                 </div>
                 <div className="flex flex-col">
                   <span className="font-medium text-foreground">Haptic Feedback</span>
-                  {!isSupported() && (
+                  {!supportsHaptics && (
                     <span className="text-xs text-muted-foreground mt-0.5">Audio feedback active</span>
                   )}
                 </div>
@@ -407,32 +427,7 @@ const Settings = () => {
         <section>
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Notifications</h2>
           <div className="space-y-2">
-            {/* Push Notifications */}
             <NotificationSettings />
-
-            {/* In-App Toasts */}
-            <div className="bg-secondary/50 backdrop-blur-sm rounded-2xl border border-border/50 overflow-hidden">
-              <div className="px-5 py-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 bg-foreground/10 rounded-xl flex items-center justify-center">
-                    <Bell className="w-4.5 h-4.5 text-foreground" />
-                  </div>
-                  <span className="font-medium text-foreground">In-App Toasts</span>
-                </div>
-                <button
-                  onClick={toggleNotifications}
-                  className={`relative w-12 h-7 rounded-full transition-all duration-300 ${
-                    notifications ? "bg-primary" : "bg-muted"
-                  }`}
-                >
-                  <div
-                    className={`absolute top-1 w-5 h-5 rounded-full bg-background shadow-sm transition-all duration-300 ${
-                      notifications ? "left-6" : "left-1"
-                    }`}
-                  />
-                </button>
-              </div>
-            </div>
           </div>
         </section>
 
@@ -470,7 +465,7 @@ const Settings = () => {
         <section>
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Advanced</h2>
           <div className="space-y-2">
-            {/* Clear History */}
+            {/* Clear Journal */}
             <button
               onClick={clearHistory}
               className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 flex items-center gap-3 border border-border/50 hover:bg-secondary/80 transition-all duration-200 active:scale-[0.98]"
@@ -479,8 +474,8 @@ const Settings = () => {
                 <Trash2 className="w-4.5 h-4.5 text-destructive" />
               </div>
               <div className="text-left flex-1">
-                <p className="font-medium text-foreground">Clear Calculator History</p>
-                <p className="text-xs text-muted-foreground">Remove all saved calculations</p>
+                <p className="font-medium text-foreground">Clear Journal</p>
+                <p className="text-xs text-muted-foreground">Remove all saved journal entries</p>
               </div>
             </button>
 
@@ -575,7 +570,7 @@ const Settings = () => {
 
       {/* App Info */}
       <div className="px-6 pb-4 text-center space-y-1 pt-2">
-        <p className="text-xs text-muted-foreground/80">Position Size Calculator v1.0</p>
+        <p className="text-xs text-muted-foreground/80">Position Size Calculator v2</p>
         <p className="text-xs text-muted-foreground/60">Officially sponsored by MandeFX</p>
       </div>
 

@@ -70,11 +70,13 @@ export const COMMON_PAIRS = [
   'AUD/USD',
   'USD/CAD',
   'NZD/USD',
-  'EUR/GBP',
-  'EUR/JPY',
-  'GBP/JPY',
   'XAU/USD',
+  'XAG/USD',
   'BTC/USD',
+  'ETH/USD',
+  'US30',
+  'US100',
+  'US500',
 ] as const;
 
 // Platforms
