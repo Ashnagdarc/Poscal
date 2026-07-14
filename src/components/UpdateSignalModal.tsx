@@ -50,6 +50,14 @@ const toOptionalNumber = (value: string) => {
   return Number.parseFloat(value);
 };
 
+const getSignalFormErrorMessage = (error: unknown) => {
+  if (!(error instanceof Error)) return 'Failed to update signal';
+  if (error.message.includes('ArgumentValidationError')) {
+    return 'Could not save signal changes. Check the symbol, order type, stop loss, and take profit.';
+  }
+  return error.message;
+};
+
 export const UpdateSignalModal = ({
   signalId,
   symbol,
@@ -109,7 +117,7 @@ export const UpdateSignalModal = ({
       onSignalUpdated();
     } catch (error) {
       logger.error('Error updating signal:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to update signal');
+      toast.error(getSignalFormErrorMessage(error));
     } finally {
       setLoading(false);
     }

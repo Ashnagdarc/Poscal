@@ -41,6 +41,14 @@ const toNumber = (value: string) => Number.parseFloat(value);
 const orderTypeLabel = (value: SignalOrderType) =>
   ORDER_TYPES.find((type) => type.value === value)?.label ?? value;
 
+const getSignalFormErrorMessage = (error: unknown) => {
+  if (!(error instanceof Error)) return 'Failed to create signal';
+  if (error.message.includes('ArgumentValidationError')) {
+    return 'Could not create signal. Check the symbol, order type, stop loss, and take profit.';
+  }
+  return error.message;
+};
+
 export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -98,7 +106,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
       onSignalCreated();
     } catch (error) {
       logger.error('Error creating signal:', error);
-      toast.error(error instanceof Error ? error.message : 'Failed to create signal');
+      toast.error(getSignalFormErrorMessage(error));
     } finally {
       setLoading(false);
     }
