@@ -86,6 +86,7 @@ const getPrimaryTakeProfit = (signal: TradingSignal) =>
 
 const buildCalculatorUrl = (signal: TradingSignal) => {
   const params = new URLSearchParams();
+  params.set('fromSignal', 'true');
   params.set('symbol', signal.currency_pair);
   if (signal.entry_price !== null && signal.entry_price !== '') {
     params.set('entry', String(signal.entry_price));
@@ -94,7 +95,7 @@ const buildCalculatorUrl = (signal: TradingSignal) => {
   params.set('takeProfit', String(getPrimaryTakeProfit(signal) ?? ''));
   params.set('orderType', signal.order_type);
 
-  return `/?${params.toString()}`;
+  return `/calculator?${params.toString()}`;
 };
 
 const Signals = () => {
@@ -337,7 +338,16 @@ const Signals = () => {
                     {group.signals.map((signal) => (
                       <div
                         key={signal.id}
-                        className="bg-secondary rounded-2xl p-4 border border-border/50 space-y-4"
+                        className="bg-secondary rounded-2xl p-4 border border-border/50 space-y-4 cursor-pointer transition-colors hover:bg-secondary/80"
+                        onClick={() => applyToCalculator(signal)}
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            applyToCalculator(signal);
+                          }
+                        }}
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
@@ -380,7 +390,10 @@ const Signals = () => {
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <Button
-                            onClick={() => applyToCalculator(signal)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              applyToCalculator(signal);
+                            }}
                             className="w-full h-12"
                           >
                             Apply to Calculator

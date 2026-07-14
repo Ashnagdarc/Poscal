@@ -47,6 +47,17 @@ const detectPipDecimal = (symbol: string): number => {
   return 4;
 };
 
+const getDirectionFromOrderType = (orderType: string | null): "buy" | "sell" => {
+  if (!orderType) return "buy";
+  const normalized = orderType
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/-/g, "_")
+    .toLowerCase();
+
+  return normalized.startsWith("sell") ? "sell" : "buy";
+};
+
 export const Calculator = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -100,7 +111,7 @@ export const Calculator = () => {
     setEntryPrice(entry ?? "");
     setStopLossPrice(sl);
     setTakeProfitPrice(tp ?? "");
-    setTradeDirection(orderType?.startsWith("sell") ? "sell" : "buy");
+    setTradeDirection(getDirectionFromOrderType(orderType));
   }, [searchParams]);
 
   const riskPresets = [0.5, 1, 2, 3];
