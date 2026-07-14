@@ -9,7 +9,7 @@ import { logger } from '@/lib/logger';
 import { toast } from 'sonner';
 import { SignalFormSchema } from '@/lib/formValidation';
 import { notificationsApi, signalsApi } from '@/lib/api';
-import { CURRENCY_PAIRS } from './CurrencyGrid';
+import { FEATURED_CURRENCY_PAIRS } from './CurrencyGrid';
 
 type SignalOrderType = 'buy' | 'sell' | 'buy_limit' | 'sell_limit' | 'buy_stop' | 'sell_stop';
 
@@ -133,7 +133,7 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
                   <SelectValue placeholder="Select pair" />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {CURRENCY_PAIRS.map((pair) => (
+                  {FEATURED_CURRENCY_PAIRS.map((pair) => (
                     <SelectItem key={pair.symbol} value={pair.symbol}>
                       {pair.symbol}
                     </SelectItem>

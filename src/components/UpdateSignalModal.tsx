@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { toast } from 'sonner';
 import { logger } from '@/lib/logger';
 import { signalsApi } from '@/lib/api';
-import { CURRENCY_PAIRS } from './CurrencyGrid';
+import { FEATURED_CURRENCY_PAIRS } from './CurrencyGrid';
 
 type SignalOrderType = 'buy' | 'sell' | 'buy_limit' | 'sell_limit' | 'buy_stop' | 'sell_stop';
 type SignalStatus = 'active' | 'hit_tp' | 'hit_sl' | 'cancelled';
@@ -86,10 +86,6 @@ export const UpdateSignalModal = ({
     setShowDeleteConfirm(false);
   }, [currentStatus, entryPrice, open, orderType, stopLoss, symbol, takeProfit1]);
 
-  const symbolOptions = CURRENCY_PAIRS.some((pair) => pair.symbol === formData.currency_pair) || !formData.currency_pair
-    ? CURRENCY_PAIRS
-    : [...CURRENCY_PAIRS, { symbol: formData.currency_pair, pipDecimal: 4 }];
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -162,7 +158,7 @@ export const UpdateSignalModal = ({
                   <SelectValue placeholder="Select pair" />
                 </SelectTrigger>
                 <SelectContent className="max-h-72">
-                  {symbolOptions.map((pair) => (
+                  {FEATURED_CURRENCY_PAIRS.map((pair) => (
                     <SelectItem key={pair.symbol} value={pair.symbol}>
                       {pair.symbol}
                     </SelectItem>
