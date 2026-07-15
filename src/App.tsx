@@ -13,7 +13,6 @@ import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
-import { PWAUpdatePrompt } from "./components/PWAUpdatePrompt";
 import UpgradeBanner from '@/components/UpgradeBanner';
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
@@ -47,7 +46,6 @@ const AppContent = () => {
       <SkipLink />
       <UpgradeBanner />
       <AppUpdateModal />
-      <PWAUpdatePrompt />
       <PWAInstallPrompt />
       <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
         <Routes>

@@ -6,14 +6,9 @@ import { convexReactClient } from "@/lib/convexClient";
 import "./index.css";
 
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
-const UPDATE_EVENT_NAME = "poscal:pwa-update-available";
 
-const notifyUpdateAvailable = (registration: ServiceWorkerRegistration) => {
-  window.dispatchEvent(
-    new CustomEvent(UPDATE_EVENT_NAME, {
-      detail: { registration },
-    }),
-  );
+const activateWaitingWorker = (registration: ServiceWorkerRegistration) => {
+  registration.waiting?.postMessage({ type: "SKIP_WAITING" });
 };
 
 const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
@@ -24,7 +19,7 @@ const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
 
 const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) => {
   if (registration.waiting && navigator.serviceWorker.controller) {
-    notifyUpdateAvailable(registration);
+    activateWaitingWorker(registration);
   }
 
   registration.addEventListener("updatefound", () => {
@@ -33,7 +28,7 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
 
     installingWorker.addEventListener("statechange", () => {
       if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-        notifyUpdateAvailable(registration);
+        activateWaitingWorker(registration);
       }
     });
   });
@@ -52,6 +47,14 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
 // Register service worker for push notifications if enabled
 const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
 if (ENABLE_SW && "serviceWorker" in navigator) {
+  const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
+
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (hadServiceWorkerController) {
+      window.location.reload();
+    }
+  });
+
   const registerServiceWorker = async () => {
     try {
       const timeoutPromise = new Promise((_, reject) => 
