@@ -60,13 +60,13 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
 
   return (
     <nav 
-      className="fixed bottom-0 left-0 right-0 z-40 px-4 pb-6 pt-3"
+      className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-[calc(1rem+env(safe-area-inset-bottom))] pt-3 sm:px-4 sm:pb-[calc(1.5rem+env(safe-area-inset-bottom))]"
       role="navigation"
       aria-label="Main navigation"
     >
       <div 
         ref={navRef}
-        className="relative flex justify-around items-center max-w-md mx-auto px-2 py-2 rounded-[1.75rem]
+        className="relative flex justify-around items-center w-full max-w-md mx-auto px-1.5 py-2 rounded-[1.75rem]
                    border border-border/70 bg-background/95
                    shadow-[0_14px_34px_-20px_rgba(0,0,0,0.65)]"
       >
@@ -92,7 +92,7 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
               onClick={() => navigate(path)}
               aria-label={label}
               aria-current={isActive ? 'page' : undefined}
-              className={`relative z-10 flex min-w-0 flex-col items-center gap-1 px-3 py-2 rounded-[1.2rem]
+              className={`relative z-10 flex min-w-0 flex-1 flex-col items-center gap-1 px-1.5 py-2 rounded-[1.2rem] sm:px-3
                          transition-all duration-300 ease-out
                          ${isActive
                            ? 'text-foreground'

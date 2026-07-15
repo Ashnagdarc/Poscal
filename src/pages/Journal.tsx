@@ -1,7 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Calculator, Camera, Clock3, Copy, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { BottomNav } from "@/components/BottomNav";
 import { Calendar } from "@/components/ui/calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -899,7 +898,6 @@ const Journal = () => {
         variant="destructive"
       />
 
-      <BottomNav />
     </div>
   );
 };

@@ -1,8 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, Radio, RefreshCw, TrendingDown, TrendingUp, X } from 'lucide-react';
+import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, Radio, RefreshCw, TrendingDown, TrendingUp, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
-import { BottomNav } from '@/components/BottomNav';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
@@ -185,36 +184,48 @@ const Signals = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
+    <div className="min-h-screen overflow-x-hidden bg-background pb-28">
+      <header className="sticky top-0 z-30 px-4 pb-4 pt-12 sm:px-6 sm:pb-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="w-10 h-10 shrink-0 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
               <Radio className="w-5 h-5 text-primary-foreground" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">Trading Signals</h1>
+            <div className="min-w-0">
+              <h1 className="truncate text-2xl font-bold text-foreground tracking-tight">Trading Signals</h1>
               <p className="text-sm text-muted-foreground">
                 {totalCount} signal{totalCount !== 1 ? 's' : ''} available
               </p>
             </div>
           </div>
-          <Button
-            variant={showFilters ? 'secondary' : 'outline'}
-            size="icon"
-            onClick={() => setShowFilters(!showFilters)}
-            className="relative"
-          >
-            <Filter className="w-4 h-4" />
-            {hasActiveFilters && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+          <div className="flex shrink-0 items-center gap-2">
+            {isAdmin && (
+              <CreateSignalModal
+                onSignalCreated={fetchSignals}
+                trigger={
+                  <Button size="icon" aria-label="Create signal" className="hidden h-10 w-10 sm:inline-flex">
+                    <Plus className="w-4 h-4" />
+                  </Button>
+                }
+              />
             )}
-          </Button>
+            <Button
+              variant={showFilters ? 'secondary' : 'outline'}
+              size="icon"
+              onClick={() => setShowFilters(!showFilters)}
+              className="relative h-10 w-10"
+            >
+              <Filter className="w-4 h-4" />
+              {hasActiveFilters && (
+                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
       {hasActiveFilters && (
-        <div className="px-6 pb-2 flex flex-wrap items-center gap-2">
+        <div className="px-4 pb-2 sm:px-6 flex flex-wrap items-center gap-2">
           {statusFilter !== 'all' && (
             <Badge variant="secondary" className="text-xs">Status: {STATUS_LABELS[statusFilter as SignalStatus] ?? statusFilter}</Badge>
           )}
@@ -228,8 +239,8 @@ const Signals = () => {
       )}
 
       {showFilters && (
-        <div className="px-6 pb-4 space-y-3 animate-in slide-in-from-top-2">
-          <div className="grid grid-cols-2 gap-3">
+        <div className="px-4 pb-4 sm:px-6 space-y-3 animate-in slide-in-from-top-2">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="bg-secondary border-border" aria-label="Status">
                 <SelectValue placeholder="Status" />
@@ -258,7 +269,7 @@ const Signals = () => {
       )}
 
       {isAtSignalLimit && !dismissLimitBanner && (
-        <div className="mx-6 mb-4 bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between">
+        <div className="mx-4 mb-4 sm:mx-6 bg-primary/10 border border-primary/20 rounded-2xl p-4 flex items-center justify-between">
           <div className="flex items-center gap-3 flex-1">
             <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center flex-shrink-0">
               <Radio className="w-5 h-5 text-primary" />
@@ -277,7 +288,7 @@ const Signals = () => {
         </div>
       )}
 
-      <main className="px-6 space-y-4">
+      <main className="px-4 sm:px-6 space-y-4">
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((item) => (
@@ -338,7 +349,7 @@ const Signals = () => {
                     {group.signals.map((signal) => (
                       <div
                         key={signal.id}
-                        className="bg-secondary rounded-2xl p-4 border border-border/50 space-y-4 cursor-pointer transition-colors hover:bg-secondary/80"
+                        className="min-w-0 bg-secondary rounded-2xl p-4 border border-border/50 space-y-4 cursor-pointer transition-colors hover:bg-secondary/80"
                         onClick={() => applyToCalculator(signal)}
                         role="button"
                         tabIndex={0}
@@ -351,7 +362,7 @@ const Signals = () => {
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${getOrderTone(signal.order_type)}`}>
+                            <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${getOrderTone(signal.order_type)}`}>
                               {signal.order_type.startsWith('sell') ? (
                                 <TrendingDown className="w-5 h-5" />
                               ) : (
@@ -363,7 +374,7 @@ const Signals = () => {
                               <p className="text-sm text-muted-foreground">{ORDER_TYPE_LABELS[signal.order_type]}</p>
                             </div>
                           </div>
-                          <Badge className={getStatusClass(signal.status)}>{STATUS_LABELS[signal.status]}</Badge>
+                          <Badge className={`${getStatusClass(signal.status)} shrink-0`}>{STATUS_LABELS[signal.status]}</Badge>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -383,9 +394,9 @@ const Signals = () => {
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                           <Calendar className="w-4 h-4" />
-                          <span>{format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}</span>
+                          <span className="truncate">{format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}</span>
                         </div>
 
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -459,9 +470,20 @@ const Signals = () => {
         )}
       </main>
 
-      {isAdmin && <CreateSignalModal onSignalCreated={fetchSignals} />}
-
-      <BottomNav />
+      {isAdmin && (
+        <CreateSignalModal
+          onSignalCreated={fetchSignals}
+          trigger={
+            <Button
+              size="icon"
+              aria-label="Create signal"
+              className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 z-40 h-14 w-14 rounded-full shadow-lg sm:hidden"
+            >
+              <Plus className="w-6 h-6" />
+            </Button>
+          }
+        />
+      )}
     </div>
   );
 };

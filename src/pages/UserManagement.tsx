@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, RefreshCw, Search, Users } from "lucide-react";
 import { toast } from "sonner";
 import { useAdmin } from "@/hooks/use-admin";
-import { BottomNav } from "@/components/BottomNav";
 import { adminUsersApi, featureFlagApi } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -205,7 +204,6 @@ const UserManagement = () => {
         </div>
       </main>
 
-      <BottomNav />
     </div>
   );
 };

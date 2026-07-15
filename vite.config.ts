@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       strategies: "injectManifest",
       srcDir: "public",
       filename: "sw.js",
@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => ({
         theme_color: "#ffffff",
         background_color: "#ffffff",
         display: "standalone",
+        display_override: ["standalone"],
         orientation: "portrait",
         scope: "/",
         start_url: "/",
@@ -72,10 +73,6 @@ export default defineConfig(({ mode }) => ({
 
           if (id.includes('/node_modules/@radix-ui/')) {
             return 'radix-ui';
-          }
-
-          if (id.includes('/node_modules/recharts/')) {
-            return 'charts';
           }
 
           if (id.includes('/node_modules/@tanstack/react-query/')) {

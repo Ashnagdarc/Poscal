@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ const ORDER_TYPES: Array<{ value: SignalOrderType; label: string }> = [
 
 interface CreateSignalModalProps {
   onSignalCreated: () => void;
+  trigger?: ReactNode;
 }
 
 const initialFormData = {
@@ -49,7 +50,7 @@ const getSignalFormErrorMessage = (error: unknown) => {
   return error.message;
 };
 
-export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) => {
+export const CreateSignalModal = ({ onSignalCreated, trigger }: CreateSignalModalProps) => {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState(initialFormData);
@@ -115,14 +116,17 @@ export const CreateSignalModal = ({ onSignalCreated }: CreateSignalModalProps) =
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button
-          size="icon"
-          className="fixed bottom-24 right-6 h-14 w-14 rounded-full shadow-lg z-40"
-        >
-          <Plus className="w-6 h-6" />
-        </Button>
+        {trigger ?? (
+          <Button
+            size="icon"
+            className="fixed bottom-[calc(5.75rem+env(safe-area-inset-bottom))] right-4 h-14 w-14 rounded-full shadow-lg z-40"
+            aria-label="Create signal"
+          >
+            <Plus className="w-6 h-6" />
+          </Button>
+        )}
       </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] w-[calc(100vw-2rem)] max-w-md overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle>Create Signal</DialogTitle>
           <DialogDescription>

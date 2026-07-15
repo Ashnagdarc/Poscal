@@ -17,7 +17,12 @@ workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
   log(`Installing ${SW_VERSION}...`);
-  self.skipWaiting();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data?.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('activate', (event) => {

@@ -9,7 +9,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { logger } from '@/lib/logger';
 import { useAdmin } from '@/hooks/use-admin';
-import { BottomNav } from '@/components/BottomNav';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { featureFlagApi, appUpdatesApi, notificationsApi } from '@/lib/api';
@@ -302,7 +301,6 @@ const AdminUpdates = () => {
         )}
       </main>
 
-      <BottomNav />
     </div>
   );
 };

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Calculator } from "@/components/Calculator";
-import { BottomNav } from "@/components/BottomNav";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -27,7 +26,6 @@ const Index = () => {
   return (
     <div className="pb-24">
       <Calculator />
-      <BottomNav />
     </div>
   );
 };

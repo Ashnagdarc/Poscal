@@ -21,7 +21,6 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
-import { BottomNav } from "@/components/BottomNav";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usersApi } from "@/lib/api";
 
@@ -170,7 +169,6 @@ const Profile = () => {
             <Skeleton className="h-20 w-full rounded-2xl" />
           </div>
         </main>
-        <BottomNav />
       </div>
     );
   }
@@ -411,7 +409,6 @@ const Profile = () => {
         </div>
       </main>
 
-      <BottomNav />
     </div>
   );
 };

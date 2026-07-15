@@ -6,7 +6,6 @@ import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
-import { BottomNav } from "@/components/BottomNav";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
@@ -574,7 +573,6 @@ const Settings = () => {
         <p className="text-xs text-muted-foreground/60">Officially sponsored by MandeFX</p>
       </div>
 
-      <BottomNav />
     </div>
   );
 };

@@ -147,7 +147,7 @@ export const UpdateSignalModal = ({
           Edit
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto rounded-2xl">
         <DialogHeader>
           <DialogTitle>Edit Signal</DialogTitle>
           <DialogDescription>
