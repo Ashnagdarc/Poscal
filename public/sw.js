@@ -1,8 +1,7 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-// Bump version to force clients to fetch the latest assets (fixes stale routing bundles)
-const SW_VERSION = 'v21-production';
+const SW_VERSION = 'v22-native-pwa';
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -13,6 +12,29 @@ log(`Loading service worker ${SW_VERSION}`);
 
 // Precache assets injected by Workbox
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
+
+const navigationStrategy = new workbox.strategies.NetworkFirst({
+  cacheName: 'poscal-pages',
+  networkTimeoutSeconds: 3,
+  plugins: [
+    new workbox.cacheableResponse.CacheableResponsePlugin({
+      statuses: [0, 200],
+    }),
+  ],
+});
+
+workbox.routing.registerRoute(
+  ({ request, url }) => request.mode === 'navigate' && url.origin === self.location.origin,
+  async ({ event }) => {
+    try {
+      return await navigationStrategy.handle({ event });
+    } catch (err) {
+      const cachedIndex = await caches.match(workbox.precaching.getCacheKeyForURL('/index.html'));
+      if (cachedIndex) return cachedIndex;
+      throw err;
+    }
+  }
+);
 
 // Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
@@ -29,10 +51,9 @@ self.addEventListener('activate', (event) => {
   log(`Activated ${SW_VERSION}`);
   event.waitUntil(
     clients.claim().then(() => {
-      // Send version to all clients
       return clients.matchAll().then(clients => {
         clients.forEach(client => {
-          client.postMessage({ type: 'SW_LOG', message: `✅ Service Worker ${SW_VERSION} activated!`, logType: 'success' });
+          client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
         });
       });
     })
@@ -65,10 +86,10 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'PosCal Notification',
     body: 'You have a new notification',
-    icon: '/pwa-192x192.png',
-    badge: '/favicon.png',
-    tag: 'general',
-    data: {}
+      icon: '/pwa-192x192.png',
+      badge: '/favicon.png',
+      tag: 'general',
+      data: {}
   };
 
   if (event.data) {
@@ -99,8 +120,13 @@ self.addEventListener('push', (event) => {
     icon: data.icon || '/pwa-192x192.png',
     badge: data.badge || '/favicon.png',
     tag: data.tag || 'general',
-    data: data.data,
+    data: {
+      ...(data.data || {}),
+      url: data.url || data.data?.url || (data.data?.type === 'signal' ? '/signals' : '/'),
+    },
     requireInteraction: true,
+    renotify: true,
+    timestamp: Date.now(),
     vibrate: [200, 100, 200],
     actions: [
       { action: 'open', title: 'Open App' },
@@ -130,25 +156,33 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
 
-  // Open or focus the app
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true })
+    Promise.resolve()
+      .then(() => {
+        const target = event.notification.data?.url || '/';
+        const url = new URL(target, self.location.origin);
+        if (url.origin !== self.location.origin) return '/';
+        return `${url.pathname}${url.search}${url.hash}`;
+      })
+      .catch(() => '/')
+      .then((targetUrl) => clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // Check if there's already a window open
         for (const client of clientList) {
           if (client.url.includes(self.location.origin) && 'focus' in client) {
-            // Navigate to signals page if it's a signal notification
-            if (event.notification.data?.type === 'signal') {
-              client.navigate('/signals');
+            const currentUrl = new URL(client.url);
+            const currentPath = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+            if ('navigate' in client && currentPath !== targetUrl) {
+              return client.navigate(targetUrl).then((navigatedClient) => {
+                return (navigatedClient || client).focus();
+              });
             }
             return client.focus();
           }
         }
-        // Open new window
-        const url = event.notification.data?.type === 'signal' ? '/signals' : '/';
+
         if (clients.openWindow) {
-          return clients.openWindow(url);
+          return clients.openWindow(targetUrl);
         }
-      })
+      }))
   );
 });

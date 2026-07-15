@@ -16,6 +16,12 @@ const notifyUpdateAvailable = (registration: ServiceWorkerRegistration) => {
   );
 };
 
+const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
+  void registration.update().catch((error) => {
+    if (import.meta.env.DEV) console.warn("[sw] Update check failed:", error);
+  });
+};
+
 const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) => {
   if (registration.waiting && navigator.serviceWorker.controller) {
     notifyUpdateAvailable(registration);
@@ -31,6 +37,16 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
       }
     });
   });
+
+  const checkWhenVisible = () => {
+    if (document.visibilityState === "visible") {
+      requestUpdateCheck(registration);
+    }
+  };
+
+  window.addEventListener("online", () => requestUpdateCheck(registration));
+  window.addEventListener("focus", () => requestUpdateCheck(registration));
+  document.addEventListener("visibilitychange", checkWhenVisible);
 };
 
 // Register service worker for push notifications if enabled
@@ -49,7 +65,7 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
 
       const registration = await Promise.race([registrationPromise, timeoutPromise]) as ServiceWorkerRegistration;
       watchRegistrationForUpdates(registration);
-      void registration.update();
+      requestUpdateCheck(registration);
       if (import.meta.env.DEV) console.log("[sw] Service worker registered successfully:", registration);
     } catch (error) {
       if (import.meta.env.DEV) console.error("[sw] Failed to register service worker:", error);

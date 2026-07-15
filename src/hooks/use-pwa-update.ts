@@ -22,6 +22,12 @@ export const usePWAUpdate = () => {
     return true;
   }, []);
 
+  const clearPendingUpdate = useCallback(() => {
+    registrationRef.current = null;
+    localStorage.removeItem(PENDING_UPDATE_KEY);
+    setUpdateAvailable(false);
+  }, []);
+
   useEffect(() => {
     if (!("serviceWorker" in navigator)) return;
 
@@ -59,6 +65,29 @@ export const usePWAUpdate = () => {
     };
   }, [showUpdate]);
 
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    const verifyPendingUpdate = async () => {
+      const hasPendingUpdate = localStorage.getItem(PENDING_UPDATE_KEY) === "true";
+      if (!hasPendingUpdate) return;
+
+      try {
+        const registration = await navigator.serviceWorker.getRegistration("/");
+        if (showUpdate(registration)) return;
+
+        await registration?.update();
+        if (!showUpdate(registration)) {
+          clearPendingUpdate();
+        }
+      } catch {
+        clearPendingUpdate();
+      }
+    };
+
+    void verifyPendingUpdate();
+  }, [clearPendingUpdate, showUpdate]);
+
   const updateApp = useCallback(async () => {
     if (!("serviceWorker" in navigator)) return;
 
@@ -69,13 +98,12 @@ export const usePWAUpdate = () => {
     const waitingWorker = registration?.waiting;
 
     if (!waitingWorker) {
-      localStorage.removeItem(PENDING_UPDATE_KEY);
-      window.location.reload();
+      clearPendingUpdate();
       return;
     }
 
     waitingWorker.postMessage({ type: "SKIP_WAITING" });
-  }, []);
+  }, [clearPendingUpdate]);
 
   return {
     updateAvailable,
