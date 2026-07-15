@@ -24,31 +24,25 @@ export const PWAInstallPrompt = () => {
       (window.navigator as unknown as { standalone?: boolean }).standalone === true;
     setIsStandalone(standalone);
 
-    // Check if we should show the prompt
-    const shouldShowPrompt = () => {
-      if (standalone || isInstalled) return false;
+    if (standalone || isInstalled) return;
 
-      const dismissed = localStorage.getItem(PROMPT_DISMISSED_KEY);
-      if (dismissed === 'true') return false;
+    const dismissed = localStorage.getItem(PROMPT_DISMISSED_KEY);
+    if (dismissed === 'true') return;
 
-      const shownCount = parseInt(localStorage.getItem(PROMPT_SHOWN_COUNT_KEY) || '0', 10);
-      if (shownCount >= MAX_PROMPT_COUNT) return false;
+    const shownCount = parseInt(localStorage.getItem(PROMPT_SHOWN_COUNT_KEY) || '0', 10);
+    if (shownCount >= MAX_PROMPT_COUNT) return;
 
-      // Show prompt after 5 seconds on first visit, then after 3 seconds on subsequent visits
-      const delay = shownCount === 0 ? 5000 : 3000;
-      
-      const timer = setTimeout(() => {
-        if (iOS || isInstallable) {
-          setOpen(true);
-          localStorage.setItem(PROMPT_SHOWN_COUNT_KEY, (shownCount + 1).toString());
-        }
-      }, delay);
+    // Show prompt after 5 seconds on first visit, then after 3 seconds on subsequent visits
+    const delay = shownCount === 0 ? 5000 : 3000;
 
-      return () => clearTimeout(timer);
-    };
+    const timer = setTimeout(() => {
+      if (iOS || isInstallable) {
+        setOpen(true);
+        localStorage.setItem(PROMPT_SHOWN_COUNT_KEY, (shownCount + 1).toString());
+      }
+    }, delay);
 
-    const cleanup = shouldShowPrompt();
-    return cleanup;
+    return () => clearTimeout(timer);
   }, [isInstallable, isInstalled]);
 
   const handleInstall = async () => {
