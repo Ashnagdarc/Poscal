@@ -10,8 +10,6 @@ import {
   Crown,
   Bell,
   Download,
-  Moon,
-  Sun,
   Zap,
   Eye,
   EyeOff,
@@ -22,6 +20,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UserAvatar } from "@/components/UserAvatar";
 import { usersApi } from "@/lib/api";
 
 interface Profile {
@@ -44,13 +43,6 @@ const Profile = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
-  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
-  const toggleTheme = () => {
-    const newTheme = theme === 'dark' ? 'light' : 'dark';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.classList.toggle('dark');
-  };
 
   useEffect(() => {
     if (user) {
@@ -90,10 +82,6 @@ const Profile = () => {
   };
 
   const loadPreferences = () => {
-    // Load from localStorage
-    const savedTheme = localStorage.getItem('theme') as 'light' | 'dark' || 'dark';
-    setTheme(savedTheme);
-    
     const saved = localStorage.getItem('notificationsEnabled');
     if (saved !== null) setNotificationsEnabled(saved === 'true');
   };
@@ -197,17 +185,12 @@ const Profile = () => {
         {/* Avatar Section */}
         <div className="flex flex-col items-center">
           <div className="relative">
-            <div className="w-24 h-24 bg-secondary rounded-full flex items-center justify-center overflow-hidden">
-              {profile?.avatar_url ? (
-                <img 
-                  src={profile.avatar_url} 
-                  alt="Avatar" 
-                  className="w-full h-full rounded-full object-cover"
-                />
-              ) : (
-                <UserIcon className="w-12 h-12 text-muted-foreground" />
-              )}
-            </div>
+            <UserAvatar
+              size="lg"
+              name={profile?.full_name || user?.full_name}
+              email={profile?.email || user?.email}
+              src={profile?.avatar_url || user?.avatar_url}
+            />
           </div>
           <h2 className="text-2xl font-bold text-foreground mt-4">
             {profile?.full_name || "Trader"}
@@ -274,31 +257,20 @@ const Profile = () => {
         {/* Preferences Section */}
         <div className="space-y-3 pt-2">
           <h3 className="text-sm font-semibold text-muted-foreground px-2">PREFERENCES</h3>
-          
-          {/* Theme Toggle */}
-          <div className="bg-secondary rounded-2xl p-4 flex items-center justify-between">
+
+          <button
+            onClick={() => navigate("/settings")}
+            className="flex w-full items-center justify-between rounded-2xl bg-secondary p-4 transition-colors hover:bg-secondary/80"
+          >
             <div className="flex items-center gap-3">
-              {theme === 'dark' ? (
-                <Moon className="w-5 h-5 text-muted-foreground" />
-              ) : (
-                <Sun className="w-5 h-5 text-muted-foreground" />
-              )}
-              <div>
-                <span className="text-sm font-medium text-foreground">Theme</span>
-                <p className="text-xs text-muted-foreground capitalize">{theme}</p>
+              <SettingsIcon className="h-5 w-5 text-muted-foreground" />
+              <div className="text-left">
+                <span className="text-sm font-medium text-foreground">Appearance</span>
+                <p className="text-xs text-muted-foreground">Theme and display settings</p>
               </div>
             </div>
-            <button
-              onClick={toggleTheme}
-              className="w-10 h-10 bg-background rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-            >
-              {theme === 'dark' ? (
-                <Sun className="w-5 h-5 text-foreground" />
-              ) : (
-                <Moon className="w-5 h-5 text-foreground" />
-              )}
-            </button>
-          </div>
+            <span className="text-xs font-medium text-brand">Open Settings</span>
+          </button>
 
           {/* Notifications Toggle */}
           <div className="bg-secondary rounded-2xl p-4 flex items-center justify-between">
@@ -312,11 +284,11 @@ const Profile = () => {
             <button
               onClick={() => setNotificationsEnabled(!notificationsEnabled)}
               className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                notificationsEnabled ? 'bg-green-500/20' : 'bg-background'
+                notificationsEnabled ? 'bg-brand/20' : 'bg-background'
               }`}
             >
               {notificationsEnabled ? (
-                <Eye className="w-5 h-5 text-green-500" />
+                <Eye className="w-5 h-5 text-brand" />
               ) : (
                 <EyeOff className="w-5 h-5 text-muted-foreground" />
               )}

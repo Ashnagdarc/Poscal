@@ -1,15 +1,16 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { 
-  Calculator as CalculatorIcon, 
-  TrendingDown, 
+import {
+  TrendingDown,
   TrendingUp,
   ChevronRight,
   Target,
-  User,
-  X
+  X,
 } from "lucide-react";
+import poscalLogo from "@/assets/poscal-logo.png";
 import { NumPad } from "./NumPad";
+import { PageHeader } from "./PageHeader";
+import { UserAvatar } from "./UserAvatar";
 import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
@@ -283,61 +284,123 @@ export const Calculator = () => {
       ? "pips"
       : "";
 
+  const toggleClass = (active: boolean) =>
+    `h-11 flex-1 rounded-xl text-sm font-semibold transition-colors active:scale-[0.98] ${
+      active ? "bg-brand text-brand-foreground" : "bg-secondary text-foreground"
+    }`;
+
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center shadow-md shadow-foreground/20">
-              <CalculatorIcon className="w-5 h-5 text-background" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-foreground tracking-tight">Position Size</h1>
-              <p className="text-xs text-muted-foreground">Calculator</p>
-            </div>
-          </div>
+    <div className="min-h-dvh bg-background">
+      <PageHeader
+        title="Poscal"
+        subtitle="Position size"
+        logoSrc={poscalLogo}
+        actions={
           <button
-            onClick={() => navigate(user ? '/profile' : '/signin')}
-            className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all active:scale-95 hover:bg-secondary"
+            onClick={() => navigate(user ? "/profile" : "/signin")}
+            className="rounded-full transition-transform active:scale-95"
+            aria-label={user ? "Open profile" : "Sign in"}
           >
-            <User className="w-5 h-5 text-foreground" />
+            <UserAvatar
+              size="sm"
+              name={user?.full_name}
+              email={user?.email}
+              src={user?.avatar_url}
+              className="rounded-xl"
+            />
           </button>
-        </div>
-      </header>
+        }
+      />
 
-      {/* Main Content */}
-      <main className="flex-1 px-6 pb-8 space-y-4">
-        {/* Currency Pair Selector */}
-        <button
-          onClick={() => setShowCurrencyGrid(true)}
-          className="w-full bg-secondary rounded-2xl p-4 flex items-center justify-between transition-all duration-200 active:scale-[0.98] animate-slide-up"
-        >
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Currency Pair</p>
-            <p className="text-lg font-bold text-foreground">{selectedPair.symbol}</p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </button>
-
-        {/* Account Balance */}
-        <button
-          onClick={() => openNumPad("balance")}
-          className="w-full bg-secondary rounded-2xl p-4 flex items-center justify-between transition-all duration-200 active:scale-[0.98] animate-slide-up"
-          style={{ animationDelay: "50ms" }}
-        >
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Account Balance</p>
-            <p className="text-lg font-bold text-foreground">
-              {accountBalance ? `${currency.symbol}${parseFloat(accountBalance).toLocaleString()}` : "Tap to enter"}
+      <main className="mx-auto w-full max-w-2xl px-6 pb-32 md:max-w-3xl">
+        {/* Result first — hero outcome */}
+        <section className="animate-scale-in mb-6">
+          <div className="rounded-3xl bg-foreground px-6 py-7 text-background">
+            <p className="mb-1 text-center text-sm font-medium opacity-60">Position size</p>
+            <p className="text-center font-display text-5xl font-bold tracking-tight">
+              {formatNumber(calculation.positionSize)}
             </p>
-          </div>
-          <ChevronRight className="w-5 h-5 text-muted-foreground" />
-        </button>
+            <p className="mt-1 text-center text-lg font-medium opacity-80">lots</p>
 
-        {/* Risk Percentage */}
-        <div className="animate-slide-up" style={{ animationDelay: "100ms" }}>
-          <p className="text-xs text-muted-foreground mb-3 ml-1">Risk Percentage</p>
+            <div className="my-5 h-px bg-background/20" />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <p className="mb-1 text-xs font-medium opacity-60">Risk</p>
+                <p className="text-lg font-semibold">
+                  {currency.symbol}
+                  {formatNumber(calculation.actualRisk || calculation.riskAmount, 0)}
+                </p>
+              </div>
+              <div className="text-center">
+                <p className="mb-1 text-xs font-medium opacity-60">Units</p>
+                <p className="text-lg font-semibold">{formatNumber(calculation.units, 0)}</p>
+              </div>
+            </div>
+
+            {calculation.rewardToRisk > 0 && (
+              <>
+                <div className="my-5 h-px bg-background/20" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="text-center">
+                    <div className="mb-1 flex items-center justify-center gap-1">
+                      <Target className="h-3 w-3 opacity-60" />
+                      <p className="text-xs font-medium opacity-60">R:R</p>
+                    </div>
+                    <p className="text-lg font-semibold">1:{formatNumber(calculation.rewardToRisk, 1)}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="mb-1 text-xs font-medium opacity-60">Potential</p>
+                    <p className="text-lg font-semibold">
+                      +{currency.symbol}
+                      {formatNumber(calculation.potentialProfit, 0)}
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={saveToHistory}
+            disabled={!calculation.isValid || calculation.positionSize <= 0}
+            className="mt-3 h-12 w-full rounded-xl bg-brand font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Save to Journal
+          </button>
+        </section>
+
+        {/* Primary inputs — one grouped composition */}
+        <section className="animate-slide-up space-y-1 overflow-hidden rounded-2xl bg-secondary">
+          <button
+            onClick={() => setShowCurrencyGrid(true)}
+            className="flex w-full items-center justify-between px-4 py-3.5 transition-colors active:bg-secondary/80"
+          >
+            <div className="text-left">
+              <p className="text-xs text-muted-foreground">Pair</p>
+              <p className="text-base font-bold text-foreground">{selectedPair.symbol}</p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </button>
+          <div className="mx-4 h-px bg-border/60" />
+          <button
+            onClick={() => openNumPad("balance")}
+            className="flex w-full items-center justify-between px-4 py-3.5 transition-colors active:bg-secondary/80"
+          >
+            <div className="text-left">
+              <p className="text-xs text-muted-foreground">Account balance</p>
+              <p className="text-base font-bold text-foreground">
+                {accountBalance
+                  ? `${currency.symbol}${parseFloat(accountBalance).toLocaleString()}`
+                  : "Tap to enter"}
+              </p>
+            </div>
+            <ChevronRight className="h-5 w-5 text-muted-foreground" />
+          </button>
+        </section>
+
+        <section className="mt-5 animate-slide-up" style={{ animationDelay: "40ms" }}>
+          <p className="mb-2 ml-1 text-xs text-muted-foreground">Risk %</p>
           <div className="flex gap-2">
             {riskPresets.map((preset) => (
               <button
@@ -346,22 +409,14 @@ export const Calculator = () => {
                   setRiskPercent(preset);
                   setShowCustomRisk(false);
                 }}
-                className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                  riskPercent === preset && !showCustomRisk
-                    ? "bg-foreground text-background"
-                    : "bg-secondary text-foreground"
-                }`}
+                className={toggleClass(riskPercent === preset && !showCustomRisk)}
               >
                 {preset}%
               </button>
             ))}
             <button
               onClick={() => setShowCustomRisk(true)}
-              className={`flex-1 h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                showCustomRisk || !riskPresets.includes(riskPercent)
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
+              className={toggleClass(showCustomRisk || !riskPresets.includes(riskPercent))}
             >
               {showCustomRisk || !riskPresets.includes(riskPercent) ? `${riskPercent}%` : "Custom"}
             </button>
@@ -373,7 +428,7 @@ export const Calculator = () => {
                 value={customRiskInput}
                 onChange={(e) => setCustomRiskInput(e.target.value)}
                 placeholder="Enter risk %"
-                className="flex-1 h-12 px-4 bg-secondary text-foreground rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-foreground/20"
+                className="h-11 flex-1 rounded-xl bg-secondary px-4 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-brand/30"
                 autoFocus
                 min="0.1"
                 max="100"
@@ -389,231 +444,109 @@ export const Calculator = () => {
                   }
                 }}
                 disabled={!customRiskInput || parseFloat(customRiskInput) <= 0}
-                className="px-6 h-12 bg-foreground text-background rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
+                className="h-11 rounded-xl bg-foreground px-5 text-sm font-semibold text-background transition-all active:scale-95 disabled:opacity-50"
               >
                 Set
               </button>
             </div>
           )}
-        </div>
+        </section>
 
-        <div className="animate-slide-up" style={{ animationDelay: "125ms" }}>
-          <p className="text-xs text-muted-foreground mb-3 ml-1">Trade Direction</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setTradeDirection('buy')}
-              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                tradeDirection === 'buy'
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              Buy
-            </button>
-            <button
-              onClick={() => setTradeDirection('sell')}
-              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                tradeDirection === 'sell'
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              Sell
-            </button>
-          </div>
-        </div>
-
-        <div className="animate-slide-up" style={{ animationDelay: "135ms" }}>
-          <p className="text-xs text-muted-foreground mb-3 ml-1">Stop Loss Input</p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => setCalculationMode("pips")}
-              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                calculationMode === "pips"
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              Pips
-            </button>
-            <button
-              onClick={() => setCalculationMode("price")}
-              className={`h-12 rounded-xl font-semibold text-sm transition-all duration-200 active:scale-95 ${
-                calculationMode === "price"
-                  ? "bg-foreground text-background"
-                  : "bg-secondary text-foreground"
-              }`}
-            >
-              Entry / SL
-            </button>
-          </div>
-        </div>
-
-        {/* Stop Loss & Take Profit */}
-        {calculationMode === "pips" ? (
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setShowStopLossSelector(true)}
-              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-              style={{ animationDelay: "150ms" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingDown className="w-4 h-4 text-destructive" />
-                <p className="text-xs text-muted-foreground">Stop Loss (pips)</p>
-              </div>
-              <p className="text-lg font-bold text-foreground">
-                {stopLossPips ? `${stopLossPips} pips` : "—"}
-              </p>
-            </button>
-
-            <button
-              onClick={() => openNumPad("takeProfit")}
-              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-              style={{ animationDelay: "200ms" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-foreground" />
-                <p className="text-xs text-muted-foreground">Take Profit (pips)</p>
-              </div>
-              <p className="text-lg font-bold text-foreground">
-                {takeProfitPips ? `${takeProfitPips} pips` : "—"}
-              </p>
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => openNumPad("entryPrice")}
-              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-              style={{ animationDelay: "150ms" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingUp className="w-4 h-4 text-foreground" />
-                <p className="text-xs text-muted-foreground">Entry Price</p>
-              </div>
-              <p className="text-lg font-bold text-foreground">
-                {entryPrice || "—"}
-              </p>
-            </button>
-
-            <button
-              onClick={() => openNumPad("stopLossPrice")}
-              className="bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-              style={{ animationDelay: "200ms" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <TrendingDown className="w-4 h-4 text-destructive" />
-                <p className="text-xs text-muted-foreground">Stop-Loss Price</p>
-              </div>
-              <p className="text-lg font-bold text-foreground">
-                {stopLossPrice || "—"}
-              </p>
-            </button>
-
-            <button
-              onClick={() => openNumPad("takeProfitPrice")}
-              className="col-span-2 bg-secondary rounded-2xl p-4 flex flex-col items-start transition-all duration-200 active:scale-[0.98] animate-slide-up"
-              style={{ animationDelay: "225ms" }}
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <Target className="w-4 h-4 text-foreground" />
-                <p className="text-xs text-muted-foreground">Take Profit Price</p>
-              </div>
-              <p className="text-lg font-bold text-foreground">
-                {takeProfitPrice || "—"}
-              </p>
-            </button>
-          </div>
-        )}
-
-        <div
-          className="bg-secondary/70 rounded-2xl px-4 py-3 animate-slide-up"
-          style={{ animationDelay: "225ms" }}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Instrument Spec</p>
-              <p className="text-base font-semibold text-foreground">
-                {calculation.spec
-                  ? `${calculation.spec.displayName} • ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / pip`
-                  : "Unsupported instrument"}
-              </p>
+        <section className="mt-5 grid grid-cols-2 gap-4 animate-slide-up" style={{ animationDelay: "60ms" }}>
+          <div>
+            <p className="mb-2 ml-1 text-xs text-muted-foreground">Direction</p>
+            <div className="flex gap-2">
+              <button onClick={() => setTradeDirection("buy")} className={toggleClass(tradeDirection === "buy")}>
+                Buy
+              </button>
+              <button onClick={() => setTradeDirection("sell")} className={toggleClass(tradeDirection === "sell")}>
+                Sell
+              </button>
             </div>
-            <span className="rounded-full bg-background px-3 py-1 text-xs font-semibold text-foreground">
-              LOCAL
-            </span>
           </div>
-          <p className="mt-2 text-xs text-muted-foreground">
-            Estimated using local instrument spec
-            {calculation.warning ? ` • ${calculation.warning}` : ""}
-          </p>
-        </div>
-
-        {/* Result Card */}
-        <div 
-          className="mt-4 animate-scale-in" 
-          style={{ animationDelay: "250ms" }}
-        >
-          <div className="bg-foreground text-background rounded-3xl p-6">
-            <div className="text-center mb-5">
-              <p className="text-sm font-medium opacity-60 mb-1">Position Size</p>
-              <p className="text-5xl font-bold tracking-tight">
-                {formatNumber(calculation.positionSize)}
-              </p>
-              <p className="text-lg font-medium opacity-80 mt-1">lots</p>
+          <div>
+            <p className="mb-2 ml-1 text-xs text-muted-foreground">SL input</p>
+            <div className="flex gap-2">
+              <button onClick={() => setCalculationMode("pips")} className={toggleClass(calculationMode === "pips")}>
+                Pips
+              </button>
+              <button onClick={() => setCalculationMode("price")} className={toggleClass(calculationMode === "price")}>
+                Price
+              </button>
             </div>
+          </div>
+        </section>
 
-            <div className="h-px bg-background/20 my-4" />
-
-            <div className="grid grid-cols-2 gap-4 mb-4">
-              <div className="text-center">
-                <p className="text-xs font-medium opacity-60 mb-1">Risk Amount</p>
-                <p className="text-xl font-semibold">
-                  {currency.symbol}{formatNumber(calculation.actualRisk || calculation.riskAmount, 0)}
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-xs font-medium opacity-60 mb-1">Units</p>
-                <p className="text-xl font-semibold">
-                  {formatNumber(calculation.units, 0)}
-                </p>
-              </div>
-            </div>
-
-            {/* Risk/Reward Section */}
-            {calculation.rewardToRisk > 0 && (
-              <>
-                <div className="h-px bg-background/20 my-4" />
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="text-center">
-                    <div className="flex items-center justify-center gap-1 mb-1">
-                      <Target className="w-3 h-3 opacity-60" />
-                      <p className="text-xs font-medium opacity-60">R:R Ratio</p>
-                    </div>
-                    <p className="text-xl font-semibold">
-                      1:{formatNumber(calculation.rewardToRisk, 1)}
-                    </p>
-                  </div>
-                  <div className="text-center">
-                    <p className="text-xs font-medium opacity-60 mb-1">Potential Profit</p>
-                    <p className="text-xl font-semibold">
-                      +{currency.symbol}{formatNumber(calculation.potentialProfit, 0)}
-                    </p>
-                  </div>
+        <section className="mt-5 animate-slide-up" style={{ animationDelay: "80ms" }}>
+          {calculationMode === "pips" ? (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => setShowStopLossSelector(true)}
+                className="flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  <p className="text-xs text-muted-foreground">Stop loss</p>
                 </div>
-              </>
-            )}
-          </div>
+                <p className="text-lg font-bold text-foreground">
+                  {stopLossPips ? `${stopLossPips} pips` : "—"}
+                </p>
+              </button>
+              <button
+                onClick={() => openNumPad("takeProfit")}
+                className="flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-brand" />
+                  <p className="text-xs text-muted-foreground">Take profit</p>
+                </div>
+                <p className="text-lg font-bold text-foreground">
+                  {takeProfitPips ? `${takeProfitPips} pips` : "—"}
+                </p>
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => openNumPad("entryPrice")}
+                className="flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <TrendingUp className="h-4 w-4 text-foreground" />
+                  <p className="text-xs text-muted-foreground">Entry</p>
+                </div>
+                <p className="text-lg font-bold text-foreground">{entryPrice || "—"}</p>
+              </button>
+              <button
+                onClick={() => openNumPad("stopLossPrice")}
+                className="flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4 text-destructive" />
+                  <p className="text-xs text-muted-foreground">Stop loss</p>
+                </div>
+                <p className="text-lg font-bold text-foreground">{stopLossPrice || "—"}</p>
+              </button>
+              <button
+                onClick={() => openNumPad("takeProfitPrice")}
+                className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+              >
+                <div className="mb-1 flex items-center gap-2">
+                  <Target className="h-4 w-4 text-brand" />
+                  <p className="text-xs text-muted-foreground">Take profit</p>
+                </div>
+                <p className="text-lg font-bold text-foreground">{takeProfitPrice || "—"}</p>
+              </button>
+            </div>
+          )}
+        </section>
 
-          {/* Save Button */}
-          <button
-            onClick={saveToHistory}
-            disabled={!calculation.isValid || calculation.positionSize <= 0}
-            className="w-full mt-4 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Save to Journal
-          </button>
-        </div>
+        <p className="mt-4 px-1 text-xs text-muted-foreground">
+          {calculation.spec
+            ? `${calculation.spec.displayName} · ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / pip`
+            : "Unsupported instrument"}
+          {calculation.warning ? ` · ${calculation.warning}` : ""}
+        </p>
       </main>
 
       {/* NumPad Overlay */}

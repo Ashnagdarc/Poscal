@@ -34,20 +34,20 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
 
   return (
     <nav
-      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-3rem)] max-w-sm -translate-x-1/2 sm:bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
+      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-2.5rem)] max-w-md -translate-x-1/2 sm:bottom-[calc(1.25rem+env(safe-area-inset-bottom))]"
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="relative flex items-center justify-around overflow-hidden rounded-full border border-border/50 bg-background/70 px-2 py-1.5 shadow-xl backdrop-blur-2xl supports-[backdrop-filter]:bg-background/55 sm:px-3">
+      <div className="relative flex items-center justify-around overflow-hidden rounded-2xl border border-border/60 bg-background/80 px-1.5 py-1.5 shadow-soft backdrop-blur-xl supports-[backdrop-filter]:bg-background/65 sm:px-2">
         {activeIndex >= 0 && (
           <motion.div
-            layoutId="bottom-nav-active-glow"
-            className="pointer-events-none absolute h-12 w-12 rounded-full bg-gradient-to-r from-primary/70 to-violet-500/70 blur-2xl"
+            layoutId="bottom-nav-active-pill"
+            className="pointer-events-none absolute inset-y-1.5 rounded-xl bg-brand/15"
             animate={{
-              left: `calc(${activeIndex * (100 / navItems.length)}% + ${100 / navItems.length / 2}%)`,
-              translateX: '-50%',
+              left: `calc(${activeIndex * (100 / navItems.length)}% + 0.25rem)`,
+              width: `calc(${100 / navItems.length}% - 0.5rem)`,
             }}
-            transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
             aria-hidden="true"
           />
         )}
@@ -56,28 +56,22 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
           const isActive = index === activeIndex;
 
           return (
-            <motion.div key={path} className="group relative flex flex-1 flex-col items-center">
+            <motion.div key={path} className="relative flex flex-1 flex-col items-center">
               <motion.button
                 type="button"
                 onClick={() => navigate(path)}
-                whileHover={{ scale: 1.15 }}
-                whileTap={{ scale: 0.92 }}
-                animate={{ scale: isActive ? 1.18 : 1 }}
-                transition={{ type: 'spring', stiffness: 500, damping: 30 }}
+                whileTap={{ scale: 0.96 }}
                 aria-label={label}
                 aria-current={isActive ? 'page' : undefined}
-                className={`relative z-10 flex h-10 w-10 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-12 sm:w-12 ${
+                className={`relative z-10 flex w-full flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   isActive
-                    ? 'text-primary'
+                    ? 'text-brand'
                     : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
                 <Icon className="h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5" aria-hidden="true" />
+                <span className="text-[10px] font-medium leading-none sm:text-[11px]">{label}</span>
               </motion.button>
-
-              <span className="pointer-events-none absolute bottom-full mb-3 rounded-md bg-foreground px-2 py-1 text-xs text-background opacity-0 shadow-md transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-                {label}
-              </span>
             </motion.div>
           );
         })}

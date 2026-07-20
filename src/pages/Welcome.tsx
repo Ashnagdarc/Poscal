@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ChevronRight, ChevronLeft } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import poscalLogo from '@/assets/poscal-logo.png';
 import { useHaptics } from '@/hooks/use-haptics';
 
@@ -12,27 +11,26 @@ interface OnboardingStep {
 
 const steps: OnboardingStep[] = [
   {
-    title: "Position Size Calculator",
-    description: "Calculate the perfect position size for every trade based on your risk tolerance and account balance.",
+    title: 'Size every trade',
+    description: 'Calculate position size from your balance, risk percentage, and stop loss — before you enter.',
   },
   {
-    title: "Trading Journal",
-    description: "Track all your trades, review your performance, and learn from your history.",
+    title: 'Follow signals',
+    description: 'Browse curated trading signals and apply them straight into the calculator.',
   },
   {
-    title: "Improve Your Trading",
-    description: "Make data-driven decisions with analytics, win rate tracking, and profit factor analysis.",
+    title: 'Keep a journal',
+    description: 'Save calculations and mark results so you can review what you traded.',
   },
 ];
 
 const Welcome = () => {
   const navigate = useNavigate();
   const { lightTap, mediumTap, success } = useHaptics();
-  const [currentStep, setCurrentStep] = useState(-1); // -1 = splash screen
+  const [currentStep, setCurrentStep] = useState(-1);
   const [hasSeenOnboarding, setHasSeenOnboarding] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
-  
-  // Swipe gesture handling
+
   const touchStartX = useRef<number | null>(null);
   const touchEndX = useRef<number | null>(null);
   const minSwipeDistance = 50;
@@ -48,11 +46,11 @@ const Welcome = () => {
 
   const handleTouchEnd = () => {
     if (!touchStartX.current || !touchEndX.current) return;
-    
+
     const distance = touchStartX.current - touchEndX.current;
     const isLeftSwipe = distance > minSwipeDistance;
     const isRightSwipe = distance < -minSwipeDistance;
-    
+
     if (isLeftSwipe && currentStep < steps.length - 1) {
       mediumTap();
       setCurrentStep(currentStep + 1);
@@ -60,7 +58,7 @@ const Welcome = () => {
       lightTap();
       setCurrentStep(currentStep - 1);
     }
-    
+
     touchStartX.current = null;
     touchEndX.current = null;
   };
@@ -78,7 +76,7 @@ const Welcome = () => {
       const timer = setTimeout(() => {
         setShowSplash(false);
         setCurrentStep(0);
-      }, 2000);
+      }, 1600);
       return () => clearTimeout(timer);
     }
   }, [showSplash]);
@@ -100,43 +98,9 @@ const Welcome = () => {
     }
   };
 
-  const handleDotClick = (index: number) => {
-    lightTap();
-    setCurrentStep(index);
-  };
-
-  const fireConfetti = () => {
-    const duration = 1500;
-    const end = Date.now() + duration;
-
-    const frame = () => {
-      confetti({
-        particleCount: 3,
-        angle: 60,
-        spread: 55,
-        origin: { x: 0, y: 0.7 },
-        colors: ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'],
-      });
-      confetti({
-        particleCount: 3,
-        angle: 120,
-        spread: 55,
-        origin: { x: 1, y: 0.7 },
-        colors: ['#ffd700', '#ff6b6b', '#4ecdc4', '#45b7d1', '#96ceb4'],
-      });
-
-      if (Date.now() < end) {
-        requestAnimationFrame(frame);
-      }
-    };
-
-    frame();
-  };
-
   const completeOnboarding = () => {
-    fireConfetti();
     localStorage.setItem('hasSeenOnboarding', 'true');
-    setTimeout(() => navigate('/'), 800);
+    navigate('/');
   };
 
   const handleSkip = () => {
@@ -148,18 +112,18 @@ const Welcome = () => {
     return null;
   }
 
-  // Splash screen with large animated logo
   if (showSplash) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-scale-in relative">
-          {/* Glow effect */}
-          <div className="absolute inset-0 blur-3xl bg-foreground/20 animate-pulse rounded-full scale-150" />
-          <img 
-            src={poscalLogo} 
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="animate-scale-in text-center">
+          <img
+            src={poscalLogo}
             alt="Poscal"
-            className="relative w-64 h-auto drop-shadow-2xl"
+            className="mx-auto h-28 w-28 rounded-3xl object-contain"
           />
+          <p className="mt-6 font-display text-sm font-semibold uppercase tracking-[0.28em] text-brand">
+            Poscal
+          </p>
         </div>
       </div>
     );
@@ -169,79 +133,60 @@ const Welcome = () => {
   const progress = ((currentStep + 1) / steps.length) * 100;
 
   return (
-    <div className="min-h-screen bg-background flex flex-col overflow-hidden">
-      {/* Progress bar */}
-      <div className="pt-12 px-6">
-        <div className="h-1 bg-muted rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-foreground rounded-full transition-all duration-500 ease-out"
+    <div className="flex min-h-screen flex-col overflow-hidden bg-background">
+      <div className="px-6 pt-12">
+        <div className="h-1 overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-brand transition-all duration-500 ease-out"
             style={{ width: `${progress}%` }}
           />
         </div>
       </div>
 
-      {/* Skip button */}
-      <header className="pt-4 px-6 flex justify-end relative z-10">
+      <header className="relative z-10 flex justify-end px-6 pt-4">
         <button
           onClick={handleSkip}
-          className="text-muted-foreground text-sm font-medium hover:text-foreground transition-colors"
+          className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           Skip
         </button>
       </header>
 
-      {/* Content with swipe gestures */}
-      <main 
-        className="flex-1 flex flex-col items-center justify-center px-8"
+      <main
+        className="flex flex-1 flex-col items-center justify-center px-8"
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        <div 
-          key={currentStep}
-          className="animate-fade-in text-center max-w-sm"
-        >
-          {/* Logo */}
-          <div className="relative w-40 h-20 mx-auto mb-12">
-            <img 
-              src={poscalLogo} 
-              alt="Poscal"
-              className="w-full h-full object-contain"
-            />
-          </div>
-
-          {/* Title */}
-          <h1 className="text-3xl font-bold text-foreground mb-4">
-            {step.title}
-          </h1>
-
-          {/* Description */}
-          <p className="text-muted-foreground text-lg leading-relaxed">
-            {step.description}
-          </p>
+        <div key={currentStep} className="max-w-sm animate-fade-in text-center">
+          <img
+            src={poscalLogo}
+            alt="Poscal"
+            className="mx-auto mb-10 h-20 w-20 rounded-2xl object-contain"
+          />
+          <h1 className="mb-4 font-display text-3xl font-bold text-foreground">{step.title}</h1>
+          <p className="text-lg leading-relaxed text-muted-foreground">{step.description}</p>
         </div>
       </main>
 
-      {/* Navigation */}
-      <footer className="pb-12 px-6">
-
-        {/* Navigation buttons */}
+      <footer className="px-6 pb-12">
         <div className="flex gap-3">
           {currentStep > 0 && (
             <button
               onClick={handlePrev}
-              className="w-14 h-14 bg-secondary rounded-2xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary/80"
+              className="flex h-14 w-14 items-center justify-center rounded-2xl bg-secondary transition-all active:scale-95 hover:bg-secondary/80"
+              aria-label="Previous"
             >
-              <ChevronLeft className="w-6 h-6 text-foreground" />
+              <ChevronLeft className="h-6 w-6 text-foreground" />
             </button>
           )}
-          
+
           <button
             onClick={handleNext}
-            className="flex-1 h-14 bg-foreground text-background font-semibold rounded-2xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98] hover:opacity-90"
+            className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-brand font-semibold text-brand-foreground transition-all active:scale-[0.98]"
           >
             {currentStep === steps.length - 1 ? 'Get Started' : 'Continue'}
-            {currentStep < steps.length - 1 && <ChevronRight className="w-5 h-5" />}
+            {currentStep < steps.length - 1 && <ChevronRight className="h-5 w-5" />}
           </button>
         </div>
       </footer>

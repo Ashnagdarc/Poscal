@@ -23,11 +23,7 @@ const Index = () => {
     );
   }
 
-  return (
-    <div className="pb-24">
-      <Calculator />
-    </div>
-  );
+  return <Calculator />;
 };
 
 export default Index;

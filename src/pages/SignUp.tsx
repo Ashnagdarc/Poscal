@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
-import { EmojiAvatar } from "@/components/EmojiAvatar";
+import poscalLogo from "@/assets/poscal-logo.png";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -53,34 +53,39 @@ const SignUp = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background via-background to-background/50 flex flex-col px-6">
-      {/* Header */}
-      <div className="pt-16 pb-8 text-center animate-fade-in">
-        <div className="w-20 h-20 bg-gradient-to-br from-primary to-primary/60 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-lg shadow-primary/20">
-          <EmojiAvatar size="lg" />
-        </div>
-        <h1 className="text-4xl font-bold text-foreground mb-2 tracking-tight">Create Account</h1>
-        <p className="text-muted-foreground text-lg">Start your trading journey</p>
+    <div className="flex min-h-screen flex-col bg-background px-6">
+      <div className="animate-fade-in pb-8 pt-16 text-center">
+        <img
+          src={poscalLogo}
+          alt="Poscal"
+          className="mx-auto mb-6 h-16 w-16 rounded-2xl object-contain"
+        />
+        <p className="mb-2 font-display text-sm font-semibold tracking-[0.2em] text-brand uppercase">
+          Poscal
+        </p>
+        <h1 className="mb-2 font-display text-3xl font-bold tracking-tight text-foreground">
+          Create account
+        </h1>
+        <p className="text-muted-foreground">Start sizing trades with confidence</p>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4 animate-slide-up max-w-md mx-auto w-full">
+      <form onSubmit={handleSubmit} className="mx-auto w-full max-w-md animate-slide-up space-y-4">
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
-            Full Name <span className="text-muted-foreground font-normal">(Optional)</span>
+          <label className="mb-2.5 ml-1 block text-sm font-semibold text-foreground">
+            Full Name <span className="font-normal text-muted-foreground">(Optional)</span>
           </label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="John Doe"
+            placeholder="Your name"
             autoComplete="name"
-            className="w-full h-14 px-5 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
+            className="h-14 w-full rounded-2xl border border-transparent bg-secondary px-5 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:bg-card hover:bg-secondary/80"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
+          <label className="mb-2.5 ml-1 block text-sm font-semibold text-foreground">
             Email Address
           </label>
           <input
@@ -90,12 +95,12 @@ const SignUp = () => {
             placeholder="you@example.com"
             autoComplete="email"
             required
-            className="w-full h-14 px-5 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
+            className="h-14 w-full rounded-2xl border border-transparent bg-secondary px-5 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:bg-card hover:bg-secondary/80"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
+          <label className="mb-2.5 ml-1 block text-sm font-semibold text-foreground">
             Password
           </label>
           <div className="relative">
@@ -107,22 +112,22 @@ const SignUp = () => {
               autoComplete="new-password"
               required
               minLength={6}
-              className="w-full h-14 px-5 pr-14 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
+              className="h-14 w-full rounded-2xl border border-transparent bg-secondary px-5 pr-14 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:bg-card hover:bg-secondary/80"
             />
             <button
               type="button"
               onClick={() => setShowPassword(!showPassword)}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors p-1 rounded-lg hover:bg-background/50"
+              className="absolute right-4 top-1/2 -translate-y-1/2 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground"
               aria-label={showPassword ? "Hide password" : "Show password"}
             >
-              {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
             </button>
           </div>
-          <p className="text-xs text-muted-foreground mt-2 ml-1">Must be at least 6 characters</p>
+          <p className="ml-1 mt-2 text-xs text-muted-foreground">Must be at least 6 characters</p>
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-foreground mb-2.5 ml-1">
+          <label className="mb-2.5 ml-1 block text-sm font-semibold text-foreground">
             Confirm Password
           </label>
           <input
@@ -133,48 +138,47 @@ const SignUp = () => {
             autoComplete="new-password"
             required
             minLength={6}
-            className="w-full h-14 px-5 bg-secondary/80 backdrop-blur-sm text-foreground text-base rounded-2xl border-2 border-transparent outline-none transition-all duration-300 focus:border-primary focus:bg-secondary placeholder:text-muted-foreground/60 hover:bg-secondary"
+            className="h-14 w-full rounded-2xl border border-transparent bg-secondary px-5 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-brand focus:bg-card hover:bg-secondary/80"
           />
           {confirmPassword.length > 0 && confirmPassword !== password && (
-            <p className="text-xs text-destructive mt-2 ml-1">Passwords do not match</p>
+            <p className="ml-1 mt-2 text-xs text-destructive">Passwords do not match</p>
           )}
         </div>
 
         <button
           type="submit"
           disabled={isLoading || (confirmPassword.length > 0 && confirmPassword !== password)}
-          className="w-full h-14 bg-gradient-to-r from-primary to-primary/90 hover:from-primary/90 hover:to-primary text-primary-foreground text-base font-semibold rounded-2xl transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-primary/25 mt-6"
+          className="mt-6 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">
-              <span className="w-5 h-5 border-2 border-primary-foreground/30 border-t-primary-foreground rounded-full animate-spin"></span>
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-brand-foreground/30 border-t-brand-foreground" />
               Creating account...
             </span>
           ) : "Create Account"}
         </button>
 
-        <p className="text-xs text-center text-muted-foreground pt-2">
+        <p className="pt-2 text-center text-xs text-muted-foreground">
           By signing up, you agree to our{" "}
-          <Link to="/terms" className="text-primary hover:underline">
+          <Link to="/terms" className="text-brand hover:underline">
             Terms
           </Link>
           {" "}and{" "}
-          <Link to="/privacy" className="text-primary hover:underline">
+          <Link to="/privacy" className="text-brand hover:underline">
             Privacy Policy
           </Link>
         </p>
       </form>
 
-      {/* Footer */}
-      <div className="mt-auto pb-8 text-center animate-fade-in max-w-md mx-auto w-full" style={{ animationDelay: "200ms" }}>
-        <div className="mt-8 pt-6 border-t border-border/50">
+      <div className="mx-auto mt-auto w-full max-w-md animate-fade-in pb-8 text-center" style={{ animationDelay: "200ms" }}>
+        <div className="mt-8 border-t border-border pt-6">
           <p className="text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/signin" className="text-primary font-semibold hover:text-primary/80 transition-colors">
+            <Link to="/signin" className="font-semibold text-brand transition-colors hover:text-brand/80">
               Sign In
             </Link>
           </p>
-          <Link to="/" className="text-sm text-muted-foreground hover:text-foreground mt-4 inline-block transition-colors">
+          <Link to="/" className="mt-4 inline-block text-sm text-muted-foreground transition-colors hover:text-foreground">
             Continue as guest →
           </Link>
         </div>

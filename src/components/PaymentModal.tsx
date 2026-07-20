@@ -21,6 +21,7 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { subscriptionApi } from '@/lib/api';
+import { PLAN_OPTIONS, type PlanId } from '@/lib/pricing';
 
 const PAYSTACK_FALLBACK_TIMEOUT_MS = 30_000;
 
@@ -29,36 +30,6 @@ const CHECKLIST_ITEMS = [
   'Full access to trading signals',
   'Advanced Position Calculator',
 ];
-
-const PLAN_OPTIONS = [
-  {
-    id: 'monthly',
-    name: 'Monthly',
-    amount: 300000, // 3,000 NGN in kobo
-    displayPrice: '₦3,000',
-    periodLabel: '/mo',
-    summary: 'Cancel anytime',
-  },
-  {
-    id: 'yearly',
-    name: 'Yearly',
-    amount: 3000000, // 30,000 NGN in kobo
-    displayPrice: '₦30,000',
-    periodLabel: '/yr',
-    summary: 'Best value for active traders',
-    badge: 'Save 17%',
-  },
-  {
-    id: 'lifetime',
-    name: 'Lifetime',
-    amount: 10000000, // 100,000 NGN in kobo
-    displayPrice: '₦100,000',
-    periodLabel: 'once',
-    summary: 'One payment, lifetime access',
-  },
-] as const;
-
-type PlanId = (typeof PLAN_OPTIONS)[number]['id'];
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -260,148 +231,120 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   };
 
   return (
-    <>
-      <Dialog
-        open={isOpen}
-        onOpenChange={(open) => {
-          if (!open && paymentStatus !== 'success' && !suppressCloseToastRef.current) {
-            toast.info('Payment cancelled. Try again whenever you\'re ready.');
-          }
-          if (!open) {
-            suppressCloseToastRef.current = false;
-          }
-          if (!open) {
-            onClose();
-          }
-        }}
-      >
-        <DialogContent className="overflow-hidden border-0 p-0 sm:max-w-[470px]">
-
-          <div className="max-h-[90vh] overflow-y-auto bg-neutral-50">
-            {paymentStatus === 'success' && (
-              <div className="space-y-4 px-6 py-10 text-center">
-                <CheckCircle2 className="mx-auto h-16 w-16 text-green-500" />
-                <div>
-                  <h3 className="mb-2 text-lg font-semibold text-neutral-900">
-                    Payment successful
-                  </h3>
-                  <p className="text-sm text-neutral-600">
-                    Your access has been activated. You now have full premium access.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {paymentStatus === 'error' && (
-              <div className="m-6 space-y-4 rounded-xl border border-red-200 bg-red-50 p-4">
-                <div className="flex items-start gap-3">
-                  <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-500" />
-                  <div>
-                    <h3 className="mb-1 font-semibold text-red-700">
-                      Payment Failed
-                    </h3>
-                    <p className="text-sm text-red-700">
-                      {errorMessage}
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={() => setPaymentStatus('idle')}
-                  variant="outline"
-                  className="w-full"
-                >
-                  Try Again
-                </Button>
-              </div>
-            )}
-
-            {paymentStatus !== 'success' && paymentStatus !== 'error' && (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open && paymentStatus !== 'success' && !suppressCloseToastRef.current) {
+          toast.info("Payment cancelled. Try again whenever you're ready.");
+        }
+        if (!open) {
+          suppressCloseToastRef.current = false;
+          onClose();
+        }
+      }}
+    >
+      <DialogContent className="overflow-hidden border-border p-0 sm:max-w-[470px]">
+        <div className="max-h-[90vh] overflow-y-auto bg-background">
+          {paymentStatus === 'success' && (
+            <div className="space-y-4 px-6 py-10 text-center">
+              <CheckCircle2 className="mx-auto h-16 w-16 text-brand" />
               <div>
-                <div className="relative h-64 overflow-hidden bg-black">
-                  <div className="absolute inset-0 bg-gradient-to-b from-black via-neutral-950 to-black" />
-                  <div className="absolute left-1/2 top-8 h-40 w-40 -translate-x-1/2 rounded-full border border-neutral-600 bg-[radial-gradient(circle_at_35%_30%,#3f3f46,#111827_55%,#09090b)] shadow-[0_18px_40px_rgba(0,0,0,0.75)]" />
-                  <div className="absolute left-[-28px] top-20 h-36 w-36 rounded-full border border-neutral-800 bg-[radial-gradient(circle_at_40%_30%,#18181b,#030712_70%)] opacity-70" />
-                  <div className="absolute right-[-28px] top-20 h-36 w-36 rounded-full border border-neutral-800 bg-[radial-gradient(circle_at_40%_30%,#18181b,#030712_70%)] opacity-70" />
-                  <div className="absolute inset-x-0 bottom-4 text-center text-xs text-neutral-400">
-                    Premium access starts now
-                  </div>
-                </div>
+                <h3 className="mb-2 font-display text-lg font-semibold text-foreground">
+                  Payment successful
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Your access has been activated. You now have full premium access.
+                </p>
+              </div>
+            </div>
+          )}
 
-                <div className="-mt-4 rounded-t-[28px] bg-neutral-100 px-5 pb-5 pt-8">
-                  <div className="space-y-2 text-center">
-                    <h2 className="text-3xl font-semibold tracking-tight text-neutral-900">
-                      Begin your journey
-                    </h2>
-                    <p className="text-sm leading-relaxed text-neutral-600">
-                      Unlock peace of mind and access everything you need to trade with confidence.
-                    </p>
-                  </div>
-
-                  <ul className="mt-5 space-y-2.5">
-                    {CHECKLIST_ITEMS.map((item) => (
-                      <li key={item} className="flex items-center gap-2.5 text-[15px] text-neutral-800">
-                        <Check className="h-4 w-4 text-neutral-900" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-
-                  <div className="mt-6 grid grid-cols-3 gap-2">
-                    {PLAN_OPTIONS.map((plan) => {
-                      const selected = plan.id === selectedPlan.id;
-                      return (
-                        <button
-                          key={plan.id}
-                          type="button"
-                          onClick={() => setSelectedPlanId(plan.id)}
-                          className={`relative rounded-md border px-2 py-2 text-left transition ${
-                            selected
-                              ? 'border-blue-400 bg-blue-50 shadow-[0_0_0_1px_rgba(59,130,246,0.45)]'
-                              : 'border-neutral-300 bg-white hover:border-neutral-400'
-                          }`}
-                        >
-                          <div className="text-sm font-semibold text-neutral-900">{plan.name}</div>
-                          <div className="mt-1 text-[22px] font-semibold leading-none text-neutral-900">
-                            {plan.displayPrice}
-                          </div>
-                          <div className="mt-1 text-xs text-neutral-600">{plan.periodLabel}</div>
-                          <div className="mt-1 min-h-[16px] text-[11px] text-neutral-600">{plan.summary}</div>
-                          {plan.badge && (
-                            <Badge className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-amber-300 text-[10px] font-semibold text-amber-950 hover:bg-amber-300">
-                              {plan.badge}
-                            </Badge>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <Button
-                    onClick={handlePay}
-                    className="mt-8 h-12 w-full rounded-md bg-black text-base font-semibold text-white hover:bg-neutral-900 disabled:opacity-60"
-                    disabled={isProcessing || !paystackScriptLoaded}
-                  >
-                    {isProcessing ? 'Processing...' : `Continue - ${selectedPlan.displayPrice}`}
-                  </Button>
-
-                  <div className="mt-4 flex items-center justify-center gap-2 text-xs text-neutral-600">
-                    <ShieldCheck className="h-4 w-4" />
-                    <span>Secure checkout powered by Paystack</span>
-                  </div>
-
-                  <div className="mt-5 flex items-center justify-center gap-3 text-xs text-neutral-600">
-                    <button type="button" className="hover:text-neutral-800">Restore</button>
-                    <span>•</span>
-                    <button type="button" className="hover:text-neutral-800">Terms</button>
-                    <span>•</span>
-                    <button type="button" className="hover:text-neutral-800">Privacy policy</button>
-                  </div>
+          {paymentStatus === 'error' && (
+            <div className="m-6 space-y-4 rounded-xl border border-destructive/30 bg-destructive/10 p-4">
+              <div className="flex items-start gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 flex-shrink-0 text-destructive" />
+                <div>
+                  <h3 className="mb-1 font-semibold text-destructive">Payment Failed</h3>
+                  <p className="text-sm text-destructive/90">{errorMessage}</p>
                 </div>
               </div>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+              <Button onClick={() => setPaymentStatus('idle')} variant="outline" className="w-full">
+                Try Again
+              </Button>
+            </div>
+          )}
+
+          {paymentStatus !== 'success' && paymentStatus !== 'error' && (
+            <div>
+              <div className="relative overflow-hidden bg-foreground px-6 pb-10 pt-12 text-background">
+                <p className="font-display text-sm font-semibold uppercase tracking-[0.18em] text-brand-foreground/70">
+                  Poscal Premium
+                </p>
+                <h2 className="mt-3 font-display text-3xl font-bold tracking-tight">
+                  Trade with full access
+                </h2>
+                <p className="mt-2 text-sm text-background/70">
+                  Unlock journal, signals, and the full calculator workflow.
+                </p>
+              </div>
+
+              <div className="-mt-4 rounded-t-[28px] bg-background px-5 pb-5 pt-8">
+                <ul className="space-y-2.5">
+                  {CHECKLIST_ITEMS.map((item) => (
+                    <li key={item} className="flex items-center gap-2.5 text-[15px] text-foreground">
+                      <Check className="h-4 w-4 text-brand" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+
+                <div className="mt-6 grid grid-cols-3 gap-2">
+                  {PLAN_OPTIONS.map((plan) => {
+                    const selected = plan.id === selectedPlan.id;
+                    return (
+                      <button
+                        key={plan.id}
+                        type="button"
+                        onClick={() => setSelectedPlanId(plan.id)}
+                        className={`relative rounded-xl border px-2 py-2.5 text-left transition ${
+                          selected
+                            ? 'border-brand bg-accent shadow-none'
+                            : 'border-border bg-secondary hover:border-brand/40'
+                        }`}
+                      >
+                        <div className="text-sm font-semibold text-foreground">{plan.name}</div>
+                        <div className="mt-1 font-display text-lg font-semibold leading-none text-foreground">
+                          {plan.displayPrice}
+                        </div>
+                        <div className="mt-1 text-xs text-muted-foreground">{plan.periodLabel}</div>
+                        <div className="mt-1 min-h-[16px] text-[11px] text-muted-foreground">{plan.summary}</div>
+                        {'badge' in plan && plan.badge && (
+                          <Badge className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-brand text-[10px] font-semibold text-brand-foreground hover:bg-brand">
+                            {plan.badge}
+                          </Badge>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Button
+                  onClick={handlePay}
+                  className="mt-8 h-12 w-full rounded-xl bg-brand text-base font-semibold text-brand-foreground hover:bg-brand/90 disabled:opacity-60"
+                  disabled={isProcessing || !paystackScriptLoaded}
+                >
+                  {isProcessing ? 'Processing...' : `Continue — ${selectedPlan.displayPrice}`}
+                </Button>
+
+                <div className="mt-4 flex items-center justify-center gap-2 text-xs text-muted-foreground">
+                  <ShieldCheck className="h-4 w-4" />
+                  <span>Secure checkout powered by Paystack</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 };

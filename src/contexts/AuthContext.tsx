@@ -20,6 +20,7 @@ export interface User {
   id: string;
   email: string;
   full_name: string | null;
+  avatar_url: string | null;
   email_verified: boolean;
 }
 
@@ -34,6 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         id: viewer.id,
         email: viewer.email ?? "",
         full_name: viewer.fullName ?? null,
+        avatar_url: viewer.avatarUrl ?? null,
         email_verified: viewer.emailVerified,
       }
     : null;

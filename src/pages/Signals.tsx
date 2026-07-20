@@ -3,6 +3,7 @@ import { Calendar, ChevronDown, ChevronLeft, ChevronRight, Filter, Plus, Radio, 
 import { useNavigate } from 'react-router-dom';
 import { format, parseISO } from 'date-fns';
 import { CreateSignalModal } from '@/components/CreateSignalModal';
+import { PageHeader } from '@/components/PageHeader';
 import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { Badge } from '@/components/ui/badge';
@@ -185,26 +186,19 @@ const Signals = () => {
 
   return (
     <div className="min-h-screen overflow-x-hidden bg-background pb-28">
-      <header className="sticky top-0 z-30 px-4 pb-4 pt-12 sm:px-6 sm:pb-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="w-10 h-10 shrink-0 bg-primary rounded-xl flex items-center justify-center shadow-md shadow-primary/20">
-              <Radio className="w-5 h-5 text-primary-foreground" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="truncate text-2xl font-bold text-foreground tracking-tight">Trading Signals</h1>
-              <p className="text-sm text-muted-foreground">
-                {totalCount} signal{totalCount !== 1 ? 's' : ''} available
-              </p>
-            </div>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
+      <PageHeader
+        title="Signals"
+        subtitle={`${totalCount} signal${totalCount !== 1 ? 's' : ''} available`}
+        icon={<Radio className="h-5 w-5" />}
+        className="px-4 sm:px-6"
+        actions={
+          <>
             {isAdmin && (
               <CreateSignalModal
                 onSignalCreated={fetchSignals}
                 trigger={
                   <Button size="icon" aria-label="Create signal" className="hidden h-10 w-10 sm:inline-flex">
-                    <Plus className="w-4 h-4" />
+                    <Plus className="h-4 w-4" />
                   </Button>
                 }
               />
@@ -215,14 +209,14 @@ const Signals = () => {
               onClick={() => setShowFilters(!showFilters)}
               className="relative h-10 w-10"
             >
-              <Filter className="w-4 h-4" />
+              <Filter className="h-4 w-4" />
               {hasActiveFilters && (
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-primary rounded-full" />
+                <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-brand" />
               )}
             </Button>
-          </div>
-        </div>
-      </header>
+          </>
+        }
+      />
 
       {hasActiveFilters && (
         <div className="px-4 pb-2 sm:px-6 flex flex-wrap items-center gap-2">
@@ -349,77 +343,59 @@ const Signals = () => {
                     {group.signals.map((signal) => (
                       <div
                         key={signal.id}
-                        className="min-w-0 bg-secondary rounded-2xl p-4 border border-border/50 space-y-4 cursor-pointer transition-colors hover:bg-secondary/80"
-                        onClick={() => applyToCalculator(signal)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            applyToCalculator(signal);
-                          }
-                        }}
+                        className="min-w-0 space-y-3 rounded-2xl border border-border/40 bg-secondary/60 p-4 transition-colors hover:bg-secondary"
                       >
                         <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3 min-w-0">
-                            <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${getOrderTone(signal.order_type)}`}>
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${getOrderTone(signal.order_type)}`}>
                               {signal.order_type.startsWith('sell') ? (
-                                <TrendingDown className="w-5 h-5" />
+                                <TrendingDown className="h-5 w-5" />
                               ) : (
-                                <TrendingUp className="w-5 h-5" />
+                                <TrendingUp className="h-5 w-5" />
                               )}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-semibold text-foreground text-lg leading-tight">{signal.currency_pair}</p>
+                              <p className="truncate text-lg font-semibold leading-tight text-foreground">{signal.currency_pair}</p>
                               <p className="text-sm text-muted-foreground">{ORDER_TYPE_LABELS[signal.order_type]}</p>
                             </div>
                           </div>
                           <Badge className={`${getStatusClass(signal.status)} shrink-0`}>{STATUS_LABELS[signal.status]}</Badge>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
                           {signal.entry_price !== null && signal.entry_price !== '' && (
-                            <div className="bg-background/50 rounded-xl p-3">
-                              <span className="text-xs text-muted-foreground block mb-1">Entry</span>
-                              <span className="text-base font-semibold text-foreground">{formatPrice(signal.entry_price)}</span>
-                            </div>
+                            <span className="text-muted-foreground">
+                              Entry <span className="font-semibold text-foreground">{formatPrice(signal.entry_price)}</span>
+                            </span>
                           )}
-                          <div className="bg-red-500/10 rounded-xl p-3">
-                            <span className="text-xs text-red-700 dark:text-red-400 block mb-1">Stop Loss</span>
-                            <span className="text-base font-semibold text-red-700 dark:text-red-400">{formatPrice(signal.stop_loss)}</span>
-                          </div>
-                          <div className="bg-emerald-500/10 rounded-xl p-3">
-                            <span className="text-xs text-emerald-700 dark:text-emerald-400 block mb-1">Take Profit</span>
-                            <span className="text-base font-semibold text-emerald-700 dark:text-emerald-400">{formatPrice(signal.take_profit_1)}</span>
-                          </div>
+                          <span className="text-muted-foreground">
+                            SL <span className="font-semibold text-destructive">{formatPrice(signal.stop_loss)}</span>
+                          </span>
+                          <span className="text-muted-foreground">
+                            TP <span className="font-semibold text-brand">{formatPrice(signal.take_profit_1)}</span>
+                          </span>
                         </div>
 
-                        <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                          <Calendar className="w-4 h-4" />
-                          <span className="truncate">{format(parseISO(signal.created_at), 'MMM d, yyyy h:mm a')}</span>
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div className="flex gap-2">
                           <Button
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              applyToCalculator(signal);
-                            }}
-                            className="w-full h-12"
+                            onClick={() => applyToCalculator(signal)}
+                            className="h-11 flex-1 bg-brand text-brand-foreground hover:bg-brand/90"
                           >
                             Apply to Calculator
                           </Button>
                           {isAdmin && (
-                            <UpdateSignalModal
-                              signalId={signal.id}
-                              symbol={signal.currency_pair}
-                              orderType={signal.order_type}
-                              status={signal.status}
-                              entryPrice={signal.entry_price}
-                              stopLoss={signal.stop_loss}
-                              takeProfit1={signal.take_profit_1}
-                              onSignalUpdated={fetchSignals}
-                            />
+                            <div onClick={(event) => event.stopPropagation()}>
+                              <UpdateSignalModal
+                                signalId={signal.id}
+                                symbol={signal.currency_pair}
+                                orderType={signal.order_type}
+                                status={signal.status}
+                                entryPrice={signal.entry_price}
+                                stopLoss={signal.stop_loss}
+                                takeProfit1={signal.take_profit_1}
+                                onSignalUpdated={fetchSignals}
+                              />
+                            </div>
                           )}
                         </div>
                       </div>

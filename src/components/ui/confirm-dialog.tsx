@@ -27,26 +27,26 @@ export const ConfirmDialog = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-6 animate-fade-in">
-      <div className="bg-card border border-border rounded-2xl w-full max-w-sm p-6 shadow-lg animate-scale-in">
-        <div className="flex items-start justify-between mb-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain bg-background/80 p-6 backdrop-blur-sm animate-fade-in sm:items-center">
+      <div className="my-auto w-full max-w-sm rounded-2xl border border-border bg-card p-6 shadow-lg animate-scale-in">
+        <div className="mb-4 flex items-start justify-between">
           <h3 className="text-lg font-bold text-foreground">{title}</h3>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-muted-foreground hover:text-foreground transition-colors"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:text-foreground"
           >
-            <X className="w-4 h-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
         
-        <p className="text-muted-foreground mb-4">{description}</p>
+        <p className="mb-4 text-muted-foreground">{description}</p>
         
         {children}
         
-        <div className="flex gap-3 mt-6">
+        <div className="mt-6 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
+            className="h-12 flex-1 rounded-xl bg-secondary font-semibold text-foreground transition-all duration-200 active:scale-[0.98]"
           >
             {cancelText}
           </button>
@@ -55,7 +55,7 @@ export const ConfirmDialog = ({
               onConfirm();
               onClose();
             }}
-            className={`flex-1 h-12 font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] ${
+            className={`h-12 flex-1 rounded-xl font-semibold transition-all duration-200 active:scale-[0.98] ${
               variant === "destructive"
                 ? "bg-destructive text-destructive-foreground"
                 : "bg-foreground text-background"

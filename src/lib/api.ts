@@ -461,10 +461,13 @@ export const usersApi = {
   },
 
   updateProfile: async (updates: any): Promise<any> => {
-    return await getAuthenticatedConvexClient().mutation(convexApi.users.updateViewerProfile, {
+    const args: { fullName?: string | null; avatarUrl?: string | null } = {
       fullName: updates.full_name ?? null,
-      avatarUrl: updates.avatar_url ?? null,
-    });
+    };
+    if ("avatar_url" in updates) {
+      args.avatarUrl = updates.avatar_url ?? null;
+    }
+    return await getAuthenticatedConvexClient().mutation(convexApi.users.updateViewerProfile, args);
   },
 };
 

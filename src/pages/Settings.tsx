@@ -1,4 +1,3 @@
-// ...existing code...
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Trash2, LogOut, User, ChevronRight, Smartphone, Download, RotateCcw, Coins, Megaphone, Wallet, Mail, FileText, Shield, Users } from "lucide-react";
@@ -6,7 +5,9 @@ import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
+import { PageHeader } from "@/components/PageHeader";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { UserAvatar } from "@/components/UserAvatar";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { NotificationSettings } from "@/components/NotificationSettings";
@@ -146,25 +147,23 @@ const Settings = () => {
   };
 
   return (
-    <div className="h-dvh bg-background flex flex-col overflow-hidden">
-      {/* Header */}
-      <header className="shrink-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
+    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+      <PageHeader
+        sticky={false}
+        title="Settings"
+        subtitle="Preferences and account"
+        leading={
           <button
             onClick={() => navigate(-1)}
-            className="w-10 h-10 bg-secondary/80 backdrop-blur-sm rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95 hover:bg-secondary"
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary transition-colors active:scale-95 hover:bg-secondary/80"
+            aria-label="Go back"
           >
-            <ArrowLeft className="w-5 h-5 text-foreground" />
+            <ArrowLeft className="h-5 w-5 text-foreground" />
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Settings</h1>
-            <p className="text-sm text-muted-foreground">Manage your preferences and account</p>
-          </div>
-        </div>
-      </header>
+        }
+      />
 
-      {/* Settings List — min-h-0 lets flex child shrink so overflow-y-auto can scroll */}
-      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-2 pb-28 space-y-6 animate-slide-up">
+      <main className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-28 md:max-w-3xl">
         {/* Account Section */}
         <section>
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Account</h2>
@@ -176,9 +175,11 @@ const Settings = () => {
                   className="w-full px-5 py-4 flex items-center justify-between hover:bg-secondary/80 transition-colors"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="w-11 h-11 bg-gradient-to-br from-primary/20 to-primary/5 rounded-full flex items-center justify-center ring-2 ring-primary/20">
-                      <User className="w-5 h-5 text-primary" />
-                    </div>
+                    <UserAvatar
+                      name={user.full_name}
+                      email={user.email}
+                      src={user.avatar_url}
+                    />
                     <div className="text-left">
                       <p className="font-medium text-foreground">{user.email}</p>
                       <p className="text-sm text-muted-foreground">Manage profile & preferences</p>

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Syne:wght@500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,77 +11,76 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 0 0% 8%;
+    --background: 40 20% 98%;
+    --foreground: 200 15% 10%;
 
-    --card: 0 0% 98%;
-    --card-foreground: 0 0% 8%;
+    --card: 40 16% 96%;
+    --card-foreground: 200 15% 10%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 8%;
+    --popover: 40 20% 98%;
+    --popover-foreground: 200 15% 10%;
 
-    --primary: 0 0% 8%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 200 15% 10%;
+    --primary-foreground: 40 20% 98%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 8%;
+    --secondary: 40 12% 93%;
+    --secondary-foreground: 200 15% 10%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 45%;
+    --muted: 40 10% 93%;
+    --muted-foreground: 200 8% 42%;
 
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 8%;
+    --accent: 173 42% 92%;
+    --accent-foreground: 173 55% 22%;
 
-    --destructive: 0 84% 60%;
+    /* Brand: deep teal — trading tool accent, not violet */
+    --brand: 173 58% 32%;
+    --brand-foreground: 0 0% 100%;
+
+    --destructive: 4 72% 48%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 92%;
-    --input: 0 0% 92%;
-    --ring: 0 0% 8%;
+    --border: 40 10% 88%;
+    --input: 40 10% 88%;
+    --ring: 173 58% 32%;
 
-    --radius: 1rem;
+    --radius: 0.875rem;
 
-    /* Custom tokens */
-    --shadow-soft: 0 4px 24px -4px hsl(0 0% 0% / 0.08);
-    --shadow-medium: 0 8px 32px -8px hsl(0 0% 0% / 0.12);
+    --shadow-soft: 0 4px 20px -6px hsl(200 15% 10% / 0.08);
+    --shadow-medium: 0 8px 28px -8px hsl(200 15% 10% / 0.12);
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    
-    /* Liquid Glass tokens */
-    --glass-blur: 20px;
-    --glass-opacity: 0.7;
-    --glass-border: hsl(0 0% 100% / 0.2);
-    --glass-shadow: 0 8px 32px -8px hsl(0 0% 0% / 0.12), 0 4px 16px -4px hsl(0 0% 0% / 0.08);
-    --glass-inner-glow: inset 0 1px 0 hsl(0 0% 100% / 0.4);
   }
 
   .dark {
-    --background: 0 0% 4%;
-    --foreground: 0 0% 98%;
+    --background: 200 14% 6%;
+    --foreground: 40 12% 96%;
 
-    --card: 0 0% 8%;
-    --card-foreground: 0 0% 98%;
+    --card: 200 12% 10%;
+    --card-foreground: 40 12% 96%;
 
-    --popover: 0 0% 8%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 200 12% 10%;
+    --popover-foreground: 40 12% 96%;
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 8%;
+    --primary: 40 12% 96%;
+    --primary-foreground: 200 14% 8%;
 
-    --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 200 10% 14%;
+    --secondary-foreground: 40 12% 96%;
 
-    --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 60%;
+    --muted: 200 10% 14%;
+    --muted-foreground: 200 8% 62%;
 
-    --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 98%;
+    --accent: 173 28% 16%;
+    --accent-foreground: 173 45% 72%;
 
-    --destructive: 0 62% 30%;
-    --destructive-foreground: 0 0% 98%;
+    --brand: 173 52% 42%;
+    --brand-foreground: 200 14% 6%;
 
-    --border: 0 0% 18%;
-    --input: 0 0% 18%;
-    --ring: 0 0% 80%;
+    --destructive: 4 62% 42%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 200 10% 18%;
+    --input: 200 10% 18%;
+    --ring: 173 52% 42%;
   }
 }
 
@@ -93,7 +92,8 @@
 
   html {
     min-height: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: auto;
     background: hsl(var(--background));
   }
 
@@ -102,16 +102,20 @@
     min-width: 320px;
     min-height: 100dvh;
     width: 100%;
-    overflow-x: hidden;
+    overflow-x: clip;
+    overflow-y: visible;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: 'DM Sans', sans-serif;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: 'Syne', 'DM Sans', sans-serif;
   }
 
   #root {
     min-height: 100dvh;
     width: 100%;
-    overflow-x: clip;
   }
 
   img,
@@ -204,7 +208,7 @@
 .apple-note-editor .ProseMirror {
   min-height: 16rem;
   outline: none;
-  font-family: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+  font-family: "DM Sans", sans-serif;
   letter-spacing: 0.01em;
   line-height: 1.62;
   font-size: 16px;

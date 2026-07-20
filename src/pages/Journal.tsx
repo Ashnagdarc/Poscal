@@ -1,8 +1,15 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
-import { BookOpen, Calculator, Camera, Clock3, Copy, Trash2, X } from "lucide-react";
+import { BookOpen, Calculator, Camera, Clock3, Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { PageHeader } from "@/components/PageHeader";
 import { Calendar } from "@/components/ui/calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   deleteJournalEntry,
@@ -323,23 +330,14 @@ const Journal = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-24">
-      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-foreground rounded-xl flex items-center justify-center shadow-md shadow-foreground/20">
-            <BookOpen className="w-5 h-5 text-background" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground tracking-tight">Journal</h1>
-            <p className="text-sm text-muted-foreground">
-              {items.length} saved calculation{items.length === 1 ? "" : "s"}
-              {items.length > 0 ? ` • ${totalSignalEntries} from signals` : ""}
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="flex min-h-screen flex-col bg-background pb-24">
+      <PageHeader
+        title="Journal"
+        subtitle={`${items.length} saved calculation${items.length === 1 ? "" : "s"}${items.length > 0 ? ` · ${totalSignalEntries} from signals` : ""}`}
+        icon={<BookOpen className="h-5 w-5" />}
+      />
 
-      <main className="flex-1 px-6 py-4">
+      <main className="mx-auto w-full max-w-2xl flex-1 px-6 py-4 md:max-w-3xl">
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((item) => (
@@ -598,31 +596,34 @@ const Journal = () => {
                   </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                  <button
-                    onClick={() => setSelectedItem(item)}
-                    className="h-11 rounded-xl bg-background text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
-                  >
-                    View
-                  </button>
-                  <button
-                    disabled
-                    className="h-11 rounded-xl bg-background text-sm font-semibold text-muted-foreground opacity-60"
-                  >
-                    Reuse
-                  </button>
+                <div className="mt-4 flex items-center gap-2">
                   <button
                     onClick={() => openResultEditor(item)}
-                    className="h-11 rounded-xl bg-background text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
+                    className="h-11 flex-1 rounded-xl bg-brand text-sm font-semibold text-brand-foreground transition-all active:scale-[0.98]"
                   >
                     {item.status === "open" ? "Mark Result" : "Edit Result"}
                   </button>
-                  <button
-                    onClick={() => setItemToDelete(item)}
-                    className="h-11 rounded-xl bg-background text-sm font-semibold text-destructive transition-all active:scale-[0.98]"
-                  >
-                    Delete
-                  </button>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="flex h-11 w-11 items-center justify-center rounded-xl bg-background text-foreground transition-all active:scale-[0.98]"
+                        aria-label="More actions"
+                      >
+                        <MoreHorizontal className="h-5 w-5" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => setSelectedItem(item)}>
+                        View details
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive"
+                        onClick={() => setItemToDelete(item)}
+                      >
+                        Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                 </div>
               </article>
             )) : null}
@@ -631,8 +632,9 @@ const Journal = () => {
       </main>
 
       {selectedItem && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm px-6 py-8">
-          <div className="mx-auto mt-12 max-w-md rounded-3xl bg-background border border-border p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-background/80 backdrop-blur-sm">
+          <div className="flex min-h-full items-start justify-center px-6 py-8 sm:items-center">
+            <div className="my-auto w-full max-w-md rounded-3xl border border-border bg-background p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-foreground">{selectedItem.symbol}</h2>
@@ -745,13 +747,15 @@ const Journal = () => {
                 {selectedItem.status === "open" ? "Mark Result" : "Edit Result"}
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
 
       {itemForResult && (
-        <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm px-6 py-8">
-          <div className="mx-auto mt-12 max-w-md rounded-3xl border border-border bg-background p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-background/80 backdrop-blur-sm">
+          <div className="flex min-h-full items-start justify-center px-6 py-8 sm:items-center">
+            <div className="my-auto w-full max-w-md rounded-3xl border border-border bg-background p-5 shadow-2xl">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-foreground">
@@ -883,6 +887,7 @@ const Journal = () => {
                   Save
                 </button>
               </div>
+            </div>
             </div>
           </div>
         </div>

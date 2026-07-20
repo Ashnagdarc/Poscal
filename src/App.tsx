@@ -1,4 +1,3 @@
-import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -16,7 +15,6 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
 
-// Lazy load pages that aren't immediately needed
 const Welcome = lazy(() => import("./pages/Welcome"));
 const SignIn = lazy(() => import("./pages/SignIn"));
 const SignUp = lazy(() => import("./pages/SignUp"));
@@ -24,7 +22,6 @@ const Profile = lazy(() => import("./pages/Profile"));
 const Journal = lazy(() => import("./pages/Journal"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Signals = lazy(() => import("./pages/Signals"));
-const Pricing = lazy(() => import("./pages/Pricing"));
 const Upgrade = lazy(() => import("./pages/Upgrade"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
@@ -37,7 +34,7 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
-  const hideBottomNavOn = ['/signin', '/signup', '/welcome', '/terms', '/privacy'];
+  const hideBottomNavOn = ["/signin", "/signup", "/welcome", "/terms", "/privacy"];
   const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
 
   return (
@@ -45,7 +42,13 @@ const AppContent = () => {
       <SkipLink />
       <AppUpdateModal />
       <PWAInstallPrompt />
-      <Suspense fallback={<div className="flex items-center justify-center min-h-screen">Loading...</div>}>
+      <Suspense
+        fallback={
+          <div className="flex min-h-screen items-center justify-center font-display text-muted-foreground">
+            Loading...
+          </div>
+        }
+      >
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/calculator" element={<Index />} />
@@ -53,33 +56,36 @@ const AppContent = () => {
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
-          <Route path="/history" element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>} />
+          <Route
+            path="/history"
+            element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>}
+          />
           <Route path="/settings" element={<Settings />} />
           <Route path="/pricing" element={<Upgrade />} />
           <Route path="/upgrade" element={<Upgrade />} />
-          <Route 
-            path="/signals" 
+          <Route
+            path="/signals"
             element={
               <ProtectedRoute requiresPremium>
                 <Signals />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/admin/users" 
+          <Route
+            path="/admin/users"
             element={
               <ProtectedRoute requiresAdmin>
                 <UserManagement />
               </ProtectedRoute>
-            } 
+            }
           />
-          <Route 
-            path="/admin/updates" 
+          <Route
+            path="/admin/updates"
             element={
               <ProtectedRoute requiresAdmin>
                 <AdminUpdates />
               </ProtectedRoute>
-            } 
+            }
           />
           <Route
             path="/admin/ingestor-health"
@@ -90,12 +96,12 @@ const AppContent = () => {
             }
           />
           <Route
-            path="/profile" 
+            path="/profile"
             element={
               <ProtectedRoute>
                 <Profile />
               </ProtectedRoute>
-            } 
+            }
           />
           <Route path="/terms" element={<Terms />} />
           <Route path="/privacy" element={<Privacy />} />
@@ -111,7 +117,6 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <ErrorBoundary>
-        <Toaster />
         <Sonner />
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>

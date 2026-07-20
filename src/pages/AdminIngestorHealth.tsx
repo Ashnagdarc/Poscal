@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { systemApi } from "@/lib/api";
+import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -27,8 +28,8 @@ export default function AdminIngestorHealth() {
       setError(null);
       const data = await systemApi.getIngestorHealth();
       setHealth(data);
-    } catch (err: any) {
-      setError(err?.message || "Failed to load ingestor health");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Failed to load ingestor health");
     } finally {
       setLoading(false);
     }
@@ -39,36 +40,34 @@ export default function AdminIngestorHealth() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 text-slate-100">
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-semibold">Price Ingestor Health</h1>
-            <p className="text-sm text-slate-400 mt-1">
-              Monitor batch flushes and recent 401s from the ingestor.
-            </p>
-          </div>
-          <Button onClick={loadHealth} disabled={loading}>
+    <div className="min-h-screen bg-background pb-28 text-foreground">
+      <PageHeader
+        title="Ingestor Health"
+        subtitle="Batch flushes and recent auth errors"
+        actions={
+          <Button onClick={loadHealth} disabled={loading} variant="outline">
             {loading ? "Refreshing..." : "Refresh"}
           </Button>
-        </div>
+        }
+      />
 
+      <div className="mx-auto max-w-5xl px-6">
         {error && (
-          <div className="mt-6 rounded-md border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+          <div className="mb-6 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {error}
           </div>
         )}
 
-        <div className="mt-8 grid gap-4 md:grid-cols-2">
-          <Card className="bg-slate-900/60 border-slate-800">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Recent 401 Errors (last 5 min)</CardTitle>
             </CardHeader>
-            <CardContent className="text-3xl font-semibold">
+            <CardContent className="font-display text-3xl font-semibold">
               {health ? health.recent_401_count : "—"}
             </CardContent>
           </Card>
-          <Card className="bg-slate-900/60 border-slate-800">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Last 401 At</CardTitle>
             </CardHeader>
@@ -76,7 +75,7 @@ export default function AdminIngestorHealth() {
               {health ? formatTimestamp(health.last_401_at) : "—"}
             </CardContent>
           </Card>
-          <Card className="bg-slate-900/60 border-slate-800">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Last Batch Flush</CardTitle>
             </CardHeader>
@@ -84,7 +83,7 @@ export default function AdminIngestorHealth() {
               {health ? formatTimestamp(health.last_flush_at) : "—"}
             </CardContent>
           </Card>
-          <Card className="bg-slate-900/60 border-slate-800">
+          <Card>
             <CardHeader>
               <CardTitle className="text-base">Backend Reachable</CardTitle>
             </CardHeader>
