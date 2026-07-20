@@ -1,5 +1,6 @@
 import axios, { type AxiosInstance } from 'axios';
 import { api as convexApi } from '../../convex/_generated/api';
+import type { Id } from '../../convex/_generated/dataModel';
 import { convexClient, createAuthenticatedConvexClient } from '@/lib/convexClient';
 import { logger } from '@/lib/logger';
 
@@ -468,6 +469,32 @@ export const usersApi = {
       args.avatarUrl = updates.avatar_url ?? null;
     }
     return await getAuthenticatedConvexClient().mutation(convexApi.users.updateViewerProfile, args);
+  },
+};
+
+export const uploadsApi = {
+  uploadAvatar: async (file: File): Promise<{ avatar_url: string; storage_id: string }> => {
+    const client = getAuthenticatedConvexClient();
+    const uploadUrl = await client.mutation(convexApi.users.generateUploadUrl, {});
+
+    const result = await fetch(uploadUrl, {
+      method: "POST",
+      headers: { "Content-Type": file.type || "application/octet-stream" },
+      body: file,
+    });
+
+    if (!result.ok) {
+      throw new Error(`Avatar upload failed (${result.status})`);
+    }
+
+    const { storageId } = (await result.json()) as { storageId: Id<"_storage"> };
+    if (!storageId) {
+      throw new Error("Upload succeeded but no storageId was returned");
+    }
+
+    return await client.mutation(convexApi.users.saveAvatar, {
+      storageId,
+    });
   },
 };
 

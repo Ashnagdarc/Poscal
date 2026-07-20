@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   ArrowLeft, 
@@ -14,14 +14,16 @@ import {
   Eye,
   EyeOff,
   Trash2,
-  Shield
+  Shield,
+  Camera,
+  Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
-import { usersApi } from "@/lib/api";
+import { uploadsApi, usersApi } from "@/lib/api";
 
 interface Profile {
   id: string;
@@ -43,6 +45,8 @@ const Profile = () => {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
@@ -106,6 +110,48 @@ const Profile = () => {
     toast.error("Account deletion coming soon!");
     // TODO: Implement account deletion
     setShowDeleteConfirm(false);
+  };
+
+  const handleAvatarClick = () => {
+    if (isUploadingAvatar) return;
+    fileInputRef.current?.click();
+  };
+
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (PNG, JPG, etc.)");
+      return;
+    }
+
+    const maxSize = 2 * 1024 * 1024;
+    if (file.size > maxSize) {
+      const sizeMB = (file.size / 1024 / 1024).toFixed(2);
+      toast.error(`Image is too large (${sizeMB}MB). Please choose an image under 2MB.`);
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      const resp = await uploadsApi.uploadAvatar(file);
+      setProfile((current) =>
+        current
+          ? { ...current, avatar_url: resp.avatar_url }
+          : current,
+      );
+      toast.success("Avatar updated successfully!");
+      await fetchProfile();
+    } catch (error) {
+      logger.error("Avatar upload error:", error);
+      toast.error(error instanceof Error ? error.message : "Failed to upload avatar. Please try again.");
+    } finally {
+      setIsUploadingAvatar(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
   };
 
   const handleSave = async () => {
@@ -185,17 +231,40 @@ const Profile = () => {
         {/* Avatar Section */}
         <div className="flex flex-col items-center">
           <div className="relative">
-            <UserAvatar
-              size="lg"
-              name={profile?.full_name || user?.full_name}
-              email={profile?.email || user?.email}
-              src={profile?.avatar_url || user?.avatar_url}
+            {isUploadingAvatar ? (
+              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-secondary">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+              </div>
+            ) : (
+              <UserAvatar
+                size="lg"
+                name={profile?.full_name || user?.full_name}
+                email={profile?.email || user?.email}
+                src={profile?.avatar_url || user?.avatar_url}
+              />
+            )}
+            <button
+              type="button"
+              onClick={handleAvatarClick}
+              disabled={isUploadingAvatar}
+              className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-foreground transition-all active:scale-95 disabled:opacity-50"
+              aria-label="Upload profile photo"
+            >
+              <Camera className="h-4 w-4" />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarChange}
+              className="hidden"
             />
           </div>
-          <h2 className="text-2xl font-bold text-foreground mt-4">
+          <h2 className="mt-4 text-2xl font-bold text-foreground">
             {profile?.full_name || "Trader"}
           </h2>
           <p className="text-muted-foreground">{profile?.email || user?.email}</p>
+          <p className="mt-1 text-xs text-muted-foreground">Tap the camera to update your photo</p>
           
           {/* Subscription Badge */}
           {subscriptionTier !== 'free' && (

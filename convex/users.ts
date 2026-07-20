@@ -155,3 +155,104 @@ export const updateViewerProfile = mutation({
     };
   },
 });
+
+export const generateUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const saveAvatar = mutation({
+  args: {
+    storageId: v.id("_storage"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const avatarUrl = await ctx.storage.getUrl(args.storageId);
+    if (!avatarUrl) {
+      throw new Error("Failed to resolve uploaded avatar URL");
+    }
+
+    const previousStorageId = user.avatarStorageId;
+    if (previousStorageId && previousStorageId !== args.storageId) {
+      try {
+        await ctx.storage.delete(previousStorageId);
+      } catch {
+        // Ignore cleanup failures for missing/orphaned blobs.
+      }
+    }
+
+    await ctx.db.patch(userId, {
+      avatarUrl,
+      image: avatarUrl,
+      avatarStorageId: args.storageId,
+    });
+
+    let profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
+      .first();
+
+    if (!profile && user.email) {
+      profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_email", (q) => q.eq("email", user.email!.trim().toLowerCase()))
+        .first();
+    }
+
+    if (profile) {
+      const previousProfileStorageId = profile.avatarStorageId;
+      if (
+        previousProfileStorageId &&
+        previousProfileStorageId !== args.storageId &&
+        previousProfileStorageId !== previousStorageId
+      ) {
+        try {
+          await ctx.storage.delete(previousProfileStorageId);
+        } catch {
+          // Ignore cleanup failures.
+        }
+      }
+
+      await ctx.db.patch(profile._id, {
+        externalUserId: userId,
+        avatarUrl,
+        avatarStorageId: args.storageId,
+        updatedAtMs: Date.now(),
+      });
+    } else if (user.email) {
+      await ctx.db.insert("profiles", {
+        externalUserId: userId,
+        email: user.email.trim().toLowerCase(),
+        fullName: user.fullName ?? user.name ?? null,
+        avatarUrl,
+        avatarStorageId: args.storageId,
+        role: user.role ?? "user",
+        paymentStatus: user.paymentStatus ?? "free",
+        subscriptionTier: user.subscriptionTier ?? "free",
+        subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+        createdAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
+    }
+
+    return {
+      avatar_url: avatarUrl,
+      storage_id: args.storageId,
+    };
+  },
+});
