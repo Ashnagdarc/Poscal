@@ -146,9 +146,9 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-24">
+    <div className="h-dvh bg-background flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
+      <header className="shrink-0 z-30 pt-12 pb-6 px-6 bg-gradient-to-b from-background via-background to-background/70 backdrop-blur-sm">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate(-1)}
@@ -163,8 +163,8 @@ const Settings = () => {
         </div>
       </header>
 
-      {/* Settings List */}
-      <main className="flex-1 overflow-y-auto px-6 py-2 space-y-6 animate-slide-up">
+      {/* Settings List — min-h-0 lets flex child shrink so overflow-y-auto can scroll */}
+      <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-2 pb-28 space-y-6 animate-slide-up">
         {/* Account Section */}
         <section>
           <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 px-1">Account</h2>
@@ -565,14 +565,13 @@ const Settings = () => {
             </button>
           </section>
         )}
+
+        {/* App Info */}
+        <div className="pb-4 text-center space-y-1 pt-2">
+          <p className="text-xs text-muted-foreground/80">Position Size Calculator v2</p>
+          <p className="text-xs text-muted-foreground/60">Officially sponsored by MandeFX</p>
+        </div>
       </main>
-
-      {/* App Info */}
-      <div className="px-6 pb-4 text-center space-y-1 pt-2">
-        <p className="text-xs text-muted-foreground/80">Position Size Calculator v2</p>
-        <p className="text-xs text-muted-foreground/60">Officially sponsored by MandeFX</p>
-      </div>
-
     </div>
   );
 };
