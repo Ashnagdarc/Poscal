@@ -18,6 +18,7 @@ import type * as notificationsNode from "../notificationsNode.js";
 import type * as prices from "../prices.js";
 import type * as pricesHttp from "../pricesHttp.js";
 import type * as profiles from "../profiles.js";
+import type * as progressSessions from "../progressSessions.js";
 import type * as signals from "../signals.js";
 import type * as status from "../status.js";
 import type * as tradingJournal from "../tradingJournal.js";
@@ -40,6 +41,7 @@ declare const fullApi: ApiFromModules<{
   prices: typeof prices;
   pricesHttp: typeof pricesHttp;
   profiles: typeof profiles;
+  progressSessions: typeof progressSessions;
   signals: typeof signals;
   status: typeof status;
   tradingJournal: typeof tradingJournal;

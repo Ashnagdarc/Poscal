@@ -4,6 +4,7 @@ import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalc
 
 interface StopLossSelectorProps {
   symbol: string;
+  unitLabel?: string;
   selectedStopLoss: number | null;
   onSelect: (stopLoss: number) => void;
   accountBalance: number;
@@ -12,6 +13,7 @@ interface StopLossSelectorProps {
 
 export const StopLossSelector = ({
   symbol,
+  unitLabel = "pips",
   selectedStopLoss,
   onSelect,
   accountBalance,
@@ -104,7 +106,7 @@ export const StopLossSelector = ({
                   handleCustomSubmit();
                 }
               }}
-              placeholder="Type stop loss (pips)..."
+              placeholder={`Type stop loss (${unitLabel})...`}
               className="w-full h-14 pl-12 pr-4 bg-secondary text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground/50"
               autoFocus
               step="0.1"
@@ -117,7 +119,7 @@ export const StopLossSelector = ({
               disabled={!customInput || parseFloat(customInput) <= 0}
               className="w-full mt-3 h-12 bg-primary text-primary-foreground rounded-xl font-semibold text-sm transition-all active:scale-95 disabled:opacity-50"
             >
-              Set {customInput} pips
+              Set {customInput} {unitLabel}
             </button>
           )}
         </div>

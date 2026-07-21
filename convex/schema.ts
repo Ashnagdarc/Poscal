@@ -89,6 +89,25 @@ export default defineSchema({
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_external_id", ["externalId"]),
 
+  progressSessions: defineTable({
+    userId: v.string(),
+    dateKey: v.string(),
+    phase: v.union(v.literal("pre_market"), v.literal("post_market")),
+    preMarketNotes: nullableString,
+    postMarketNotes: nullableString,
+    tasks: v.array(v.object({
+      id: v.string(),
+      label: v.string(),
+      phase: v.union(v.literal("pre_market"), v.literal("session"), v.literal("post_market")),
+      completed: v.boolean(),
+    })),
+    sessionStarted: v.boolean(),
+    journalCreated: v.boolean(),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+  })
+    .index("by_user_date", ["userId", "dateKey"]),
+
   calculatorHistory: defineTable({
     userId: nullableString,
     clientId: nullableString,

@@ -1,4 +1,5 @@
 import { INSTRUMENT_SPECS, InstrumentSpec } from "./instrumentSpecs";
+import { roundPipsFromPriceDistance } from "./calculatorModeSync";
 
 export type StopInputMode = "pips" | "price";
 
@@ -82,7 +83,7 @@ export function calculateStopDistance(input: {
     const stopDistance = Math.abs(input.entryPrice - input.stopLossPrice);
     return {
       mode: "price",
-      stopLossPips: stopDistance / input.spec.pipSize,
+      stopLossPips: roundPipsFromPriceDistance(stopDistance, input.spec),
     };
   }
 
@@ -127,7 +128,8 @@ export function calculatePositionSize(
     return invalidResult(symbol, stop.mode, "Instrument pip value is missing", spec, riskAmount);
   }
 
-  const rawLotSize = riskAmount / (stop.stopLossPips * spec.pipValuePerStandardLot);
+  const pipValuePerLot = resolveEffectivePipValue(spec, symbol, input.entryPrice);
+  const rawLotSize = riskAmount / (stop.stopLossPips * pipValuePerLot);
   const roundedLotSize = roundToLotStep(rawLotSize, spec.lotStep);
   const wasMinLotClamped = roundedLotSize > 0 && roundedLotSize < spec.minLot;
   const wasMaxLotClamped = roundedLotSize > spec.maxLot;
@@ -135,11 +137,11 @@ export function calculatePositionSize(
     Math.max(roundedLotSize, wasMinLotClamped ? spec.minLot : 0),
     spec.maxLot,
   );
-  const actualRisk = positionSize * stop.stopLossPips * spec.pipValuePerStandardLot;
+  const actualRisk = positionSize * stop.stopLossPips * pipValuePerLot;
   const takeProfitPips = getTakeProfitPips(input, stop.mode, spec);
   const rewardToRisk = takeProfitPips > 0 ? takeProfitPips / stop.stopLossPips : 0;
   const potentialProfit = takeProfitPips > 0
-    ? positionSize * takeProfitPips * spec.pipValuePerStandardLot
+    ? positionSize * takeProfitPips * pipValuePerLot
     : 0;
 
   return {
@@ -155,7 +157,7 @@ export function calculatePositionSize(
     actualRisk,
     rewardToRisk,
     potentialProfit,
-    pipValue: spec.pipValuePerStandardLot,
+    pipValue: pipValuePerLot,
     wasRounded: roundedLotSize !== rawLotSize,
     wasMinLotClamped,
     wasMaxLotClamped,
@@ -177,7 +179,10 @@ function getTakeProfitPips(
     isPositiveNumber(input.entryPrice) &&
     isPositiveNumber(input.takeProfitPrice)
   ) {
-    return Math.abs(input.takeProfitPrice - input.entryPrice) / spec.pipSize;
+    return roundPipsFromPriceDistance(
+      Math.abs(input.takeProfitPrice - input.entryPrice),
+      spec,
+    );
   }
 
   return 0;
@@ -213,5 +218,21 @@ function isPositiveNumber(value: number | null | undefined): value is number {
 function getDecimalPrecision(value: number): number {
   const decimal = value.toString().split(".")[1];
   return decimal ? decimal.length : 0;
+}
+
+/** USD-base pairs (USD/JPY, USD/CHF, USD/CAD) need a live quote for accurate pip value. */
+export function resolveEffectivePipValue(
+  spec: InstrumentSpec,
+  symbol: string,
+  entryPrice?: number | null,
+): number {
+  if (isPositiveNumber(entryPrice)) {
+    const [base] = symbol.split("/");
+    if (base === "USD" && !symbol.endsWith("/USD")) {
+      return (spec.contractSize * spec.pipSize) / entryPrice;
+    }
+  }
+
+  return spec.pipValuePerStandardLot;
 }
 

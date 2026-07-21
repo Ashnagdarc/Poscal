@@ -39,14 +39,38 @@ describe("positionSizeCalculator", () => {
   it("calculates XAU/USD with a broker-specific local spec warning", () => {
     const result = calculatePositionSize({
       symbol: "XAU/USD",
-      accountBalance: 1000,
+      accountBalance: 10000,
       riskPercent: 1,
-      stopLossPips: 20,
+      stopLossPips: 10,
     });
 
     expect(result.isValid).toBe(true);
-    expect(result.positionSize).toBe(0.05);
+    expect(result.positionSize).toBe(0.1);
     expect(result.warning).toContain("Broker");
+  });
+
+  it("matches XAU/USD pips and price inputs for a ~36 point stop", () => {
+    const fromPips = calculatePositionSize({
+      symbol: "XAU/USD",
+      accountBalance: 9651.28,
+      riskPercent: 0.5,
+      stopLossPips: 36,
+    });
+
+    const fromPrices = calculatePositionSize({
+      symbol: "XAU/USD",
+      accountBalance: 9651.28,
+      riskPercent: 0.5,
+      entryPrice: 4036.07,
+      stopLossPrice: 3999.94,
+      takeProfitPrice: 4068.59,
+    });
+
+    expect(fromPips.isValid).toBe(true);
+    expect(fromPrices.isValid).toBe(true);
+    expect(fromPips.positionSize).toBe(fromPrices.positionSize);
+    expect(fromPips.positionSize).toBe(0.01);
+    expect(fromPips.stopLossPips).toBeCloseTo(fromPrices.stopLossPips, 0);
   });
 
   it("returns invalid state when balance is missing", () => {

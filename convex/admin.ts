@@ -102,6 +102,55 @@ export const listUsers = query({
   },
 });
 
+export const setUserRole = mutation({
+  args: {
+    userId: v.string(),
+    isAdmin: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    const { userId: actorId, role: actorRole } = await requireAdmin(ctx);
+
+    if (args.userId === actorId) {
+      throw new Error("You cannot change your own admin role");
+    }
+
+    const targetUser = await ctx.db.get(args.userId as any);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
+      .first();
+
+    if (!profile && !targetUser) {
+      throw new Error("User not found");
+    }
+
+    const currentRole = profile?.role ?? targetUser?.role ?? "user";
+    if (currentRole === "super_admin" && actorRole !== "super_admin") {
+      throw new Error("Only super admins can modify super admin accounts");
+    }
+
+    const newRole = args.isAdmin ? "admin" : "user";
+    const now = Date.now();
+
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        role: newRole,
+        updatedAtMs: now,
+      });
+    }
+
+    if (targetUser) {
+      await ctx.db.patch(args.userId as any, { role: newRole });
+    }
+
+    return {
+      id: args.userId,
+      is_admin: isElevatedRole(newRole),
+      role: newRole,
+    };
+  },
+});
+
 export const listAppUpdates = query({
   args: {},
   handler: async (ctx) => {

@@ -30,15 +30,22 @@ export const useTradesQuery = () => {
   });
 };
 
-interface AddTradeData {
+export interface ManualTradeInput {
   pair: string;
   direction: 'buy' | 'sell' | 'long' | 'short';
   entry_price: number | null;
+  exit_price: number | null;
   stop_loss: number | null;
   take_profit: number | null;
   position_size: number | null;
   risk_percent: number | null;
+  pnl: number | null;
+  status: 'open' | 'closed' | 'cancelled';
   notes: string | null;
+  entry_date?: string | null;
+  exit_date?: string | null;
+  tags?: string | null;
+  market_condition?: string | null;
 }
 
 export const useAddTradeMutation = () => {
@@ -46,15 +53,15 @@ export const useAddTradeMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (newTrade: AddTradeData) => {
+    mutationFn: async (newTrade: ManualTradeInput) => {
       if (!user) {
         throw new Error('User not authenticated');
       }
 
       return await createJournalEntry(user.id, {
         ...newTrade,
-        status: 'open',
-        entry_date: new Date().toISOString(),
+        entry_date: newTrade.entry_date ?? new Date().toISOString(),
+        exit_date: newTrade.status === 'closed' ? (newTrade.exit_date ?? new Date().toISOString()) : null,
       });
     },
     onSuccess: () => {
@@ -63,16 +70,8 @@ export const useAddTradeMutation = () => {
   });
 };
 
-interface UpdateTradeData {
+export interface UpdateTradeInput extends ManualTradeInput {
   id: string;
-  pair: string;
-  direction: 'buy' | 'sell' | 'long' | 'short';
-  entry_price: number | null;
-  stop_loss: number | null;
-  take_profit: number | null;
-  position_size: number | null;
-  risk_percent: number | null;
-  notes: string | null;
 }
 
 export const useUpdateTradeMutation = () => {
@@ -80,7 +79,7 @@ export const useUpdateTradeMutation = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: UpdateTradeData) => {
+    mutationFn: async ({ id, ...updates }: UpdateTradeInput) => {
       if (!user) {
         throw new Error('User not authenticated');
       }

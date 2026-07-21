@@ -1,11 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, RefreshCw, Search, Users } from "lucide-react";
+import { ArrowLeft, Crown, RefreshCw, Search, Shield, ShieldOff, Users } from "lucide-react";
+import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAdmin } from "@/hooks/use-admin";
+import { useAuth } from "@/contexts/AuthContext";
 import { adminUsersApi, featureFlagApi } from "@/lib/api";
+import { PageHeader } from "@/components/PageHeader";
+import { UserAvatar } from "@/components/UserAvatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 interface AdminUserRow {
   id: string;
@@ -20,17 +27,40 @@ interface AdminUserRow {
 
 const USERS_PER_PAGE = 15;
 
+function getTierLabel(tier: string | null | undefined) {
+  const normalized = (tier || "free").toLowerCase();
+  if (normalized === "pro") return "Pro";
+  if (normalized === "premium") return "Premium";
+  if (normalized === "trial") return "Trial";
+  return "Free";
+}
+
+function getTierBadgeClass(tier: string | null | undefined) {
+  const normalized = (tier || "free").toLowerCase();
+  if (normalized === "pro" || normalized === "premium") {
+    return "bg-brand/15 text-brand border-brand/20";
+  }
+  if (normalized === "trial") {
+    return "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/20";
+  }
+  return "bg-secondary text-muted-foreground border-border/50";
+}
+
 const UserManagement = () => {
   const navigate = useNavigate();
+  const { user: currentUser } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 
-  const fetchUsers = async () => {
-    setLoading(true);
+  const fetchUsers = async (silent = false) => {
+    if (!silent) setLoading(true);
+    else setRefreshing(true);
     try {
       const data = await adminUsersApi.getAll();
       setUsers(data || []);
@@ -39,6 +69,7 @@ const UserManagement = () => {
       console.error(err);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -51,6 +82,52 @@ const UserManagement = () => {
       setPaidLockEnabled(false);
     }
   };
+
+  const togglePaidLock = async () => {
+    try {
+      const desiredState = !(paidLockEnabled ?? false);
+      const updatedState = await featureFlagApi.setPaidLock(desiredState);
+      setPaidLockEnabled(!!updatedState);
+      toast.success(updatedState ? "Paid lock enabled" : "Paid lock disabled");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to toggle paid lock");
+    }
+  };
+
+  const handleSetAdmin = async (user: AdminUserRow, makeAdmin: boolean) => {
+    if (user.id === currentUser?.id) {
+      toast.error("You cannot change your own admin role");
+      return;
+    }
+
+    setUpdatingUserId(user.id);
+    try {
+      const result = await adminUsersApi.setRole(user.id, makeAdmin);
+      setUsers((prev) =>
+        prev.map((row) =>
+          row.id === user.id
+            ? {
+                ...row,
+                is_admin: result.is_admin,
+                account_type: result.role,
+              }
+            : row,
+        ),
+      );
+      toast.success(
+        makeAdmin
+          ? `${user.full_name || user.email} is now an admin`
+          : `Admin access removed from ${user.full_name || user.email}`,
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update admin role");
+    } finally {
+      setUpdatingUserId(null);
+    }
+  };
+
+  const isSuperAdminAccount = (user: AdminUserRow) =>
+    (user.account_type || "").toLowerCase() === "super_admin";
 
   useEffect(() => {
     if (!adminLoading && !isAdmin) {
@@ -75,6 +152,15 @@ const UserManagement = () => {
     });
   }, [users, searchQuery]);
 
+  const stats = useMemo(() => {
+    const admins = users.filter((u) => u.is_admin).length;
+    const premium = users.filter((u) => {
+      const tier = (u.subscription_tier || "free").toLowerCase();
+      return tier !== "free";
+    }).length;
+    return { total: users.length, admins, premium };
+  }, [users]);
+
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
   const pageStart = (currentPage - 1) * USERS_PER_PAGE;
   const pageUsers = filteredUsers.slice(pageStart, pageStart + USERS_PER_PAGE);
@@ -83,10 +169,14 @@ const UserManagement = () => {
     if (currentPage > totalPages) setCurrentPage(1);
   }, [currentPage, totalPages]);
 
-  if (adminLoading || (isAdmin && loading)) {
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  if (adminLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-brand" />
       </div>
     );
   }
@@ -96,116 +186,267 @@ const UserManagement = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-24">
-      <header className="pt-12 pb-4 px-6">
-        <div className="flex items-start gap-3 sm:gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/settings")} className="shrink-0">
-            <ArrowLeft className="w-5 h-5" />
+    <div className="min-h-screen bg-background pb-28">
+      <PageHeader
+        title="User Management"
+        subtitle="Accounts, roles, and subscriptions"
+        icon={<Users className="h-5 w-5" />}
+        leading={
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/settings")}
+            aria-label="Back to settings"
+          >
+            <ArrowLeft className="h-5 w-5" />
           </Button>
-          <div className="min-w-0 flex-1 space-y-3">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
-                <Users className="w-5 h-5 text-primary-foreground" />
+        }
+        actions={
+          <Button
+            variant="outline"
+            size="icon"
+            className="rounded-xl"
+            onClick={() => fetchUsers(true)}
+            disabled={refreshing}
+            aria-label="Refresh users"
+          >
+            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
+          </Button>
+        }
+      />
+
+      <main className="mx-auto max-w-2xl space-y-6 px-6 md:max-w-3xl">
+        {/* Paid lock */}
+        <section className="overflow-hidden rounded-2xl border border-border/50 bg-secondary/50">
+          <div className="flex items-center justify-between gap-4 px-5 py-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10">
+                <Shield className="h-4 w-4 text-foreground" />
               </div>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-foreground leading-tight">User Management</h1>
-                <p className="text-sm text-muted-foreground leading-snug">Name, email, and subscription tier</p>
+                <p className="font-medium text-foreground">Paid features lock</p>
+                <p className="text-xs text-muted-foreground">
+                  Restrict premium pages for free users
+                </p>
               </div>
             </div>
-            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-secondary/30 px-3 py-2 sm:ml-auto sm:w-fit">
-              <span className="text-sm text-muted-foreground">Paid lock</span>
-              <span className={`shrink-0 text-xs px-2 py-1 rounded-full ${paidLockEnabled ? "bg-primary/20 text-primary" : "bg-secondary/50 text-muted-foreground"}`}>
-                {paidLockEnabled ? "Enabled" : "Disabled"}
-              </span>
-            </div>
+            <Button
+              size="sm"
+              variant={paidLockEnabled ? "default" : "outline"}
+              className="shrink-0 rounded-xl"
+              onClick={togglePaidLock}
+            >
+              {paidLockEnabled ? "Enabled" : "Disabled"}
+            </Button>
           </div>
-        </div>
-      </header>
+        </section>
 
-      <main className="px-6 space-y-4">
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
+        {/* Stats */}
+        <section className="grid grid-cols-3 gap-3">
+          <StatPill label="Total" value={loading ? "—" : String(stats.total)} />
+          <StatPill label="Premium" value={loading ? "—" : String(stats.premium)} accent />
+          <StatPill label="Admins" value={loading ? "—" : String(stats.admins)} />
+        </section>
+
+        {/* Search + list */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between px-1">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Users
+            </h2>
+            {!loading && (
+              <span className="text-xs text-muted-foreground">
+                {filteredUsers.length} {filteredUsers.length === 1 ? "user" : "users"}
+              </span>
+            )}
+          </div>
+
+          <div className="relative">
+            <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search name, email, tier..."
-              className="pl-9"
+              placeholder="Search name, email, or tier…"
+              className="h-11 rounded-xl border-border/50 bg-secondary/40 pl-10"
             />
           </div>
-          <Button variant="outline" size="icon" onClick={fetchUsers} title="Refresh">
-            <RefreshCw className="w-4 h-4" />
-          </Button>
-        </div>
 
-        <div className="grid gap-3">
-          {pageUsers.map((user) => (
-            <div
-              key={user.id}
-              className="w-full bg-secondary/50 backdrop-blur-sm rounded-2xl px-5 py-4 border border-border/50"
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <div className="font-semibold text-foreground">
-                    {user.full_name || "Unnamed User"}
-                    {user.is_admin && (
-                      <span className="ml-2 text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full font-medium">
-                        Admin
-                      </span>
-                    )}
+          {loading ? (
+            <div className="space-y-3">
+              {[1, 2, 3, 4].map((i) => (
+                <div
+                  key={i}
+                  className="flex items-center gap-4 rounded-2xl border border-border/50 bg-secondary/30 px-5 py-4"
+                >
+                  <Skeleton className="h-11 w-11 rounded-xl" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-36" />
+                    <Skeleton className="h-3 w-48" />
                   </div>
-                  <div className="text-sm text-muted-foreground">{user.email}</div>
+                  <Skeleton className="h-6 w-16 rounded-full" />
                 </div>
-                <div className="text-right">
-                  <div className="text-xs text-muted-foreground">Subscription</div>
-                  <div className="text-sm font-semibold text-foreground">
-                    {(user.subscription_tier || "free").toUpperCase()}
+              ))}
+            </div>
+          ) : pageUsers.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border/60 bg-secondary/30 px-6 py-12 text-center">
+              <Users className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
+              <h3 className="font-semibold text-foreground">No users found</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {searchQuery.trim()
+                  ? "Try a different search term."
+                  : "Users will appear here once they sign up."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {pageUsers.map((user) => (
+                <article
+                  key={user.id}
+                  className="overflow-hidden rounded-2xl border border-border/50 bg-secondary/40 transition-colors hover:bg-secondary/60"
+                >
+                  <div className="flex items-center gap-4 px-5 py-4">
+                    <UserAvatar
+                      name={user.full_name}
+                      email={user.email}
+                      size="md"
+                      className="rounded-xl"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h3 className="truncate font-semibold text-foreground">
+                          {user.full_name || "Unnamed user"}
+                        </h3>
+                        {user.is_admin && (
+                          <Badge
+                            variant="outline"
+                            className="rounded-full border-brand/30 bg-brand/10 text-[10px] uppercase tracking-wide text-brand"
+                          >
+                            Admin
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                      {user.created_at && (
+                        <p className="mt-1 text-xs text-muted-foreground/70">
+                          Joined {format(new Date(user.created_at), "MMM d, yyyy")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="mb-1 flex items-center justify-end gap-1 text-xs text-muted-foreground">
+                        {(user.subscription_tier || "free").toLowerCase() !== "free" && (
+                          <Crown className="h-3 w-3" />
+                        )}
+                        <span>Plan</span>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "rounded-full text-[10px] font-semibold uppercase tracking-wide",
+                          getTierBadgeClass(user.subscription_tier),
+                        )}
+                      >
+                        {getTierLabel(user.subscription_tier)}
+                      </Badge>
+                      {user.subscription_end && (
+                        <p className="mt-1.5 text-[11px] text-muted-foreground">
+                          Expires {format(new Date(user.subscription_end), "MMM d, yyyy")}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  {user.subscription_end && (
-                    <div className="text-xs text-muted-foreground">
-                      Expires {new Date(user.subscription_end).toLocaleDateString()}
+                  {user.id !== currentUser?.id && !isSuperAdminAccount(user) && (
+                    <div className="border-t border-border/40 bg-background/20 px-5 py-3">
+                      {user.is_admin ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 w-full rounded-lg text-xs"
+                          disabled={updatingUserId === user.id}
+                          onClick={() => handleSetAdmin(user, false)}
+                        >
+                          <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
+                          {updatingUserId === user.id ? "Updating…" : "Remove admin"}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-8 w-full rounded-lg bg-brand text-xs text-brand-foreground hover:bg-brand/90"
+                          disabled={updatingUserId === user.id}
+                          onClick={() => handleSetAdmin(user, true)}
+                        >
+                          <Shield className="mr-1.5 h-3.5 w-3.5" />
+                          {updatingUserId === user.id ? "Updating…" : "Make admin"}
+                        </Button>
+                      )}
                     </div>
                   )}
-                </div>
+                </article>
+              ))}
+            </div>
+          )}
+
+          {!loading && filteredUsers.length > USERS_PER_PAGE && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl border border-border/50 bg-secondary/30 px-4 py-3">
+              <span className="text-xs text-muted-foreground">
+                Showing {pageStart + 1}–{Math.min(pageStart + USERS_PER_PAGE, filteredUsers.length)} of{" "}
+                {filteredUsers.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-lg"
+                  disabled={currentPage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                >
+                  Prev
+                </Button>
+                <span className="min-w-[4.5rem] text-center text-xs font-medium text-foreground">
+                  {currentPage} / {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 rounded-lg"
+                  disabled={currentPage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                >
+                  Next
+                </Button>
               </div>
             </div>
-          ))}
-
-          {pageUsers.length === 0 && (
-            <div className="text-center text-muted-foreground py-10">No users found.</div>
           )}
-        </div>
-
-        <div className="flex flex-col gap-3 pt-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <span>
-            Showing {pageUsers.length} of {filteredUsers.length}
-          </span>
-          <div className="flex items-center justify-between gap-2 sm:justify-end">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-            >
-              Prev
-            </Button>
-            <span>
-              Page {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={currentPage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-            >
-              Next
-            </Button>
-          </div>
-        </div>
+        </section>
       </main>
-
     </div>
   );
 };
+
+function StatPill({
+  label,
+  value,
+  accent = false,
+}: {
+  label: string;
+  value: string;
+  accent?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/50 bg-secondary/40 px-4 py-3 text-center">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+        {label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 font-display text-xl font-semibold text-foreground",
+          accent && "text-brand",
+        )}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
 
 export default UserManagement;

@@ -132,6 +132,17 @@ export const adminUsersApi = {
   }>> => {
     return await getAuthenticatedConvexClient().query(convexApi.admin.listUsers, {});
   },
+
+  setRole: async (userId: string, isAdmin: boolean): Promise<{
+    id: string;
+    is_admin: boolean;
+    role: string;
+  }> => {
+    return await getAuthenticatedConvexClient().mutation(convexApi.admin.setUserRole, {
+      userId,
+      isAdmin,
+    });
+  },
 };
 
 // Trading Signals API

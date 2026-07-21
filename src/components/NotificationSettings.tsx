@@ -4,15 +4,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { usePushNotifications } from '@/hooks/use-push-notifications';
 import { toast } from 'sonner';
 
-export const NotificationSettings = () => {
-  const { 
-    permission, 
-    isSupported, 
-    isSubscribed, 
-    loading, 
+interface NotificationSettingsProps {
+  embedded?: boolean;
+}
+
+export const NotificationSettings = ({ embedded = false }: NotificationSettingsProps) => {
+  const {
+    permission,
+    isSupported,
+    isSubscribed,
+    loading,
     lastError,
-    subscribe, 
-    unsubscribe 
+    subscribe,
+    unsubscribe,
   } = usePushNotifications();
 
   const handleEnableNotifications = async () => {
@@ -33,12 +37,77 @@ export const NotificationSettings = () => {
     }
   };
 
+  const content = !isSupported ? (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-foreground">Not supported</p>
+      <p className="text-xs text-muted-foreground">
+        Use Chrome, Firefox, or Edge for push notifications.
+      </p>
+    </div>
+  ) : isSubscribed ? (
+    <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+        <Check className="h-4 w-4" />
+        <span>Enabled</span>
+      </div>
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={handleDisableNotifications}
+        disabled={loading}
+        className="h-8 rounded-lg text-xs"
+      >
+        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Disable'}
+      </Button>
+    </div>
+  ) : permission === 'denied' ? (
+    <div className="space-y-1">
+      <p className="text-sm text-destructive">Blocked in browser settings</p>
+      <p className="text-xs text-muted-foreground">
+        Allow notifications via the lock icon in your address bar.
+      </p>
+    </div>
+  ) : (
+    <Button
+      onClick={handleEnableNotifications}
+      size="sm"
+      className="h-9 rounded-xl"
+      disabled={loading}
+    >
+      {loading ? (
+        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+      ) : (
+        <Bell className="mr-2 h-4 w-4" />
+      )}
+      Enable notifications
+    </Button>
+  );
+
+  if (embedded) {
+    return (
+      <div className="px-5 py-4">
+        <div className="mb-3 flex items-center gap-3">
+          {!isSupported ? (
+            <BellOff className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <Bell className="h-4 w-4 text-foreground" />
+          )}
+          <div>
+            <p className="font-medium text-foreground">Push notifications</p>
+            <p className="text-xs text-muted-foreground">Signals and app updates</p>
+          </div>
+        </div>
+        {content}
+      </div>
+    );
+  }
+
   if (!isSupported) {
     return (
-      <Card className="bg-secondary border-border">
+      <Card className="border-border bg-secondary">
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <BellOff className="w-4 h-4 text-muted-foreground" />
+          <CardTitle className="flex items-center gap-2 text-base">
+            <BellOff className="h-4 w-4 text-muted-foreground" />
             Push Notifications
           </CardTitle>
           <CardDescription>
@@ -50,57 +119,17 @@ export const NotificationSettings = () => {
   }
 
   return (
-    <Card className="bg-secondary border-border">
+    <Card className="border-border bg-secondary">
       <CardHeader className="pb-3">
-        <CardTitle className="text-base flex items-center gap-2">
-          <Bell className="w-4 h-4" />
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Bell className="h-4 w-4" />
           Push Notifications
         </CardTitle>
         <CardDescription>
           Get alerts for new trading signals and important app updates, even when the app is closed.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {isSubscribed ? (
-          <div className="space-y-3">
-            <div className="flex items-center gap-2 text-emerald-400 text-sm">
-              <Check className="w-4 h-4" />
-              <span>Push notifications are enabled</span>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleDisableNotifications}
-              disabled={loading}
-              className="w-full text-muted-foreground"
-            >
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Disable'}
-            </Button>
-          </div>
-        ) : permission === 'denied' ? (
-          <div className="space-y-2">
-            <p className="text-sm text-destructive">
-              Notifications are blocked. Please enable them in your browser settings.
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Look for the lock/info icon in your browser's address bar and allow notifications.
-            </p>
-          </div>
-        ) : (
-          <Button
-            onClick={handleEnableNotifications}
-            className="w-full"
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-            ) : (
-              <Bell className="w-4 h-4 mr-2" />
-            )}
-            Enable Push Notifications
-          </Button>
-        )}
-      </CardContent>
+      <CardContent className="space-y-3">{content}</CardContent>
     </Card>
   );
 };

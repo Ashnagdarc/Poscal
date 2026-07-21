@@ -47,7 +47,7 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     displayName: "US Dollar / Japanese Yen",
     assetClass: "forex",
     pipSize: 0.01,
-    pipValuePerStandardLot: 9.09,
+    pipValuePerStandardLot: 6.15,
     contractSize: 100000,
     minLot: 0.01,
     maxLot: 100,
@@ -59,7 +59,7 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     displayName: "US Dollar / Swiss Franc",
     assetClass: "forex",
     pipSize: 0.0001,
-    pipValuePerStandardLot: 11.1,
+    pipValuePerStandardLot: 11.3,
     contractSize: 100000,
     minLot: 0.01,
     maxLot: 100,
@@ -83,7 +83,7 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     displayName: "US Dollar / Canadian Dollar",
     assetClass: "forex",
     pipSize: 0.0001,
-    pipValuePerStandardLot: 7.4,
+    pipValuePerStandardLot: 7.38,
     contractSize: 100000,
     minLot: 0.01,
     maxLot: 100,
@@ -106,8 +106,8 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XAU/USD",
     displayName: "Gold / US Dollar",
     assetClass: "metal",
-    pipSize: 0.1,
-    pipValuePerStandardLot: 10,
+    pipSize: 1,
+    pipValuePerStandardLot: 100,
     contractSize: 100,
     minLot: 0.01,
     maxLot: 100,
@@ -145,8 +145,8 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "ETH/USD",
     displayName: "Ethereum / US Dollar",
     assetClass: "crypto",
-    pipSize: 0.1,
-    pipValuePerStandardLot: 0.1,
+    pipSize: 1,
+    pipValuePerStandardLot: 1,
     contractSize: 1,
     minLot: 0.01,
     maxLot: 100,
@@ -194,4 +194,22 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     warning: BROKER_SPECIFIC_WARNING,
   },
 };
+
+export function normalizeInstrumentSymbol(symbol: string): string {
+  return symbol.trim().toUpperCase();
+}
+
+export function getInstrumentSpecBySymbol(symbol: string): InstrumentSpec | undefined {
+  return INSTRUMENT_SPECS[normalizeInstrumentSymbol(symbol)];
+}
+
+/** Label for stop-distance input — gold, silver, indices, and crypto use "points". */
+export function getStopLossUnitLabel(symbol: string): string {
+  const spec = getInstrumentSpecBySymbol(symbol);
+  if (!spec) return "pips";
+  if (spec.assetClass === "metal" || spec.assetClass === "index" || spec.assetClass === "crypto") {
+    return "pts";
+  }
+  return "pips";
+}
 

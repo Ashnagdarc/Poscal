@@ -2,7 +2,11 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { BookOpen, Calculator, Camera, Clock3, Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageHeader } from "@/components/PageHeader";
-import { Calendar } from "@/components/ui/calendar";
+import { JournalAnalyticsTabs, type JournalTab } from "@/components/journal/JournalAnalyticsTabs";
+import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
+import { ProgressTracker } from "@/components/journal/ProgressTracker";
+import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCalendar";
+import { ResultsHeatmap } from "@/components/journal/ResultsHeatmap";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   DropdownMenu,
@@ -19,7 +23,21 @@ import {
   type SavedCalculationStatus,
   updateJournalEntry,
 } from "@/lib/calculatorHistory";
+import type { JournalTrade } from "@/lib/convexJournal";
+import {
+  useAddTradeMutation,
+  useDeleteTradeMutation,
+  useTradesQuery,
+  useUpdateTradeMutation,
+  type ManualTradeInput,
+} from "@/hooks/queries/use-trades-query";
 import { toast } from "sonner";
+import {
+  buildResultDaySummaries,
+  buildResultHeatmapDays,
+  isSameDay,
+  startOfDay,
+} from "@/lib/historyResults";
 
 const ORDER_TYPE_LABELS: Record<SavedCalculationOrderType, string> = {
   buy: "Buy",
@@ -101,37 +119,19 @@ const parseNumericInput = (value: string) => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-type CalendarDayTone = "positive" | "negative" | "neutral" | "missed" | "none";
-
-interface CalendarDaySummary {
-  dateKey: string;
-  tradeCount: number;
-  tone: CalendarDayTone;
-  label: string;
-}
-
-const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
-
-const isSameDay = (left: Date, right: Date) =>
-  left.getFullYear() === right.getFullYear()
-  && left.getMonth() === right.getMonth()
-  && left.getDate() === right.getDate();
-
-const startOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate());
-
-const endOfDay = (date: Date) => new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
-
-const formatDaySummaryAmount = (value: number, suffix = "") => {
-  const absoluteValue = Math.abs(value);
-  const prefix = value > 0 ? "+" : value < 0 ? "-" : "";
-  const fixed = absoluteValue >= 100 ? absoluteValue.toFixed(0) : absoluteValue.toFixed(1);
-  return `${prefix}${fixed}${suffix}`;
-};
-
 const Journal = () => {
   const { user } = useAuth();
   const screenshotInputRef = useRef<HTMLInputElement | null>(null);
-  const [activeView, setActiveView] = useState<"list" | "calendar">("list");
+  const [journalTab, setJournalTab] = useState<JournalTab>("overview");
+  const [pageSection, setPageSection] = useState<"today" | "trades" | "history">("today");
+  const [isTradeSheetOpen, setIsTradeSheetOpen] = useState(false);
+  const [tradeToEdit, setTradeToEdit] = useState<JournalTrade | null>(null);
+  const [tradeToDelete, setTradeToDelete] = useState<JournalTrade | null>(null);
+  const { data: manualTrades = [], isLoading: isManualTradesLoading } = useTradesQuery();
+  const addTradeMutation = useAddTradeMutation();
+  const updateTradeMutation = useUpdateTradeMutation();
+  const deleteTradeMutation = useDeleteTradeMutation();
+  const [activeView, setActiveView] = useState<"heatmap" | "calendar">("heatmap");
   const [items, setItems] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedItem, setSelectedItem] = useState<JournalEntry | null>(null);
@@ -174,67 +174,16 @@ const Journal = () => {
     };
   }, [user?.id]);
 
-  const totalSignalEntries = useMemo(
-    () => items.filter((item) => item.source === "signal").length,
-    [items],
-  );
-
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  const calendarDaySummaries = useMemo(() => {
-    const summaries = new Map<string, CalendarDaySummary>();
-    const closedItems = items.filter((item) => item.status !== "open" && item.closedAt);
+  const resultDaySummaries = useMemo(() => buildResultDaySummaries(items), [items]);
 
-    for (const item of closedItems) {
-      const closedAt = startOfDay(item.closedAt ?? item.updatedAt);
-      const dateKey = toDateKey(closedAt);
-      const existing = summaries.get(dateKey);
-      const tradeCount = (existing?.tradeCount ?? 0) + 1;
+  const resultHeatmapDays = useMemo(
+    () => buildResultHeatmapDays(resultDaySummaries, today),
+    [resultDaySummaries, today],
+  );
 
-      const dayItems = closedItems.filter((entry) => entry.closedAt && isSameDay(entry.closedAt, closedAt));
-
-      const allHavePnl = dayItems.every((entry) => entry.pnlAmount !== null && entry.pnlAmount !== undefined);
-      const allHaveResultR = dayItems.every((entry) => entry.resultR !== null && entry.resultR !== undefined);
-
-      let tone: CalendarDayTone = "neutral";
-      let label = `${tradeCount}T`;
-
-      if (allHavePnl && dayItems.length > 0) {
-        const totalPnl = dayItems.reduce((sum, entry) => sum + (entry.pnlAmount ?? 0), 0);
-        tone = totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "neutral";
-        label = `${totalPnl > 0 ? "+" : totalPnl < 0 ? "-" : ""}$${Math.abs(totalPnl) >= 100 ? Math.abs(totalPnl).toFixed(0) : Math.abs(totalPnl).toFixed(1)}`;
-      } else if (allHaveResultR && dayItems.length > 0) {
-        const totalR = dayItems.reduce((sum, entry) => sum + (entry.resultR ?? 0), 0);
-        tone = totalR > 0 ? "positive" : totalR < 0 ? "negative" : "neutral";
-        label = formatDaySummaryAmount(totalR, "R");
-      } else {
-        const wins = dayItems.filter((entry) => entry.status === "win").length;
-        const losses = dayItems.filter((entry) => entry.status === "loss").length;
-        tone = wins > losses ? "positive" : losses > wins ? "negative" : "neutral";
-        label = wins || losses ? `W${wins}/L${losses}` : `${tradeCount}T`;
-      }
-
-      summaries.set(dateKey, {
-        dateKey,
-        tradeCount,
-        tone,
-        label,
-      });
-    }
-
-    return summaries;
-  }, [items]);
-
-  const dayModifiers = useMemo(() => ({
-    positive: (date: Date) => calendarDaySummaries.get(toDateKey(date))?.tone === "positive",
-    negative: (date: Date) => calendarDaySummaries.get(toDateKey(date))?.tone === "negative",
-    neutral: (date: Date) => calendarDaySummaries.get(toDateKey(date))?.tone === "neutral",
-    missed: (date: Date) => {
-      const day = startOfDay(date);
-      if (day >= today) return false;
-      return !calendarDaySummaries.has(toDateKey(day));
-    },
-  }), [calendarDaySummaries, today]);
+  const selectedDateKey = selectedCalendarDate?.toISOString().slice(0, 10);
 
   const filteredItems = useMemo(() => {
     if (!selectedCalendarDate) {
@@ -329,15 +278,106 @@ const Journal = () => {
     }
   };
 
+  const handleSaveManualTrade = async (tradeInput: ManualTradeInput) => {
+    try {
+      if (tradeToEdit) {
+        await updateTradeMutation.mutateAsync({ id: tradeToEdit.id, ...tradeInput });
+        toast.success("Trade updated");
+      } else {
+        await addTradeMutation.mutateAsync(tradeInput);
+        toast.success("Trade saved");
+      }
+
+      setIsTradeSheetOpen(false);
+      setTradeToEdit(null);
+    } catch (error) {
+      console.error("[journal] Failed to save manual trade", error);
+      toast.error("Failed to save trade");
+    }
+  };
+
+  const handleDeleteManualTrade = async () => {
+    if (!tradeToDelete) return;
+
+    try {
+      await deleteTradeMutation.mutateAsync(tradeToDelete.id);
+      toast.success("Trade deleted");
+    } catch (error) {
+      console.error("[journal] Failed to delete manual trade", error);
+      toast.error("Failed to delete trade");
+    } finally {
+      setTradeToDelete(null);
+    }
+  };
+
   return (
     <div className="flex min-h-screen flex-col bg-background pb-24">
       <PageHeader
         title="Journal"
-        subtitle={`${items.length} saved calculation${items.length === 1 ? "" : "s"}${items.length > 0 ? ` · ${totalSignalEntries} from signals` : ""}`}
+        subtitle={
+          pageSection === "today"
+            ? "Daily discipline & session notes"
+            : pageSection === "trades"
+              ? `${manualTrades.length} manual trade${manualTrades.length === 1 ? "" : "s"}`
+              : `${items.length} saved calculation${items.length === 1 ? "" : "s"}`
+        }
         icon={<BookOpen className="h-5 w-5" />}
       />
 
       <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4 sm:px-6 md:max-w-3xl">
+        <section className="mb-4 rounded-2xl bg-secondary p-2">
+          <div className="grid grid-cols-3 gap-2">
+            {(
+              [
+                { id: "today", label: "Today" },
+                { id: "trades", label: "Trades" },
+                { id: "history", label: "History" },
+              ] as const
+            ).map((section) => (
+              <button
+                key={section.id}
+                type="button"
+                onClick={() => setPageSection(section.id)}
+                className={`h-11 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
+                  pageSection === section.id
+                    ? "bg-background text-foreground"
+                    : "text-muted-foreground"
+                }`}
+              >
+                {section.label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {pageSection === "today" ? <ProgressTracker trades={manualTrades} /> : null}
+
+        {pageSection === "trades" ? (
+          <JournalAnalyticsTabs
+            trades={manualTrades}
+            isLoading={isManualTradesLoading}
+            activeTab={journalTab}
+            onTabChange={setJournalTab}
+            onAddTrade={() => {
+              setTradeToEdit(null);
+              setIsTradeSheetOpen(true);
+            }}
+            onEditTrade={(trade) => {
+              setTradeToEdit(trade);
+              setIsTradeSheetOpen(true);
+            }}
+            onDeleteTrade={setTradeToDelete}
+          />
+        ) : null}
+
+        {pageSection === "history" ? (
+          <>
+            <section className="mb-4">
+              <h2 className="text-base font-bold text-foreground">Saved Calculations</h2>
+              <p className="text-sm text-muted-foreground">
+                Position sizes from the calculator and signals
+              </p>
+            </section>
         {isLoading ? (
           <div className="space-y-3">
             {[1, 2, 3].map((item) => (
@@ -366,16 +406,18 @@ const Journal = () => {
             <section className="rounded-2xl bg-secondary p-2">
               <div className="grid grid-cols-2 gap-2">
                 <button
-                  onClick={() => setActiveView("list")}
+                  type="button"
+                  onClick={() => setActiveView("heatmap")}
                   className={`h-11 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
-                    activeView === "list"
+                    activeView === "heatmap"
                       ? "bg-background text-foreground"
                       : "text-muted-foreground"
                   }`}
                 >
-                  List
+                  Heatmap
                 </button>
                 <button
+                  type="button"
                   onClick={() => setActiveView("calendar")}
                   className={`h-11 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
                     activeView === "calendar"
@@ -388,150 +430,45 @@ const Journal = () => {
               </div>
             </section>
 
-            {activeView === "calendar" && (
-              <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
-                <div className="mb-3 sm:mb-4">
-                  <h2 className="text-base font-bold text-foreground">Results Calendar</h2>
-                  <p className="text-xs text-muted-foreground sm:text-sm">
-                    Daily outcome markers for closed trades.
-                  </p>
-                </div>
+            <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
+              <div className="mb-3 sm:mb-4">
+                <h2 className="text-base font-bold text-foreground">
+                  {activeView === "heatmap" ? "Results Heatmap" : "Results Calendar"}
+                </h2>
+                <p className="text-xs text-muted-foreground sm:text-sm">
+                  Daily outcomes for saved calculator results.
+                </p>
+              </div>
 
-                <Calendar
-                  month={calendarMonth}
-                  onMonthChange={setCalendarMonth}
-                  selected={selectedCalendarDate}
-                  onSelect={(date) => {
-                    if (!date) {
-                      setSelectedCalendarDate(undefined);
-                      return;
-                    }
-
-                    if (selectedCalendarDate && isSameDay(selectedCalendarDate, date)) {
-                      setSelectedCalendarDate(undefined);
-                      return;
-                    }
-
-                    setSelectedCalendarDate(startOfDay(date));
-                  }}
-                  modifiers={dayModifiers}
-                  className="w-full max-w-full rounded-2xl bg-background p-2 sm:p-3"
-                  classNames={{
-                    months: "flex w-full flex-col",
-                    month: "w-full space-y-2 sm:space-y-3",
-                    caption: "relative flex items-center justify-center px-8 pb-1 pt-1",
-                    caption_label: "text-sm font-semibold",
-                    nav_button_previous: "absolute left-0",
-                    nav_button_next: "absolute right-0",
-                    table: "w-full border-collapse",
-                    head_row: "flex w-full",
-                    head_cell:
-                      "w-[14.28%] basis-[14.28%] px-0 text-center text-[10px] font-medium text-muted-foreground sm:text-[11px]",
-                    row: "mt-1 flex w-full sm:mt-2",
-                    cell: "relative w-[14.28%] basis-[14.28%] p-0.5 sm:p-1",
-                    day: "h-11 w-full rounded-lg p-0 text-foreground hover:bg-secondary/80 sm:h-14 sm:rounded-xl",
-                    day_selected:
-                      "bg-brand/15 text-foreground ring-1 ring-brand/40 hover:bg-brand/20",
-                    day_today: "bg-secondary text-foreground ring-1 ring-border",
-                    day_outside: "opacity-30",
-                  }}
-                  modifiersClassNames={{
-                    positive: "border border-emerald-500/35 bg-emerald-500/12",
-                    negative: "border border-red-500/35 bg-red-500/12",
-                    neutral: "border border-slate-500/35 bg-slate-500/12",
-                    missed: "border border-border/70 bg-background/60",
-                  }}
-                  components={{
-                    DayContent: ({ date, activeModifiers }: { date: Date; activeModifiers: Record<string, boolean> }) => {
-                      const summary = calendarDaySummaries.get(toDateKey(date));
-                      const isFuture = startOfDay(date) > endOfDay(today);
-                      const isMissed = activeModifiers.missed;
-                      const isCurrentMonth = date.getMonth() === calendarMonth.getMonth();
-
-                      return (
-                        <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg sm:gap-1 sm:rounded-xl">
-                          <span className="text-xs font-semibold leading-none sm:text-sm">
-                            {date.getDate()}
-                          </span>
-                          {isCurrentMonth && summary && (
-                            <>
-                              <span
-                                className={`h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5 ${
-                                  summary.tone === "positive"
-                                    ? "bg-emerald-400"
-                                    : summary.tone === "negative"
-                                      ? "bg-red-400"
-                                      : "bg-slate-300"
-                                }`}
-                              />
-                              <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
-                                {summary.label}
-                              </span>
-                            </>
-                          )}
-                          {isCurrentMonth && !summary && isMissed && (
-                            <span className="text-[9px] font-semibold leading-none text-muted-foreground/80 sm:text-[10px]">
-                              x
-                            </span>
-                          )}
-                          {isCurrentMonth && !summary && !isMissed && !isFuture && isSameDay(date, today) && (
-                            <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
-                              Today
-                            </span>
-                          )}
-                        </div>
-                      );
-                    },
-                  }}
-                />
-
-                <div className="mt-3 grid grid-cols-2 gap-1.5 text-[11px] text-muted-foreground sm:mt-4 sm:gap-2 sm:text-xs">
-                  <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-                    <span>Profitable</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />
-                    <span>Losing</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-slate-300" />
-                    <span>Breakeven</span>
-                  </div>
-                  <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-                    <span className="text-[11px] font-semibold leading-none">x</span>
-                    <span>No trades</span>
-                  </div>
-                </div>
-
-                {selectedCalendarDate && (
-                  <div className="mt-3 rounded-2xl bg-background p-3 sm:mt-4 sm:p-4">
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-foreground">
-                          {selectedCalendarDate.toLocaleDateString("en-US", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {filteredItems.length} closed trade{filteredItems.length === 1 ? "" : "s"}
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setSelectedCalendarDate(undefined)}
-                        className="shrink-0 rounded-xl bg-secondary px-3 py-2 text-xs font-semibold text-foreground transition-all active:scale-[0.98]"
-                      >
-                        Clear
-                      </button>
-                    </div>
-                  </div>
+              <div className="rounded-xl border border-border/60 bg-background/50 p-2 sm:p-3">
+                {activeView === "heatmap" ? (
+                  <ResultsHeatmap
+                    days={resultHeatmapDays}
+                    selectedDateKey={selectedDateKey}
+                    onSelectDay={(dateKey) => {
+                      const summary = resultDaySummaries.get(dateKey);
+                      if (!summary) return;
+                      setSelectedCalendarDate(startOfDay(new Date(`${dateKey}T12:00:00`)));
+                    }}
+                  />
+                ) : (
+                  <ResultsCalendar
+                    month={calendarMonth}
+                    onMonthChange={setCalendarMonth}
+                    selectedDate={selectedCalendarDate}
+                    onSelectDate={setSelectedCalendarDate}
+                    summaries={resultDaySummaries}
+                    today={today}
+                  />
                 )}
-              </section>
-            )}
+              </div>
 
-            {activeView === "list" && selectedCalendarDate && (
+              <div className="mt-3 sm:mt-4">
+                <ResultsLegend />
+              </div>
+            </section>
+
+            {selectedCalendarDate ? (
               <section className="rounded-2xl bg-secondary p-4">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -543,10 +480,11 @@ const Journal = () => {
                       })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {filteredItems.length} closed trade{filteredItems.length === 1 ? "" : "s"} on this day
+                      {filteredItems.length} result{filteredItems.length === 1 ? "" : "s"} on this day
                     </p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setSelectedCalendarDate(undefined)}
                     className="rounded-xl bg-background px-3 py-2 text-xs font-semibold text-foreground transition-all active:scale-[0.98]"
                   >
@@ -554,14 +492,14 @@ const Journal = () => {
                   </button>
                 </div>
               </section>
-            )}
+            ) : null}
 
-            {activeView === "list" && filteredItems.length === 0 ? (
+            {selectedCalendarDate && filteredItems.length === 0 ? (
               <section className="rounded-2xl bg-secondary p-5 text-center text-muted-foreground">
-                <p className="font-medium text-foreground">No closed trades for this day</p>
-                <p className="mt-1 text-sm">Choose another day on the calendar to inspect results.</p>
+                <p className="font-medium text-foreground">No results for this day</p>
+                <p className="mt-1 text-sm">Pick another day on the heatmap or calendar.</p>
               </section>
-            ) : activeView === "list" ? filteredItems.map((item) => (
+            ) : filteredItems.map((item) => (
               <article key={item.id} className="bg-secondary rounded-2xl p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
@@ -639,9 +577,11 @@ const Journal = () => {
                   </DropdownMenu>
                 </div>
               </article>
-            )) : null}
+            )) }
           </div>
         )}
+          </>
+        ) : null}
       </main>
 
       {selectedItem && (
@@ -914,6 +854,29 @@ const Journal = () => {
         description="Remove this saved calculation from your journal?"
         confirmText="Delete"
         variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={!!tradeToDelete}
+        onClose={() => setTradeToDelete(null)}
+        onConfirm={() => void handleDeleteManualTrade()}
+        title="Delete Trade"
+        description="Remove this manual trade from your journal?"
+        confirmText="Delete"
+        variant="destructive"
+      />
+
+      <ManualTradeSheet
+        open={isTradeSheetOpen}
+        onOpenChange={(open) => {
+          setIsTradeSheetOpen(open);
+          if (!open) {
+            setTradeToEdit(null);
+          }
+        }}
+        trade={tradeToEdit}
+        isSaving={addTradeMutation.isPending || updateTradeMutation.isPending}
+        onSave={handleSaveManualTrade}
       />
 
     </div>

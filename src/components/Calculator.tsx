@@ -16,6 +16,8 @@ import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveJournalEntry } from "@/lib/calculatorHistory";
+import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
+import { getStopLossUnitLabel } from "@/lib/instrumentSpecs";
 import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalculator";
 import { toast } from "sonner";
 
@@ -117,6 +119,26 @@ export const Calculator = () => {
   }, [selectedPair.symbol]);
 
   useEffect(() => {
+    const spec = getInstrumentSpec(selectedPair.symbol);
+    const entry = parseFloat(entryPrice);
+    const stopPips = parseFloat(stopLossPips);
+    if (!spec || !Number.isFinite(entry) || !Number.isFinite(stopPips)) return;
+
+    const converted = pipsToPrices({
+      spec,
+      direction: tradeDirection,
+      entryPrice: entry,
+      stopLossPips: stopPips,
+      takeProfitPips: parseFloat(takeProfitPips) || null,
+    });
+
+    setStopLossPrice(converted.stopLossPrice);
+    if (converted.takeProfitPrice) {
+      setTakeProfitPrice(converted.takeProfitPrice);
+    }
+  }, [tradeDirection, selectedPair.symbol, entryPrice, stopLossPips, takeProfitPips]);
+
+  useEffect(() => {
     const symbol = searchParams.get("symbol");
     const entry = searchParams.get("entry");
     const sl = searchParams.get("stopLoss");
@@ -159,7 +181,7 @@ export const Calculator = () => {
       riskPercent,
       stopLossPips: calculationMode === "pips" ? parseFloat(stopLossPips) || null : null,
       takeProfitPips: calculationMode === "pips" ? parseFloat(takeProfitPips) || null : null,
-      entryPrice: calculationMode === "price" ? parseFloat(entryPrice) || null : null,
+      entryPrice: parseFloat(entryPrice) || null,
       stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
       takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
     });
@@ -174,6 +196,79 @@ export const Calculator = () => {
     takeProfitPrice,
     selectedPair,
   ]);
+
+  const stopLossUnit = getStopLossUnitLabel(selectedPair.symbol);
+
+  const syncPipFieldsFromPrices = (
+    nextEntry = entryPrice,
+    nextStopLoss = stopLossPrice,
+    nextTakeProfit = takeProfitPrice,
+  ) => {
+    const spec = getInstrumentSpec(selectedPair.symbol);
+    const entry = parseFloat(nextEntry);
+    const stop = parseFloat(nextStopLoss);
+    if (!spec || !Number.isFinite(entry) || !Number.isFinite(stop)) return;
+
+    const converted = pricesToPips({
+      spec,
+      entryPrice: entry,
+      stopLossPrice: stop,
+      takeProfitPrice: parseFloat(nextTakeProfit) || null,
+    });
+
+    setStopLossPips(String(converted.stopLossPips));
+    if (converted.takeProfitPips) {
+      setTakeProfitPips(String(converted.takeProfitPips));
+    }
+  };
+
+  const syncPriceFieldsFromPips = (
+    nextStopLossPips = stopLossPips,
+    nextTakeProfitPips = takeProfitPips,
+    nextEntry = entryPrice,
+  ) => {
+    const spec = getInstrumentSpec(selectedPair.symbol);
+    const entry = parseFloat(nextEntry);
+    const stopPips = parseFloat(nextStopLossPips);
+    if (!spec || !Number.isFinite(entry) || !Number.isFinite(stopPips)) return;
+
+    const converted = pipsToPrices({
+      spec,
+      direction: tradeDirection,
+      entryPrice: entry,
+      stopLossPips: stopPips,
+      takeProfitPips: parseFloat(nextTakeProfitPips) || null,
+    });
+
+    setStopLossPrice(converted.stopLossPrice);
+    if (converted.takeProfitPrice) {
+      setTakeProfitPrice(converted.takeProfitPrice);
+    }
+  };
+
+  const handleCalculationModeChange = (mode: "pips" | "price") => {
+    if (mode === calculationMode) return;
+
+    if (mode === "price") {
+      const entry = parseFloat(entryPrice);
+      const stopPips = parseFloat(stopLossPips);
+      if (Number.isFinite(entry) && Number.isFinite(stopPips)) {
+        syncPriceFieldsFromPips(stopLossPips, takeProfitPips, entryPrice);
+      } else if (Number.isFinite(entry) && Number.isFinite(parseFloat(stopLossPrice))) {
+        syncPipFieldsFromPrices();
+      } else if (Number.isFinite(stopPips) && !Number.isFinite(entry)) {
+        toast.message("Set entry price to sync pip values into prices");
+      }
+    } else {
+      const entry = parseFloat(entryPrice);
+      const stop = parseFloat(stopLossPrice);
+      if (Number.isFinite(entry) && Number.isFinite(stop)) {
+        syncPipFieldsFromPrices();
+      }
+    }
+
+    setCalculationMode(mode);
+  };
 
   const saveToHistory = async () => {
     if (!calculation.isValid || calculation.positionSize <= 0) return;
@@ -258,14 +353,38 @@ export const Calculator = () => {
   };
 
   const handleNumPadDone = () => {
+    let nextEntry = entryPrice;
+    let nextStopLoss = stopLossPrice;
+    let nextTakeProfit = takeProfitPrice;
+    let nextStopLossPips = stopLossPips;
+    let nextTakeProfitPips = takeProfitPips;
+
     if (showNumPad === "balance") setAccountBalance(numPadValue);
     else if (showNumPad === "takeProfit") {
-      if (calculationMode === "pips") setTakeProfitPips(numPadValue);
-      else setTakeProfitPrice(numPadValue);
+      if (calculationMode === "pips") {
+        nextTakeProfitPips = numPadValue;
+        setTakeProfitPips(numPadValue);
+      } else {
+        nextTakeProfit = numPadValue;
+        setTakeProfitPrice(numPadValue);
+      }
+    } else if (showNumPad === "entryPrice") {
+      nextEntry = numPadValue;
+      setEntryPrice(numPadValue);
+    } else if (showNumPad === "stopLossPrice") {
+      nextStopLoss = numPadValue;
+      setStopLossPrice(numPadValue);
+    } else if (showNumPad === "takeProfitPrice") {
+      nextTakeProfit = numPadValue;
+      setTakeProfitPrice(numPadValue);
     }
-    else if (showNumPad === "entryPrice") setEntryPrice(numPadValue);
-    else if (showNumPad === "stopLossPrice") setStopLossPrice(numPadValue);
-    else if (showNumPad === "takeProfitPrice") setTakeProfitPrice(numPadValue);
+
+    if (showNumPad === "entryPrice" || showNumPad === "stopLossPrice" || showNumPad === "takeProfitPrice") {
+      syncPipFieldsFromPrices(nextEntry, nextStopLoss, nextTakeProfit);
+    } else if (showNumPad === "takeProfit" && calculationMode === "pips") {
+      syncPriceFieldsFromPips(nextStopLossPips, nextTakeProfitPips, nextEntry);
+    }
+
     setShowNumPad(null);
     setNumPadValue("");
   };
@@ -281,7 +400,7 @@ export const Calculator = () => {
   const numPadSuffix = showNumPad === "balance"
     ? currency.code
     : showNumPad === "takeProfit" && calculationMode === "pips"
-      ? "pips"
+      ? stopLossUnit
       : "";
 
   const toggleClass = (active: boolean) =>
@@ -368,6 +487,16 @@ export const Calculator = () => {
           >
             Save to Journal
           </button>
+
+          {calculation.wasMinLotClamped && (
+            <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-center text-xs text-muted-foreground">
+              Minimum lot size ({formatNumber(calculation.spec?.minLot ?? 0.01)} lots) caps actual risk at{" "}
+              {currency.symbol}
+              {formatNumber(calculation.actualRisk, 0)} instead of{" "}
+              {currency.symbol}
+              {formatNumber(calculation.riskAmount, 0)}.
+            </p>
+          )}
         </section>
 
         {/* Primary inputs — one grouped composition */}
@@ -467,10 +596,18 @@ export const Calculator = () => {
           <div>
             <p className="mb-2 ml-1 text-xs text-muted-foreground">SL input</p>
             <div className="flex gap-2">
-              <button onClick={() => setCalculationMode("pips")} className={toggleClass(calculationMode === "pips")}>
+              <button
+                type="button"
+                onClick={() => handleCalculationModeChange("pips")}
+                className={toggleClass(calculationMode === "pips")}
+              >
                 Pips
               </button>
-              <button onClick={() => setCalculationMode("price")} className={toggleClass(calculationMode === "price")}>
+              <button
+                type="button"
+                onClick={() => handleCalculationModeChange("price")}
+                className={toggleClass(calculationMode === "price")}
+              >
                 Price
               </button>
             </div>
@@ -489,7 +626,7 @@ export const Calculator = () => {
                   <p className="text-xs text-muted-foreground">Stop loss</p>
                 </div>
                 <p className="text-lg font-bold text-foreground">
-                  {stopLossPips ? `${stopLossPips} pips` : "—"}
+                  {stopLossPips ? `${stopLossPips} ${stopLossUnit}` : "—"}
                 </p>
               </button>
               <button
@@ -501,7 +638,7 @@ export const Calculator = () => {
                   <p className="text-xs text-muted-foreground">Take profit</p>
                 </div>
                 <p className="text-lg font-bold text-foreground">
-                  {takeProfitPips ? `${takeProfitPips} pips` : "—"}
+                  {takeProfitPips ? `${takeProfitPips} ${stopLossUnit}` : "—"}
                 </p>
               </button>
             </div>
@@ -543,7 +680,7 @@ export const Calculator = () => {
 
         <p className="mt-4 px-1 text-xs text-muted-foreground">
           {calculation.spec
-            ? `${calculation.spec.displayName} · ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / pip`
+            ? `${calculation.spec.displayName} · ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / ${stopLossUnit} · SL ${formatNumber(calculation.stopLossPips, 1)} ${stopLossUnit}`
             : "Unsupported instrument"}
           {calculation.warning ? ` · ${calculation.warning}` : ""}
         </p>
@@ -594,9 +731,11 @@ export const Calculator = () => {
           <div className="flex-1 overflow-hidden">
             <StopLossSelector
               symbol={selectedPair.symbol}
+              unitLabel={stopLossUnit}
               selectedStopLoss={parseFloat(stopLossPips) || null}
               onSelect={(sl) => {
                 setStopLossPips(sl.toString());
+                syncPriceFieldsFromPips(sl.toString(), takeProfitPips, entryPrice);
                 setShowStopLossSelector(false);
               }}
               accountBalance={parseFloat(accountBalance) || 0}
