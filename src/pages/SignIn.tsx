@@ -65,7 +65,7 @@ const SignIn = () => {
   return (
     <AuthLayout
       title="Welcome back"
-      subtitle="Sign in to sync your journal, signals, and subscription"
+      subtitle="Sign in to continue"
       banner={
         bannerMessage ? (
           <div className="rounded-xl border border-brand/30 bg-accent px-4 py-3 text-sm text-accent-foreground">
@@ -81,7 +81,7 @@ const SignIn = () => {
         />
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <AuthField id="signin-email" label="Email address">
           <input
             id="signin-email"
@@ -109,7 +109,7 @@ const SignIn = () => {
         <button
           type="submit"
           disabled={isLoading}
-          className="mt-2 h-12 w-full rounded-xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">

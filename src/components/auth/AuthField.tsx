@@ -3,7 +3,7 @@ import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const fieldClassName =
-  "h-12 w-full rounded-xl border border-border/60 bg-secondary/60 px-4 text-base text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 hover:bg-secondary/80 focus:border-brand focus:bg-background focus:ring-2 focus:ring-brand/20";
+  "h-14 w-full rounded-2xl border border-white/10 bg-white/[0.06] px-4 text-base text-white outline-none transition-colors placeholder:text-white/35 hover:border-white/15 hover:bg-white/[0.08] focus:border-brand focus:bg-white/[0.08] focus:ring-2 focus:ring-brand/25";
 
 interface AuthFieldProps {
   id: string;
@@ -16,12 +16,12 @@ interface AuthFieldProps {
 export const AuthField = ({ id, label, hint, error, children }: AuthFieldProps) => {
   return (
     <div>
-      <label htmlFor={id} className="mb-2 block text-sm font-semibold text-foreground">
+      <label htmlFor={id} className="mb-2.5 ml-1 block text-sm font-semibold text-white/90">
         {label}
       </label>
       {children}
-      {hint ? <p className="mt-2 text-xs text-muted-foreground">{hint}</p> : null}
-      {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+      {hint ? <p className="ml-1 mt-2 text-xs text-white/50">{hint}</p> : null}
+      {error ? <p className="ml-1 mt-2 text-xs text-red-400">{error}</p> : null}
     </div>
   );
 };
@@ -67,15 +67,15 @@ export const AuthPasswordField = ({
           autoComplete={autoComplete}
           required={required}
           minLength={minLength}
-          className={cn(fieldClassName, "pr-12")}
+          className={cn(fieldClassName, "pr-14")}
         />
         <button
           type="button"
           onClick={onTogglePassword}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-background/60 hover:text-foreground"
+          className="absolute right-3 top-1/2 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-xl text-white/50 transition-colors hover:bg-white/10 hover:text-white"
           aria-label={showPassword ? "Hide password" : "Show password"}
         >
-          {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
         </button>
       </div>
     </AuthField>

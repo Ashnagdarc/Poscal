@@ -66,7 +66,7 @@ const SignUp = () => {
         />
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <AuthField
           id="signup-name"
           label={
@@ -134,7 +134,7 @@ const SignUp = () => {
         <button
           type="submit"
           disabled={isLoading || passwordsMismatch}
-          className="mt-2 h-12 w-full rounded-xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">
@@ -146,7 +146,7 @@ const SignUp = () => {
           )}
         </button>
 
-        <p className="pt-1 text-center text-xs leading-relaxed text-muted-foreground">
+        <p className="pt-1 text-center text-xs leading-relaxed text-white/50">
           By signing up, you agree to our{" "}
           <Link to="/terms" className="text-brand hover:underline">
             Terms
