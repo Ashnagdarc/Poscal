@@ -3,7 +3,10 @@ import { createRoot } from "react-dom/client";
 import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App.tsx";
 import { convexReactClient } from "@/lib/convexClient";
+import { initErrorReporting } from "@/lib/errorReporting";
 import "./index.css";
+
+initErrorReporting();
 
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
 

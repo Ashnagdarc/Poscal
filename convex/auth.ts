@@ -29,13 +29,15 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       }
 
       const email = user.email.trim().toLowerCase();
-      const byUserId = await ctx.db
+      // Auth callback ctx is loosely typed relative to the app schema; cast for profile indexes.
+      const db = ctx.db as any;
+      const byUserId = await db
         .query("profiles")
-        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
+        .withIndex("by_external_user_id", (q: any) => q.eq("externalUserId", args.userId))
         .first();
-      const byEmail = await ctx.db
+      const byEmail = await db
         .query("profiles")
-        .withIndex("by_email", (q) => q.eq("email", email))
+        .withIndex("by_email", (q: any) => q.eq("email", email))
         .first();
 
       // Prefer legacy email-linked profile (may hold uploaded avatar_url from Nest/Postgres).

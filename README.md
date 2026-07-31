@@ -32,6 +32,21 @@ npm install
 npm run dev
 ```
 
+## Quality gates
+
+```bash
+npm run lint
+npm run typecheck
+npm run test
+npm run test:coverage
+npm run build
+npm run test:e2e
+```
+
+CI runs these on every PR via `.github/workflows/ci.yml`.
+
+Optional production error reporting: set `VITE_SENTRY_DSN` (Sentry). Without it, errors still log to the console via `reportError`.
+
 ## Local URLs
 
 - Frontend: `http://localhost:8080`

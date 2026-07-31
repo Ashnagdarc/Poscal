@@ -32,17 +32,21 @@ function getOptionalEnv(name: string) {
   return process.env[name] ?? null;
 }
 
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
 function buildHtmlEmail(title: string, body: string) {
-  const escapedTitle = title
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;");
+  const escapedTitle = escapeHtml(title);
 
   const lines = body
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => `<p>${line.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")}</p>`)
+    .map((line) => `<p>${escapeHtml(line)}</p>`)
     .join("");
 
   return `<!doctype html><html><body><h2>${escapedTitle}</h2>${lines || "<p>No message body.</p>"}</body></html>`;

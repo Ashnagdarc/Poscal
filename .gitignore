@@ -63,3 +63,9 @@ exports/
 # Vercel
 .vercel
 .env*
+
+# Test / coverage artifacts
+coverage/
+playwright-report/
+test-results/
+blob-report/

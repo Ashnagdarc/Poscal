@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
@@ -114,7 +115,7 @@ export const setUserRole = mutation({
       throw new Error("You cannot change your own admin role");
     }
 
-    const targetUser = await ctx.db.get(args.userId as any);
+    const targetUser = await ctx.db.get(args.userId as Id<"users">);
     const profile = await ctx.db
       .query("profiles")
       .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
@@ -545,9 +546,9 @@ export const syncSubscriptionFromPayment = mutation({
       });
     }
 
-    const user = await ctx.db.get(args.userId as any);
+    const user = await ctx.db.get(args.userId as Id<"users">);
     if (user) {
-      await ctx.db.patch(args.userId as any, {
+      await ctx.db.patch(user._id, {
         paymentStatus: args.status === "success" ? "paid" : user.paymentStatus ?? "free",
         subscriptionTier: args.tier,
         subscriptionExpiresAtMs: args.expiresAtMs ?? null,

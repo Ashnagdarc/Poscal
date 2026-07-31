@@ -12,6 +12,7 @@
     "isolatedModules": true,
     "moduleDetection": "force",
     "noEmit": true,
+    "jsx": "react-jsx",
 
     /* Linting */
     "strict": false,
@@ -24,7 +25,6 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "ignoreDeprecations": "6.0",
     "types": ["vitest/globals", "@testing-library/jest-dom"]
   },
   "include": ["src", "src/**/*.test.ts", "src/**/*.test.tsx"]

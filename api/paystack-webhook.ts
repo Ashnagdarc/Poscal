@@ -1,5 +1,9 @@
-import crypto from 'crypto';
 import { convexServerClient, api } from './_convex.js';
+import {
+  parseSuccessfulCharge,
+  verifyPaystackSignature,
+  type PaystackWebhookEvent,
+} from './lib/paystackWebhookCore.js';
 
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
@@ -38,58 +42,32 @@ export default async function handler(req: any, res: any) {
 
   try {
     const rawBody = await buffer(req);
-    const signature = req.headers['x-paystack-signature'] as string;
+    const signature = req.headers['x-paystack-signature'] as string | undefined;
 
-    if (!signature) {
-      return res.status(401).json({ error: 'Missing signature' });
+    const signatureCheck = verifyPaystackSignature(rawBody, signature, PAYSTACK_WEBHOOK_SECRET);
+    if (!signatureCheck.ok) {
+      return res.status(signatureCheck.status).json({ error: signatureCheck.error });
     }
 
-    const computed = crypto.createHmac('sha512', PAYSTACK_WEBHOOK_SECRET).update(rawBody).digest('hex');
-    if (computed !== signature) {
-      return res.status(401).json({ error: 'Invalid signature' });
+    const event = JSON.parse(rawBody.toString('utf8')) as PaystackWebhookEvent;
+    const parsed = parseSuccessfulCharge(event);
+
+    if (parsed && 'error' in parsed) {
+      return res.status(parsed.status).json({ error: parsed.error });
     }
 
-    const event = JSON.parse(rawBody.toString('utf8'));
-
-    if (event?.event === 'charge.success' && event?.data?.status === 'success') {
-      const refParts = (event?.data?.reference || '').split('_');
-      const userId = refParts[1];
-      const tier = refParts[2];
-
-      if (!userId || !tier) {
-        return res.status(400).json({ error: 'Invalid reference format' });
-      }
-
-      const paidAt = Date.now();
-      const expiryDate = new Date(paidAt);
-      if (tier === 'yearly' || tier === 'pro') {
-        expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-      } else if (tier === 'lifetime') {
-        expiryDate.setFullYear(expiryDate.getFullYear() + 100);
-      } else {
-        expiryDate.setMonth(expiryDate.getMonth() + 1);
-      }
-
+    if (parsed) {
       await convexServerClient.mutation(api.admin.syncSubscriptionFromPayment, {
         secret: PAYMENT_SYNC_SECRET,
-        userId,
-        reference: event?.data?.reference,
-        tier,
-        amount: Number(event?.data?.amount || 0) / 100,
-        currency: event?.data?.currency || 'NGN',
+        userId: parsed.userId,
+        reference: parsed.reference,
+        tier: parsed.tier,
+        amount: parsed.amount,
+        currency: parsed.currency,
         status: 'success',
-        expiresAtMs: expiryDate.getTime(),
-        paidAtMs: paidAt,
-        metadata: {
-          source: 'paystack-webhook',
-          channel: event?.data?.channel,
-          ip_address: event?.data?.ip_address,
-          fees: event?.data?.fees || 0,
-          customer_code: event?.data?.customer?.customer_code || null,
-          authorization: event?.data?.authorization,
-          gateway_response: event?.data?.gateway_response,
-          webhook_event: event?.event,
-        },
+        expiresAtMs: parsed.expiresAtMs,
+        paidAtMs: parsed.paidAtMs,
+        metadata: parsed.metadata,
       });
     }
 

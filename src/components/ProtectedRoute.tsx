@@ -6,6 +6,7 @@ import { featureFlagApi } from '@/lib/api';
 import { useAdmin } from '@/hooks/use-admin';
 
 // Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
+// Fail-closed: if the flag cannot be fetched, treat paid lock as enabled so premium routes stay gated.
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -26,24 +27,30 @@ export const ProtectedRoute = ({
 
   useEffect(() => {
     let mounted = true;
-    let timeoutId: NodeJS.Timeout;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    setPaidLockEnabled(null);
 
     (async () => {
       try {
         const enabled = await featureFlagApi.getPaidLock();
         if (mounted) setPaidLockEnabled(!!enabled);
       } catch (err) {
-        console.warn('Could not fetch paid lock flag', err);
-        if (mounted) setPaidLockEnabled(false);
+        console.warn('Could not fetch paid lock flag; failing closed', err);
+        if (mounted) setPaidLockEnabled(true);
       }
     })();
 
-    // Fallback: if API doesn't respond within 5 seconds, default to false
+    // Fallback: if API doesn't respond within 5 seconds, fail closed (lock enabled)
     timeoutId = setTimeout(() => {
-      if (mounted && paidLockEnabled === null) {
-        console.warn('Paid lock API timeout, defaulting to false');
-        setPaidLockEnabled(false);
-      }
+      if (!mounted) return;
+      setPaidLockEnabled((current) => {
+        if (current === null) {
+          console.warn('Paid lock API timeout, defaulting to fail-closed (enabled)');
+          return true;
+        }
+        return current;
+      });
     }, 5000);
 
     return () => {

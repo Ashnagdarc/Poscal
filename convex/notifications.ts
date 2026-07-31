@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -84,7 +85,7 @@ export const getUserEmail = internalQuery({
       return profile.email;
     }
 
-    const user = await ctx.db.get(args.userId as any);
+    const user = await ctx.db.get(args.userId as Id<"users">);
     return user?.email ?? null;
   },
 });
