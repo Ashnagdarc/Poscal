@@ -12,6 +12,7 @@ import {
   Megaphone,
   Palette,
   RotateCcw,
+  RefreshCw,
   Settings as SettingsIcon,
   Shield,
   Smartphone,
@@ -33,6 +34,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
+import { usePWAUpdate } from "@/hooks/use-pwa-update";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { featureFlagApi, subscriptionApi } from "@/lib/api";
@@ -72,7 +74,9 @@ const Settings = () => {
   const [isSavingFont, setIsSavingFont] = useState(false);
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
+  const { updateAvailable, isUpdating, updateApp, checkForUpdate } = usePWAUpdate();
   const { currency, setCurrency } = useCurrency();
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
   const supportsHaptics = typeof isSupported === "function" ? isSupported() : !!isSupported;
 
@@ -168,6 +172,29 @@ const Settings = () => {
     if (installed) {
       toast.success("App installed successfully!");
     }
+  };
+
+  const handleCheckForUpdate = async () => {
+    lightTap();
+    setIsCheckingUpdate(true);
+    try {
+      const found = await checkForUpdate();
+      if (found || updateAvailable) {
+        toast.success("Update available — tap Update app");
+      } else {
+        toast.message("You're on the latest version");
+      }
+    } catch {
+      toast.error("Could not check for updates");
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
+  const handleUpdateApp = async () => {
+    lightTap();
+    toast.message("Updating Poscal…");
+    await updateApp();
   };
 
   const handleRestorePurchase = async () => {
@@ -500,6 +527,31 @@ const Settings = () => {
                 className="border-t border-border/40"
               />
             )}
+
+            <SettingsRow
+              icon={<RefreshCw className={cn("h-4 w-4", (isCheckingUpdate || isUpdating) && "animate-spin")} />}
+              title={updateAvailable ? "Update app" : "Check for updates"}
+              subtitle={
+                updateAvailable
+                  ? "A newer version is ready"
+                  : isCheckingUpdate
+                    ? "Checking…"
+                    : "Refresh the installed PWA"
+              }
+              onClick={() => {
+                if (updateAvailable) {
+                  void handleUpdateApp();
+                  return;
+                }
+                void handleCheckForUpdate();
+              }}
+              trailing={
+                <span className="text-xs font-medium text-muted-foreground">
+                  {updateAvailable ? (isUpdating ? "Updating…" : "Update") : isCheckingUpdate ? "…" : "Check"}
+                </span>
+              }
+              className="border-t border-border/40"
+            />
           </SettingsGroup>
         </section>
 

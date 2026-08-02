@@ -98,16 +98,33 @@ export const usePWAUpdate = () => {
     const waitingWorker = registration?.waiting;
 
     if (!waitingWorker) {
+      // Force a hard reload if the worker already activated but UI is stale.
       clearPendingUpdate();
+      window.location.reload();
       return;
     }
 
     waitingWorker.postMessage({ type: "SKIP_WAITING" });
   }, [clearPendingUpdate]);
 
+  const checkForUpdate = useCallback(async () => {
+    if (!("serviceWorker" in navigator)) return false;
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      if (!registration) return false;
+
+      await registration.update();
+      return showUpdate(registration);
+    } catch {
+      return false;
+    }
+  }, [showUpdate]);
+
   return {
     updateAvailable,
     isUpdating,
     updateApp,
+    checkForUpdate,
   };
 };

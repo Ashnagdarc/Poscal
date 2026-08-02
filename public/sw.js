@@ -1,7 +1,7 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v22-native-pwa';
+const SW_VERSION = 'v23-pwa-update-prompt';
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -12,6 +12,14 @@ log(`Loading service worker ${SW_VERSION}`);
 
 // Precache assets injected by Workbox
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST || []);
+
+// Never serve a stale HTML shell when a fresh network version exists.
+workbox.routing.registerRoute(
+  ({ request }) => request.destination === 'script' || request.destination === 'style',
+  new workbox.strategies.StaleWhileRevalidate({
+    cacheName: 'poscal-static-runtime',
+  })
+);
 
 const navigationStrategy = new workbox.strategies.NetworkFirst({
   cacheName: 'poscal-pages',
@@ -36,7 +44,6 @@ workbox.routing.registerRoute(
   }
 );
 
-// Service Worker for Push Notifications
 self.addEventListener('install', (event) => {
   log(`Installing ${SW_VERSION}...`);
 });
@@ -50,13 +57,26 @@ self.addEventListener('message', (event) => {
 self.addEventListener('activate', (event) => {
   log(`Activated ${SW_VERSION}`);
   event.waitUntil(
-    clients.claim().then(() => {
-      return clients.matchAll().then(clients => {
-        clients.forEach(client => {
-          client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
-        });
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys.map((key) => {
+          // Workbox manages its own precache revision list. Clear stale page /
+          // runtime caches so the next load is not stuck on an old shell.
+          if (key === 'poscal-pages' || key === 'poscal-static-runtime') {
+            log(`Deleting old cache ${key}`);
+            return caches.delete(key);
+          }
+          return Promise.resolve(false);
+        }),
+      );
+
+      await self.clients.claim();
+      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      allClients.forEach((client) => {
+        client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
       });
-    })
+    })()
   );
 });
 

@@ -14,6 +14,7 @@ import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { AppUpdateModal } from "./components/AppUpdateModal";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
+import { PWAUpdateBanner } from "./components/PWAUpdateBanner";
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
 
@@ -42,6 +43,7 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
+      <PWAUpdateBanner />
       <AppUpdateModal />
       <PWAInstallPrompt />
       <Suspense

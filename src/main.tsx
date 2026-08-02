@@ -9,9 +9,16 @@ import "./index.css";
 initErrorReporting();
 
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
+const UPDATE_EVENT_NAME = "poscal:pwa-update-available";
+const UPDATE_POLL_MS = 5 * 60 * 1000;
 
-const activateWaitingWorker = (registration: ServiceWorkerRegistration) => {
-  registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+const notifyUpdateAvailable = (registration: ServiceWorkerRegistration) => {
+  if (!registration.waiting) return;
+  window.dispatchEvent(
+    new CustomEvent(UPDATE_EVENT_NAME, {
+      detail: { registration },
+    }),
+  );
 };
 
 const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
@@ -21,8 +28,10 @@ const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
 };
 
 const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) => {
+  // A waiting worker means a new build is ready — prompt the user instead of
+  // silently swapping (which can strand PWAs on a half-applied cache).
   if (registration.waiting && navigator.serviceWorker.controller) {
-    activateWaitingWorker(registration);
+    notifyUpdateAvailable(registration);
   }
 
   registration.addEventListener("updatefound", () => {
@@ -31,7 +40,7 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
 
     installingWorker.addEventListener("statechange", () => {
       if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-        activateWaitingWorker(registration);
+        notifyUpdateAvailable(registration);
       }
     });
   });
@@ -45,23 +54,20 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
   window.addEventListener("online", () => requestUpdateCheck(registration));
   window.addEventListener("focus", () => requestUpdateCheck(registration));
   document.addEventListener("visibilitychange", checkWhenVisible);
+  window.setInterval(() => requestUpdateCheck(registration), UPDATE_POLL_MS);
 };
 
-// Register service worker for push notifications if enabled
-const ENABLE_SW = import.meta.env.VITE_ENABLE_SW === "true";
+// Enable SW in production by default so installed PWAs keep receiving updates.
+// Locally require an explicit opt-in to avoid noisy HMR/service-worker fights.
+const ENABLE_SW =
+  import.meta.env.VITE_ENABLE_SW === "true"
+  || (import.meta.env.PROD && import.meta.env.VITE_ENABLE_SW !== "false");
+
 if (ENABLE_SW && "serviceWorker" in navigator) {
-  const hadServiceWorkerController = Boolean(navigator.serviceWorker.controller);
-
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    if (hadServiceWorkerController) {
-      window.location.reload();
-    }
-  });
-
   const registerServiceWorker = async () => {
     try {
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("SW registration timeout")), SW_REGISTRATION_TIMEOUT_MS)
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("SW registration timeout")), SW_REGISTRATION_TIMEOUT_MS),
       );
 
       const existingRegistration = await navigator.serviceWorker.getRegistration("/");
@@ -69,20 +75,30 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
         ? Promise.resolve(existingRegistration)
         : navigator.serviceWorker.register("/sw.js", { scope: "/" });
 
-      const registration = await Promise.race([registrationPromise, timeoutPromise]) as ServiceWorkerRegistration;
-      watchRegistrationForUpdates(registration);
-      requestUpdateCheck(registration);
-      if (import.meta.env.DEV) console.log("[sw] Service worker registered successfully:", registration);
+      const registration = await Promise.race([
+        registrationPromise,
+        timeoutPromise,
+      ]) as ServiceWorkerRegistration;
+
+      // Always re-register against the latest URL so Vercel deploys can replace
+      // a stale worker that was installed from an older build.
+      if (existingRegistration) {
+        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
+      }
+
+      const latest = (await navigator.serviceWorker.getRegistration("/")) ?? registration;
+      watchRegistrationForUpdates(latest);
+      requestUpdateCheck(latest);
+      if (import.meta.env.DEV) console.log("[sw] Service worker registered:", latest);
     } catch (error) {
       if (import.meta.env.DEV) console.error("[sw] Failed to register service worker:", error);
     }
   };
 
-  // Register after DOM is ready
   if (document.readyState === "complete") {
-    registerServiceWorker();
+    void registerServiceWorker();
   } else {
-    window.addEventListener("load", registerServiceWorker, { once: true });
+    window.addEventListener("load", () => void registerServiceWorker(), { once: true });
   }
 }
 
@@ -91,5 +107,5 @@ createRoot(document.getElementById("root")!).render(
     <ConvexAuthProvider client={convexReactClient}>
       <App />
     </ConvexAuthProvider>
-  </StrictMode>
+  </StrictMode>,
 );
