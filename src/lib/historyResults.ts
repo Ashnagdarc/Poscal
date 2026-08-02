@@ -1,4 +1,5 @@
 import type { JournalEntry } from "@/lib/calculatorHistory";
+import type { JournalTrade } from "@/lib/convexJournal";
 
 export type ResultDayTone = "positive" | "negative" | "neutral" | "missed" | "none";
 
@@ -16,9 +17,24 @@ export interface ResultHeatmapDay {
   tradeCount: number;
 }
 
-const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
+interface NormalizedResult {
+  date: Date;
+  status: "win" | "loss" | "breakeven" | "cancelled";
+  pnlAmount: number | null;
+  resultR: number | null;
+}
 
-const parseDateKey = (dateKey: string) => new Date(`${dateKey}T12:00:00`);
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const parseDateKey = (dateKey: string) => {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day, 12, 0, 0);
+};
 
 export const startOfDay = (date: Date) =>
   new Date(date.getFullYear(), date.getMonth(), date.getDate());
@@ -35,50 +51,106 @@ const formatDaySummaryAmount = (value: number, suffix = "") => {
   return `${prefix}${fixed}${suffix}`;
 };
 
-export const buildResultDaySummaries = (items: JournalEntry[]) => {
+const resolveCalculatorResultDate = (item: JournalEntry) => {
+  if (item.closedAt) return startOfDay(item.closedAt);
+  if (item.openedAt) return startOfDay(item.openedAt);
+  return startOfDay(item.updatedAt ?? item.createdAt);
+};
+
+const normalizeCalculatorResults = (items: JournalEntry[]): NormalizedResult[] => {
+  return items
+    .filter((item) => item.status === "win" || item.status === "loss" || item.status === "breakeven" || item.status === "cancelled")
+    .map((item) => ({
+      date: resolveCalculatorResultDate(item),
+      status: item.status as NormalizedResult["status"],
+      pnlAmount: item.pnlAmount ?? null,
+      resultR: item.resultR ?? null,
+    }));
+};
+
+const normalizeManualTrades = (trades: JournalTrade[]): NormalizedResult[] => {
+  return trades
+    .filter((trade) => trade.status === "closed")
+    .map((trade) => {
+      const rawDate = trade.exit_date ?? trade.entry_date ?? trade.created_at;
+      const pnl = trade.pnl;
+      const status: NormalizedResult["status"] =
+        pnl === null || pnl === undefined
+          ? "breakeven"
+          : pnl > 0
+            ? "win"
+            : pnl < 0
+              ? "loss"
+              : "breakeven";
+
+      return {
+        date: startOfDay(new Date(rawDate)),
+        status,
+        pnlAmount: pnl ?? 0,
+        resultR: null,
+      };
+    })
+    .filter((item) => !Number.isNaN(item.date.getTime()));
+};
+
+const summarizeDay = (dayItems: NormalizedResult[]): Omit<ResultDaySummary, "dateKey"> => {
+  const tradeCount = dayItems.length;
+  const allHavePnl = dayItems.every((entry) => entry.pnlAmount !== null && entry.pnlAmount !== undefined);
+  const allHaveResultR = dayItems.every((entry) => entry.resultR !== null && entry.resultR !== undefined);
+
+  if (allHavePnl && dayItems.length > 0) {
+    const totalPnl = dayItems.reduce((sum, entry) => sum + (entry.pnlAmount ?? 0), 0);
+    return {
+      tradeCount,
+      tone: totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "neutral",
+      label: `${totalPnl > 0 ? "+" : totalPnl < 0 ? "-" : ""}$${Math.abs(totalPnl) >= 100 ? Math.abs(totalPnl).toFixed(0) : Math.abs(totalPnl).toFixed(1)}`,
+    };
+  }
+
+  if (allHaveResultR && dayItems.length > 0) {
+    const totalR = dayItems.reduce((sum, entry) => sum + (entry.resultR ?? 0), 0);
+    return {
+      tradeCount,
+      tone: totalR > 0 ? "positive" : totalR < 0 ? "negative" : "neutral",
+      label: formatDaySummaryAmount(totalR, "R"),
+    };
+  }
+
+  const wins = dayItems.filter((entry) => entry.status === "win").length;
+  const losses = dayItems.filter((entry) => entry.status === "loss").length;
+
+  return {
+    tradeCount,
+    tone: wins > losses ? "positive" : losses > wins ? "negative" : "neutral",
+    label: wins || losses ? `W${wins}/L${losses}` : `${tradeCount}T`,
+  };
+};
+
+export const buildResultDaySummaries = (
+  items: JournalEntry[],
+  manualTrades: JournalTrade[] = [],
+) => {
   const summaries = new Map<string, ResultDaySummary>();
-  const closedItems = items.filter((item) => item.status !== "open" && item.closedAt);
+  const normalized = [
+    ...normalizeCalculatorResults(items),
+    ...normalizeManualTrades(manualTrades),
+  ];
 
-  for (const item of closedItems) {
-    const closedAt = startOfDay(item.closedAt ?? item.updatedAt);
-    const dateKey = toDateKey(closedAt);
-    const existing = summaries.get(dateKey);
-    const tradeCount = (existing?.tradeCount ?? 0) + 1;
-
-    const dayItems = closedItems.filter(
-      (entry) => entry.closedAt && isSameDay(entry.closedAt, closedAt),
-    );
-
-    const allHavePnl = dayItems.every(
-      (entry) => entry.pnlAmount !== null && entry.pnlAmount !== undefined,
-    );
-    const allHaveResultR = dayItems.every(
-      (entry) => entry.resultR !== null && entry.resultR !== undefined,
-    );
-
-    let tone: ResultDayTone = "neutral";
-    let label = `${tradeCount}T`;
-
-    if (allHavePnl && dayItems.length > 0) {
-      const totalPnl = dayItems.reduce((sum, entry) => sum + (entry.pnlAmount ?? 0), 0);
-      tone = totalPnl > 0 ? "positive" : totalPnl < 0 ? "negative" : "neutral";
-      label = `${totalPnl > 0 ? "+" : totalPnl < 0 ? "-" : ""}$${Math.abs(totalPnl) >= 100 ? Math.abs(totalPnl).toFixed(0) : Math.abs(totalPnl).toFixed(1)}`;
-    } else if (allHaveResultR && dayItems.length > 0) {
-      const totalR = dayItems.reduce((sum, entry) => sum + (entry.resultR ?? 0), 0);
-      tone = totalR > 0 ? "positive" : totalR < 0 ? "negative" : "neutral";
-      label = formatDaySummaryAmount(totalR, "R");
+  const byDay = new Map<string, NormalizedResult[]>();
+  for (const item of normalized) {
+    const dateKey = toDateKey(item.date);
+    const bucket = byDay.get(dateKey);
+    if (bucket) {
+      bucket.push(item);
     } else {
-      const wins = dayItems.filter((entry) => entry.status === "win").length;
-      const losses = dayItems.filter((entry) => entry.status === "loss").length;
-      tone = wins > losses ? "positive" : losses > wins ? "negative" : "neutral";
-      label = wins || losses ? `W${wins}/L${losses}` : `${tradeCount}T`;
+      byDay.set(dateKey, [item]);
     }
+  }
 
+  for (const [dateKey, dayItems] of byDay) {
     summaries.set(dateKey, {
       dateKey,
-      tradeCount,
-      tone,
-      label,
+      ...summarizeDay(dayItems),
     });
   }
 
@@ -112,6 +184,70 @@ export const buildResultHeatmapDays = (
   }
 
   return days;
+};
+
+export interface MonthlyReturnsGrid {
+  years: number[];
+  returns: number[][];
+}
+
+/** Build years × months percent returns from closed trades and calculator results. */
+export const buildMonthlyReturnsGrid = (
+  items: JournalEntry[],
+  manualTrades: JournalTrade[] = [],
+  today: Date = new Date(),
+  startingBalance?: number | null,
+): MonthlyReturnsGrid => {
+  const normalized = [
+    ...normalizeCalculatorResults(items),
+    ...normalizeManualTrades(manualTrades),
+  ];
+
+  const capitalCandidates = items
+    .map((item) => item.accountBalance)
+    .filter((value): value is number => typeof value === "number" && value > 0);
+  const baseCapital =
+    startingBalance && startingBalance > 0
+      ? startingBalance
+      : capitalCandidates.length
+        ? capitalCandidates.reduce((sum, value) => sum + value, 0) / capitalCandidates.length
+        : 10000;
+
+  const monthlyPnl = new Map<string, number>();
+  for (const item of normalized) {
+    if (item.pnlAmount === null || item.pnlAmount === undefined) continue;
+    const key = `${item.date.getFullYear()}-${item.date.getMonth()}`;
+    monthlyPnl.set(key, (monthlyPnl.get(key) ?? 0) + item.pnlAmount);
+  }
+
+  const currentYear = today.getFullYear();
+  let minYear = currentYear;
+  let maxYear = currentYear;
+
+  for (const item of normalized) {
+    const year = item.date.getFullYear();
+    minYear = Math.min(minYear, year);
+    maxYear = Math.max(maxYear, year);
+  }
+
+  // Keep a short readable window when history is sparse.
+  if (maxYear - minYear < 2) {
+    minYear = Math.max(minYear - 1, currentYear - 4);
+  }
+
+  const years: number[] = [];
+  for (let year = minYear; year <= maxYear; year += 1) {
+    years.push(year);
+  }
+
+  const returns = years.map((year) =>
+    Array.from({ length: 12 }, (_, month) => {
+      const pnl = monthlyPnl.get(`${year}-${month}`) ?? 0;
+      return Math.round((pnl / baseCapital) * 1000) / 10;
+    }),
+  );
+
+  return { years, returns };
 };
 
 export const formatResultDayTooltip = (

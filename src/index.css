@@ -4,6 +4,20 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Font pairings — switched via html[data-font] (admin app setting) */
+:root,
+html[data-font="classic"] {
+  --font-sans: "DM Sans", sans-serif;
+  --font-display: "Syne", "DM Sans", sans-serif;
+}
+
+/* TradingView public site stack (in.tradingview.com) */
+html[data-font="markets"] {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif;
+  font-feature-settings: "tnum" 1, "lnum" 1;
+}
+
 @keyframes marquee-right {
   0% { transform: translateX(-50%); }
   100% { transform: translateX(0%); }
@@ -106,11 +120,11 @@
     overflow-y: visible;
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
-    font-family: 'DM Sans', sans-serif;
+    font-family: var(--font-sans);
   }
 
   h1, h2, h3, .font-display {
-    font-family: 'Syne', 'DM Sans', sans-serif;
+    font-family: var(--font-display);
   }
 
   #root {
@@ -208,7 +222,7 @@
 .apple-note-editor .ProseMirror {
   min-height: 16rem;
   outline: none;
-  font-family: "DM Sans", sans-serif;
+  font-family: var(--font-sans);
   letter-spacing: 0.01em;
   line-height: 1.62;
   font-size: 16px;

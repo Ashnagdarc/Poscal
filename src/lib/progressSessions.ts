@@ -13,6 +13,7 @@ export interface ProgressTask {
 
 export interface ProgressSession {
   id: string;
+  journalId?: string | null;
   dateKey: string;
   phase: ProgressPhase;
   preMarketNotes: string;
@@ -45,8 +46,9 @@ const toDateKey = (date: Date) => {
   return `${year}-${month}-${day}`;
 };
 
-export const createEmptySession = (dateKey: string): ProgressSession => ({
+export const createEmptySession = (dateKey: string, journalId?: string | null): ProgressSession => ({
   id: `local-${dateKey}`,
+  journalId: journalId ?? null,
   dateKey,
   phase: "pre_market",
   preMarketNotes: "",
@@ -60,6 +62,7 @@ export const createEmptySession = (dateKey: string): ProgressSession => ({
 
 const fromConvexRow = (row: {
   _id: string;
+  journalId?: string | null;
   dateKey: string;
   phase: ProgressPhase;
   preMarketNotes?: string | null;
@@ -71,6 +74,7 @@ const fromConvexRow = (row: {
   updatedAtMs: number;
 }): ProgressSession => ({
   id: row._id,
+  journalId: row.journalId ?? null,
   dateKey: row.dateKey,
   phase: row.phase,
   preMarketNotes: row.preMarketNotes ?? "",
@@ -111,11 +115,15 @@ const upsertLocalSession = (userId: string, session: ProgressSession) => {
   return session;
 };
 
-export const listProgressSessions = async (userId: string): Promise<ProgressSession[]> => {
+export const listProgressSessions = async (
+  userId: string,
+  journalId?: string | null,
+): Promise<ProgressSession[]> => {
   if (convexClient) {
     try {
       const rows = await convexClient.query(api.progressSessions.listForUser, {
         userId,
+        journalId: (journalId as any) ?? null,
         limit: 120,
       });
       const sessions = rows.map(fromConvexRow);
@@ -126,18 +134,22 @@ export const listProgressSessions = async (userId: string): Promise<ProgressSess
     }
   }
 
-  return readLocalSessions(userId);
+  return readLocalSessions(userId).filter((session) =>
+    !journalId || !session.journalId || session.journalId === journalId,
+  );
 };
 
 export const getProgressSessionForDay = async (
   userId: string,
   dateKey: string,
+  journalId?: string | null,
 ): Promise<ProgressSession> => {
   if (convexClient) {
     try {
       const row = await convexClient.query(api.progressSessions.getForDay, {
         userId,
         dateKey,
+        journalId: (journalId as any) ?? null,
       });
       if (row) {
         const session = fromConvexRow(row);
@@ -149,16 +161,22 @@ export const getProgressSessionForDay = async (
     }
   }
 
-  const local = readLocalSessions(userId).find((session) => session.dateKey === dateKey);
-  return local ?? createEmptySession(dateKey);
+  const local = readLocalSessions(userId).find((session) =>
+    session.dateKey === dateKey
+    && (!journalId || !session.journalId || session.journalId === journalId),
+  );
+  return local ?? createEmptySession(dateKey, journalId);
 };
 
 export const saveProgressSession = async (
   userId: string,
   session: ProgressSession,
+  journalId?: string | null,
 ): Promise<ProgressSession> => {
+  const resolvedJournalId = journalId ?? session.journalId ?? null;
   const payload = {
     ...session,
+    journalId: resolvedJournalId,
     updatedAt: new Date().toISOString(),
     journalCreated:
       session.journalCreated
@@ -172,6 +190,7 @@ export const saveProgressSession = async (
     try {
       const row = await convexClient.mutation(api.progressSessions.upsertDay, {
         userId,
+        journalId: (resolvedJournalId as any) ?? null,
         dateKey: payload.dateKey,
         phase: payload.phase,
         preMarketNotes: payload.preMarketNotes || null,

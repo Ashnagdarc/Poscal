@@ -1,7 +1,9 @@
 import { Calendar } from "@/components/ui/calendar";
+import { cn } from "@/lib/utils";
 import {
   isSameDay,
   startOfDay,
+  toDateKey,
   type ResultDaySummary,
 } from "@/lib/historyResults";
 
@@ -23,13 +25,13 @@ export const ResultsCalendar = ({
   today,
 }: ResultsCalendarProps) => {
   const dayModifiers = {
-    positive: (date: Date) => summaries.get(date.toISOString().slice(0, 10))?.tone === "positive",
-    negative: (date: Date) => summaries.get(date.toISOString().slice(0, 10))?.tone === "negative",
-    neutral: (date: Date) => summaries.get(date.toISOString().slice(0, 10))?.tone === "neutral",
+    positive: (date: Date) => summaries.get(toDateKey(date))?.tone === "positive",
+    negative: (date: Date) => summaries.get(toDateKey(date))?.tone === "negative",
+    neutral: (date: Date) => summaries.get(toDateKey(date))?.tone === "neutral",
     missed: (date: Date) => {
       const day = startOfDay(date);
       if (day >= today) return false;
-      return !summaries.has(day.toISOString().slice(0, 10));
+      return !summaries.has(toDateKey(day));
     },
   };
 
@@ -67,41 +69,63 @@ export const ResultsCalendar = ({
         row: "mt-1 flex w-full sm:mt-2",
         cell: "relative w-[14.28%] basis-[14.28%] p-0.5 sm:p-1",
         day: "h-11 w-full rounded-lg p-0 text-foreground hover:bg-secondary/80 sm:h-14 sm:rounded-xl",
-        day_selected: "bg-brand/15 text-foreground ring-1 ring-brand/40 hover:bg-brand/20",
-        day_today: "bg-secondary text-foreground ring-1 ring-border",
+        day_selected: "bg-transparent text-foreground ring-2 ring-brand ring-offset-1 ring-offset-background hover:bg-transparent",
+        day_today: "bg-transparent text-foreground",
         day_outside: "opacity-30",
       }}
       modifiersClassNames={{
-        positive: "border border-emerald-500/35 bg-emerald-500/12",
-        negative: "border border-red-500/35 bg-red-500/12",
-        neutral: "border border-slate-500/35 bg-slate-500/12",
-        missed: "border border-border/70 bg-background/60",
+        positive: "!bg-emerald-500/20 !text-foreground",
+        negative: "!bg-red-500/20 !text-foreground",
+        neutral: "!bg-slate-500/20 !text-foreground",
+        missed: "!bg-background/60",
       }}
       components={{
         DayContent: ({ date, activeModifiers }: { date: Date; activeModifiers: Record<string, boolean> }) => {
-          const dateKey = date.toISOString().slice(0, 10);
+          const dateKey = toDateKey(date);
           const summary = summaries.get(dateKey);
           const isFuture = startOfDay(date) > today;
-          const isMissed = activeModifiers.missed;
+          const isMissed = Boolean(activeModifiers.missed) && !summary;
           const isCurrentMonth = date.getMonth() === month.getMonth();
+          const toneClass = summary?.tone === "positive"
+            ? "border border-emerald-500/50 bg-emerald-500/20"
+            : summary?.tone === "negative"
+              ? "border border-red-500/50 bg-red-500/20"
+              : summary?.tone === "neutral"
+                ? "border border-slate-400/50 bg-slate-500/20"
+                : isMissed
+                  ? "border border-border/50 bg-background/40"
+                  : isSameDay(date, today)
+                    ? "border border-border bg-secondary/70"
+                    : "";
 
           return (
-            <div className="flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg sm:gap-1 sm:rounded-xl">
+            <div
+              className={cn(
+                "flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg sm:gap-1 sm:rounded-xl",
+                isCurrentMonth && toneClass,
+              )}
+            >
               <span className="text-xs font-semibold leading-none sm:text-sm">
                 {date.getDate()}
               </span>
               {isCurrentMonth && summary && (
                 <>
                   <span
-                    className={`h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5 ${
-                      summary.tone === "positive"
-                        ? "bg-emerald-400"
-                        : summary.tone === "negative"
-                          ? "bg-red-400"
-                          : "bg-slate-300"
-                    }`}
+                    className={cn(
+                      "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
+                      summary.tone === "positive" && "bg-emerald-400",
+                      summary.tone === "negative" && "bg-red-400",
+                      summary.tone === "neutral" && "bg-slate-300",
+                    )}
                   />
-                  <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
+                  <span
+                    className={cn(
+                      "hidden text-[9px] font-semibold leading-none sm:inline",
+                      summary.tone === "positive" && "text-emerald-400",
+                      summary.tone === "negative" && "text-red-400",
+                      summary.tone === "neutral" && "text-slate-300",
+                    )}
+                  >
                     {summary.label}
                   </span>
                 </>

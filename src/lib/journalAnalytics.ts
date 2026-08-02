@@ -1,4 +1,5 @@
 import type { JournalTrade } from "@/lib/convexJournal";
+import type { JournalEntry } from "@/lib/calculatorHistory";
 
 export interface JournalStats {
   totalTrades: number;
@@ -42,10 +43,23 @@ export interface CumulativePnlPoint {
   value: number;
 }
 
+export interface EquityCurvePoint {
+  label: string;
+  value: number;
+  tradePnl: number;
+  pair: string | null;
+  dateKey: string;
+}
+
 const DAY_NAMES = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"] as const;
 const SHORT_DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
-const toDateKey = (date: Date) => date.toISOString().slice(0, 10);
+const toDateKey = (date: Date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const getTradeDate = (trade: JournalTrade): Date | null => {
   const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
@@ -130,6 +144,95 @@ export const computeCumulativePnl = (dailyPoints: DailyPnlPoint[]): CumulativePn
     running += point.pnl;
     return { label: point.label, value: running };
   });
+};
+
+/** Trade-by-trade equity curve so individual wins/losses show as rises and dips. */
+export const computeEquityCurve = (
+  trades: JournalTrade[],
+  calculatorResults: JournalEntry[] = [],
+  startingBalance = 0,
+): EquityCurvePoint[] => {
+  type TimedResult = {
+    date: Date;
+    pnl: number;
+    pair: string;
+    createdAt: string;
+  };
+
+  const timed: TimedResult[] = [];
+
+  for (const trade of trades) {
+    const pnl = getClosedPnl(trade);
+    const date = getTradeDate(trade);
+    if (pnl === null || !date) continue;
+    timed.push({
+      date,
+      pnl,
+      pair: trade.pair,
+      createdAt: trade.created_at,
+    });
+  }
+
+  for (const item of calculatorResults) {
+    if (
+      item.status !== "win"
+      && item.status !== "loss"
+      && item.status !== "breakeven"
+    ) {
+      continue;
+    }
+
+    const date = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
+    if (!date || Number.isNaN(date.getTime())) continue;
+
+    let pnl = item.pnlAmount;
+    if (pnl === null || pnl === undefined || !Number.isFinite(pnl)) {
+      if (item.resultR !== null && item.resultR !== undefined && Number.isFinite(item.resultR)) {
+        pnl = item.resultR * (item.riskAmount || 0);
+      } else if (item.status === "win") {
+        pnl = item.potentialProfit ?? item.riskAmount ?? 0;
+      } else if (item.status === "loss") {
+        pnl = -(item.actualRisk ?? item.riskAmount ?? 0);
+      } else {
+        pnl = 0;
+      }
+    }
+
+    timed.push({
+      date,
+      pnl,
+      pair: item.symbol,
+      createdAt: item.createdAt.toISOString(),
+    });
+  }
+
+  timed.sort((left, right) => {
+    const byDate = left.date.getTime() - right.date.getTime();
+    if (byDate !== 0) return byDate;
+    return left.createdAt.localeCompare(right.createdAt);
+  });
+
+  if (!timed.length && startingBalance <= 0) {
+    return [];
+  }
+
+  let running = startingBalance;
+  const points: EquityCurvePoint[] = [
+    { label: "Start", value: startingBalance, tradePnl: 0, pair: null, dateKey: "" },
+  ];
+
+  for (const item of timed) {
+    running += item.pnl;
+    points.push({
+      label: item.date.toLocaleDateString("en-US", { month: "short", day: "numeric" }),
+      value: running,
+      tradePnl: item.pnl,
+      pair: item.pair,
+      dateKey: toDateKey(item.date),
+    });
+  }
+
+  return points;
 };
 
 export const computeDayOfWeekPerformance = (trades: JournalTrade[]): DayOfWeekPerformance[] => {

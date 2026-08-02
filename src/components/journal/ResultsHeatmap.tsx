@@ -5,6 +5,7 @@ import {
   parseDateKey,
   resultToneClassName,
   startOfDay,
+  toDateKey,
   type ResultHeatmapDay,
   type ResultDayTone,
 } from "@/lib/historyResults";
@@ -28,10 +29,10 @@ const toWeekKey = (dateKey: string) => {
   const dow = date.getDay();
   const monday = new Date(date);
   monday.setDate(monday.getDate() - (dow === 0 ? 6 : dow - 1));
-  return monday.toISOString().slice(0, 10);
+  return toDateKey(monday);
 };
 
-const dateKeyFromDate = (date: Date) => date.toISOString().slice(0, 10);
+const dateKeyFromDate = (date: Date) => toDateKey(date);
 
 const buildHeatmapWeekColumns = (days: ResultHeatmapDay[]): HeatmapWeekColumn[] => {
   if (!days.length) return [];
@@ -52,26 +53,36 @@ const buildHeatmapWeekColumns = (days: ResultHeatmapDay[]): HeatmapWeekColumn[] 
 
   const columns: HeatmapWeekColumn[] = [];
   const cursor = new Date(gridStart);
-  let lastMonth = -1;
+  let lastLabeledMonth = -1;
 
   while (cursor <= gridEnd) {
     const weekStart = new Date(cursor);
     const weekDays: Array<ResultHeatmapDay | null> = [];
+    let monthBoundaryDate: Date | null = null;
 
     for (let index = 0; index < 7; index += 1) {
       const current = new Date(cursor);
-      const dateKey = current.toISOString().slice(0, 10);
+      const dateKey = dateKeyFromDate(current);
       const inRange = current >= firstDate && current <= lastDate;
       weekDays.push(inRange ? (dayMap.get(dateKey) ?? { dateKey, tone: "none", label: "", tradeCount: 0 }) : null);
+
+      if (inRange && current.getDate() === 1) {
+        monthBoundaryDate = current;
+      }
+
       cursor.setDate(cursor.getDate() + 1);
     }
 
-    const month = weekStart.getMonth();
-    const isMonthStart = month !== lastMonth;
-    const monthLabel = isMonthStart
-      ? weekStart.toLocaleDateString("en-US", { month: "short" })
+    const labelDate = monthBoundaryDate ?? (columns.length === 0 ? weekStart : null);
+    const labelMonth = labelDate?.getMonth() ?? -1;
+    const isMonthStart = Boolean(labelDate) && labelMonth !== lastLabeledMonth;
+    const monthLabel = isMonthStart && labelDate
+      ? labelDate.toLocaleDateString("en-US", { month: "short" })
       : null;
-    lastMonth = month;
+
+    if (isMonthStart) {
+      lastLabeledMonth = labelMonth;
+    }
 
     columns.push({
       key: dateKeyFromDate(weekStart),
@@ -97,7 +108,7 @@ export const ResultsHeatmap = ({
 }: ResultsHeatmapProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const today = useMemo(() => startOfDay(new Date()), []);
-  const todayKey = today.toISOString().slice(0, 10);
+  const todayKey = toDateKey(today);
   const weekColumns = useMemo(() => buildHeatmapWeekColumns(days), [days]);
 
   const selectedWeekKey = useMemo(() => {

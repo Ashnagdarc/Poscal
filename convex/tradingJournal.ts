@@ -9,15 +9,27 @@ const nullableAnyArg = v.optional(v.union(v.any(), v.null()));
 export const listForUser = query({
   args: {
     userId: v.string(),
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     status: nullableStringArg,
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const rows = await ctx.db
-      .query("tradingJournal")
-      .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
-      .order("desc")
-      .take(args.limit ?? 200);
+    let rows;
+    if (args.journalId) {
+      rows = await ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", args.userId).eq("journalId", args.journalId),
+        )
+        .order("desc")
+        .take(args.limit ?? 200);
+    } else {
+      rows = await ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
+        .order("desc")
+        .take(args.limit ?? 200);
+    }
 
     if (!args.status || args.status === "all") {
       return rows;
@@ -30,6 +42,7 @@ export const listForUser = query({
 export const createEntry = mutation({
   args: {
     userId: v.string(),
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     externalId: nullableStringArg,
     pair: v.string(),
     direction: v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short")),
@@ -58,6 +71,7 @@ export const createEntry = mutation({
     const now = Date.now();
     const insertedId = await ctx.db.insert("tradingJournal", {
       ...args,
+      journalId: args.journalId ?? null,
       createdAtMs: now,
       updatedAtMs: now,
     });
@@ -132,6 +146,7 @@ export const saveMany = mutation({
   args: {
     items: v.array(v.object({
       userId: v.string(),
+      journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
       externalId: nullableStringArg,
       pair: v.string(),
       direction: v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short")),
@@ -164,6 +179,7 @@ export const saveMany = mutation({
     for (const item of args.items) {
       ids.push(await ctx.db.insert("tradingJournal", {
         ...item,
+        journalId: item.journalId ?? null,
         createdAtMs: now,
         updatedAtMs: now,
       }));

@@ -22,6 +22,7 @@ import type * as progressSessions from "../progressSessions.js";
 import type * as signals from "../signals.js";
 import type * as status from "../status.js";
 import type * as tradingJournal from "../tradingJournal.js";
+import type * as tradingJournals from "../tradingJournals.js";
 import type * as users from "../users.js";
 
 import type {
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   signals: typeof signals;
   status: typeof status;
   tradingJournal: typeof tradingJournal;
+  tradingJournals: typeof tradingJournals;
   users: typeof users;
 }>;
 

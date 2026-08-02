@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
+import { useJournal } from '@/contexts/JournalContext';
 import {
   createJournalEntry,
   deleteJournalEntry,
@@ -14,17 +15,18 @@ type Trade = JournalTrade;
 
 export const useTradesQuery = () => {
   const { user } = useAuth();
+  const { activeJournalId } = useJournal();
 
   return useQuery({
-    queryKey: [...TRADES_QUERY_KEY, user?.id],
+    queryKey: [...TRADES_QUERY_KEY, user?.id, activeJournalId],
     queryFn: async (): Promise<Trade[]> => {
       if (!user) {
         throw new Error('User not authenticated');
       }
 
-      return await listJournalEntries(user.id);
+      return await listJournalEntries(user.id, undefined, activeJournalId);
     },
-    enabled: !!user,
+    enabled: !!user && !!activeJournalId,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
   });
@@ -50,6 +52,7 @@ export interface ManualTradeInput {
 
 export const useAddTradeMutation = () => {
   const { user } = useAuth();
+  const { activeJournalId } = useJournal();
   const queryClient = useQueryClient();
 
   return useMutation({
@@ -57,9 +60,13 @@ export const useAddTradeMutation = () => {
       if (!user) {
         throw new Error('User not authenticated');
       }
+      if (!activeJournalId) {
+        throw new Error('No active journal');
+      }
 
       return await createJournalEntry(user.id, {
         ...newTrade,
+        journal_id: activeJournalId,
         entry_date: newTrade.entry_date ?? new Date().toISOString(),
         exit_date: newTrade.status === 'closed' ? (newTrade.exit_date ?? new Date().toISOString()) : null,
       });

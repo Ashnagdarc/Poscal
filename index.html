@@ -17,11 +17,20 @@
 
     <meta name="twitter:card" content="summary_large_image" />
     <script>
-      // Load theme before page renders to prevent flash
+      // Apply theme + font before paint to prevent flash
       (function() {
-        const theme = localStorage.getItem('theme');
-        if (theme === 'dark') {
-          document.documentElement.classList.add('dark');
+        try {
+          if (localStorage.getItem('theme') === 'dark') {
+            document.documentElement.classList.add('dark');
+          }
+          var font = localStorage.getItem('appFont');
+          if (font === 'classic' || font === 'markets') {
+            document.documentElement.setAttribute('data-font', font);
+          } else {
+            document.documentElement.setAttribute('data-font', 'markets');
+          }
+        } catch (e) {
+          document.documentElement.setAttribute('data-font', 'markets');
         }
       })();
     </script>

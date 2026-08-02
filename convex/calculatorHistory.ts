@@ -24,6 +24,7 @@ const statusArg = v.optional(v.union(
 
 const historyFields = {
   userId: v.string(),
+  journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
   clientId: nullableStringArg,
   symbol: v.string(),
   orderType: orderTypeArg,
@@ -55,9 +56,20 @@ const historyFields = {
 export const listForUser = query({
   args: {
     userId: v.string(),
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    if (args.journalId) {
+      return await ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", args.userId).eq("journalId", args.journalId),
+        )
+        .order("desc")
+        .take(args.limit ?? 20);
+    }
+
     return await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
@@ -79,6 +91,7 @@ export const save = mutation({
 
     const row = {
       userId: args.userId,
+      journalId: args.journalId ?? existing?.journalId ?? null,
       clientId: args.clientId ?? null,
       symbol: args.symbol,
       orderType: args.orderType ?? null,
@@ -134,6 +147,7 @@ export const saveMany = mutation({
 
       const row = {
         userId: item.userId,
+        journalId: item.journalId ?? existing?.journalId ?? null,
         clientId: item.clientId ?? null,
         symbol: item.symbol,
         orderType: item.orderType ?? null,

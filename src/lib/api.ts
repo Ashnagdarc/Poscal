@@ -106,6 +106,26 @@ export const featureFlagApi = {
       throw new Error(parseFeatureFlagError(err));
     }
   },
+
+  getAppFont: async (): Promise<string> => {
+    try {
+      const fontId = await convexClient.query(convexApi.admin.getAppFont, {});
+      return typeof fontId === 'string' ? fontId : 'markets';
+    } catch (err) {
+      logger.error('[feature-flag] App font fetch error:', err);
+      throw new Error(parseFeatureFlagError(err));
+    }
+  },
+
+  setAppFont: async (fontId: string): Promise<string> => {
+    try {
+      const updated = await getAuthenticatedConvexClient().mutation(convexApi.admin.setAppFont, { fontId });
+      return typeof updated === 'string' ? updated : fontId;
+    } catch (err) {
+      logger.error('[feature-flag] App font update error:', err);
+      throw new Error(parseFeatureFlagError(err));
+    }
+  },
 };
 
 export const systemApi = {

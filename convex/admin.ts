@@ -8,7 +8,16 @@ const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 const nullableAnyArg = v.optional(v.union(v.any(), v.null()));
 const PAID_LOCK_KEY = "signals_paid_lock_enabled";
+const APP_FONT_KEY = "app_font";
 const INGESTOR_HEALTH_KEY = "primary";
+const APP_FONT_IDS = ["classic", "markets"] as const;
+
+const resolveAppFontId = (value?: string | null) => {
+  if (value && (APP_FONT_IDS as readonly string[]).includes(value)) {
+    return value;
+  }
+  return "markets";
+};
 
 const isElevatedRole = (role?: string | null) => role === "admin" || role === "super_admin";
 
@@ -79,6 +88,50 @@ export const setPaidLock = mutation({
     }
 
     return args.enabled;
+  },
+});
+
+export const getAppFont = query({
+  args: {},
+  handler: async (ctx) => {
+    const row = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", APP_FONT_KEY))
+      .unique();
+
+    return resolveAppFontId(row?.valueString);
+  },
+});
+
+export const setAppFont = mutation({
+  args: {
+    fontId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { userId } = await requireAdmin(ctx);
+    const fontId = resolveAppFontId(args.fontId);
+
+    const existing = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", APP_FONT_KEY))
+      .unique();
+
+    const payload = {
+      key: APP_FONT_KEY,
+      valueBoolean: null,
+      valueString: fontId,
+      valueNumber: null,
+      updatedAtMs: Date.now(),
+      updatedByUserId: userId,
+    };
+
+    if (existing) {
+      await ctx.db.patch(existing._id, payload);
+    } else {
+      await ctx.db.insert("appSettings", payload);
+    }
+
+    return fontId;
   },
 });
 

@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import {
   BarChart3,
-  LineChart,
   MoreHorizontal,
   Pencil,
   Plus,
@@ -10,6 +9,10 @@ import {
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
+import {
+  EChartsAreaChart,
+  type ChartConfig,
+} from "@/components/evilcharts/charts/echarts-area-chart";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,13 +25,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { JournalTrade } from "@/lib/convexJournal";
 import {
-  computeCumulativePnl,
   computeDailyPnl,
   computeDayOfWeekPerformance,
+  computeEquityCurve,
   computeJournalStats,
   formatJournalMoney,
   formatJournalPercent,
 } from "@/lib/journalAnalytics";
+import { cn } from "@/lib/utils";
 
 type JournalTab = "overview" | "statistics" | "performance" | "charts";
 
@@ -40,6 +44,7 @@ interface JournalAnalyticsTabsProps {
   onAddTrade: () => void;
   onEditTrade: (trade: JournalTrade) => void;
   onDeleteTrade: (trade: JournalTrade) => void;
+  startingBalance?: number;
 }
 
 const MetricCard = ({
@@ -160,79 +165,107 @@ const TradeListItem = ({
   );
 };
 
-const SimpleBarChart = ({
-  points,
+const equityChartConfig = {
+  equity: {
+    label: "Equity",
+    colors: {
+      light: ["#047857", "#0ea5e9", "#8b5cf6"],
+      dark: ["#34d399", "#38bdf8", "#a78bfa"],
+    },
+  },
+} satisfies ChartConfig;
+
+const CumulativePnlAreaChart = ({
+  trades,
   currencySymbol,
+  startingBalance = 0,
 }: {
-  points: Array<{ label: string; value: number }>;
+  trades: JournalTrade[];
   currencySymbol: string;
+  startingBalance?: number;
 }) => {
-  if (!points.length) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">No chart data yet</p>;
-  }
-
-  const maxAbs = Math.max(...points.map((point) => Math.abs(point.value)), 1);
-
-  return (
-    <div className="flex h-48 items-end gap-2">
-      {points.map((point) => {
-        const height = Math.max((Math.abs(point.value) / maxAbs) * 100, 6);
-        const isPositive = point.value >= 0;
-
-        return (
-          <div key={point.label} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-            <div className="flex h-36 w-full items-end justify-center">
-              <div
-                className={`w-full max-w-8 rounded-t-lg ${isPositive ? "bg-emerald-500/70" : "bg-red-500/70"}`}
-                style={{ height: `${height}%` }}
-                title={`${point.label}: ${formatJournalMoney(point.value, currencySymbol)}`}
-              />
-            </div>
-            <span className="truncate text-[10px] text-muted-foreground">{point.label}</span>
-          </div>
-        );
-      })}
-    </div>
+  const equityPoints = useMemo(
+    () => computeEquityCurve(trades, [], startingBalance),
+    [trades, startingBalance],
   );
-};
 
-const SimpleLineChart = ({
-  points,
-  currencySymbol,
-}: {
-  points: Array<{ label: string; value: number }>;
-  currencySymbol: string;
-}) => {
-  if (points.length < 2) {
-    return <p className="py-8 text-center text-sm text-muted-foreground">Add more closed trades to see the equity curve</p>;
+  const chartData = useMemo(
+    () =>
+      equityPoints.map((point, index) => ({
+        date: index === 0 ? "Start" : point.label,
+        equity: Number(point.value.toFixed(2)),
+      })),
+    [equityPoints],
+  );
+
+  const lastValue = equityPoints[equityPoints.length - 1]?.value ?? startingBalance;
+  const closedCount = Math.max(equityPoints.length - 1, 0);
+  const isPositive = lastValue >= startingBalance;
+  const firstLabel = chartData[1]?.date;
+  const lastLabel = chartData[chartData.length - 1]?.date;
+
+  if (chartData.length < 2) {
+    return (
+      <p className="py-8 text-center text-sm text-muted-foreground">
+        Add more closed trades to see the equity curve
+      </p>
+    );
   }
 
-  const values = points.map((point) => point.value);
-  const min = Math.min(...values, 0);
-  const max = Math.max(...values, 0);
-  const range = max - min || 1;
-  const width = 100;
-  const height = 100;
-
-  const coordinates = points.map((point, index) => {
-    const x = (index / (points.length - 1)) * width;
-    const y = height - ((point.value - min) / range) * height;
-    return `${x},${y}`;
-  });
-
-  const lastValue = points[points.length - 1]?.value ?? 0;
-  const strokeClass = lastValue >= 0 ? "stroke-emerald-400" : "stroke-red-400";
-
   return (
-    <div className="space-y-3">
-      <svg viewBox={`0 0 ${width} ${height}`} className="h-44 w-full overflow-visible">
-        <line x1="0" y1={height - ((0 - min) / range) * height} x2={width} y2={height - ((0 - min) / range) * height} className="stroke-border" strokeWidth="0.5" strokeDasharray="2 2" />
-        <polyline fill="none" className={strokeClass} strokeWidth="2" points={coordinates.join(" ")} />
-      </svg>
-      <div className="flex items-center justify-between text-xs text-muted-foreground">
-        <span>{points[0]?.label}</span>
-        <span className="font-semibold text-foreground">{formatJournalMoney(lastValue, currencySymbol)}</span>
-        <span>{points[points.length - 1]?.label}</span>
+    <div className="flex w-full flex-col">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-base font-medium tracking-tight text-foreground sm:text-lg">
+            Cumulative P&amp;L
+          </span>
+          <span className="max-w-[28ch] text-xs leading-snug text-muted-foreground">
+            Equity curve from {closedCount} closed trade{closedCount === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="flex shrink-0 flex-col items-end gap-1">
+          <span
+            className={cn(
+              "text-2xl font-semibold tracking-tight sm:text-4xl",
+              isPositive ? "text-emerald-400" : "text-red-400",
+            )}
+          >
+            {formatJournalMoney(lastValue, currencySymbol)}
+          </span>
+          <span className="text-xs text-muted-foreground">
+            {firstLabel && lastLabel ? `${firstLabel} – ${lastLabel}` : "Net growth"}
+          </span>
+        </div>
+      </div>
+
+      <div className="relative mt-2 h-56 w-full sm:h-64">
+        <EChartsAreaChart
+          data={chartData}
+          config={equityChartConfig}
+          xDataKey="date"
+          className="h-full w-full"
+          curveType="monotone"
+          enableHoverReveal
+          chartOptions={{
+            grid: { left: 0, right: 0, top: 16, bottom: 0, outerBoundsMode: "none" },
+            yAxis: { type: "value", show: false, scale: true, boundaryGap: ["16%", "20%"] },
+          }}
+        >
+          <EChartsAreaChart.Tooltip variant="frosted-glass" />
+          <EChartsAreaChart.Area
+            dataKey="equity"
+            variant="gradient"
+            strokeVariant="solid"
+            strokeWidth={2.5}
+          >
+            <EChartsAreaChart.ActiveDot variant="ping" />
+          </EChartsAreaChart.Area>
+        </EChartsAreaChart>
+
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-between px-1 pb-1 text-[10px] text-muted-foreground sm:px-2 sm:text-xs">
+          <span>{chartData[1]?.date}</span>
+          <span>{chartData[chartData.length - 1]?.date}</span>
+        </div>
       </div>
     </div>
   );
@@ -246,12 +279,12 @@ export const JournalAnalyticsTabs = ({
   onAddTrade,
   onEditTrade,
   onDeleteTrade,
+  startingBalance = 0,
 }: JournalAnalyticsTabsProps) => {
   const { currency } = useCurrency();
 
   const stats = useMemo(() => computeJournalStats(trades), [trades]);
   const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades]);
-  const cumulativePnl = useMemo(() => computeCumulativePnl(dailyPnl), [dailyPnl]);
   const dayPerformance = useMemo(() => computeDayOfWeekPerformance(trades), [trades]);
   const recentTrades = useMemo(
     () => [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
@@ -259,6 +292,7 @@ export const JournalAnalyticsTabs = ({
   );
 
   const pnlTone = stats.totalPnl > 0 ? "positive" : stats.totalPnl < 0 ? "negative" : "neutral";
+  const currentEquity = startingBalance + stats.totalPnl;
 
   if (isLoading) {
     return (
@@ -311,7 +345,11 @@ export const JournalAnalyticsTabs = ({
               <section className="rounded-2xl bg-secondary p-3 sm:p-4">
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-foreground">Account Overview</h3>
-                  <p className="text-xs text-muted-foreground">Portfolio status from logged trades</p>
+                  <p className="text-xs text-muted-foreground">
+                    {startingBalance > 0
+                      ? `Starting ${formatJournalMoney(startingBalance, currency.symbol)} · Equity ${formatJournalMoney(currentEquity, currency.symbol)}`
+                      : "Portfolio status from logged trades"}
+                  </p>
                 </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <MetricCard
@@ -333,6 +371,9 @@ export const JournalAnalyticsTabs = ({
                     tone="negative"
                   />
                 </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Net = Gross Profit − Gross Loss
+                </p>
               </section>
 
               <section className="rounded-2xl bg-secondary p-3 sm:p-4">
@@ -499,31 +540,11 @@ export const JournalAnalyticsTabs = ({
             </TabsContent>
 
             <TabsContent value="charts" className="mt-4 space-y-4">
-              <section className="rounded-2xl bg-secondary p-3 sm:p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <LineChart className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <h3 className="text-base font-bold text-foreground">Cumulative P&amp;L</h3>
-                    <p className="text-xs text-muted-foreground">Equity curve from closed trades</p>
-                  </div>
-                </div>
-                <SimpleLineChart
-                  points={cumulativePnl}
+              <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
+                <CumulativePnlAreaChart
+                  trades={trades}
                   currencySymbol={currency.symbol}
-                />
-              </section>
-
-              <section className="rounded-2xl bg-secondary p-3 sm:p-4">
-                <div className="mb-3 flex items-center gap-2">
-                  <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                  <div>
-                    <h3 className="text-base font-bold text-foreground">Daily P&amp;L</h3>
-                    <p className="text-xs text-muted-foreground">Daily breakdown over time</p>
-                  </div>
-                </div>
-                <SimpleBarChart
-                  points={dailyPnl.slice(-8).map((point) => ({ label: point.label, value: point.pnl }))}
-                  currencySymbol={currency.symbol}
+                  startingBalance={startingBalance}
                 />
               </section>
 

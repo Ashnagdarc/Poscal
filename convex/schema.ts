@@ -37,6 +37,7 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     subscriptionTier: v.optional(v.string()),
     subscriptionExpiresAtMs: nullableNumber,
+    journalOnboardedAtMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })
@@ -60,6 +61,7 @@ export default defineSchema({
 
   tradingJournal: defineTable({
     userId: v.string(),
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     externalId: nullableString,
     pair: v.string(),
     direction: v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short")),
@@ -87,10 +89,12 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
     .index("by_external_id", ["externalId"]),
 
   progressSessions: defineTable({
     userId: v.string(),
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     dateKey: v.string(),
     phase: v.union(v.literal("pre_market"), v.literal("post_market")),
     preMarketNotes: nullableString,
@@ -106,10 +110,12 @@ export default defineSchema({
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })
-    .index("by_user_date", ["userId", "dateKey"]),
+    .index("by_user_date", ["userId", "dateKey"])
+    .index("by_user_journal_date", ["userId", "journalId", "dateKey"]),
 
   calculatorHistory: defineTable({
     userId: nullableString,
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     clientId: nullableString,
     pair: nullableString,
     direction: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.null())),
@@ -160,6 +166,7 @@ export default defineSchema({
     updatedAtMs: nullableNumber,
   })
     .index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
     .index("by_user_client", ["userId", "clientId"]),
 
   priceSnapshots: defineTable({

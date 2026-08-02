@@ -33,6 +33,7 @@ export interface CalculatorHistoryItem {
 export interface SavedCalculationRecord {
   id: string;
   userId?: string | null;
+  journalId?: string | null;
   symbol: string;
   orderType?: SavedCalculationOrderType | null;
   entryPrice: number | null;
@@ -64,6 +65,7 @@ export type JournalEntry = SavedCalculationRecord;
 
 export interface SaveCalculatorHistoryInput extends CalculatorHistoryItem {
   riskAmount: number;
+  journalId?: string | null;
   units?: number;
   pipValue?: number;
   spreadPips?: number | null;
@@ -89,6 +91,7 @@ export interface SaveCalculatorHistoryInput extends CalculatorHistoryItem {
 }
 
 const HISTORY_LIMIT = 20;
+const JOURNAL_HISTORY_LIMIT = 200;
 const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
 const convexClient = convexUrl ? new ConvexHttpClient(convexUrl) : null;
 
@@ -298,6 +301,7 @@ const toSavedCalculationRecord = (
   return {
     id: item.id,
     userId: userId ?? null,
+    journalId: item.journalId ?? null,
     symbol: item.symbol ?? item.pair,
     orderType: item.orderType ?? getOrderTypeFromDirection(item.direction),
     entryPrice: item.entryPrice ?? null,
@@ -331,6 +335,7 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
 
   return {
     userId,
+    journalId: (item.journalId as any) ?? null,
     clientId: item.id,
     symbol: record.symbol,
     orderType: record.orderType ?? null,
@@ -363,6 +368,7 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
 const toConvexInputFromSavedRecord = (userId: string, record: SavedCalculationRecord) => {
   return {
     userId,
+    journalId: (record.journalId as any) ?? null,
     clientId: record.id,
     symbol: record.symbol,
     orderType: record.orderType ?? null,
@@ -395,6 +401,7 @@ const toConvexInputFromSavedRecord = (userId: string, record: SavedCalculationRe
 const fromConvexSavedRecord = (row: {
   _id: string;
   userId?: string | null;
+  journalId?: string | null;
   clientId?: string | null;
   symbol?: string | null;
   pair?: string | null;
@@ -427,6 +434,7 @@ const fromConvexSavedRecord = (row: {
 }): SavedCalculationRecord => ({
   id: row.clientId ?? row._id,
   userId: row.userId ?? null,
+  journalId: row.journalId ?? null,
   symbol: row.symbol ?? row.pair ?? "EUR/USD",
   orderType: row.orderType ?? getOrderTypeFromDirection(row.direction),
   entryPrice: row.entryPrice ?? null,
@@ -499,14 +507,20 @@ const fromConvexRow = (row: {
   };
 };
 
-export const loadSavedCalculations = async (userId?: string | null): Promise<SavedCalculationRecord[]> => {
+export const loadSavedCalculations = async (
+  userId?: string | null,
+  journalId?: string | null,
+): Promise<SavedCalculationRecord[]> => {
   if (!userId || !convexClient) {
-    return readLocalSavedCalculations();
+    return readLocalSavedCalculations().filter((item) =>
+      !journalId || !item.journalId || item.journalId === journalId,
+    );
   }
 
   const rows = await convexClient.query(api.calculatorHistory.listForUser, {
     userId,
-    limit: HISTORY_LIMIT,
+    journalId: (journalId as any) ?? null,
+    limit: JOURNAL_HISTORY_LIMIT,
   });
 
   return rows.map(fromConvexSavedRecord);
@@ -514,8 +528,11 @@ export const loadSavedCalculations = async (userId?: string | null): Promise<Sav
 
 export const loadJournalEntries = loadSavedCalculations;
 
-export const loadCalculatorHistory = async (userId?: string | null): Promise<CalculatorHistoryItem[]> => {
-  const records = await loadSavedCalculations(userId);
+export const loadCalculatorHistory = async (
+  userId?: string | null,
+  journalId?: string | null,
+): Promise<CalculatorHistoryItem[]> => {
+  const records = await loadSavedCalculations(userId, journalId);
   return records.map(toCalculatorHistoryItem);
 };
 
@@ -530,7 +547,7 @@ export const saveCalculatorHistory = async (
 
   if (userId && convexClient) {
     await convexClient.mutation(api.calculatorHistory.save, toConvexInput(userId, item));
-    return await loadCalculatorHistory(userId);
+    return await loadCalculatorHistory(userId, item.journalId);
   }
 
   return localHistory.map(toCalculatorHistoryItem);

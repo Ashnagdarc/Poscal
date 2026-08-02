@@ -48,6 +48,7 @@ export const STORAGE_KEYS = {
   NOTIFICATIONS: 'notifications',
   HAPTICS: 'hapticsEnabled',
   THEME: 'theme',
+  APP_FONT: 'appFont',
   ONBOARDING: 'hasSeenOnboarding',
   POSITION_HISTORY: 'positionSizeHistory',
   PUSH_SUBSCRIPTION: 'pushSubscription',

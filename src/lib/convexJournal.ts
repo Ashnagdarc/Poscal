@@ -4,6 +4,7 @@ import { api } from "../../convex/_generated/api";
 
 export interface JournalTrade {
   id: string;
+  journal_id?: string | null;
   pair: string;
   direction: "buy" | "sell" | "long" | "short";
   entry_price: number | null;
@@ -46,6 +47,7 @@ const parseNumberish = (value: unknown): number | null => {
 
 const fromConvexTrade = (row: any): JournalTrade => ({
   id: row._id,
+  journal_id: row.journalId ?? null,
   pair: row.pair,
   direction: row.direction,
   entry_price: row.entryPrice ?? null,
@@ -72,6 +74,7 @@ const fromConvexTrade = (row: any): JournalTrade => ({
 
 const toConvexTradeInput = (userId: string, trade: Record<string, any>) => ({
   userId,
+  journalId: trade.journal_id ?? trade.journalId ?? null,
   externalId: trade.externalId ?? null,
   pair: trade.pair || trade.symbol || "JOURNAL",
   direction: trade.direction === "sell" || trade.direction === "short" ? trade.direction : "buy",
@@ -170,10 +173,15 @@ const toConvexTradePatch = (userId: string, updates: Record<string, any>) => {
   return patch;
 };
 
-export const listJournalEntries = async (userId: string, status?: string): Promise<JournalTrade[]> => {
+export const listJournalEntries = async (
+  userId: string,
+  status?: string,
+  journalId?: string | null,
+): Promise<JournalTrade[]> => {
   if (convexClient) {
     const rows = await convexClient.query(api.tradingJournal.listForUser, {
       userId,
+      journalId: (journalId as any) ?? null,
       status: status ?? null,
       limit: 300,
     });

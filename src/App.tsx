@@ -5,6 +5,8 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import { lazy, Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
+import { FontProvider } from "@/contexts/FontContext";
+import { JournalProvider } from "@/contexts/JournalContext";
 import { SubscriptionProvider } from "@/contexts/SubscriptionContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -121,9 +123,13 @@ const App = () => (
         <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <AuthProvider>
             <SubscriptionProvider>
-              <CurrencyProvider>
-                <AppContent />
-              </CurrencyProvider>
+              <FontProvider>
+                <CurrencyProvider>
+                  <JournalProvider>
+                    <AppContent />
+                  </JournalProvider>
+                </CurrencyProvider>
+              </FontProvider>
             </SubscriptionProvider>
           </AuthProvider>
         </BrowserRouter>

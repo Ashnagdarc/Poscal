@@ -17,11 +17,13 @@ import {
   Smartphone,
   Sparkles,
   Trash2,
+  Type,
   User,
   Users,
 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
+import { useAppFont } from "@/contexts/FontContext";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -35,6 +37,7 @@ import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
 import { featureFlagApi, subscriptionApi } from "@/lib/api";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
+import type { AppFontId } from "@/lib/fonts";
 import { cn } from "@/lib/utils";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
@@ -60,10 +63,13 @@ const Settings = () => {
   const { user, signOut } = useAuth();
   const { isPaid, isTrial, subscriptionTier, expiresAt, refreshSubscription } = useSubscription();
   const { isAdmin } = useAdmin();
+  const { fontId, options: fontOptions, setFontId } = useAppFont();
   const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
+  const [showFontPicker, setShowFontPicker] = useState(false);
+  const [isSavingFont, setIsSavingFont] = useState(false);
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { currency, setCurrency } = useCurrency();
@@ -103,6 +109,23 @@ const Settings = () => {
     } catch (err: unknown) {
       console.error("togglePaidLockFromSettings error", err);
       toast.error(getErrorMessage(err, "Failed to toggle paid lock"));
+    }
+  };
+
+  const handleFontChange = async (nextFont: AppFontId) => {
+    if (nextFont === fontId || isSavingFont) return;
+    setIsSavingFont(true);
+    try {
+      const updated = await setFontId(nextFont);
+      const option = fontOptions.find((item) => item.id === updated);
+      toast.success(`App font set to ${option?.label ?? updated}`);
+      setShowFontPicker(false);
+      lightTap();
+    } catch (err: unknown) {
+      console.error("handleFontChange error", err);
+      toast.error(getErrorMessage(err, "Failed to update app font"));
+    } finally {
+      setIsSavingFont(false);
     }
   };
 
@@ -310,6 +333,77 @@ const Settings = () => {
                   </Button>
                 }
               />
+              <div className="border-t border-border/40">
+                <button
+                  type="button"
+                  onClick={() => setShowFontPicker(!showFontPicker)}
+                  className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-secondary/30"
+                >
+                  <SettingsRowContent
+                    icon={<Type className="h-4 w-4 text-brand" />}
+                    iconClassName="bg-brand/10"
+                    title="App fonts"
+                    subtitle="Change fonts for everyone"
+                  />
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {fontOptions.find((option) => option.id === fontId)?.label ?? "Markets"}
+                    </span>
+                    <AdminBadge />
+                    <ChevronRight
+                      className={cn(
+                        "h-4 w-4 text-muted-foreground transition-transform",
+                        showFontPicker && "rotate-90",
+                      )}
+                    />
+                  </div>
+                </button>
+                {showFontPicker && (
+                  <div className="border-t border-border/40 bg-background/40 px-5 pb-4 pt-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      {fontOptions.map((option) => {
+                        const isActive = fontId === option.id;
+                        return (
+                          <button
+                            key={option.id}
+                            type="button"
+                            disabled={isSavingFont}
+                            onClick={() => void handleFontChange(option.id)}
+                            className={cn(
+                              "rounded-xl border p-3 text-left transition-all",
+                              isActive
+                                ? "border-brand bg-brand text-brand-foreground"
+                                : "border-border bg-secondary/50 hover:border-foreground/20",
+                              isSavingFont && "opacity-70",
+                            )}
+                          >
+                            <p
+                              className="text-2xl font-semibold leading-none"
+                              style={{
+                                fontFamily:
+                                  option.id === "classic"
+                                    ? '"Syne", "DM Sans", sans-serif'
+                                    : '-apple-system, BlinkMacSystemFont, "Trebuchet MS", Roboto, Ubuntu, sans-serif',
+                              }}
+                            >
+                              {option.sample}
+                            </p>
+                            <p className="mt-2 text-sm font-semibold">{option.label}</p>
+                            <p
+                              className={cn(
+                                "mt-0.5 text-xs",
+                                isActive ? "opacity-80" : "text-muted-foreground",
+                              )}
+                            >
+                              {option.subtitle}
+                            </p>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
             </SettingsGroup>
           </section>
         )}
