@@ -38,6 +38,7 @@ export default defineSchema({
     subscriptionTier: v.optional(v.string()),
     subscriptionExpiresAtMs: nullableNumber,
     journalOnboardedAtMs: nullableNumber,
+    journalTourCompletedAtMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })

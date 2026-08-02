@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import type { JournalEntry } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
 import {
   computeDailyPnl,
@@ -38,6 +39,7 @@ type JournalTab = "overview" | "statistics" | "performance" | "charts";
 
 interface JournalAnalyticsTabsProps {
   trades: JournalTrade[];
+  calculatorResults?: JournalEntry[];
   isLoading: boolean;
   activeTab: JournalTab;
   onTabChange: (tab: JournalTab) => void;
@@ -177,16 +179,18 @@ const equityChartConfig = {
 
 const CumulativePnlAreaChart = ({
   trades,
+  calculatorResults = [],
   currencySymbol,
   startingBalance = 0,
 }: {
   trades: JournalTrade[];
+  calculatorResults?: JournalEntry[];
   currencySymbol: string;
   startingBalance?: number;
 }) => {
   const equityPoints = useMemo(
-    () => computeEquityCurve(trades, [], startingBalance),
-    [trades, startingBalance],
+    () => computeEquityCurve(trades, calculatorResults, startingBalance),
+    [trades, calculatorResults, startingBalance],
   );
 
   const chartData = useMemo(
@@ -273,6 +277,7 @@ const CumulativePnlAreaChart = ({
 
 export const JournalAnalyticsTabs = ({
   trades,
+  calculatorResults = [],
   isLoading,
   activeTab,
   onTabChange,
@@ -283,11 +288,25 @@ export const JournalAnalyticsTabs = ({
 }: JournalAnalyticsTabsProps) => {
   const { currency } = useCurrency();
 
-  const stats = useMemo(() => computeJournalStats(trades), [trades]);
+  const stats = useMemo(
+    () => computeJournalStats(trades, calculatorResults),
+    [trades, calculatorResults],
+  );
   const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades]);
   const dayPerformance = useMemo(() => computeDayOfWeekPerformance(trades), [trades]);
   const recentTrades = useMemo(
     () => [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
+    [trades],
+  );
+  const closedManualWithPnl = useMemo(
+    () =>
+      trades.filter(
+        (trade) =>
+          trade.status === "closed" &&
+          trade.pnl !== null &&
+          trade.pnl !== undefined &&
+          Number.isFinite(trade.pnl),
+      ).length,
     [trades],
   );
 
@@ -310,7 +329,11 @@ export const JournalAnalyticsTabs = ({
         <div>
           <h2 className="text-base font-bold text-foreground">Manual Trades</h2>
           <p className="text-sm text-muted-foreground">
-            {trades.length} trade{trades.length === 1 ? "" : "s"} logged
+            {closedManualWithPnl} closed with P&amp;L
+            {stats.openTrades > 0 ? ` · ${stats.openTrades} open` : ""}
+            {trades.length !== closedManualWithPnl
+              ? ` · ${trades.length} total`
+              : ""}
           </p>
         </div>
         <Button size="sm" onClick={onAddTrade}>
@@ -373,6 +396,9 @@ export const JournalAnalyticsTabs = ({
                 </div>
                 <p className="mt-3 text-xs text-muted-foreground">
                   Net = Gross Profit − Gross Loss
+                  {stats.openTrades > 0
+                    ? ` · Open trades don’t affect P&L until closed with a result`
+                    : ""}
                 </p>
               </section>
 
@@ -543,6 +569,7 @@ export const JournalAnalyticsTabs = ({
               <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
                 <CumulativePnlAreaChart
                   trades={trades}
+                  calculatorResults={calculatorResults}
                   currencySymbol={currency.symbol}
                   startingBalance={startingBalance}
                 />

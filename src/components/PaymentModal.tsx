@@ -21,12 +21,13 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { subscriptionApi } from '@/lib/api';
-import { PLAN_OPTIONS, type PlanId } from '@/lib/pricing';
+import { PLAN_OPTIONS, PAYMENT_CURRENCY, type PlanId } from '@/lib/pricing';
 
 const PAYSTACK_FALLBACK_TIMEOUT_MS = 30_000;
 
 const CHECKLIST_ITEMS = [
   'Full access to trading journal',
+  'Up to 5 trading journals',
   'Full access to trading signals',
   'Advanced Position Calculator',
 ];
@@ -86,15 +87,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const computeExpiryIso = (planId: PlanId): string => {
     const date = new Date();
-    if (planId === 'monthly') {
-      date.setMonth(date.getMonth() + 1);
-      return date.toISOString();
+    switch (planId) {
+      case 'monthly':
+        date.setMonth(date.getMonth() + 1);
+        break;
+      case 'yearly':
+        date.setFullYear(date.getFullYear() + 1);
+        break;
+      default: {
+        const _exhaustive: never = planId;
+        throw new Error(`Unhandled plan: ${_exhaustive}`);
+      }
     }
-    if (planId === 'yearly') {
-      date.setFullYear(date.getFullYear() + 1);
-      return date.toISOString();
-    }
-    date.setFullYear(date.getFullYear() + 100);
     return date.toISOString();
   };
 
@@ -156,7 +160,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
           key: publicKey,
           email: effectiveUserEmail,
           amount: selectedPlan.amount,
-          currency: 'NGN',
+          currency: PAYMENT_CURRENCY,
           metadata: {
             custom_fields: [
               {
@@ -184,7 +188,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 userId,
                 tier,
                 amount: selectedPlan.amount,
-                currency: 'NGN',
+                currency: PAYMENT_CURRENCY,
                 expiresAt: computeExpiryIso(selectedPlan.id),
                 metadata: {
                   planId: selectedPlan.id,
@@ -298,7 +302,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   ))}
                 </ul>
 
-                <div className="mt-6 grid grid-cols-3 gap-2">
+                <div className="mt-6 grid grid-cols-2 gap-2">
                   {PLAN_OPTIONS.map((plan) => {
                     const selected = plan.id === selectedPlan.id;
                     return (
@@ -306,14 +310,14 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         key={plan.id}
                         type="button"
                         onClick={() => setSelectedPlanId(plan.id)}
-                        className={`relative rounded-xl border px-2 py-2.5 text-left transition ${
+                        className={`relative rounded-xl border px-3 py-3 text-left transition ${
                           selected
                             ? 'border-brand bg-accent shadow-none'
                             : 'border-border bg-secondary hover:border-brand/40'
                         }`}
                       >
                         <div className="text-sm font-semibold text-foreground">{plan.name}</div>
-                        <div className="mt-1 font-display text-lg font-semibold leading-none text-foreground">
+                        <div className="mt-1 font-display text-xl font-semibold leading-none text-foreground">
                           {plan.displayPrice}
                         </div>
                         <div className="mt-1 text-xs text-muted-foreground">{plan.periodLabel}</div>

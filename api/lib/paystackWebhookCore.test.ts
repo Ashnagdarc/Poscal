@@ -63,7 +63,7 @@ describe("computeSubscriptionExpiry", () => {
     expect(new Date(computeSubscriptionExpiry("pro", paidAt)).getUTCFullYear()).toBe(2027);
   });
 
-  it("adds ~100 years for lifetime", () => {
+  it("adds ~100 years for legacy lifetime charges", () => {
     expect(new Date(computeSubscriptionExpiry("lifetime", paidAt)).getUTCFullYear()).toBe(2126);
   });
 });
@@ -97,8 +97,8 @@ describe("parseSuccessfulCharge", () => {
         data: {
           status: "success",
           reference: "psk_user99_yearly",
-          amount: 500000,
-          currency: "NGN",
+          amount: 5880,
+          currency: "USD",
           channel: "card",
           fees: 100,
         },
@@ -110,8 +110,8 @@ describe("parseSuccessfulCharge", () => {
       userId: "user99",
       tier: "yearly",
       reference: "psk_user99_yearly",
-      amount: 5000,
-      currency: "NGN",
+      amount: 58.8,
+      currency: "USD",
       paidAtMs: paidAt,
     });
     expect(result && "expiresAtMs" in result && result.expiresAtMs).toBeGreaterThan(paidAt);

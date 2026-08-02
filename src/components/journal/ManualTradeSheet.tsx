@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -75,9 +76,9 @@ const toDirection = (value?: string | null): DirectionOption => {
 const emptyForm = (): FormState => ({
   pair: "",
   direction: "long",
-  status: "open",
+  status: "closed",
   entry_date: new Date().toISOString().slice(0, 10),
-  exit_date: "",
+  exit_date: new Date().toISOString().slice(0, 10),
   entry_price: "",
   exit_price: "",
   stop_loss: "",
@@ -191,7 +192,16 @@ export const ManualTradeSheet = ({
 
   const handleSubmit = async () => {
     const pair = canonicalizePairSymbol(form.pair);
-    if (!pair) return;
+    if (!pair) {
+      toast.error("Enter a symbol");
+      return;
+    }
+
+    const pnlValue = isClosed ? parsePriceInput(form.pnl) : null;
+    if (isClosed && (pnlValue === null || !Number.isFinite(pnlValue))) {
+      toast.error("Enter P&L so this trade updates your charts and overview");
+      return;
+    }
 
     await onSave({
       pair,
@@ -203,14 +213,14 @@ export const ManualTradeSheet = ({
       take_profit: parsePriceInput(form.take_profit),
       position_size: parsePriceInput(form.position_size),
       risk_percent: parsePriceInput(form.risk_percent),
-      pnl: isClosed ? parsePriceInput(form.pnl) : null,
+      pnl: pnlValue,
       notes: form.notes.trim() || null,
       tags: form.tags.trim() || null,
       market_condition: null,
-      entry_date: form.entry_date ? new Date(form.entry_date).toISOString() : new Date().toISOString(),
+      entry_date: form.entry_date ? new Date(`${form.entry_date}T12:00:00`).toISOString() : new Date().toISOString(),
       exit_date:
         isClosed && form.exit_date
-          ? new Date(form.exit_date).toISOString()
+          ? new Date(`${form.exit_date}T12:00:00`).toISOString()
           : isClosed
             ? new Date().toISOString()
             : null,
@@ -284,8 +294,8 @@ export const ManualTradeSheet = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="open">Open</SelectItem>
                     <SelectItem value="closed">Closed</SelectItem>
+                    <SelectItem value="open">Open</SelectItem>
                     <SelectItem value="cancelled">Cancelled</SelectItem>
                   </SelectContent>
                 </Select>
@@ -377,7 +387,7 @@ export const ManualTradeSheet = ({
 
               {isClosed ? (
                 <div className="space-y-2">
-                  <Label htmlFor="pnl">P&amp;L</Label>
+                  <Label htmlFor="pnl">P&amp;L *</Label>
                   <Input
                     id="pnl"
                     inputMode="decimal"
@@ -389,6 +399,7 @@ export const ManualTradeSheet = ({
                         pnl: sanitizePriceInput(event.target.value, 2, true),
                       }))
                     }
+                    required
                   />
                 </div>
               ) : null}
@@ -476,7 +487,10 @@ export const ManualTradeSheet = ({
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isSaving}>
             Cancel
           </Button>
-          <Button onClick={() => void handleSubmit()} disabled={isSaving || !form.pair.trim()}>
+          <Button
+            onClick={() => void handleSubmit()}
+            disabled={isSaving || !form.pair.trim() || (isClosed && !form.pnl.trim())}
+          >
             {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {trade ? "Update Trade" : "Save Trade"}
           </Button>

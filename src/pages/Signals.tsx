@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Calendar,
+  Calendar as CalendarIcon,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -19,12 +19,15 @@ import { UpdateSignalModal } from '@/components/UpdateSignalModal';
 import { UpgradePrompt } from '@/components/UpgradePrompt';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAdmin } from '@/hooks/use-admin';
+import { usePaidLock } from '@/hooks/use-paid-lock';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { signalsApi } from '@/lib/api';
 import { logger } from '@/lib/logger';
+import { cn } from '@/lib/utils';
 
 type SignalOrderType = 'buy' | 'sell' | 'buy_limit' | 'sell_limit' | 'buy_stop' | 'sell_stop';
 type SignalStatus = 'active' | 'hit_tp' | 'hit_sl' | 'cancelled';
@@ -123,6 +126,7 @@ const buildCalculatorUrl = (signal: TradingSignal) => {
 const Signals = () => {
   const { isAdmin } = useAdmin();
   const { isPaid } = useSubscription();
+  const { paidLockEnabled } = usePaidLock();
   const navigate = useNavigate();
   const [allSignals, setAllSignals] = useState<TradingSignal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -134,6 +138,7 @@ const Signals = () => {
     () => new Set([new Date().toISOString().split('T')[0]]),
   );
   const [dismissLimitBanner, setDismissLimitBanner] = useState(false);
+  const enforceFreeLimits = paidLockEnabled && !isPaid && !isAdmin;
 
   const fetchSignals = useCallback(async () => {
     setLoading(true);
@@ -170,19 +175,19 @@ const Signals = () => {
   }), [allSignals]);
 
   const visibleSignals = useMemo(() => {
-    const limited = !isPaid && !isAdmin
+    const limited = enforceFreeLimits
       ? allSignals.slice(0, FREE_SIGNALS_LIMIT)
       : allSignals;
     const from = (currentPage - 1) * SIGNALS_PER_PAGE;
     return limited.slice(from, from + SIGNALS_PER_PAGE);
-  }, [allSignals, isPaid, isAdmin, currentPage]);
+  }, [allSignals, enforceFreeLimits, currentPage]);
 
-  const visibleTotal = !isPaid && !isAdmin
+  const visibleTotal = enforceFreeLimits
     ? Math.min(allSignals.length, FREE_SIGNALS_LIMIT)
     : allSignals.length;
 
   const totalPages = Math.max(1, Math.ceil(visibleTotal / SIGNALS_PER_PAGE));
-  const isAtSignalLimit = !isPaid && !isAdmin && allSignals.length >= FREE_SIGNALS_LIMIT;
+  const isAtSignalLimit = enforceFreeLimits && allSignals.length >= FREE_SIGNALS_LIMIT;
   const hasDateFilter = dateFilter !== '';
 
   const headerSubtitle = stats.active > 0
@@ -294,27 +299,79 @@ const Signals = () => {
         </section>
 
         <section className="rounded-2xl bg-secondary p-3">
-          <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="date"
-              value={dateFilter}
-              onChange={(event) => setDateFilter(event.target.value)}
-              className="h-10 rounded-xl border-border bg-background pl-10"
-              aria-label="Filter by date"
-            />
-          </div>
-          {hasDateFilter ? (
-            <div className="mt-2 flex items-center justify-between gap-2">
-              <Badge variant="secondary" className="text-xs">
-                Showing {dateFilter}
-              </Badge>
-              <Button variant="ghost" size="sm" onClick={clearDateFilter} className="h-7 text-xs">
-                <X className="mr-1 h-3 w-3" />
-                Clear date
+          <div className="flex items-center gap-2">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-11 min-w-0 flex-1 justify-start rounded-xl border-border bg-background px-3 text-left font-medium",
+                    !hasDateFilter && "text-muted-foreground",
+                  )}
+                  aria-label="Filter by date"
+                >
+                  <CalendarIcon className="mr-2 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate">
+                    {hasDateFilter
+                      ? format(parseISO(`${dateFilter}T12:00:00`), "EEE, MMM d, yyyy")
+                      : "Filter by date"}
+                  </span>
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[min(calc(100vw-2rem),20rem)] rounded-2xl p-0"
+                align="start"
+                sideOffset={8}
+              >
+                <Calendar
+                  mode="single"
+                  selected={hasDateFilter ? parseISO(`${dateFilter}T12:00:00`) : undefined}
+                  onSelect={(date) => {
+                    if (!date) {
+                      setDateFilter("");
+                      return;
+                    }
+                    setDateFilter(format(date, "yyyy-MM-dd"));
+                  }}
+                  initialFocus
+                  className="rounded-2xl"
+                />
+                <div className="grid grid-cols-2 gap-2 border-t border-border p-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 rounded-xl text-sm"
+                    onClick={() => setDateFilter(format(new Date(), "yyyy-MM-dd"))}
+                  >
+                    Today
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-9 rounded-xl text-sm"
+                    onClick={clearDateFilter}
+                    disabled={!hasDateFilter}
+                  >
+                    Clear
+                  </Button>
+                </div>
+              </PopoverContent>
+            </Popover>
+
+            {hasDateFilter ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-11 w-11 shrink-0 rounded-xl"
+                onClick={clearDateFilter}
+                aria-label="Clear date filter"
+              >
+                <X className="h-4 w-4" />
               </Button>
-            </div>
-          ) : null}
+            ) : null}
+          </div>
         </section>
 
         {isAtSignalLimit && !dismissLimitBanner ? (
@@ -499,7 +556,7 @@ const Signals = () => {
               </section>
             ))}
 
-            {!isPaid && !isAdmin && allSignals.length >= FREE_SIGNALS_LIMIT ? (
+            {enforceFreeLimits && allSignals.length >= FREE_SIGNALS_LIMIT ? (
               <UpgradePrompt
                 feature="unlimited signals"
                 title="View all signals"

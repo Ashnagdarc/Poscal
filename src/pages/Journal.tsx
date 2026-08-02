@@ -666,6 +666,7 @@ const Journal = () => {
             </div>
             <JournalAnalyticsTabs
               trades={manualTrades}
+              calculatorResults={items}
               isLoading={isManualTradesLoading}
               activeTab={journalTab}
               onTabChange={setJournalTab}

@@ -105,6 +105,85 @@ export const viewerProfile = query({
   },
 });
 
+export const journalTourStatus = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return { completed: false };
+    }
+
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
+      .first();
+
+    return {
+      completed: Boolean(profile?.journalTourCompletedAtMs),
+    };
+  },
+});
+
+export const markJournalTourCompleted = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      throw new Error("Not authenticated");
+    }
+
+    const user = await ctx.db.get(userId);
+    if (!user) {
+      throw new Error("User not found");
+    }
+
+    const now = Date.now();
+    let profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
+      .first();
+
+    if (!profile && user.email) {
+      profile = await ctx.db
+        .query("profiles")
+        .withIndex("by_email", (q) => q.eq("email", user.email!.trim().toLowerCase()))
+        .first();
+    }
+
+    if (profile) {
+      if (profile.journalTourCompletedAtMs) {
+        return { completed: true };
+      }
+      await ctx.db.patch(profile._id, {
+        externalUserId: userId,
+        journalTourCompletedAtMs: now,
+        updatedAtMs: now,
+      });
+      return { completed: true };
+    }
+
+    if (!user.email) {
+      throw new Error("Profile email is required to save tour status");
+    }
+
+    await ctx.db.insert("profiles", {
+      externalUserId: userId,
+      email: user.email.trim().toLowerCase(),
+      fullName: user.fullName ?? user.name ?? null,
+      avatarUrl: user.avatarUrl ?? user.image ?? null,
+      role: user.role ?? "user",
+      paymentStatus: user.paymentStatus ?? "free",
+      subscriptionTier: user.subscriptionTier ?? "free",
+      subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+      journalTourCompletedAtMs: now,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+
+    return { completed: true };
+  },
+});
+
 export const updateViewerProfile = mutation({
   args: {
     fullName: nullableStringArg,

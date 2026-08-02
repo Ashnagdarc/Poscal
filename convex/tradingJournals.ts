@@ -9,7 +9,7 @@ const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 export const JOURNAL_LIMITS = {
   free: 2,
   premium: 5,
-  pro: 10,
+  pro: 5,
 } as const;
 
 type SubscriptionTier = keyof typeof JOURNAL_LIMITS;

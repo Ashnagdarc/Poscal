@@ -74,11 +74,52 @@ const getClosedPnl = (trade: JournalTrade): number | null => {
   return trade.pnl;
 };
 
-export const computeJournalStats = (trades: JournalTrade[]): JournalStats => {
-  const closedTrades = trades.filter((trade) => trade.status === "closed");
-  const pnlValues = closedTrades
-    .map(getClosedPnl)
-    .filter((value): value is number => value !== null);
+const resolveCalculatorPnl = (item: JournalEntry): number | null => {
+  if (item.status !== "win" && item.status !== "loss" && item.status !== "breakeven") {
+    return null;
+  }
+
+  if (item.pnlAmount !== null && item.pnlAmount !== undefined && Number.isFinite(item.pnlAmount)) {
+    return item.pnlAmount;
+  }
+
+  if (item.resultR !== null && item.resultR !== undefined && Number.isFinite(item.resultR)) {
+    return item.resultR * (item.riskAmount || 0);
+  }
+
+  if (item.status === "win") return item.potentialProfit ?? item.riskAmount ?? 0;
+  if (item.status === "loss") return -(item.actualRisk ?? item.riskAmount ?? 0);
+  return 0;
+};
+
+const collectClosedPnlValues = (
+  trades: JournalTrade[],
+  calculatorResults: JournalEntry[] = [],
+): number[] => {
+  const values: number[] = [];
+
+  for (const trade of trades) {
+    const pnl = getClosedPnl(trade);
+    if (pnl !== null) values.push(pnl);
+  }
+
+  for (const item of calculatorResults) {
+    const pnl = resolveCalculatorPnl(item);
+    if (pnl !== null) values.push(pnl);
+  }
+
+  return values;
+};
+
+export const computeJournalStats = (
+  trades: JournalTrade[],
+  calculatorResults: JournalEntry[] = [],
+): JournalStats => {
+  const closedManual = trades.filter((trade) => trade.status === "closed");
+  const closedCalculator = calculatorResults.filter(
+    (item) => item.status === "win" || item.status === "loss" || item.status === "breakeven",
+  );
+  const pnlValues = collectClosedPnlValues(trades, calculatorResults);
 
   const wins = pnlValues.filter((value) => value > 0).length;
   const losses = pnlValues.filter((value) => value < 0).length;
@@ -92,8 +133,8 @@ export const computeJournalStats = (trades: JournalTrade[]): JournalStats => {
   const avgLoss = lossValues.length ? lossValues.reduce((sum, value) => sum + value, 0) / lossValues.length : null;
 
   return {
-    totalTrades: trades.length,
-    closedTrades: closedTrades.length,
+    totalTrades: trades.length + closedCalculator.length,
+    closedTrades: closedManual.length + closedCalculator.length,
     openTrades: trades.filter((trade) => trade.status === "open").length,
     wins,
     losses,
@@ -174,29 +215,11 @@ export const computeEquityCurve = (
   }
 
   for (const item of calculatorResults) {
-    if (
-      item.status !== "win"
-      && item.status !== "loss"
-      && item.status !== "breakeven"
-    ) {
-      continue;
-    }
+    const pnl = resolveCalculatorPnl(item);
+    if (pnl === null) continue;
 
     const date = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
     if (!date || Number.isNaN(date.getTime())) continue;
-
-    let pnl = item.pnlAmount;
-    if (pnl === null || pnl === undefined || !Number.isFinite(pnl)) {
-      if (item.resultR !== null && item.resultR !== undefined && Number.isFinite(item.resultR)) {
-        pnl = item.resultR * (item.riskAmount || 0);
-      } else if (item.status === "win") {
-        pnl = item.potentialProfit ?? item.riskAmount ?? 0;
-      } else if (item.status === "loss") {
-        pnl = -(item.actualRisk ?? item.riskAmount ?? 0);
-      } else {
-        pnl = 0;
-      }
-    }
 
     timed.push({
       date,

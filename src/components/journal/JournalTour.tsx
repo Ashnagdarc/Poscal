@@ -1,8 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useMutation, useQuery } from "convex/react";
 import { AnimatePresence, motion } from "motion/react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
+import { api } from "../../../convex/_generated/api";
 
 export type JournalTourSection = "today" | "trades" | "history";
 
@@ -77,7 +79,7 @@ export const hasCompletedJournalTour = (userId?: string | null) => {
   }
 };
 
-export const markJournalTourCompleted = (userId: string) => {
+export const markJournalTourCompletedLocal = (userId: string) => {
   try {
     localStorage.setItem(storageKey(userId), "1");
   } catch {
@@ -113,28 +115,89 @@ export const JournalTour = ({
   onSectionChange,
 }: JournalTourProps) => {
   const { user } = useAuth();
+  const tourStatus = useQuery(api.users.journalTourStatus, user ? {} : "skip");
+  const markTourCompletedRemote = useMutation(api.users.markJournalTourCompleted);
   const [stepIndex, setStepIndex] = useState(0);
   const [isOpen, setIsOpen] = useState(false);
   const [highlight, setHighlight] = useState<HighlightRect | null>(null);
+  const [completedLocally, setCompletedLocally] = useState(() => hasCompletedJournalTour(user?.id));
+  const persistedRef = useRef(false);
+  const launchedRef = useRef(false);
+  const isOpenRef = useRef(false);
+  const userIdRef = useRef(user?.id);
+  const markRemoteRef = useRef(markTourCompletedRemote);
 
   const step = TOUR_STEPS[stepIndex];
   const progress = ((stepIndex + 1) / TOUR_STEPS.length) * 100;
+  const completedRemotely = tourStatus?.completed === true;
+  const statusReady = completedLocally || tourStatus !== undefined;
+  const alreadyCompleted = completedLocally || completedRemotely;
+
+  isOpenRef.current = isOpen;
+  userIdRef.current = user?.id;
+  markRemoteRef.current = markTourCompletedRemote;
+
+  const persistCompleted = useCallback((userId: string, options?: { updateState?: boolean }) => {
+    if (!persistedRef.current) {
+      persistedRef.current = true;
+      markJournalTourCompletedLocal(userId);
+      void markRemoteRef.current({}).catch(() => {
+        persistedRef.current = false;
+      });
+    }
+    if (options?.updateState !== false) {
+      setCompletedLocally(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    launchedRef.current = false;
+    setCompletedLocally(hasCompletedJournalTour(user?.id));
+    persistedRef.current = hasCompletedJournalTour(user?.id);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (completedRemotely && user?.id && !completedLocally) {
+      markJournalTourCompletedLocal(user.id);
+      setCompletedLocally(true);
+      persistedRef.current = true;
+    }
+  }, [completedRemotely, completedLocally, user?.id]);
 
   useEffect(() => {
     if (!enabled || !user?.id) {
       setIsOpen(false);
       return;
     }
-    if (hasCompletedJournalTour(user.id)) {
+    if (alreadyCompleted) {
       setIsOpen(false);
       return;
     }
+    if (!statusReady || launchedRef.current) {
+      return;
+    }
+
     const timer = window.setTimeout(() => {
+      launchedRef.current = true;
       setStepIndex(0);
       setIsOpen(true);
+      // Persist as soon as it plays once so login/refresh never replays it.
+      persistCompleted(user.id, { updateState: false });
     }, 400);
     return () => window.clearTimeout(timer);
-  }, [enabled, user?.id]);
+  }, [enabled, user?.id, alreadyCompleted, statusReady, persistCompleted]);
+
+  // If the user leaves Journal mid-tour, still count it as done.
+  useEffect(() => {
+    return () => {
+      if (isOpenRef.current && userIdRef.current) {
+        markJournalTourCompletedLocal(userIdRef.current);
+        void markRemoteRef.current({}).catch(() => {
+          // ignore
+        });
+      }
+    };
+  }, []);
 
   // Switch tab first, then measure after the target is stably in view.
   useEffect(() => {
@@ -201,7 +264,7 @@ export const JournalTour = ({
   }, [isOpen, step, pageSection, onSectionChange, stepIndex]);
 
   const finish = () => {
-    if (user?.id) markJournalTourCompleted(user.id);
+    if (user?.id) persistCompleted(user.id);
     setIsOpen(false);
     setHighlight(null);
     onSectionChange("today");
@@ -230,7 +293,6 @@ export const JournalTour = ({
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
       >
-        {/* Soft dim — no giant cutout that fights tall sections */}
         <button
           type="button"
           className="absolute inset-0 cursor-default bg-black/50"
@@ -254,7 +316,6 @@ export const JournalTour = ({
           />
         ) : null}
 
-        {/* Docked coach card — always reachable above the bottom nav */}
         <motion.div
           key={step.id}
           role="dialog"

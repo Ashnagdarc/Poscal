@@ -6,7 +6,7 @@ import type { SubscriptionTier } from "@/contexts/SubscriptionContext";
 export const JOURNAL_LIMITS = {
   free: 2,
   premium: 5,
-  pro: 10,
+  pro: 5,
 } as const;
 
 export type TradingJournal = {
@@ -32,8 +32,7 @@ export type CreateJournalInput = {
 const ACTIVE_JOURNAL_STORAGE_KEY = "poscal.activeJournalId";
 
 export const getJournalLimit = (tier?: string | null) => {
-  if (tier === "premium") return JOURNAL_LIMITS.premium;
-  if (tier === "pro") return JOURNAL_LIMITS.pro;
+  if (tier === "premium" || tier === "pro") return JOURNAL_LIMITS.premium;
   return JOURNAL_LIMITS.free;
 };
 

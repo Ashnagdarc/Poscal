@@ -51,6 +51,7 @@ export function computeSubscriptionExpiry(tier: string, paidAtMs: number): numbe
   if (tier === "yearly" || tier === "pro") {
     expiryDate.setFullYear(expiryDate.getFullYear() + 1);
   } else if (tier === "lifetime") {
+    // Legacy: lifetime is no longer sold; keep expiry handling for old charges.
     expiryDate.setFullYear(expiryDate.getFullYear() + 100);
   } else {
     expiryDate.setMonth(expiryDate.getMonth() + 1);
@@ -93,7 +94,7 @@ export function parseSuccessfulCharge(
     tier,
     reference,
     amount: Number(event?.data?.amount || 0) / 100,
-    currency: event?.data?.currency || "NGN",
+    currency: event?.data?.currency || "USD",
     expiresAtMs: computeSubscriptionExpiry(tier, paidAtMs),
     paidAtMs,
     metadata: {

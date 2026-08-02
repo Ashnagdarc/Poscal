@@ -282,8 +282,8 @@ const Settings = () => {
           )}
         </section>
 
-        {/* Subscription */}
-        {user && !isPremium && (
+        {/* Subscription upsell — only when the admin paid lock is on */}
+        {user && !isPremium && paidLockEnabled ? (
           <section>
             <SettingsSection title="Subscription" />
             <div className="overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-secondary/40 to-secondary/20">
@@ -318,7 +318,7 @@ const Settings = () => {
               </div>
             </div>
           </section>
-        )}
+        ) : null}
 
         {/* Admin */}
         {isAdmin && (

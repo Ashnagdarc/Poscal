@@ -85,25 +85,27 @@ describe("ProtectedRoute", () => {
     expect(await screen.findByText("Upgrade Page")).toBeInTheDocument();
   });
 
-  it("fails closed when paid lock fetch errors", async () => {
+  it("fails open when paid lock fetch errors", async () => {
     mockGetPaidLock.mockRejectedValue(new Error("flag down"));
 
     renderAt("/journal");
 
-    expect(await screen.findByText("Upgrade Page")).toBeInTheDocument();
+    expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 
-  it("fails closed when paid lock fetch times out", async () => {
+  it("fails open when paid lock fetch times out", async () => {
     vi.useFakeTimers();
     mockGetPaidLock.mockImplementation(() => new Promise(() => undefined));
 
     renderAt("/journal");
 
+    expect(screen.getByText("Journal Content")).toBeInTheDocument();
+
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
 
-    expect(screen.getByText("Upgrade Page")).toBeInTheDocument();
+    expect(screen.getByText("Journal Content")).toBeInTheDocument();
   });
 
   it("allows paid users when paid lock is enabled", async () => {

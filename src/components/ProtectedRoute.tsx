@@ -1,16 +1,15 @@
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
-import { useEffect, useState } from 'react';
-import { featureFlagApi } from '@/lib/api';
 import { useAdmin } from '@/hooks/use-admin';
+import { usePaidLock } from '@/hooks/use-paid-lock';
 
 // Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
-// Fail-closed: if the flag cannot be fetched, treat paid lock as enabled so premium routes stay gated.
+// Fail-open: payment wall stays off until an admin turns the lock on (and on fetch errors/timeouts).
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiresPremium?: boolean; // New prop for premium-only routes
+  requiresPremium?: boolean;
   requiresAdmin?: boolean;
 }
 
@@ -22,45 +21,11 @@ export const ProtectedRoute = ({
   const { user, loading: authLoading } = useAuth();
   const { isPaid, isTrial, isLoading: subLoading } = useSubscription();
   const { isAdmin, loading: adminLoading } = useAdmin();
-  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
+  const { paidLockEnabled } = usePaidLock();
   const location = useLocation();
 
-  useEffect(() => {
-    let mounted = true;
-    let timeoutId: ReturnType<typeof setTimeout>;
-
-    setPaidLockEnabled(null);
-
-    (async () => {
-      try {
-        const enabled = await featureFlagApi.getPaidLock();
-        if (mounted) setPaidLockEnabled(!!enabled);
-      } catch (err) {
-        console.warn('Could not fetch paid lock flag; failing closed', err);
-        if (mounted) setPaidLockEnabled(true);
-      }
-    })();
-
-    // Fallback: if API doesn't respond within 5 seconds, fail closed (lock enabled)
-    timeoutId = setTimeout(() => {
-      if (!mounted) return;
-      setPaidLockEnabled((current) => {
-        if (current === null) {
-          console.warn('Paid lock API timeout, defaulting to fail-closed (enabled)');
-          return true;
-        }
-        return current;
-      });
-    }, 5000);
-
-    return () => {
-      mounted = false;
-      clearTimeout(timeoutId);
-    };
-  }, [location.pathname]);
-
   // Show loading spinner while checking auth or subscription
-  if (authLoading || subLoading || adminLoading || paidLockEnabled === null) {
+  if (authLoading || subLoading || adminLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
@@ -77,7 +42,7 @@ export const ProtectedRoute = ({
     return <Navigate to="/settings" replace />;
   }
 
-  // Check premium requirement. Enforce only if route requires premium AND admin has enabled paid lock.
+  // Enforce only if route requires premium AND admin has enabled paid lock.
   if (requiresPremium && paidLockEnabled && !isPaid && !isTrial) {
     const redirectPath = encodeURIComponent(location.pathname || '/');
     return <Navigate to={`/upgrade?tier=premium&redirectPath=${redirectPath}`} replace />;
