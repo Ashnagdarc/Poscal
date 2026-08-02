@@ -69,3 +69,14 @@ coverage/
 playwright-report/
 test-results/
 blob-report/
+
+# Convex AI agent skills / install noise (regenerate via `npx convex ai-files install`)
+.agents/
+.claude/
+skills-lock.json
+convex/_generated/ai/
+
+# Local one-off audit reports (keep on disk; not product source)
+docs/audit/
+docs/security-audit-*/
+docs/PRODUCT_AUDIT_*
