@@ -1,4 +1,8 @@
-import { INSTRUMENT_SPECS, InstrumentSpec } from "./instrumentSpecs";
+import {
+  INSTRUMENT_SPECS,
+  InstrumentSpec,
+  resolveInstrumentSymbol,
+} from "./instrumentSpecs";
 import { roundPipsFromPriceDistance } from "./calculatorModeSync";
 
 export type StopInputMode = "pips" | "price";
@@ -12,6 +16,8 @@ export interface CalculatePositionSizeInput {
   stopLossPrice?: number | null;
   takeProfitPips?: number | null;
   takeProfitPrice?: number | null;
+  /** Mid prices for conversion pairs, e.g. { "GBP/USD": 1.27, "USD/JPY": 150 }. User-supplied only. */
+  marketPrices?: Record<string, number> | null;
 }
 
 export interface CalculatePositionSizeResult {
@@ -55,7 +61,7 @@ const EMPTY_RESULT: Omit<
 };
 
 export function getInstrumentSpec(symbol: string): InstrumentSpec | undefined {
-  return INSTRUMENT_SPECS[normalizeSymbol(symbol)];
+  return INSTRUMENT_SPECS[resolveInstrumentSymbol(symbol)];
 }
 
 export function calculateRiskAmount(
@@ -105,7 +111,7 @@ export function roundToLotStep(lotSize: number, lotStep: number): number {
 export function calculatePositionSize(
   input: CalculatePositionSizeInput,
 ): CalculatePositionSizeResult {
-  const symbol = normalizeSymbol(input.symbol);
+  const symbol = resolveInstrumentSymbol(input.symbol);
   const spec = getInstrumentSpec(symbol);
   const mode = isPositiveNumber(input.stopLossPips) ? "pips" : "price";
 
@@ -124,11 +130,25 @@ export function calculatePositionSize(
     return invalidResult(symbol, stop.mode, "Enter stop loss", spec, riskAmount);
   }
 
-  if (spec.pipValuePerStandardLot <= 0) {
+  if (spec.pipValuePerStandardLot <= 0 && !isCrossPair(symbol)) {
     return invalidResult(symbol, stop.mode, "Instrument pip value is missing", spec, riskAmount);
   }
 
-  const pipValuePerLot = resolveEffectivePipValue(spec, symbol, input.entryPrice);
+  const pipValuePerLot = resolveEffectivePipValue(spec, symbol, input.entryPrice, input.marketPrices);
+  if (pipValuePerLot == null || pipValuePerLot <= 0) {
+    return invalidResult(
+      symbol,
+      stop.mode,
+      requiresEntryForPipValue(symbol)
+        ? "Enter entry/mid price for accurate pip value on this pair"
+        : isCrossPair(symbol)
+          ? `Enter ${requiredConversionPair(symbol)} conversion rate to size this cross in USD`
+          : "Instrument pip value is missing",
+      spec,
+      riskAmount,
+    );
+  }
+
   const rawLotSize = riskAmount / (stop.stopLossPips * pipValuePerLot);
   const roundedLotSize = roundToLotStep(rawLotSize, spec.lotStep);
   const wasMinLotClamped = roundedLotSize > 0 && roundedLotSize < spec.minLot;
@@ -207,10 +227,6 @@ function invalidResult(
   };
 }
 
-function normalizeSymbol(symbol: string): string {
-  return symbol.trim().toUpperCase();
-}
-
 function isPositiveNumber(value: number | null | undefined): value is number {
   return typeof value === "number" && Number.isFinite(value) && value > 0;
 }
@@ -220,17 +236,71 @@ function getDecimalPrecision(value: number): number {
   return decimal ? decimal.length : 0;
 }
 
-/** USD-base pairs (USD/JPY, USD/CHF, USD/CAD) need a live quote for accurate pip value. */
+/** USD-base pairs (USD/JPY, USD/CHF, USD/CAD) need a user-entered quote for accurate pip value. */
+export function requiresEntryForPipValue(symbol: string): boolean {
+  const normalized = resolveInstrumentSymbol(symbol);
+  const [base] = normalized.split("/");
+  return base === "USD" && !normalized.endsWith("/USD");
+}
+
+/** Non-USD quote crosses need a user-supplied conversion pair rate to express pip value in USD. */
+export function isCrossPair(symbol: string): boolean {
+  const normalized = resolveInstrumentSymbol(symbol);
+  if (!normalized.includes("/")) return false;
+  const [base, quote] = normalized.split("/");
+  return base !== "USD" && quote !== "USD" && Boolean(base) && Boolean(quote);
+}
+
+export function requiredConversionPair(symbol: string): string {
+  const normalized = resolveInstrumentSymbol(symbol);
+  const [, quote] = normalized.split("/");
+  if (quote === "JPY" || quote === "CHF" || quote === "CAD") {
+    return `USD/${quote}`;
+  }
+  return `${quote}/USD`;
+}
+
+/**
+ * Resolve USD pip value per standard lot.
+ * Crosses: pipValueInQuote = contractSize * pipSize, then convert quote→USD.
+ * EUR/GBP: 10 GBP/pip → × GBPUSD
+ * EUR/JPY: 1000 JPY/pip → ÷ USDJPY
+ */
 export function resolveEffectivePipValue(
   spec: InstrumentSpec,
   symbol: string,
   entryPrice?: number | null,
-): number {
-  if (isPositiveNumber(entryPrice)) {
-    const [base] = symbol.split("/");
-    if (base === "USD" && !symbol.endsWith("/USD")) {
-      return (spec.contractSize * spec.pipSize) / entryPrice;
+  marketPrices?: Record<string, number> | null,
+): number | null {
+  const normalized = resolveInstrumentSymbol(symbol);
+
+  if (requiresEntryForPipValue(normalized)) {
+    if (!isPositiveNumber(entryPrice)) {
+      return null;
     }
+    return (spec.contractSize * spec.pipSize) / entryPrice;
+  }
+
+  if (isCrossPair(normalized)) {
+    const pipValueInQuote = spec.contractSize * spec.pipSize;
+    const conversionPair = requiredConversionPair(normalized);
+    const conversionRate =
+      marketPrices && isPositiveNumber(marketPrices[conversionPair])
+        ? marketPrices[conversionPair]
+        : null;
+
+    if (!isPositiveNumber(conversionRate)) {
+      return null;
+    }
+
+    // USD/XXX → divide; XXX/USD → multiply
+    if (conversionPair.startsWith("USD/")) {
+      return pipValueInQuote / conversionRate;
+    }
+    if (conversionPair.endsWith("/USD")) {
+      return pipValueInQuote * conversionRate;
+    }
+    return null;
   }
 
   return spec.pipValuePerStandardLot;

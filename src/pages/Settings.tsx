@@ -6,6 +6,7 @@ import {
   Coins,
   Download,
   FileText,
+  Globe,
   LogOut,
   Lock,
   Mail,
@@ -24,7 +25,7 @@ import {
 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAppFont } from "@/contexts/FontContext";
+import { useAppFont } from "@/contexts/useAppFont";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { PageHeader } from "@/components/PageHeader";
@@ -37,13 +38,23 @@ import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { usePWAUpdate } from "@/hooks/use-pwa-update";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { toast } from "sonner";
-import { featureFlagApi, subscriptionApi } from "@/lib/api";
+import { featureFlagApi, preferencesApi, subscriptionApi } from "@/lib/api";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
 import type { AppFontId } from "@/lib/fonts";
+import { COMMON_TIMEZONES, detectBrowserTimeZone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
-  return error instanceof Error ? error.message : fallback;
+  if (!(error instanceof Error)) return fallback;
+  const message = error.message.trim();
+  if (
+    !message
+    || /VITE_|RESEND_|VAPID_|API_KEY|PaystackPop|Convex client|Request ID|@convex|\.ts:|\.js:/i.test(message)
+    || message.length > 160
+  ) {
+    return fallback;
+  }
+  return message;
 };
 
 const getSubscriptionLabel = ({
@@ -71,7 +82,10 @@ const Settings = () => {
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
   const [showFontPicker, setShowFontPicker] = useState(false);
+  const [showTimezonePicker, setShowTimezonePicker] = useState(false);
+  const [timezone, setTimezone] = useState(detectBrowserTimeZone());
   const [isSavingFont, setIsSavingFont] = useState(false);
+  const [isSavingTimezone, setIsSavingTimezone] = useState(false);
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const { updateAvailable, isUpdating, updateApp, checkForUpdate } = usePWAUpdate();
@@ -89,7 +103,35 @@ const Settings = () => {
 
     const savedHaptics = localStorage.getItem("hapticsEnabled");
     setHapticsEnabled(savedHaptics !== "false");
+
+    const savedTimezone = localStorage.getItem("preferredTimezone");
+    if (savedTimezone) setTimezone(savedTimezone);
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const prefs = await preferencesApi.get();
+        if (!mounted || !prefs) return;
+        if (prefs.timezone) {
+          setTimezone(prefs.timezone);
+          localStorage.setItem("preferredTimezone", prefs.timezone);
+        }
+        if (prefs.default_risk_percent != null) {
+          const risk = String(prefs.default_risk_percent);
+          setDefaultRisk(risk);
+          localStorage.setItem("defaultRisk", risk);
+        }
+      } catch {
+        // Keep local defaults
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     if (isAdmin) {
@@ -144,6 +186,36 @@ const Settings = () => {
     setDefaultRisk(value);
     localStorage.setItem("defaultRisk", value);
     lightTap();
+    if (user) {
+      void preferencesApi
+        .update({ defaultRiskPercent: Number(value) })
+        .catch(() => {
+          toast.error("Could not sync default risk to your profile");
+        });
+    }
+  };
+
+  const handleTimezoneChange = async (nextZone: string) => {
+    if (nextZone === timezone || isSavingTimezone) return;
+    setIsSavingTimezone(true);
+    const previous = timezone;
+    setTimezone(nextZone);
+    localStorage.setItem("preferredTimezone", nextZone);
+    try {
+      if (user) {
+        await preferencesApi.update({ timezone: nextZone });
+      }
+      const label = COMMON_TIMEZONES.find((zone) => zone.id === nextZone)?.label ?? nextZone;
+      toast.success(`Timezone set to ${label}`);
+      setShowTimezonePicker(false);
+      lightTap();
+    } catch {
+      setTimezone(previous);
+      localStorage.setItem("preferredTimezone", previous);
+      toast.error("Could not update timezone");
+    } finally {
+      setIsSavingTimezone(false);
+    }
   };
 
   const clearHistory = async () => {
@@ -499,6 +571,67 @@ const Settings = () => {
                           )}
                         >
                           {curr.name}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-border/40">
+              <button
+                type="button"
+                onClick={() => setShowTimezonePicker(!showTimezonePicker)}
+                className="flex w-full items-center justify-between px-5 py-4 transition-colors hover:bg-secondary/30"
+              >
+                <SettingsRowContent
+                  icon={<Globe className="h-4 w-4" />}
+                  title="Timezone"
+                  subtitle="Date labels in journal analytics"
+                />
+                <div className="flex items-center gap-2">
+                  <span className="max-w-[9rem] truncate text-sm font-medium text-muted-foreground">
+                    {COMMON_TIMEZONES.find((zone) => zone.id === timezone)?.label ?? timezone}
+                  </span>
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 text-muted-foreground transition-transform",
+                      showTimezonePicker && "rotate-90",
+                    )}
+                  />
+                </div>
+              </button>
+              {showTimezonePicker && (
+                <div className="border-t border-border/40 bg-background/40 px-5 pb-4 pt-3">
+                  <p className="mb-2 text-[11px] text-muted-foreground">
+                    Formats trade dates and day buckets. Session rollups stay on UTC market hours.
+                  </p>
+                  <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto">
+                    {COMMON_TIMEZONES.map((zone) => (
+                      <button
+                        key={zone.id}
+                        type="button"
+                        disabled={isSavingTimezone}
+                        onClick={() => {
+                          void handleTimezoneChange(zone.id);
+                        }}
+                        className={cn(
+                          "rounded-xl border p-3 text-left transition-all",
+                          timezone === zone.id
+                            ? "border-brand bg-brand text-brand-foreground"
+                            : "border-border bg-secondary/50 hover:border-foreground/20",
+                          isSavingTimezone && "opacity-70",
+                        )}
+                      >
+                        <p className="text-sm font-semibold">{zone.label}</p>
+                        <p
+                          className={cn(
+                            "mt-0.5 text-xs",
+                            timezone === zone.id ? "opacity-80" : "text-muted-foreground",
+                          )}
+                        >
+                          {zone.id}
                         </p>
                       </button>
                     ))}

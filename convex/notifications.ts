@@ -14,15 +14,17 @@ export const claimPendingBatch = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
+    // Cap scans so a large backlog cannot blow read limits; claim only needs a batch.
+    const scanCap = Math.max(args.limit * 10, 50);
     const duePending = await ctx.db
       .query("notificationQueue")
       .withIndex("by_status_scheduled", (q) => q.eq("status", "pending"))
-      .collect();
+      .take(scanCap);
 
     const staleProcessing = await ctx.db
       .query("notificationQueue")
       .withIndex("by_status_scheduled", (q) => q.eq("status", "processing"))
-      .collect();
+      .take(scanCap);
 
     const candidates = [
       ...duePending.filter((row) => row.scheduledForMs === null || row.scheduledForMs === undefined || row.scheduledForMs <= now),

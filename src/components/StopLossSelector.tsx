@@ -107,6 +107,7 @@ export const StopLossSelector = ({
                 }
               }}
               placeholder={`Type stop loss (${unitLabel})...`}
+              aria-label={`Stop loss in ${unitLabel}`}
               className="w-full h-14 pl-12 pr-4 bg-secondary text-foreground rounded-xl text-lg font-medium focus:outline-none focus:ring-2 focus:ring-primary/50 placeholder:text-muted-foreground/50"
               autoFocus
               step="0.1"
@@ -143,7 +144,10 @@ export const StopLossSelector = ({
           return (
             <button
               key={option.stopLoss}
+              type="button"
               onClick={() => onSelect(option.stopLoss)}
+              aria-label={`Stop loss ${option.stopLoss} ${unitLabel}, ${option.lotSize.toFixed(2)} lots`}
+              aria-pressed={isSelected}
               className={`w-full grid grid-cols-2 px-6 py-4 transition-all duration-150 border-b border-border/30 ${
                 isSelected
                   ? "bg-primary text-primary-foreground"
@@ -151,7 +155,7 @@ export const StopLossSelector = ({
               }`}
             >
               <div className={`text-left ${isSelected ? "font-bold text-lg" : "font-medium"}`}>
-                {option.stopLoss}
+                {option.stopLoss.toFixed(1)}
               </div>
               <div className={`text-right font-mono ${isSelected ? "font-bold text-lg" : "font-medium text-muted-foreground"}`}>
                 {option.lotSize.toFixed(2)}

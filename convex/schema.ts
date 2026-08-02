@@ -4,6 +4,7 @@ import { authTables } from "@convex-dev/auth/server";
 
 const nullableString = v.optional(v.union(v.string(), v.null()));
 const nullableNumber = v.optional(v.union(v.number(), v.null()));
+const nullableBoolean = v.optional(v.union(v.boolean(), v.null()));
 const nullableAny = v.optional(v.union(v.any(), v.null()));
 
 export default defineSchema({
@@ -40,11 +41,16 @@ export default defineSchema({
     journalOnboardedAtMs: nullableNumber,
     journalTourCompletedAtMs: nullableNumber,
     newsAlertsEnabled: v.optional(v.boolean()),
+    timezone: nullableString,
+    defaultRiskPercent: nullableNumber,
+    tradingRiskAlertsEnabled: v.optional(v.boolean()),
+    tradingMilestoneAlertsEnabled: v.optional(v.boolean()),
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })
     .index("by_email", ["email"])
-    .index("by_external_user_id", ["externalUserId"]),
+    .index("by_external_user_id", ["externalUserId"])
+    .index("by_payment_expires", ["paymentStatus", "subscriptionExpiresAtMs"]),
 
   tradingAccounts: defineTable({
     userId: v.string(),
@@ -92,6 +98,8 @@ export default defineSchema({
   })
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
+    .index("by_user_status_created", ["userId", "status", "createdAtMs"])
+    .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
     .index("by_external_id", ["externalId"]),
 
   progressSessions: defineTable({
@@ -220,7 +228,8 @@ export default defineSchema({
 
   appSettings: defineTable({
     key: v.string(),
-    valueBoolean: v.optional(v.boolean()),
+    // Nullable so unused typed slots can be cleared (e.g. setAppFont sets valueBoolean: null).
+    valueBoolean: nullableBoolean,
     valueString: nullableString,
     valueNumber: nullableNumber,
     updatedAtMs: v.number(),
@@ -304,4 +313,13 @@ export default defineSchema({
   })
     .index("by_source_table", ["source", "tableName"])
     .index("by_status", ["status"]),
+
+  appAuthRateLimits: defineTable({
+    key: v.string(),
+    action: v.string(),
+    email: v.string(),
+    count: v.number(),
+    windowStartMs: v.number(),
+    updatedAtMs: v.number(),
+  }).index("by_key", ["key"]),
 });

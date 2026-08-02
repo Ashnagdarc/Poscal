@@ -1,6 +1,4 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useState,
   type ReactNode,
@@ -14,15 +12,7 @@ import {
   resolveAppFontId,
   type AppFontId,
 } from "@/lib/fonts";
-
-type FontContextValue = {
-  fontId: AppFontId;
-  options: typeof APP_FONT_OPTIONS;
-  isLoading: boolean;
-  setFontId: (fontId: AppFontId) => Promise<AppFontId>;
-};
-
-const FontContext = createContext<FontContextValue | undefined>(undefined);
+import { FontContext } from "@/contexts/fontContextInstance";
 
 export const FontProvider = ({ children }: { children: ReactNode }) => {
   const [fontId, setFontIdState] = useState<AppFontId>(() => readCachedAppFont());
@@ -74,12 +64,4 @@ export const FontProvider = ({ children }: { children: ReactNode }) => {
       {children}
     </FontContext.Provider>
   );
-};
-
-export const useAppFont = () => {
-  const context = useContext(FontContext);
-  if (!context) {
-    throw new Error("useAppFont must be used within FontProvider");
-  }
-  return context;
 };

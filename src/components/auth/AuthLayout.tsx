@@ -48,7 +48,7 @@ interface AuthFooterProps {
   prompt: string;
   linkLabel: string;
   linkTo: string;
-  guestHref?: string;
+  guestHref?: string | null;
 }
 
 export const AuthFooter = ({ prompt, linkLabel, linkTo, guestHref = "/" }: AuthFooterProps) => {
@@ -63,14 +63,16 @@ export const AuthFooter = ({ prompt, linkLabel, linkTo, guestHref = "/" }: AuthF
           {linkLabel}
         </Link>
       </p>
-      <Link
-        to={guestHref}
-        className={cn(
-          "inline-flex min-h-11 items-center justify-center px-4 text-sm text-white/60 transition-colors hover:text-white",
-        )}
-      >
-        Continue as guest →
-      </Link>
+      {guestHref ? (
+        <Link
+          to={guestHref}
+          className={cn(
+            "inline-flex min-h-11 items-center justify-center px-4 text-xs text-white/45 transition-colors hover:text-white/70",
+          )}
+        >
+          Continue as guest
+        </Link>
+      ) : null}
     </div>
   );
 };

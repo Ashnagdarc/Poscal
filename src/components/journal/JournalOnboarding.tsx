@@ -24,6 +24,35 @@ interface JournalOnboardingProps {
   onCancel?: () => void;
 }
 
+/** Surface server reasons (limit / auth) from Convex-wrapped Error messages. */
+function toJournalCreateToastMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const uncaught = raw.match(/Uncaught Error:\s*(.+?)(?:\n|$)/i)?.[1]?.trim();
+  const candidate = uncaught || raw;
+
+  if (/not authenticated/i.test(candidate)) {
+    return "Please sign in again to create a journal";
+  }
+  if (/journal limit reached/i.test(candidate)) {
+    const match = candidate.match(/Journal limit reached[^.!\n]*/i);
+    return match?.[0]?.trim() ?? "Journal limit reached for your plan";
+  }
+  if (/journal name is required|account size must be/i.test(candidate)) {
+    return candidate;
+  }
+  if (
+    candidate
+    && !/\[CONVEX|VITE_|API_KEY|Request ID|@convex|\.ts:|\.js:|\n/i.test(candidate)
+    && candidate.length <= 160
+  ) {
+    return candidate;
+  }
+  if (/unavailable/i.test(raw)) {
+    return "Service temporarily unavailable. Please try again.";
+  }
+  return "Failed to create journal";
+}
+
 export const JournalOnboarding = ({
   mode = "first",
   onComplete,
@@ -80,7 +109,7 @@ export const JournalOnboarding = ({
       onComplete?.();
     } catch (error) {
       console.error("[journalOnboarding] Failed to create journal", error);
-      toast.error(error instanceof Error ? error.message : "Failed to create journal");
+      toast.error(toJournalCreateToastMessage(error));
     } finally {
       setIsSaving(false);
     }

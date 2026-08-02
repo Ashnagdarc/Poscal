@@ -2,7 +2,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { lazy, Suspense } from "react";
+import { Suspense } from "react";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { FontProvider } from "@/contexts/FontContext";
@@ -17,27 +17,29 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { PWAUpdateBanner } from "./components/PWAUpdateBanner";
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
+import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
-const Welcome = lazy(() => import("./pages/Welcome"));
-const SignIn = lazy(() => import("./pages/SignIn"));
-const SignUp = lazy(() => import("./pages/SignUp"));
-const Profile = lazy(() => import("./pages/Profile"));
-const Journal = lazy(() => import("./pages/Journal"));
-const Settings = lazy(() => import("./pages/Settings"));
-const News = lazy(() => import("./pages/News"));
-const Upgrade = lazy(() => import("./pages/Upgrade"));
-const UserManagement = lazy(() => import("./pages/UserManagement"));
-const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
-const AdminIngestorHealth = lazy(() => import("./pages/AdminIngestorHealth"));
-const Terms = lazy(() => import("./pages/Terms"));
-const Privacy = lazy(() => import("./pages/Privacy"));
-const NotFound = lazy(() => import("./pages/NotFound"));
+const Welcome = lazyWithRetry(() => import("./pages/Welcome"));
+const SignIn = lazyWithRetry(() => import("./pages/SignIn"));
+const SignUp = lazyWithRetry(() => import("./pages/SignUp"));
+const ForgotPassword = lazyWithRetry(() => import("./pages/ForgotPassword"));
+const Profile = lazyWithRetry(() => import("./pages/Profile"));
+const Journal = lazyWithRetry(() => import("./pages/Journal"));
+const Settings = lazyWithRetry(() => import("./pages/Settings"));
+const News = lazyWithRetry(() => import("./pages/News"));
+const Upgrade = lazyWithRetry(() => import("./pages/Upgrade"));
+const UserManagement = lazyWithRetry(() => import("./pages/UserManagement"));
+const AdminUpdates = lazyWithRetry(() => import("./pages/AdminUpdates"));
+const AdminIngestorHealth = lazyWithRetry(() => import("./pages/AdminIngestorHealth"));
+const Terms = lazyWithRetry(() => import("./pages/Terms"));
+const Privacy = lazyWithRetry(() => import("./pages/Privacy"));
+const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
-  const hideBottomNavOn = ["/signin", "/signup", "/welcome", "/terms", "/privacy"];
+  const hideBottomNavOn = ["/signin", "/signup", "/forgot-password", "/welcome", "/terms", "/privacy"];
   const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
 
   return (
@@ -59,12 +61,13 @@ const AppContent = () => {
           <Route path="/welcome" element={<Welcome />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
           <Route
             path="/history"
             element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>}
           />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="/pricing" element={<Upgrade />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route

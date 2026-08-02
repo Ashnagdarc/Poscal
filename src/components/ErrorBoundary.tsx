@@ -40,6 +40,21 @@ export class ErrorBoundary extends Component<Props, State> {
       error,
       errorInfo,
     });
+
+    // Vite HMR can break lazy chunks mid-navigation; recover with a single reload.
+    const message = error.message ?? '';
+    const isChunkLoadError =
+      message.includes('dynamically imported module') ||
+      message.includes('Importing a module script failed');
+    if (isChunkLoadError && import.meta.env.DEV) {
+      const key = 'poscal:chunk-auto-reload';
+      const last = Number(sessionStorage.getItem(key) ?? '0');
+      const now = Date.now();
+      if (now - last > 10_000) {
+        sessionStorage.setItem(key, String(now));
+        window.location.reload();
+      }
+    }
   }
 
   handleReset = () => {
@@ -49,6 +64,26 @@ export class ErrorBoundary extends Component<Props, State> {
       errorInfo: null,
     });
     window.location.href = '/';
+  };
+
+  handleRetry = () => {
+    const message = this.state.error?.message ?? "";
+    // Soft remount cannot recover these: Vite HMR often recreates createContext()
+    // while an old Provider fiber remains, so hooks keep seeing undefined.
+    const needsHardReload =
+      message.includes("dynamically imported module") ||
+      message.includes("Failed to fetch") ||
+      message.includes("must be used within");
+
+    this.setState({
+      hasError: false,
+      error: null,
+      errorInfo: null,
+    });
+
+    if (needsHardReload) {
+      window.location.reload();
+    }
   };
 
   render() {
@@ -62,7 +97,7 @@ export class ErrorBoundary extends Component<Props, State> {
             </div>
             
             <p className="text-muted-foreground">
-              We encountered an unexpected error. Please try refreshing the page or returning to the home screen.
+              We encountered an unexpected error. Please try again, refresh the page, or return home.
             </p>
 
             {this.state.error && import.meta.env.DEV && (
@@ -74,10 +109,14 @@ export class ErrorBoundary extends Component<Props, State> {
                 </pre>
               </details>
             )}
+            {/* Production builds never render stack traces (P-033 / AIS-018). */}
 
             <div className="flex gap-2">
-              <Button onClick={this.handleReset} className="flex-1">
+              <Button onClick={this.handleRetry} variant="outline" className="flex-1">
                 <RefreshCw className="h-4 w-4 mr-2" />
+                Try again
+              </Button>
+              <Button onClick={this.handleReset} className="flex-1">
                 Return to Home
               </Button>
             </div>

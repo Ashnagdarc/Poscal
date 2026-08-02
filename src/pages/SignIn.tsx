@@ -1,32 +1,66 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { AuthFooter, AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField, AuthPasswordField, authInputClassName } from "@/components/auth/AuthField";
 import { useAuth } from "@/contexts/AuthContext";
 
+type SignInLocationState = {
+  email?: string;
+  fromSignup?: boolean;
+};
+
 const SignIn = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { signIn } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [fromSignupBanner, setFromSignupBanner] = useState(false);
+
+  const locationState = (location.state as SignInLocationState | null) ?? null;
 
   const bannerMessage = useMemo(() => {
-    if (searchParams.get("fromSignup") === "1") {
-      return "Account created. Verify your email, then sign in.";
+    if (fromSignupBanner || searchParams.get("fromSignup") === "1") {
+      // Email verification is not enforced by the Password provider (ETH-006 / AIS-015).
+      return "Account created. You can sign in with your email and password.";
     }
     return "";
-  }, [searchParams]);
+  }, [fromSignupBanner, searchParams]);
 
   useEffect(() => {
-    const prefilledEmail = searchParams.get("email");
-    if (prefilledEmail) {
-      setEmail(prefilledEmail);
+    const stateEmail = locationState?.email?.trim();
+    if (stateEmail) {
+      setEmail(stateEmail);
     }
-  }, [searchParams]);
+    if (locationState?.fromSignup) {
+      setFromSignupBanner(true);
+    }
+  }, [locationState]);
+
+  useEffect(() => {
+    // Strip legacy ?email= / ?fromSignup= from the URL so PII is not left in history/logs (P-026).
+    const legacyEmail = searchParams.get("email");
+    const legacyFromSignup = searchParams.get("fromSignup");
+    if (!legacyEmail && !legacyFromSignup) {
+      return;
+    }
+
+    if (legacyEmail) {
+      setEmail((current) => current || legacyEmail);
+    }
+    if (legacyFromSignup === "1") {
+      setFromSignupBanner(true);
+    }
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("email");
+    next.delete("fromSignup");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -36,8 +70,8 @@ const SignIn = () => {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
@@ -46,13 +80,7 @@ const SignIn = () => {
     const { error } = await signIn(email, password);
 
     if (error) {
-      if (error.includes("Invalid credentials") || error.includes("Invalid login credentials")) {
-        toast.error("Invalid email or password");
-      } else if (error.includes("Email not confirmed")) {
-        toast.error("Please check your email to confirm your account");
-      } else {
-        toast.error(error);
-      }
+      toast.error(error);
       setIsLoading(false);
       return;
     }
@@ -106,10 +134,19 @@ const SignIn = () => {
           onTogglePassword={() => setShowPassword((current) => !current)}
         />
 
+        <div className="flex justify-end">
+          <Link
+            to="/forgot-password"
+            className="text-sm font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            Forgot password?
+          </Link>
+        </div>
+
         <button
           type="submit"
           disabled={isLoading}
-          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">

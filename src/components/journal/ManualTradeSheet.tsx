@@ -191,15 +191,33 @@ export const ManualTradeSheet = ({
   };
 
   const handleSubmit = async () => {
+    if (isSaving) return;
+
     const pair = canonicalizePairSymbol(form.pair);
     if (!pair) {
       toast.error("Enter a symbol");
       return;
     }
 
+    const pairToken = pair.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (pairToken === "INVALID" || pairToken.includes("INVALID")) {
+      toast.error("Enter a valid trading symbol");
+      return;
+    }
+
     const pnlValue = isClosed ? parsePriceInput(form.pnl) : null;
     if (isClosed && (pnlValue === null || !Number.isFinite(pnlValue))) {
       toast.error("Enter P&L so this trade updates your charts and overview");
+      return;
+    }
+    if (pnlValue != null && Math.abs(pnlValue) > 1_000_000) {
+      toast.error("P&L looks unrealistic — check the amount");
+      return;
+    }
+
+    const positionSize = parsePriceInput(form.position_size);
+    if (positionSize != null && (positionSize < 0 || positionSize > 1_000)) {
+      toast.error("Position size must be between 0 and 1000");
       return;
     }
 
@@ -301,6 +319,12 @@ export const ManualTradeSheet = ({
                 </Select>
               </div>
             </div>
+            {!isClosed ? (
+              <p className="text-xs text-muted-foreground">
+                Open and cancelled trades show in your list but do not update P&amp;L or the equity chart
+                until you close them with a P&amp;L amount.
+              </p>
+            ) : null}
           </section>
 
           <section className="space-y-3">

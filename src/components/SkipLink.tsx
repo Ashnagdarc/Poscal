@@ -7,12 +7,14 @@ import React from 'react';
 export const SkipLink = () => {
   const handleSkip = (e: React.MouseEvent<HTMLAnchorElement>) => {
     e.preventDefault();
-    const main = document.querySelector('main');
+    const main =
+      document.getElementById("main-content")
+      ?? document.querySelector("main");
     if (main) {
-      main.setAttribute('tabindex', '-1');
+      main.setAttribute("tabindex", "-1");
       main.focus();
       // Remove tabindex after focus to restore natural tab order
-      setTimeout(() => document.querySelector('main')?.removeAttribute('tabindex'), 100);
+      setTimeout(() => main.removeAttribute("tabindex"), 100);
     }
   };
 

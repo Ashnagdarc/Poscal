@@ -287,18 +287,13 @@ export const JournalTour = ({
   return createPortal(
     <AnimatePresence>
       <motion.div
-        className="fixed inset-0 z-[80]"
+        className="fixed inset-0 z-[80] pointer-events-none"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
       >
-        <button
-          type="button"
-          className="absolute inset-0 cursor-default bg-black/50"
-          aria-label="Dismiss tour"
-          onClick={finish}
-        />
+        <div className="absolute inset-0 bg-black/40" aria-hidden="true" />
 
         {highlight ? (
           <motion.div
@@ -321,7 +316,7 @@ export const JournalTour = ({
           role="dialog"
           aria-modal="true"
           aria-labelledby="journal-tour-title"
-          className="fixed inset-x-0 bottom-0 z-[81] px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 sm:px-4"
+          className="pointer-events-auto fixed inset-x-0 bottom-0 z-[81] px-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-2 sm:px-4"
           initial={{ y: 24, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           exit={{ y: 16, opacity: 0 }}

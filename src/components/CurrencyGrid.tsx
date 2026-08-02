@@ -136,47 +136,57 @@ export const CURRENCY_PAIRS: CurrencyPair[] = [
   { symbol: "USD/RUB", pipDecimal: 4 },
   { symbol: "USD/BRL", pipDecimal: 4 },
   
-  // ============== PRECIOUS METALS (6) ==============
+  // ============== PRECIOUS / INDUSTRIAL METALS ==============
   { symbol: "XAU/USD", pipDecimal: 2 },
   { symbol: "XAG/USD", pipDecimal: 3 },
   { symbol: "XPT/USD", pipDecimal: 2 },
   { symbol: "XPD/USD", pipDecimal: 2 },
+  { symbol: "XCU/USD", pipDecimal: 4 },
   { symbol: "XAU/EUR", pipDecimal: 2 },
   { symbol: "XAU/GBP", pipDecimal: 2 },
   
-  // ============== ENERGY COMMODITIES (8) ==============
-  { symbol: "BCO/USD", pipDecimal: 4 },
-  { symbol: "WTI/USD", pipDecimal: 4 },
-  { symbol: "NG/USD", pipDecimal: 4 },
+  // ============== ENERGY COMMODITIES ==============
+  { symbol: "BCO/USD", pipDecimal: 2 },
+  { symbol: "BRENT/USD", pipDecimal: 2 },
+  { symbol: "WTI/USD", pipDecimal: 2 },
+  { symbol: "CL/USD", pipDecimal: 2 },
+  { symbol: "NG/USD", pipDecimal: 3 },
+  { symbol: "NATGAS/USD", pipDecimal: 3 },
   { symbol: "CO/USD", pipDecimal: 4 },
   { symbol: "RB/USD", pipDecimal: 4 },
   { symbol: "HO/USD", pipDecimal: 4 },
-  { symbol: "CL/USD", pipDecimal: 4 },
   { symbol: "GC/USD", pipDecimal: 4 },
+  { symbol: "IRON/USD", pipDecimal: 2 },
   
-  // ============== AGRICULTURAL COMMODITIES (8) ==============
+  // ============== AGRICULTURAL COMMODITIES ==============
   { symbol: "ZW/USD", pipDecimal: 4 },
   { symbol: "ZC/USD", pipDecimal: 4 },
-  { symbol: "ZS/USD", pipDecimal: 4 },
+  { symbol: "ZS/USD", pipDecimal: 2 },
+  { symbol: "SOYBEAN/USD", pipDecimal: 2 },
   { symbol: "CC/USD", pipDecimal: 4 },
   { symbol: "SB/USD", pipDecimal: 4 },
   { symbol: "CT/USD", pipDecimal: 4 },
   { symbol: "KC/USD", pipDecimal: 4 },
   { symbol: "OJ/USD", pipDecimal: 4 },
   
-  // ============== US INDICES (10) ==============
+  // ============== US INDICES ==============
   { symbol: "NAS/USD", pipDecimal: 0 },
   { symbol: "US100", pipDecimal: 0 },
   { symbol: "US100/USD", pipDecimal: 0 },
+  { symbol: "NDX100", pipDecimal: 0 },
   { symbol: "SPX/USD", pipDecimal: 0 },
   { symbol: "US500", pipDecimal: 0 },
   { symbol: "US500/USD", pipDecimal: 0 },
+  { symbol: "SPX500", pipDecimal: 0 },
   { symbol: "US30", pipDecimal: 0 },
   { symbol: "US30/USD", pipDecimal: 0 },
+  { symbol: "DJI", pipDecimal: 0 },
   { symbol: "RUT/USD", pipDecimal: 0 },
   { symbol: "NYA/USD", pipDecimal: 0 },
   
-  // ============== EUROPEAN INDICES (8) ==============
+  // ============== EUROPEAN INDICES ==============
+  { symbol: "DE40", pipDecimal: 0 },
+  { symbol: "DAX", pipDecimal: 0 },
   { symbol: "GER30", pipDecimal: 0 },
   { symbol: "GER30/EUR", pipDecimal: 0 },
   { symbol: "UK100", pipDecimal: 0 },
@@ -186,9 +196,11 @@ export const CURRENCY_PAIRS: CurrencyPair[] = [
   { symbol: "STOXX50", pipDecimal: 0 },
   { symbol: "AUS200", pipDecimal: 0 },
   
-  // ============== ASIAN INDICES (10) ==============
+  // ============== ASIAN INDICES ==============
+  { symbol: "JP225", pipDecimal: 0 },
   { symbol: "JPN225", pipDecimal: 0 },
   { symbol: "JPN225/USD", pipDecimal: 0 },
+  { symbol: "NIKKEI", pipDecimal: 0 },
   { symbol: "HK50", pipDecimal: 0 },
   { symbol: "CHINA50", pipDecimal: 0 },
   { symbol: "SXIE", pipDecimal: 0 },
@@ -431,7 +443,9 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
           })}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Showing {FEATURED_CURRENCY_PAIRS.length} available symbols. Other pairs are coming soon.
+          Showing {FEATURED_CURRENCY_PAIRS.length} supported symbols. Crosses (EUR/GBP,
+          EUR/JPY, GBP/JPY) convert quote→USD using your entered GBP/USD or USD/JPY
+          rate — sizing stays blocked until you provide that rate.
         </p>
       </div>
     </div>

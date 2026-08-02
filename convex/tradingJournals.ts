@@ -1,7 +1,9 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { requireAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -44,13 +46,17 @@ const getUserTier = async (ctx: { db: any }, userId: string) => {
 
 export const listForUser = query({
   args: {
-    userId: v.string(),
     includeArchived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+
     const rows = await ctx.db
       .query("tradingAccounts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
     const filtered = args.includeArchived
@@ -63,14 +69,13 @@ export const listForUser = query({
 
 export const create = mutation({
   args: {
-    userId: v.string(),
     name: v.string(),
     currency: v.string(),
     startingBalance: v.number(),
     fullName: nullableStringArg,
-    subscriptionTier: nullableStringArg,
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const trimmedName = args.name.trim();
     if (!trimmedName) {
       throw new Error("Journal name is required");
@@ -79,16 +84,17 @@ export const create = mutation({
       throw new Error("Account size must be greater than zero");
     }
 
-    const tier = args.subscriptionTier ?? (await getUserTier(ctx, args.userId));
+    // Tier is always server-derived — never accept client subscriptionTier.
+    const tier = await getUserTier(ctx, userId);
     const limit = resolveJournalLimit(tier);
-    const activeCount = await countActiveJournals(ctx, args.userId);
+    const activeCount = await countActiveJournals(ctx, userId);
     if (activeCount >= limit) {
       throw new Error(`Journal limit reached for ${normalizeTier(tier)} plan (${limit})`);
     }
 
     const now = Date.now();
     const insertedId = await ctx.db.insert("tradingAccounts", {
-      userId: args.userId,
+      userId,
       externalId: null,
       name: trimmedName,
       broker: null,
@@ -102,7 +108,7 @@ export const create = mutation({
 
     if (args.fullName?.trim()) {
       const fullName = args.fullName.trim();
-      const userDoc = await ctx.db.get(args.userId as UserId);
+      const userDoc = await ctx.db.get(userId as UserId);
       if (userDoc) {
         await ctx.db.patch(userDoc._id, {
           fullName,
@@ -112,7 +118,7 @@ export const create = mutation({
 
       const profile = await ctx.db
         .query("profiles")
-        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
+        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
         .first();
 
       if (profile) {
@@ -123,7 +129,7 @@ export const create = mutation({
         });
       } else if (userDoc?.email) {
         await ctx.db.insert("profiles", {
-          externalUserId: args.userId,
+          externalUserId: userId,
           email: userDoc.email,
           fullName,
           avatarUrl: userDoc.avatarUrl ?? userDoc.image ?? null,
@@ -139,7 +145,7 @@ export const create = mutation({
     } else {
       const profile = await ctx.db
         .query("profiles")
-        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
+        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
         .first();
       if (profile && !profile.journalOnboardedAtMs) {
         await ctx.db.patch(profile._id, {
@@ -156,7 +162,6 @@ export const create = mutation({
 export const update = mutation({
   args: {
     id: v.id("tradingAccounts"),
-    userId: v.string(),
     name: nullableStringArg,
     currency: nullableStringArg,
     startingBalance: nullableNumberArg,
@@ -164,8 +169,9 @@ export const update = mutation({
     status: nullableStringArg,
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
-    if (!existing || existing.userId !== args.userId) {
+    if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
     }
 
@@ -202,11 +208,11 @@ export const update = mutation({
 export const archive = mutation({
   args: {
     id: v.id("tradingAccounts"),
-    userId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
-    if (!existing || existing.userId !== args.userId) {
+    if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
     }
 
@@ -222,11 +228,11 @@ export const archive = mutation({
 export const remove = mutation({
   args: {
     id: v.id("tradingAccounts"),
-    userId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
-    if (!existing || existing.userId !== args.userId) {
+    if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
     }
 
@@ -237,7 +243,7 @@ export const remove = mutation({
     const tradeRows = await ctx.db
       .query("tradingJournal")
       .withIndex("by_user_journal_created", (q) =>
-        q.eq("userId", args.userId).eq("journalId", args.id),
+        q.eq("userId", userId).eq("journalId", args.id),
       )
       .collect();
     for (const row of tradeRows) {
@@ -248,7 +254,7 @@ export const remove = mutation({
     const historyRows = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_journal_created", (q) =>
-        q.eq("userId", args.userId).eq("journalId", args.id),
+        q.eq("userId", userId).eq("journalId", args.id),
       )
       .collect();
     for (const row of historyRows) {
@@ -259,7 +265,7 @@ export const remove = mutation({
     const sessionRows = await ctx.db
       .query("progressSessions")
       .withIndex("by_user_journal_date", (q) =>
-        q.eq("userId", args.userId).eq("journalId", args.id),
+        q.eq("userId", userId).eq("journalId", args.id),
       )
       .collect();
     for (const row of sessionRows) {
@@ -275,12 +281,12 @@ export const remove = mutation({
 
 export const attachOrphanData = mutation({
   args: {
-    userId: v.string(),
     journalId: v.id("tradingAccounts"),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const journal = await ctx.db.get(args.journalId);
-    if (!journal || journal.userId !== args.userId) {
+    if (!journal || journal.userId !== userId) {
       throw new Error("Journal not found");
     }
 
@@ -290,7 +296,7 @@ export const attachOrphanData = mutation({
 
     const tradeRows = await ctx.db
       .query("tradingJournal")
-      .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .collect();
 
     for (const row of tradeRows) {
@@ -301,7 +307,7 @@ export const attachOrphanData = mutation({
 
     const historyRows = await ctx.db
       .query("calculatorHistory")
-      .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .collect();
 
     for (const row of historyRows) {
@@ -315,7 +321,7 @@ export const attachOrphanData = mutation({
 
     const sessionRows = await ctx.db
       .query("progressSessions")
-      .withIndex("by_user_date", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_date", (q) => q.eq("userId", userId))
       .collect();
 
     for (const row of sessionRows) {
@@ -332,14 +338,21 @@ export const attachOrphanData = mutation({
 });
 
 export const getLimits = query({
-  args: {
-    userId: v.string(),
-    subscriptionTier: nullableStringArg,
-  },
-  handler: async (ctx, args) => {
-    const tier = normalizeTier(args.subscriptionTier ?? (await getUserTier(ctx, args.userId)));
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return {
+        tier: "free" as const,
+        limit: JOURNAL_LIMITS.free,
+        activeCount: 0,
+        canCreate: false,
+      };
+    }
+
+    const tier = normalizeTier(await getUserTier(ctx, userId));
     const limit = JOURNAL_LIMITS[tier];
-    const activeCount = await countActiveJournals(ctx, args.userId);
+    const activeCount = await countActiveJournals(ctx, userId);
     return {
       tier,
       limit,

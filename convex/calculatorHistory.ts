@@ -1,5 +1,8 @@
+import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+
+import { internalMutation, mutation, query } from "./_generated/server";
+import { requireAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -22,8 +25,7 @@ const statusArg = v.optional(v.union(
   v.null(),
 ));
 
-const historyFields = {
-  userId: v.string(),
+const historyFieldsWithoutUser = {
   journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
   clientId: nullableStringArg,
   symbol: v.string(),
@@ -53,18 +55,71 @@ const historyFields = {
   updatedAtMs: nullableNumberArg,
 };
 
+const assertJournalOwned = async (
+  ctx: { db: any },
+  userId: string,
+  journalId: string | null | undefined,
+) => {
+  if (!journalId) return;
+  const journal = await ctx.db.get(journalId);
+  if (!journal || journal.userId !== userId) {
+    throw new Error("Journal not found");
+  }
+};
+
+const buildHistoryRow = (
+  userId: string,
+  args: Record<string, any>,
+  existing: Record<string, any> | null,
+  now: number,
+) => ({
+  userId,
+  journalId: args.journalId ?? existing?.journalId ?? null,
+  clientId: args.clientId ?? null,
+  symbol: args.symbol,
+  orderType: args.orderType ?? null,
+  entryPrice: args.entryPrice ?? null,
+  stopLossPrice: args.stopLossPrice ?? null,
+  takeProfitPrice: args.takeProfitPrice ?? null,
+  accountBalance: args.accountBalance,
+  riskPercent: args.riskPercent,
+  stopLossPips: args.stopLossPips ?? null,
+  takeProfitPips: args.takeProfitPips ?? null,
+  riskAmount: args.riskAmount,
+  lotSize: args.lotSize,
+  actualRisk: args.actualRisk ?? null,
+  rewardToRisk: args.rewardToRisk ?? null,
+  potentialProfit: args.potentialProfit ?? null,
+  source: args.source,
+  signalId: args.signalId ?? null,
+  status: args.status ?? existing?.status ?? "open",
+  pnlAmount: args.pnlAmount ?? existing?.pnlAmount ?? null,
+  resultR: args.resultR ?? existing?.resultR ?? null,
+  note: args.note ?? existing?.note ?? null,
+  screenshotUrls: args.screenshotUrls ?? existing?.screenshotUrls ?? null,
+  openedAtMs: args.openedAtMs ?? existing?.openedAtMs ?? args.createdAtMs,
+  closedAtMs: args.closedAtMs ?? existing?.closedAtMs ?? null,
+  createdAtMs: args.createdAtMs,
+  updatedAtMs: args.updatedAtMs ?? now,
+});
+
 export const listForUser = query({
   args: {
-    userId: v.string(),
     journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return [];
+    }
+
     if (args.journalId) {
+      await assertJournalOwned(ctx, userId, args.journalId);
       return await ctx.db
         .query("calculatorHistory")
         .withIndex("by_user_journal_created", (q) =>
-          q.eq("userId", args.userId).eq("journalId", args.journalId),
+          q.eq("userId", userId).eq("journalId", args.journalId),
         )
         .order("desc")
         .take(args.limit ?? 20);
@@ -72,53 +127,30 @@ export const listForUser = query({
 
     return await ctx.db
       .query("calculatorHistory")
-      .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
       .take(args.limit ?? 20);
   },
 });
 
 export const save = mutation({
-  args: historyFields,
+  args: historyFieldsWithoutUser,
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    await assertJournalOwned(ctx, userId, args.journalId);
     const now = Date.now();
     const existing = args.clientId
       ? await ctx.db
           .query("calculatorHistory")
-          .withIndex("by_user_client", (q) => q.eq("userId", args.userId).eq("clientId", args.clientId ?? null))
+          .withIndex("by_user_client", (q) => q.eq("userId", userId).eq("clientId", args.clientId ?? null))
           .unique()
       : null;
 
-    const row = {
-      userId: args.userId,
-      journalId: args.journalId ?? existing?.journalId ?? null,
-      clientId: args.clientId ?? null,
-      symbol: args.symbol,
-      orderType: args.orderType ?? null,
-      entryPrice: args.entryPrice ?? null,
-      stopLossPrice: args.stopLossPrice ?? null,
-      takeProfitPrice: args.takeProfitPrice ?? null,
-      accountBalance: args.accountBalance,
-      riskPercent: args.riskPercent,
-      stopLossPips: args.stopLossPips ?? null,
-      takeProfitPips: args.takeProfitPips ?? null,
-      riskAmount: args.riskAmount,
-      lotSize: args.lotSize,
-      actualRisk: args.actualRisk ?? null,
-      rewardToRisk: args.rewardToRisk ?? null,
-      potentialProfit: args.potentialProfit ?? null,
-      source: args.source,
-      signalId: args.signalId ?? null,
-      status: args.status ?? existing?.status ?? "open",
-      pnlAmount: args.pnlAmount ?? existing?.pnlAmount ?? null,
-      resultR: args.resultR ?? existing?.resultR ?? null,
-      note: args.note ?? existing?.note ?? null,
-      screenshotUrls: args.screenshotUrls ?? existing?.screenshotUrls ?? null,
-      openedAtMs: args.openedAtMs ?? existing?.openedAtMs ?? args.createdAtMs,
-      closedAtMs: args.closedAtMs ?? existing?.closedAtMs ?? null,
-      createdAtMs: args.createdAtMs,
-      updatedAtMs: args.updatedAtMs ?? now,
-    };
+    if (existing && existing.userId !== userId) {
+      throw new Error("Not authorized");
+    }
+
+    const row = buildHistoryRow(userId, args, existing, now);
 
     if (existing) {
       await ctx.db.patch(existing._id, row);
@@ -131,50 +163,23 @@ export const save = mutation({
 
 export const saveMany = mutation({
   args: {
-    items: v.array(v.object(historyFields)),
+    items: v.array(v.object(historyFieldsWithoutUser)),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const ids = [];
     const now = Date.now();
 
     for (const item of args.items) {
+      await assertJournalOwned(ctx, userId, item.journalId);
       const existing = item.clientId
         ? await ctx.db
             .query("calculatorHistory")
-            .withIndex("by_user_client", (q) => q.eq("userId", item.userId).eq("clientId", item.clientId ?? null))
+            .withIndex("by_user_client", (q) => q.eq("userId", userId).eq("clientId", item.clientId ?? null))
             .unique()
         : null;
 
-      const row = {
-        userId: item.userId,
-        journalId: item.journalId ?? existing?.journalId ?? null,
-        clientId: item.clientId ?? null,
-        symbol: item.symbol,
-        orderType: item.orderType ?? null,
-        entryPrice: item.entryPrice ?? null,
-        stopLossPrice: item.stopLossPrice ?? null,
-        takeProfitPrice: item.takeProfitPrice ?? null,
-        accountBalance: item.accountBalance,
-        riskPercent: item.riskPercent,
-        stopLossPips: item.stopLossPips ?? null,
-        takeProfitPips: item.takeProfitPips ?? null,
-        riskAmount: item.riskAmount,
-        lotSize: item.lotSize,
-        actualRisk: item.actualRisk ?? null,
-        rewardToRisk: item.rewardToRisk ?? null,
-        potentialProfit: item.potentialProfit ?? null,
-        source: item.source,
-        signalId: item.signalId ?? null,
-        status: item.status ?? existing?.status ?? "open",
-        pnlAmount: item.pnlAmount ?? existing?.pnlAmount ?? null,
-        resultR: item.resultR ?? existing?.resultR ?? null,
-        note: item.note ?? existing?.note ?? null,
-        screenshotUrls: item.screenshotUrls ?? existing?.screenshotUrls ?? null,
-        openedAtMs: item.openedAtMs ?? existing?.openedAtMs ?? item.createdAtMs,
-        closedAtMs: item.closedAtMs ?? existing?.closedAtMs ?? null,
-        createdAtMs: item.createdAtMs,
-        updatedAtMs: item.updatedAtMs ?? now,
-      };
+      const row = buildHistoryRow(userId, item, existing, now);
 
       if (existing) {
         await ctx.db.patch(existing._id, row);
@@ -189,13 +194,12 @@ export const saveMany = mutation({
 });
 
 export const clearForUser = mutation({
-  args: {
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
     const rows = await ctx.db
       .query("calculatorHistory")
-      .withIndex("by_user_created", (q) => q.eq("userId", args.userId))
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .collect();
 
     await Promise.all(rows.map((row) => ctx.db.delete(row._id)));
@@ -206,13 +210,13 @@ export const clearForUser = mutation({
 
 export const remove = mutation({
   args: {
-    userId: v.string(),
     clientId: v.string(),
   },
   handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db
       .query("calculatorHistory")
-      .withIndex("by_user_client", (q) => q.eq("userId", args.userId).eq("clientId", args.clientId))
+      .withIndex("by_user_client", (q) => q.eq("userId", userId).eq("clientId", args.clientId))
       .unique();
 
     if (!existing) {
@@ -224,7 +228,8 @@ export const remove = mutation({
   },
 });
 
-export const backfillLegacyRows = mutation({
+/** AIS-011: maintenance backfill is internal-only. */
+export const backfillLegacyRows = internalMutation({
   args: {
     limit: v.optional(v.number()),
   },

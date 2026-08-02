@@ -37,6 +37,7 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import { toast } from "sonner";
+import { preferencesApi } from "@/lib/api";
 import {
   buildMonthlyReturnsGrid,
   buildResultDaySummaries,
@@ -45,6 +46,13 @@ import {
   toDateKey,
 } from "@/lib/historyResults";
 import { formatProgressDateKey } from "@/lib/progressSessions";
+import {
+  evaluateEquityMilestone,
+  evaluateRiskAlert,
+  evaluateTradeCountMilestone,
+  parseDefaultRiskPercent,
+} from "@/lib/tradingAlerts";
+import { detectBrowserTimeZone } from "@/lib/timezones";
 
 const ORDER_TYPE_LABELS: Record<SavedCalculationOrderType, string> = {
   buy: "Buy",
@@ -66,6 +74,31 @@ const RESULT_OPTIONS: Array<{ value: SavedCalculationStatus; label: string }> = 
   { value: "breakeven", label: "Breakeven" },
   { value: "cancelled", label: "Cancelled" },
 ];
+
+/** Surface Convex auth / validation reasons instead of a generic failure toast. */
+const toTradeSaveToastMessage = (error: unknown, fallback: string): string => {
+  const raw = error instanceof Error ? error.message : String(error ?? "");
+  const uncaught = raw.match(/Uncaught Error:\s*(.+?)(?:\n|$)/i)?.[1]?.trim();
+  const candidate = uncaught || raw;
+
+  if (/not authenticated/i.test(candidate)) {
+    return "Please sign in again to save trades";
+  }
+  if (/journal not found/i.test(candidate)) {
+    return "Journal not found. Switch journals and try again.";
+  }
+  if (/unsupported|invalid trade pair|trade pair is required|p&l|position size|risk percent|notes are too long/i.test(candidate)) {
+    return candidate.length <= 160 ? candidate : fallback;
+  }
+  if (
+    candidate
+    && !/\[CONVEX|VITE_|API_KEY|Request ID|@convex|\.ts:|\.js:|\n/i.test(candidate)
+    && candidate.length <= 160
+  ) {
+    return candidate;
+  }
+  return fallback;
+};
 
 const STATUS_META: Record<SavedCalculationStatus, { label: string; className: string }> = {
   open: {
@@ -159,8 +192,38 @@ const Journal = () => {
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | undefined>(undefined);
   const [sessionDateKey, setSessionDateKey] = useState(() => formatProgressDateKey(new Date()));
+  const [preferredTimeZone, setPreferredTimeZone] = useState(
+    () => localStorage.getItem("preferredTimezone") || detectBrowserTimeZone(),
+  );
+  const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
+  const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
 
   const startingBalance = activeJournal?.startingBalance ?? 0;
+
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const prefs = await preferencesApi.get();
+        if (!mounted || !prefs) return;
+        if (prefs.timezone) {
+          setPreferredTimeZone(prefs.timezone);
+          localStorage.setItem("preferredTimezone", prefs.timezone);
+        }
+        setRiskAlertsEnabled(prefs.trading_risk_alerts_enabled);
+        setMilestoneAlertsEnabled(prefs.trading_milestone_alerts_enabled);
+        if (prefs.default_risk_percent != null) {
+          localStorage.setItem("defaultRisk", String(prefs.default_risk_percent));
+        }
+      } catch {
+        // Keep local defaults
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   useEffect(() => {
     let isMounted = true;
@@ -338,6 +401,22 @@ const Journal = () => {
 
   const handleSaveManualTrade = async (tradeInput: ManualTradeInput) => {
     try {
+      const previousClosed = manualTrades.filter(
+        (trade) =>
+          trade.status === "closed"
+          && trade.pnl !== null
+          && trade.pnl !== undefined
+          && Number.isFinite(trade.pnl),
+      );
+      const previousTotalPnl = previousClosed.reduce((sum, trade) => sum + (trade.pnl as number), 0);
+      const editingClosedPnl =
+        tradeToEdit
+        && tradeToEdit.status === "closed"
+        && tradeToEdit.pnl != null
+        && Number.isFinite(tradeToEdit.pnl)
+          ? tradeToEdit.pnl
+          : 0;
+
       if (tradeToEdit) {
         await updateTradeMutation.mutateAsync({ id: tradeToEdit.id, ...tradeInput });
         toast.success("Trade updated");
@@ -346,11 +425,36 @@ const Journal = () => {
         toast.success("Trade saved");
       }
 
+      const defaultRisk = parseDefaultRiskPercent(localStorage.getItem("defaultRisk"));
+      if (riskAlertsEnabled) {
+        const riskAlert = evaluateRiskAlert(tradeInput.risk_percent, defaultRisk);
+        if (riskAlert) {
+          toast.warning(riskAlert.body);
+        }
+      }
+
+      if (milestoneAlertsEnabled) {
+        const nextClosedCount =
+          tradeInput.status === "closed" && tradeInput.pnl != null && Number.isFinite(tradeInput.pnl)
+            ? previousClosed.length - (editingClosedPnl ? 1 : 0) + 1
+            : previousClosed.length - (editingClosedPnl ? 1 : 0);
+        const nextTotalPnl =
+          tradeInput.status === "closed" && tradeInput.pnl != null && Number.isFinite(tradeInput.pnl)
+            ? previousTotalPnl - editingClosedPnl + tradeInput.pnl
+            : previousTotalPnl - editingClosedPnl;
+
+        const countAlert = evaluateTradeCountMilestone(nextClosedCount);
+        if (countAlert) toast.message(countAlert.title, { description: countAlert.body });
+
+        const equityAlert = evaluateEquityMilestone(startingBalance, previousTotalPnl, nextTotalPnl);
+        if (equityAlert) toast.message(equityAlert.title, { description: equityAlert.body });
+      }
+
       setIsTradeSheetOpen(false);
       setTradeToEdit(null);
     } catch (error) {
       console.error("[journal] Failed to save manual trade", error);
-      toast.error("Failed to save trade");
+      toast.error(toTradeSaveToastMessage(error, "Failed to save trade"));
     }
   };
 
@@ -362,7 +466,7 @@ const Journal = () => {
       toast.success("Trade deleted");
     } catch (error) {
       console.error("[journal] Failed to delete manual trade", error);
-      toast.error("Failed to delete trade");
+      toast.error(toTradeSaveToastMessage(error, "Failed to delete trade"));
     } finally {
       setTradeToDelete(null);
     }
@@ -671,6 +775,7 @@ const Journal = () => {
               activeTab={journalTab}
               onTabChange={setJournalTab}
               startingBalance={startingBalance}
+              timeZone={preferredTimeZone}
               onAddTrade={() => {
                 setTradeToEdit(null);
                 setIsTradeSheetOpen(true);

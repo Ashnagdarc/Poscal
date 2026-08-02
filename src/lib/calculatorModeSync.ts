@@ -13,7 +13,9 @@ export function getPriceDecimals(spec: InstrumentSpec): number {
 export function roundPipsFromPriceDistance(distance: number, spec: InstrumentSpec): number {
   const rawPips = distance / spec.pipSize;
   const decimals =
-    spec.assetClass === "metal" || spec.assetClass === "index"
+    spec.assetClass === "metal" ||
+    spec.assetClass === "index" ||
+    spec.assetClass === "commodity"
       ? spec.pipSize >= 1
         ? 1
         : 2

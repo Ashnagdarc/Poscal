@@ -1,5 +1,5 @@
 import { tradesApi } from "@/lib/api";
-import { convexClient } from "@/lib/convexClient";
+import { getAuthenticatedConvexHttpClient, isConvexEnabled } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
 
 export interface JournalTrade {
@@ -13,6 +13,7 @@ export interface JournalTrade {
   take_profit: number | null;
   position_size: number | null;
   risk_percent: number | null;
+  risk_amount?: number | null;
   pnl: number | null;
   pnl_percent?: number | null;
   status: "open" | "closed" | "cancelled";
@@ -56,6 +57,7 @@ const fromConvexTrade = (row: any): JournalTrade => ({
   take_profit: row.takeProfit ?? null,
   position_size: row.positionSize ?? null,
   risk_percent: row.riskPercent ?? null,
+  risk_amount: row.riskAmount ?? null,
   pnl: row.pnl ?? null,
   pnl_percent: row.pnlPercent ?? null,
   status: row.status,
@@ -72,8 +74,7 @@ const fromConvexTrade = (row: any): JournalTrade => ({
   tags: row.tags ?? null,
 });
 
-const toConvexTradeInput = (userId: string, trade: Record<string, any>) => ({
-  userId,
+const toConvexTradeInput = (trade: Record<string, any>) => ({
   journalId: trade.journal_id ?? trade.journalId ?? null,
   externalId: trade.externalId ?? null,
   pair: trade.pair || trade.symbol || "JOURNAL",
@@ -100,8 +101,8 @@ const toConvexTradeInput = (userId: string, trade: Record<string, any>) => ({
   exitDateMs: trade.exit_date ? new Date(trade.exit_date).getTime() : null,
 });
 
-const toConvexTradePatch = (userId: string, updates: Record<string, any>) => {
-  const patch: Record<string, any> = { userId };
+const toConvexTradePatch = (updates: Record<string, any>) => {
+  const patch: Record<string, any> = {};
 
   if (updates.pair !== undefined || updates.symbol !== undefined) {
     patch.pair = updates.pair || updates.symbol || "JOURNAL";
@@ -174,13 +175,13 @@ const toConvexTradePatch = (userId: string, updates: Record<string, any>) => {
 };
 
 export const listJournalEntries = async (
-  userId: string,
+  _userId: string,
   status?: string,
   journalId?: string | null,
 ): Promise<JournalTrade[]> => {
-  if (convexClient) {
-    const rows = await convexClient.query(api.tradingJournal.listForUser, {
-      userId,
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const rows = await client.query(api.tradingJournal.listForUser, {
       journalId: (journalId as any) ?? null,
       status: status ?? null,
       limit: 300,
@@ -191,20 +192,22 @@ export const listJournalEntries = async (
   return await tradesApi.getAll(status ? { status } : undefined);
 };
 
-export const createJournalEntry = async (userId: string, trade: Record<string, any>): Promise<JournalTrade> => {
-  if (convexClient) {
-    const row = await convexClient.mutation(api.tradingJournal.createEntry, toConvexTradeInput(userId, trade));
+export const createJournalEntry = async (_userId: string, trade: Record<string, any>): Promise<JournalTrade> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const row = await client.mutation(api.tradingJournal.createEntry, toConvexTradeInput(trade));
     return fromConvexTrade(row);
   }
 
   return await tradesApi.create(trade);
 };
 
-export const updateJournalEntry = async (userId: string, id: string, updates: Record<string, any>): Promise<JournalTrade> => {
-  if (convexClient) {
-    const row = await convexClient.mutation(api.tradingJournal.updateEntry, {
+export const updateJournalEntry = async (_userId: string, id: string, updates: Record<string, any>): Promise<JournalTrade> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const row = await client.mutation(api.tradingJournal.updateEntry, {
       id: id as any,
-      ...toConvexTradePatch(userId, updates),
+      ...toConvexTradePatch(updates),
     });
     return fromConvexTrade(row);
   }
@@ -212,11 +215,11 @@ export const updateJournalEntry = async (userId: string, id: string, updates: Re
   return await tradesApi.update(id, updates);
 };
 
-export const deleteJournalEntry = async (userId: string, id: string): Promise<void> => {
-  if (convexClient) {
-    await convexClient.mutation(api.tradingJournal.deleteEntry, {
+export const deleteJournalEntry = async (_userId: string, id: string): Promise<void> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.tradingJournal.deleteEntry, {
       id: id as any,
-      userId,
     });
     return;
   }
@@ -224,10 +227,11 @@ export const deleteJournalEntry = async (userId: string, id: string): Promise<vo
   await tradesApi.delete(id);
 };
 
-export const importJournalEntries = async (userId: string, trades: Record<string, any>[]) => {
-  if (convexClient) {
-    await convexClient.mutation(api.tradingJournal.saveMany, {
-      items: trades.map((trade) => toConvexTradeInput(userId, trade)),
+export const importJournalEntries = async (_userId: string, trades: Record<string, any>[]) => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.tradingJournal.saveMany, {
+      items: trades.map((trade) => toConvexTradeInput(trade)),
     });
     return;
   }

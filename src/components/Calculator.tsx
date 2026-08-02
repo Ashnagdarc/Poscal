@@ -18,7 +18,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { saveJournalEntry } from "@/lib/calculatorHistory";
 import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
 import { getStopLossUnitLabel } from "@/lib/instrumentSpecs";
-import { calculatePositionSize, getInstrumentSpec } from "@/lib/positionSizeCalculator";
+import {
+  calculatePositionSize,
+  getInstrumentSpec,
+  isCrossPair,
+  requiredConversionPair,
+  requiresEntryForPipValue,
+} from "@/lib/positionSizeCalculator";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -96,15 +102,40 @@ export const Calculator = () => {
   const [entryPrice, setEntryPrice] = useState("");
   const [stopLossPrice, setStopLossPrice] = useState("");
   const [takeProfitPrice, setTakeProfitPrice] = useState("");
+  const [conversionRate, setConversionRate] = useState("");
   const [selectedPair, setSelectedPair] = useState<CurrencyPair>(FEATURED_CURRENCY_PAIRS[0]);
   
   // UI State
-  const [showNumPad, setShowNumPad] = useState<"balance" | "takeProfit" | "entryPrice" | "stopLossPrice" | "takeProfitPrice" | null>(null);
+  type NumPadField =
+    | "balance"
+    | "takeProfit"
+    | "entryPrice"
+    | "stopLossPrice"
+    | "takeProfitPrice"
+    | "conversionRate";
+  const [showNumPad, setShowNumPad] = useState<NumPadField | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
   const [showStopLossSelector, setShowStopLossSelector] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
 
   const { currency } = useCurrency();
+  const [isSavingToJournal, setIsSavingToJournal] = useState(false);
+  // Lot math is USD-pip based until FX conversion ships (DAN-001).
+  const riskDisplayCurrency = currency.code === "USD" ? currency : { code: "USD", symbol: "$", name: "US Dollar" };
+  const showCurrencyEstimateNote = currency.code !== "USD";
+
+  const needsEntryForPipValue = requiresEntryForPipValue(selectedPair.symbol);
+  const selectedIsCross = isCrossPair(selectedPair.symbol);
+  const conversionPair = selectedIsCross
+    ? requiredConversionPair(selectedPair.symbol)
+    : null;
+
+  const userMarketPrices = useMemo(() => {
+    if (!conversionPair) return null;
+    const rate = parseFloat(conversionRate);
+    if (!Number.isFinite(rate) || rate <= 0) return null;
+    return { [conversionPair]: rate };
+  }, [conversionPair, conversionRate]);
   
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
@@ -117,6 +148,10 @@ export const Calculator = () => {
       setSelectedPair(FEATURED_CURRENCY_PAIRS[0]);
     }
   }, [selectedPair.symbol]);
+
+  useEffect(() => {
+    setConversionRate("");
+  }, [conversionPair]);
 
   useEffect(() => {
     const spec = getInstrumentSpec(selectedPair.symbol);
@@ -184,6 +219,7 @@ export const Calculator = () => {
       entryPrice: parseFloat(entryPrice) || null,
       stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
       takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
+      marketPrices: userMarketPrices,
     });
   }, [
     accountBalance,
@@ -195,6 +231,7 @@ export const Calculator = () => {
     stopLossPrice,
     takeProfitPrice,
     selectedPair,
+    userMarketPrices,
   ]);
 
   const stopLossUnit = getStopLossUnitLabel(selectedPair.symbol);
@@ -271,13 +308,14 @@ export const Calculator = () => {
   };
 
   const saveToHistory = async () => {
-    if (!calculation.isValid || calculation.positionSize <= 0) return;
+    if (!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal) return;
 
     const source = searchParams.get("fromSignal") === "true" ? "signal" : "manual";
     const signalId = searchParams.get("signalId");
     const prefilledOrderType = normalizeOrderType(searchParams.get("orderType"));
     const orderType = prefilledOrderType ?? tradeDirection;
-    const resolvedEntryPrice = calculationMode === "price" ? parseFloat(entryPrice) || null : null;
+    // Persist entry whenever the user typed one (Price mode, or Pips mode for USD-base pairs).
+    const resolvedEntryPrice = parseFloat(entryPrice) || null;
     const resolvedStopLossPrice = calculationMode === "price" ? parseFloat(stopLossPrice) || null : null;
     const resolvedTakeProfitPrice = calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null;
 
@@ -296,6 +334,7 @@ export const Calculator = () => {
       timestamp: new Date()
     };
 
+    setIsSavingToJournal(true);
     try {
       await saveJournalEntry({
         ...newItem,
@@ -329,6 +368,8 @@ export const Calculator = () => {
         signalId,
       });
       toast.success("Saved to journal");
+    } finally {
+      setIsSavingToJournal(false);
     }
   };
 
@@ -340,13 +381,14 @@ export const Calculator = () => {
     });
   };
 
-  const openNumPad = (type: "balance" | "takeProfit" | "entryPrice" | "stopLossPrice" | "takeProfitPrice") => {
-    const values = {
+  const openNumPad = (type: NumPadField) => {
+    const values: Record<NumPadField, string> = {
       balance: accountBalance,
       takeProfit: calculationMode === "pips" ? takeProfitPips : takeProfitPrice,
       entryPrice,
       stopLossPrice,
       takeProfitPrice,
+      conversionRate,
     };
     setNumPadValue(values[type]);
     setShowNumPad(type);
@@ -359,24 +401,41 @@ export const Calculator = () => {
     let nextStopLossPips = stopLossPips;
     let nextTakeProfitPips = takeProfitPips;
 
-    if (showNumPad === "balance") setAccountBalance(numPadValue);
-    else if (showNumPad === "takeProfit") {
-      if (calculationMode === "pips") {
-        nextTakeProfitPips = numPadValue;
-        setTakeProfitPips(numPadValue);
-      } else {
+    switch (showNumPad) {
+      case "balance":
+        setAccountBalance(numPadValue);
+        break;
+      case "takeProfit":
+        if (calculationMode === "pips") {
+          nextTakeProfitPips = numPadValue;
+          setTakeProfitPips(numPadValue);
+        } else {
+          nextTakeProfit = numPadValue;
+          setTakeProfitPrice(numPadValue);
+        }
+        break;
+      case "entryPrice":
+        nextEntry = numPadValue;
+        setEntryPrice(numPadValue);
+        break;
+      case "stopLossPrice":
+        nextStopLoss = numPadValue;
+        setStopLossPrice(numPadValue);
+        break;
+      case "takeProfitPrice":
         nextTakeProfit = numPadValue;
         setTakeProfitPrice(numPadValue);
+        break;
+      case "conversionRate":
+        setConversionRate(numPadValue);
+        break;
+      case null:
+        break;
+      default: {
+        const _exhaustive: never = showNumPad;
+        void _exhaustive;
+        break;
       }
-    } else if (showNumPad === "entryPrice") {
-      nextEntry = numPadValue;
-      setEntryPrice(numPadValue);
-    } else if (showNumPad === "stopLossPrice") {
-      nextStopLoss = numPadValue;
-      setStopLossPrice(numPadValue);
-    } else if (showNumPad === "takeProfitPrice") {
-      nextTakeProfit = numPadValue;
-      setTakeProfitPrice(numPadValue);
     }
 
     if (showNumPad === "entryPrice" || showNumPad === "stopLossPrice" || showNumPad === "takeProfitPrice") {
@@ -395,6 +454,9 @@ export const Calculator = () => {
     entryPrice: "Entry Price",
     stopLossPrice: "Stop-Loss Price",
     takeProfitPrice: "Take Profit Price",
+    conversionRate: conversionPair
+      ? `${conversionPair} conversion rate`
+      : "Conversion rate",
   }[showNumPad ?? "balance"];
 
   const numPadSuffix = showNumPad === "balance"
@@ -431,7 +493,7 @@ export const Calculator = () => {
         }
       />
 
-      <main className="mx-auto w-full max-w-2xl px-6 pb-32 md:max-w-3xl">
+      <main id="main-content" className="mx-auto w-full max-w-2xl px-6 pb-32 md:max-w-3xl">
         {/* Result first — hero outcome */}
         <section className="animate-scale-in mb-6">
           <div className="rounded-3xl bg-foreground px-6 py-7 text-background">
@@ -445,9 +507,11 @@ export const Calculator = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
-                <p className="mb-1 text-xs font-medium opacity-60">Risk</p>
+                <p className="mb-1 text-xs font-medium opacity-60">
+                  Risk{showCurrencyEstimateNote ? " (USD)" : ""}
+                </p>
                 <p className="text-lg font-semibold">
-                  {currency.symbol}
+                  {riskDisplayCurrency.symbol}
                   {formatNumber(calculation.actualRisk || calculation.riskAmount, 0)}
                 </p>
               </div>
@@ -469,9 +533,11 @@ export const Calculator = () => {
                     <p className="text-lg font-semibold">1:{formatNumber(calculation.rewardToRisk, 1)}</p>
                   </div>
                   <div className="text-center">
-                    <p className="mb-1 text-xs font-medium opacity-60">Potential</p>
+                    <p className="mb-1 text-xs font-medium opacity-60">
+                      Potential{showCurrencyEstimateNote ? " (USD)" : ""}
+                    </p>
                     <p className="text-lg font-semibold">
-                      +{currency.symbol}
+                      +{riskDisplayCurrency.symbol}
                       {formatNumber(calculation.potentialProfit, 0)}
                     </p>
                   </div>
@@ -480,20 +546,26 @@ export const Calculator = () => {
             )}
           </div>
 
+          {calculation.reason && !calculation.isValid && (
+            <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-center text-xs text-muted-foreground">
+              {calculation.reason}
+            </p>
+          )}
+
           <button
             onClick={saveToHistory}
-            disabled={!calculation.isValid || calculation.positionSize <= 0}
+            disabled={!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal}
             className="mt-3 h-12 w-full rounded-xl bg-brand font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Save to Journal
+            {isSavingToJournal ? "Saving..." : "Save to Journal"}
           </button>
 
           {calculation.wasMinLotClamped && (
             <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-center text-xs text-muted-foreground">
               Minimum lot size ({formatNumber(calculation.spec?.minLot ?? 0.01)} lots) caps actual risk at{" "}
-              {currency.symbol}
+              {riskDisplayCurrency.symbol}
               {formatNumber(calculation.actualRisk, 0)} instead of{" "}
-              {currency.symbol}
+              {riskDisplayCurrency.symbol}
               {formatNumber(calculation.riskAmount, 0)}.
             </p>
           )}
@@ -617,6 +689,36 @@ export const Calculator = () => {
         <section className="mt-5 animate-slide-up" style={{ animationDelay: "80ms" }}>
           {calculationMode === "pips" ? (
             <div className="grid grid-cols-2 gap-3">
+              {needsEntryForPipValue && (
+                <button
+                  type="button"
+                  onClick={() => openNumPad("entryPrice")}
+                  className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      Entry / mid (required for pip value)
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{entryPrice || "—"}</p>
+                </button>
+              )}
+              {selectedIsCross && conversionPair && (
+                <button
+                  type="button"
+                  onClick={() => openNumPad("conversionRate")}
+                  className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {conversionPair} rate (required for USD sizing)
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
+                </button>
+              )}
               <button
                 onClick={() => setShowStopLossSelector(true)}
                 className="flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
@@ -674,6 +776,21 @@ export const Calculator = () => {
                 </div>
                 <p className="text-lg font-bold text-foreground">{takeProfitPrice || "—"}</p>
               </button>
+              {selectedIsCross && conversionPair && (
+                <button
+                  type="button"
+                  onClick={() => openNumPad("conversionRate")}
+                  className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {conversionPair} rate (required for USD sizing)
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
+                </button>
+              )}
             </div>
           )}
         </section>
@@ -684,6 +801,11 @@ export const Calculator = () => {
             : "Unsupported instrument"}
           {calculation.warning ? ` · ${calculation.warning}` : ""}
         </p>
+        {selectedIsCross && conversionPair && !userMarketPrices && (
+          <p className="mt-2 px-1 text-xs text-muted-foreground">
+            Enter a {conversionPair} conversion rate to size this cross in USD.
+          </p>
+        )}
       </main>
 
       {/* NumPad Overlay */}
@@ -715,7 +837,8 @@ export const Calculator = () => {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Select Stop Loss</h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Risk: {currency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} ({riskPercent}%)
+                  Risk: {riskDisplayCurrency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} ({riskPercent}%)
+                  {showCurrencyEstimateNote ? " USD" : ""}
                 </p>
               </div>
               <button

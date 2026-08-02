@@ -62,8 +62,9 @@ export const DATE_FORMATS = {
   TIME_ONLY: 'HH:mm',
 } as const;
 
-// Currency Pairs
+// Currency Pairs — featured calculator instruments (must exist in CURRENCY_PAIRS + INSTRUMENT_SPECS)
 export const COMMON_PAIRS = [
+  // Forex majors
   'EUR/USD',
   'GBP/USD',
   'USD/JPY',
@@ -71,13 +72,34 @@ export const COMMON_PAIRS = [
   'AUD/USD',
   'USD/CAD',
   'NZD/USD',
-  'XAU/USD',
-  'XAG/USD',
+  // Forex crosses
+  'EUR/GBP',
+  'EUR/JPY',
+  'GBP/JPY',
+  // Crypto
   'BTC/USD',
   'ETH/USD',
-  'US30',
-  'US100',
+  'SOL/USD',
+  'XRP/USD',
+  'ADA/USD',
+  // Metals
+  'XAU/USD',
+  'XAG/USD',
+  'XPT/USD',
+  'XCU/USD',
+  // Indices
   'US500',
+  'US100',
+  'US30',
+  'DE40',
+  'UK100',
+  'JP225',
+  // Energy & softs
+  'WTI/USD',
+  'BRENT/USD',
+  'NATGAS/USD',
+  'SOYBEAN/USD',
+  'IRON/USD',
 ] as const;
 
 // Platforms

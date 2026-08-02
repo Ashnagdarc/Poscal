@@ -311,7 +311,8 @@ export const getIngestorHealth = query({
   },
 });
 
-export const upsertIngestorHealth = mutation({
+/** AIS-004: Ingestor health writes are internal-only (or secret-gated HTTP). */
+export const upsertIngestorHealth = internalMutation({
   args: {
     recent401Count: v.number(),
     last401AtMs: nullableNumberArg,
@@ -487,24 +488,22 @@ export const listExpiringSubscriptions = mutation({
       throw new Error("Invalid payment sync secret");
     }
 
-    const profiles = await ctx.db.query("profiles").collect();
+    const profiles = await ctx.db
+      .query("profiles")
+      .withIndex("by_payment_expires", (q) =>
+        q
+          .eq("paymentStatus", "paid")
+          .gte("subscriptionExpiresAtMs", args.fromMs)
+          .lte("subscriptionExpiresAtMs", args.toMs),
+      )
+      .collect();
 
-    return profiles
-      .filter((profile) => {
-        const expiresAtMs = profile.subscriptionExpiresAtMs ?? null;
-        return (
-          profile.paymentStatus === "paid" &&
-          typeof expiresAtMs === "number" &&
-          expiresAtMs >= args.fromMs &&
-          expiresAtMs <= args.toMs
-        );
-      })
-      .map((profile) => ({
-        userId: profile.externalUserId,
-        email: profile.email,
-        fullName: profile.fullName ?? null,
-        subscriptionExpiresAtMs: profile.subscriptionExpiresAtMs ?? null,
-      }));
+    return profiles.map((profile) => ({
+      userId: profile.externalUserId,
+      email: profile.email,
+      fullName: profile.fullName ?? null,
+      subscriptionExpiresAtMs: profile.subscriptionExpiresAtMs ?? null,
+    }));
   },
 });
 
@@ -520,32 +519,30 @@ export const expireSubscriptionsBefore = mutation({
     }
 
     const now = Date.now();
-    const profiles = await ctx.db.query("profiles").collect();
+    const profiles = await ctx.db
+      .query("profiles")
+      .withIndex("by_payment_expires", (q) =>
+        q.eq("paymentStatus", "paid").lt("subscriptionExpiresAtMs", args.beforeMs),
+      )
+      .collect();
     let expiredCount = 0;
 
     for (const profile of profiles) {
-      const expiresAtMs = profile.subscriptionExpiresAtMs ?? null;
-      if (
-        profile.paymentStatus === "paid" &&
-        typeof expiresAtMs === "number" &&
-        expiresAtMs < args.beforeMs
-      ) {
-        await ctx.db.patch(profile._id, {
+      await ctx.db.patch(profile._id, {
+        paymentStatus: "free",
+        subscriptionTier: "free",
+        updatedAtMs: now,
+      });
+
+      const user = await ctx.db.get(profile.externalUserId as any);
+      if (user) {
+        await ctx.db.patch(profile.externalUserId as any, {
           paymentStatus: "free",
           subscriptionTier: "free",
-          updatedAtMs: now,
         });
-
-        const user = await ctx.db.get(profile.externalUserId as any);
-        if (user) {
-          await ctx.db.patch(profile.externalUserId as any, {
-            paymentStatus: "free",
-            subscriptionTier: "free",
-          });
-        }
-
-        expiredCount += 1;
       }
+
+      expiredCount += 1;
     }
 
     return { success: true, expiredCount };

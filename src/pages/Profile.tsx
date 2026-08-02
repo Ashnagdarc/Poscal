@@ -19,11 +19,13 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useMutation } from "convex/react";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
+import { api } from "../../convex/_generated/api";
 
 interface Profile {
   id: string;
@@ -36,6 +38,7 @@ interface Profile {
 const Profile = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const deleteAccount = useMutation(api.users.deleteAccount);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -43,6 +46,7 @@ const Profile = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -106,10 +110,23 @@ const Profile = () => {
       setShowDeleteConfirm(true);
       return;
     }
-    
-    toast.error("Account deletion coming soon!");
-    // TODO: Implement account deletion
-    setShowDeleteConfirm(false);
+
+    if (isDeletingAccount) return;
+    setIsDeletingAccount(true);
+    try {
+      await deleteAccount({ confirmation: "DELETE" });
+      await signOut();
+      toast.success("Your account and trading data have been deleted.");
+      navigate("/welcome");
+    } catch (error) {
+      console.error("[profile] Account deletion failed", error);
+      toast.error(
+        error instanceof Error ? error.message : "Failed to delete account. Please try again.",
+      );
+    } finally {
+      setIsDeletingAccount(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   const handleAvatarClick = () => {
@@ -435,17 +452,24 @@ const Profile = () => {
           {/* Delete Account Button */}
           <button
             onClick={handleDeleteAccount}
-            className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-[0.98] ${
+            disabled={isDeletingAccount}
+            className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
               showDeleteConfirm
                 ? 'bg-red-500/20 text-red-500'
                 : 'bg-destructive/5 text-destructive/60 hover:bg-destructive/10'
             }`}
           >
             <Trash2 className="w-5 h-5" />
-            {showDeleteConfirm ? 'Confirm Delete Account?' : 'Delete Account'}
+            {isDeletingAccount
+              ? "Deleting..."
+              : showDeleteConfirm
+                ? "Confirm Delete Account?"
+                : "Delete Account"}
           </button>
           {showDeleteConfirm && (
-            <p className="text-xs text-red-500/70 text-center">This action cannot be undone</p>
+            <p className="text-xs text-red-500/70 text-center">
+              Permanently deletes journals, trades, history, and your login. This cannot be undone.
+            </p>
           )}
         </div>
       </main>

@@ -52,7 +52,8 @@ export const listLatest = query({
   },
   handler: async (ctx, args) => {
     if (!args.symbols?.length) {
-      return await ctx.db.query("priceSnapshots").collect();
+      // Bound the unfiltered path; callers should pass symbols when possible.
+      return await ctx.db.query("priceSnapshots").take(500);
     }
 
     const rows = await Promise.all(
@@ -68,7 +69,11 @@ export const listLatest = query({
   },
 });
 
-export const upsertLatest = mutation({
+/**
+ * AIS-005: Public price writes removed. Use ingestLatestBatch (secret) or
+ * internal upsertLatestBatch / upsertLatest (internalMutation).
+ */
+export const upsertLatest = internalMutation({
   args: priceSnapshotArgs,
   handler: async (ctx, args) => upsertPriceSnapshot(ctx, args),
 });

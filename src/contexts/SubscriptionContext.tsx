@@ -1,7 +1,5 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
-import { useAuthToken } from '@convex-dev/auth/react';
+import React, { createContext, useContext } from 'react';
 import { useAuth } from './AuthContext';
-import { getUserProfile } from '@/lib/convexProfiles';
 
 // Subscription tier types
 export type SubscriptionTier = 'free' | 'premium' | 'pro';
@@ -18,13 +16,28 @@ const FEATURE_ACCESS_MAP: Record<string, SubscriptionTier[]> = {
   api_access: ['pro'],
 };
 
-interface SubscriptionDetails {
-  paymentStatus: PaymentStatus;
-  subscriptionTier: SubscriptionTier;
-  expiresAt: Date | null;
-  trialEndsAt: Date | null;
-  isActive: boolean;
-}
+const asPaymentStatus = (value: string | undefined): PaymentStatus => {
+  switch (value) {
+    case 'free':
+    case 'paid':
+    case 'trial':
+    case 'expired':
+      return value;
+    default:
+      return 'free';
+  }
+};
+
+const asSubscriptionTier = (value: string | undefined): SubscriptionTier => {
+  switch (value) {
+    case 'free':
+    case 'premium':
+    case 'pro':
+      return value;
+    default:
+      return 'free';
+  }
+};
 
 interface SubscriptionContextType {
   // Quick access properties
@@ -50,56 +63,20 @@ interface SubscriptionContextType {
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user } = useAuth();
-  const authToken = useAuthToken();
-  const [isLoading, setIsLoading] = useState(true);
-  const [subscriptionDetails, setSubscriptionDetails] = useState<SubscriptionDetails>({
-    paymentStatus: 'free',
-    subscriptionTier: 'free',
-    expiresAt: null,
-    trialEndsAt: null,
-    isActive: false,
-  });
+  const { user, loading: authLoading, viewerSubscription } = useAuth();
 
-  // Fetch user's subscription details from database
-  const fetchSubscriptionDetails = async () => {
-    if (!user) {
-      setSubscriptionDetails({
-        paymentStatus: 'free',
-        subscriptionTier: 'free',
-        expiresAt: null,
-        trialEndsAt: null,
-        isActive: false,
-      });
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      const profile = await getUserProfile(user, authToken);
-      const paymentStatus = (profile.payment_status as PaymentStatus | undefined) ?? 'free';
-      const subscriptionTier = (profile.subscription_tier as SubscriptionTier | undefined) ?? 'free';
-      const expiresAt = profile.subscription_expires_at ? new Date(profile.subscription_expires_at) : null;
-
-      setSubscriptionDetails({
-        paymentStatus,
-        subscriptionTier,
-        expiresAt,
-        trialEndsAt: null,
-        isActive: subscriptionTier !== 'free' && paymentStatus !== 'expired',
-      });
-    } catch (error) {
-      console.error('Unexpected error fetching subscription:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Load subscription on mount and when user changes
-  useEffect(() => {
-    fetchSubscriptionDetails();
-  }, [authToken, user?.id]);
+  // Derive paid/lock state from the same reactive `users.viewer` query as AuthContext
+  // (previously a second HTTP `users.viewerProfile` call on every auth change).
+  const paymentStatus = asPaymentStatus(viewerSubscription?.paymentStatus);
+  const subscriptionTier = asSubscriptionTier(viewerSubscription?.subscriptionTier);
+  const expiresAt = viewerSubscription?.expiresAtMs
+    ? new Date(viewerSubscription.expiresAtMs)
+    : null;
+  const trialEndsAt: Date | null = null;
+  const isActive = Boolean(user)
+    && subscriptionTier !== 'free'
+    && paymentStatus !== 'expired';
+  const isLoading = authLoading || Boolean(user && !viewerSubscription);
 
   // Check if user can access a specific feature
   const checkFeatureAccess = (feature: string): boolean => {
@@ -107,7 +84,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     if (!user) return false;
 
     // If not an active subscription, deny access
-    if (!subscriptionDetails.isActive) {
+    if (!isActive) {
       return false;
     }
 
@@ -119,39 +96,39 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     // Check if user's tier is in the allowed tiers
-    return allowedTiers.includes(subscriptionDetails.subscriptionTier);
+    return allowedTiers.includes(subscriptionTier);
   };
 
-  // Manually refresh subscription (useful after payment)
+  // Viewer is reactive via Convex useQuery — payment sync patches update automatically.
   const refreshSubscription = async () => {
-    await fetchSubscriptionDetails();
+    // No-op: kept for PaymentModal / Settings call sites after verify/restore.
   };
 
   // Calculate days until subscription expires
-  const daysUntilExpiry = subscriptionDetails.expiresAt
+  const daysUntilExpiry = expiresAt
     ? Math.ceil(
-        (subscriptionDetails.expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (expiresAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
     : null;
 
   // Calculate days until trial ends
-  const daysUntilTrialEnd = subscriptionDetails.trialEndsAt
+  const daysUntilTrialEnd = trialEndsAt
     ? Math.ceil(
-        (subscriptionDetails.trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+        (trialEndsAt.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
       )
     : null;
 
   const value: SubscriptionContextType = {
     // Quick access
-    isPaid: subscriptionDetails.isActive && subscriptionDetails.paymentStatus === 'paid',
-    isTrial: subscriptionDetails.paymentStatus === 'trial',
+    isPaid: isActive && paymentStatus === 'paid',
+    isTrial: paymentStatus === 'trial',
     isLoading,
 
     // Details
-    subscriptionTier: subscriptionDetails.subscriptionTier,
-    paymentStatus: subscriptionDetails.paymentStatus,
-    expiresAt: subscriptionDetails.expiresAt,
-    trialEndsAt: subscriptionDetails.trialEndsAt,
+    subscriptionTier,
+    paymentStatus,
+    expiresAt,
+    trialEndsAt,
 
     // Methods
     checkFeatureAccess,

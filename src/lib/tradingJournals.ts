@@ -1,4 +1,4 @@
-import { convexClient } from "@/lib/convexClient";
+import { getAuthenticatedConvexHttpClient } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { SubscriptionTier } from "@/contexts/SubscriptionContext";
@@ -78,27 +78,23 @@ const fromConvexJournal = (row: {
   updatedAt: new Date(row.updatedAtMs).toISOString(),
 });
 
-export const listTradingJournals = async (userId: string): Promise<TradingJournal[]> => {
-  if (!convexClient) return [];
-  const rows = await convexClient.query(api.tradingJournals.listForUser, { userId });
+export const listTradingJournals = async (_userId: string): Promise<TradingJournal[]> => {
+  const client = getAuthenticatedConvexHttpClient();
+  const rows = await client.query(api.tradingJournals.listForUser, {});
   return rows.map(fromConvexJournal);
 };
 
 export const createTradingJournal = async (
-  userId: string,
+  _userId: string,
   input: CreateJournalInput,
 ): Promise<TradingJournal> => {
-  if (!convexClient) {
-    throw new Error("Convex client unavailable");
-  }
+  const client = getAuthenticatedConvexHttpClient();
 
-  const row = await convexClient.mutation(api.tradingJournals.create, {
-    userId,
+  const row = await client.mutation(api.tradingJournals.create, {
     name: input.name,
     currency: input.currency,
     startingBalance: input.startingBalance,
     fullName: input.fullName ?? null,
-    subscriptionTier: input.subscriptionTier ?? null,
   });
 
   if (!row) {
@@ -108,38 +104,34 @@ export const createTradingJournal = async (
   return fromConvexJournal(row);
 };
 
-export const attachOrphanJournalData = async (userId: string, journalId: string) => {
-  if (!convexClient) return { trades: 0, history: 0, sessions: 0 };
-  return await convexClient.mutation(api.tradingJournals.attachOrphanData, {
-    userId,
+export const attachOrphanJournalData = async (_userId: string, journalId: string) => {
+  const client = getAuthenticatedConvexHttpClient();
+  return await client.mutation(api.tradingJournals.attachOrphanData, {
     journalId: journalId as Id<"tradingAccounts">,
   });
 };
 
-export const deleteTradingJournal = async (userId: string, journalId: string) => {
-  if (!convexClient) {
-    throw new Error("Convex client unavailable");
-  }
+export const deleteTradingJournal = async (_userId: string, journalId: string) => {
+  const client = getAuthenticatedConvexHttpClient();
 
-  return await convexClient.mutation(api.tradingJournals.remove, {
-    userId,
+  return await client.mutation(api.tradingJournals.remove, {
     id: journalId as Id<"tradingAccounts">,
   });
 };
 
 export const getTradingJournalLimits = async (
-  userId: string,
+  _userId: string,
   subscriptionTier?: string | null,
 ) => {
-  if (!convexClient) {
+  const client = getAuthenticatedConvexHttpClient();
+
+  // Tier is derived server-side from the authenticated user — never trust client tier.
+  try {
+    return await client.query(api.tradingJournals.getLimits, {});
+  } catch {
     const limit = getJournalLimit(subscriptionTier);
     return { tier: subscriptionTier ?? "free", limit, activeCount: 0, canCreate: true };
   }
-
-  return await convexClient.query(api.tradingJournals.getLimits, {
-    userId,
-    subscriptionTier: subscriptionTier ?? null,
-  });
 };
 
 export type JournalId = Id<"tradingAccounts">;

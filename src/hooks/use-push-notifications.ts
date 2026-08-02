@@ -235,7 +235,11 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     } catch (error) {
       logger.error('[push] Unexpected error during subscription:', error);
       const message = error instanceof Error ? error.message : 'Unknown error occurred';
-      setLastError(message);
+      const safeMessage =
+        /VAPID|applicationServerKey|Uint8Array|endpoint/i.test(message)
+          ? 'Push notifications could not be enabled. Please try again.'
+          : message;
+      setLastError(safeMessage);
       setLoading(false);
       return false;
     }

@@ -41,7 +41,11 @@ export const JournalSwitcher = () => {
       toast.success(`Deleted “${name}”`);
     } catch (error) {
       console.error("[journalSwitcher] Failed to delete journal", error);
-      toast.error(error instanceof Error ? error.message : "Failed to delete journal");
+      toast.error(
+        error instanceof Error && !/Convex|VITE_|API_KEY|unavailable/i.test(error.message)
+          ? error.message
+          : "Failed to delete journal",
+      );
     } finally {
       setIsDeleting(false);
     }

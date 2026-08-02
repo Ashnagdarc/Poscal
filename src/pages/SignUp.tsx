@@ -25,8 +25,8 @@ const SignUp = () => {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (password.length < 8) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
 
@@ -81,7 +81,7 @@ const SignUp = () => {
             type="text"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Your name"
+            placeholder="Full name (e.g. Alex Trader)"
             autoComplete="name"
             className={authInputClassName}
           />
@@ -109,8 +109,8 @@ const SignUp = () => {
           autoComplete="new-password"
           showPassword={showPassword}
           onTogglePassword={() => setShowPassword((current) => !current)}
-          hint="Must be at least 6 characters"
-          minLength={6}
+          hint="Must be at least 8 characters"
+          minLength={8}
         />
 
         <AuthField
@@ -126,7 +126,7 @@ const SignUp = () => {
             placeholder="Re-enter your password"
             autoComplete="new-password"
             required
-            minLength={6}
+            minLength={8}
             className={authInputClassName}
           />
         </AuthField>
@@ -134,7 +134,7 @@ const SignUp = () => {
         <button
           type="submit"
           disabled={isLoading || passwordsMismatch}
-          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isLoading ? (
             <span className="flex items-center justify-center gap-2">

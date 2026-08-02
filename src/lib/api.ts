@@ -1,6 +1,7 @@
 import axios, { type AxiosInstance } from 'axios';
 import { api as convexApi } from '../../convex/_generated/api';
 import type { Id } from '../../convex/_generated/dataModel';
+import { getConvexAuthTokenMirror } from '@/lib/authTokenStore';
 import { convexClient, createAuthenticatedConvexClient } from '@/lib/convexClient';
 import { logger } from '@/lib/logger';
 
@@ -21,22 +22,20 @@ const api = axios.create({
   },
 });
 
-const getStoredConvexAuthToken = () => {
-  if (typeof window === 'undefined') {
-    return null;
-  }
-  return window.localStorage.getItem('convex_auth_token');
-};
+const getStoredConvexAuthToken = () => getConvexAuthTokenMirror();
 
 const getAuthenticatedConvexClient = () => {
   const token = getStoredConvexAuthToken();
   return token ? createAuthenticatedConvexClient(token) : convexClient;
 };
 
-// Add auth token to requests if available (for both APIs)
+// Legacy axios Bearer from pre-Convex Auth. Prefer Convex Auth JWT mirror — never force a hard
+// redirect on 401 (that caused mid-session “Signed out” flakiness when unrelated APIs 401'd).
 const addAuthInterceptor = (axiosInstance: AxiosInstance) => {
   axiosInstance.interceptors.request.use((config) => {
-    const token = localStorage.getItem('auth_token');
+    const token = getStoredConvexAuthToken() ?? (
+      typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
+    );
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -44,16 +43,17 @@ const addAuthInterceptor = (axiosInstance: AxiosInstance) => {
   });
 };
 
-// Handle token expiration (for both APIs)
 const addErrorInterceptor = (axiosInstance: AxiosInstance) => {
   axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
-      if (error.response?.status === 401) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user');
-        // Redirect to signin page, not auth
-        window.location.href = '/signin';
+      if (error.response?.status === 401 && typeof window !== 'undefined') {
+        try {
+          window.localStorage.removeItem('auth_token');
+          window.localStorage.removeItem('user');
+        } catch {
+          // ignore
+        }
       }
       return Promise.reject(error);
     }
@@ -194,14 +194,42 @@ export const newsApi = {
   },
 };
 
+export type ViewerPreferences = {
+  timezone: string | null;
+  default_risk_percent: number | null;
+  trading_risk_alerts_enabled: boolean;
+  trading_milestone_alerts_enabled: boolean;
+  news_alerts_enabled: boolean;
+};
+
+export const preferencesApi = {
+  get: async (): Promise<ViewerPreferences | null> => {
+    const profile = await getAuthenticatedConvexClient().query(convexApi.users.viewerProfile, {});
+    if (!profile) return null;
+    return {
+      timezone: profile.timezone ?? null,
+      default_risk_percent: profile.default_risk_percent ?? null,
+      trading_risk_alerts_enabled: profile.trading_risk_alerts_enabled !== false,
+      trading_milestone_alerts_enabled: profile.trading_milestone_alerts_enabled !== false,
+      news_alerts_enabled: profile.news_alerts_enabled !== false,
+    };
+  },
+
+  update: async (updates: {
+    timezone?: string | null;
+    defaultRiskPercent?: number | null;
+    tradingRiskAlertsEnabled?: boolean;
+    tradingMilestoneAlertsEnabled?: boolean;
+  }) => {
+    return await getAuthenticatedConvexClient().mutation(convexApi.profiles.updateViewerPreferences, updates);
+  },
+};
+
 // Trading Journal API
 export const tradesApi = {
   getAll: async (query?: { status?: string }): Promise<any[]> => {
-    const userId = getStoredConvexAuthToken() ? null : null;
     const client = getAuthenticatedConvexClient();
-    const viewer = await client.query(convexApi.users.viewer, {});
     return await client.query(convexApi.tradingJournal.listForUser, {
-      userId: viewer.id,
       status: query?.status ?? null,
       limit: 300,
     });
@@ -230,9 +258,8 @@ export const tradesApi = {
 
   create: async (tradeData: any): Promise<any> => {
     const client = getAuthenticatedConvexClient();
-    const viewer = await client.query(convexApi.users.viewer, {});
     return await client.mutation(convexApi.tradingJournal.createEntry, {
-      userId: viewer.id,
+      journalId: tradeData.journal_id ?? tradeData.journalId ?? null,
       externalId: tradeData.externalId ?? null,
       pair: tradeData.pair || tradeData.symbol || 'JOURNAL',
       direction: tradeData.direction === 'sell' || tradeData.direction === 'short' ? tradeData.direction : 'buy',
@@ -261,10 +288,8 @@ export const tradesApi = {
 
   update: async (id: string, updates: any): Promise<any> => {
     const client = getAuthenticatedConvexClient();
-    const viewer = await client.query(convexApi.users.viewer, {});
     return await client.mutation(convexApi.tradingJournal.updateEntry, {
       id: id as any,
-      userId: viewer.id,
       pair: updates.pair ?? updates.symbol ?? null,
       direction: updates.direction,
       entryPrice: updates.entry_price ?? null,
@@ -292,8 +317,7 @@ export const tradesApi = {
 
   delete: async (id: string): Promise<void> => {
     const client = getAuthenticatedConvexClient();
-    const viewer = await client.query(convexApi.users.viewer, {});
-    await client.mutation(convexApi.tradingJournal.deleteEntry, { id: id as any, userId: viewer.id });
+    await client.mutation(convexApi.tradingJournal.deleteEntry, { id: id as any });
   },
 };
 

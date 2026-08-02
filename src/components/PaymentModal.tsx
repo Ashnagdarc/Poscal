@@ -104,21 +104,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
   const handlePay = () => {
     if (!publicKey) {
-      setErrorMessage('Paystack public key not set');
+      setErrorMessage('Payments are temporarily unavailable. Please contact support.');
       setPaymentStatus('error');
-      toast.error('Paystack public key not set. Please contact support.');
+      toast.error('Payments are temporarily unavailable. Please contact support.');
       return;
     }
     if (!paystackScriptLoaded) {
-      setErrorMessage('Paystack script not loaded. Please refresh and try again.');
+      setErrorMessage('Payment provider failed to load. Please refresh and try again.');
       setPaymentStatus('error');
-      toast.error('Paystack script not loaded. Please refresh and try again.');
+      toast.error('Payment provider failed to load. Please refresh and try again.');
       return;
     }
     if (!window.PaystackPop || typeof window.PaystackPop.setup !== 'function') {
-      setErrorMessage('PaystackPop.setup is not available on window.');
+      setErrorMessage('Payments are unavailable right now. Please refresh and try again.');
       setPaymentStatus('error');
-      toast.error('Paystack is unavailable right now. Please refresh and try again.');
+      toast.error('Payments are unavailable right now. Please refresh and try again.');
       return;
     }
     if (!effectiveUserEmail) {
@@ -218,11 +218,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         } else if (typeof handler?.open === 'function') {
           handler.open();
         } else {
-          throw new Error('Paystack handler could not be opened.');
+          throw new Error('Could not open the payment window. Please try again.');
         }
       } else {
         clearTimeout(fallbackTimeout);
-        throw new Error('PaystackPop.setup is not a function.');
+        throw new Error('Payments are unavailable right now. Please refresh and try again.');
       }
     } catch (err: unknown) {
       clearTimeout(fallbackTimeout);
@@ -230,7 +230,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
       setIsProcessing(false);
       setPaymentStatus('error');
       suppressCloseToastRef.current = false;
-      setErrorMessage(err instanceof Error ? err.message : 'Paystack transaction failed.');
+      const message =
+        err instanceof Error && !/PaystackPop|setup is not/i.test(err.message)
+          ? err.message
+          : 'Payment could not be started. Please try again.';
+      setErrorMessage(message);
     }
   };
 

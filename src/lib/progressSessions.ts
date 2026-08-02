@@ -1,4 +1,4 @@
-import { convexClient } from "@/lib/convexClient";
+import { getAuthenticatedConvexHttpClient, isConvexEnabled } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
 
 export type ProgressPhase = "pre_market" | "post_market";
@@ -119,10 +119,10 @@ export const listProgressSessions = async (
   userId: string,
   journalId?: string | null,
 ): Promise<ProgressSession[]> => {
-  if (convexClient) {
+  if (isConvexEnabled()) {
     try {
-      const rows = await convexClient.query(api.progressSessions.listForUser, {
-        userId,
+      const client = getAuthenticatedConvexHttpClient();
+      const rows = await client.query(api.progressSessions.listForUser, {
         journalId: (journalId as any) ?? null,
         limit: 120,
       });
@@ -144,10 +144,10 @@ export const getProgressSessionForDay = async (
   dateKey: string,
   journalId?: string | null,
 ): Promise<ProgressSession> => {
-  if (convexClient) {
+  if (isConvexEnabled()) {
     try {
-      const row = await convexClient.query(api.progressSessions.getForDay, {
-        userId,
+      const client = getAuthenticatedConvexHttpClient();
+      const row = await client.query(api.progressSessions.getForDay, {
         dateKey,
         journalId: (journalId as any) ?? null,
       });
@@ -186,10 +186,10 @@ export const saveProgressSession = async (
       || session.sessionStarted,
   };
 
-  if (convexClient) {
+  if (isConvexEnabled()) {
     try {
-      const row = await convexClient.mutation(api.progressSessions.upsertDay, {
-        userId,
+      const client = getAuthenticatedConvexHttpClient();
+      const row = await client.mutation(api.progressSessions.upsertDay, {
         journalId: (resolvedJournalId as any) ?? null,
         dateKey: payload.dateKey,
         phase: payload.phase,

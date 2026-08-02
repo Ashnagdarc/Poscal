@@ -29,9 +29,16 @@ import {
   computeDailyPnl,
   computeDayOfWeekPerformance,
   computeEquityCurve,
+  computeInstrumentBreakdown,
   computeJournalStats,
+  computeSessionBreakdown,
+  computeStrategyBreakdown,
+  formatDateInTimeZone,
   formatJournalMoney,
   formatJournalPercent,
+  formatJournalR,
+  formatProfitFactor,
+  type PerformanceBreakdownRow,
 } from "@/lib/journalAnalytics";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +54,8 @@ interface JournalAnalyticsTabsProps {
   onEditTrade: (trade: JournalTrade) => void;
   onDeleteTrade: (trade: JournalTrade) => void;
   startingBalance?: number;
+  /** IANA timezone for date labels / day buckets (P-029). */
+  timeZone?: string | null;
 }
 
 const MetricCard = ({
@@ -90,14 +99,73 @@ const EmptyState = ({ onAddTrade }: { onAddTrade: () => void }) => (
   </div>
 );
 
+const BreakdownSection = ({
+  title,
+  subtitle,
+  rows,
+  currencySymbol,
+  emptyHint,
+}: {
+  title: string;
+  subtitle: string;
+  rows: PerformanceBreakdownRow[];
+  currencySymbol: string;
+  emptyHint: string;
+}) => {
+  const activeRows = rows.filter((row) => row.trades > 0);
+
+  return (
+    <section className="rounded-2xl bg-secondary p-3 sm:p-4">
+      <div className="mb-3">
+        <h3 className="text-base font-bold text-foreground">{title}</h3>
+        <p className="text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <div className="space-y-2">
+        {activeRows.length === 0 ? (
+          <p className="py-6 text-center text-sm text-muted-foreground">{emptyHint}</p>
+        ) : (
+          activeRows.map((row) => (
+            <div key={row.key} className="rounded-2xl bg-background p-3">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <p className="truncate text-sm font-semibold text-foreground">{row.label}</p>
+                <p
+                  className={`shrink-0 text-sm font-bold ${
+                    row.pnl >= 0 ? "text-emerald-400" : "text-red-400"
+                  }`}
+                >
+                  {formatJournalMoney(row.pnl, currencySymbol)}
+                </p>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                <div
+                  className="h-full rounded-full bg-brand transition-all"
+                  style={{ width: `${row.winRate}%` }}
+                />
+              </div>
+              <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+                <span>
+                  {row.wins}W / {row.losses}L · {row.trades} trade{row.trades === 1 ? "" : "s"}
+                </span>
+                <span>{formatJournalPercent(row.winRate)}</span>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+};
+
 const TradeListItem = ({
   trade,
   currencySymbol,
+  timeZone,
   onEdit,
   onDelete,
 }: {
   trade: JournalTrade;
   currencySymbol: string;
+  timeZone?: string | null;
   onEdit: () => void;
   onDelete: () => void;
 }) => {
@@ -126,7 +194,7 @@ const TradeListItem = ({
             </span>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {tradeDate.toLocaleDateString("en-US", {
+            {formatDateInTimeZone(tradeDate, timeZone, {
               month: "short",
               day: "numeric",
               year: "numeric",
@@ -182,15 +250,17 @@ const CumulativePnlAreaChart = ({
   calculatorResults = [],
   currencySymbol,
   startingBalance = 0,
+  timeZone = null,
 }: {
   trades: JournalTrade[];
   calculatorResults?: JournalEntry[];
   currencySymbol: string;
   startingBalance?: number;
+  timeZone?: string | null;
 }) => {
   const equityPoints = useMemo(
-    () => computeEquityCurve(trades, calculatorResults, startingBalance),
-    [trades, calculatorResults, startingBalance],
+    () => computeEquityCurve(trades, calculatorResults, startingBalance, timeZone),
+    [trades, calculatorResults, startingBalance, timeZone],
   );
 
   const chartData = useMemo(
@@ -277,7 +347,7 @@ const CumulativePnlAreaChart = ({
 
 export const JournalAnalyticsTabs = ({
   trades,
-  calculatorResults = [],
+  calculatorResults: _calculatorResults = [],
   isLoading,
   activeTab,
   onTabChange,
@@ -285,15 +355,24 @@ export const JournalAnalyticsTabs = ({
   onEditTrade,
   onDeleteTrade,
   startingBalance = 0,
+  timeZone = null,
 }: JournalAnalyticsTabsProps) => {
+  void _calculatorResults;
   const { currency } = useCurrency();
 
   const stats = useMemo(
-    () => computeJournalStats(trades, calculatorResults),
-    [trades, calculatorResults],
+    // Manual Trades analytics must not blend calculator history (DAN-011 / P-024).
+    () => computeJournalStats(trades, [], startingBalance),
+    [trades, startingBalance],
   );
-  const dailyPnl = useMemo(() => computeDailyPnl(trades), [trades]);
-  const dayPerformance = useMemo(() => computeDayOfWeekPerformance(trades), [trades]);
+  const dailyPnl = useMemo(() => computeDailyPnl(trades, timeZone), [trades, timeZone]);
+  const dayPerformance = useMemo(
+    () => computeDayOfWeekPerformance(trades, timeZone),
+    [trades, timeZone],
+  );
+  const strategyBreakdown = useMemo(() => computeStrategyBreakdown(trades), [trades]);
+  const sessionBreakdown = useMemo(() => computeSessionBreakdown(trades), [trades]);
+  const instrumentBreakdown = useMemo(() => computeInstrumentBreakdown(trades), [trades]);
   const recentTrades = useMemo(
     () => [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
     [trades],
@@ -417,9 +496,20 @@ export const JournalAnalyticsTabs = ({
                     hint={`${stats.wins}W / ${stats.losses}L`}
                   />
                   <MetricCard
+                    label="Expectancy"
+                    value={formatJournalMoney(stats.expectancy, currency.symbol)}
+                    hint="Avg P&L per closed trade"
+                  />
+                  <MetricCard
+                    label="Max Drawdown"
+                    value={formatJournalMoney(stats.maxDrawdown, currency.symbol)}
+                    hint={startingBalance > 0 ? "Peak-to-trough from start" : "From trade P&L only"}
+                    tone={stats.maxDrawdown != null && stats.maxDrawdown < 0 ? "negative" : "neutral"}
+                  />
+                  <MetricCard
                     label="Open Trades"
                     value={String(stats.openTrades)}
-                    hint={`${stats.totalTrades} total`}
+                    hint={`${stats.closedTrades} closed`}
                   />
                 </div>
               </section>
@@ -435,6 +525,7 @@ export const JournalAnalyticsTabs = ({
                       key={trade.id}
                       trade={trade}
                       currencySymbol={currency.symbol}
+                      timeZone={timeZone}
                       onEdit={() => onEditTrade(trade)}
                       onDelete={() => onDeleteTrade(trade)}
                     />
@@ -472,6 +563,21 @@ export const JournalAnalyticsTabs = ({
                       stats.avgWinLossRatio !== null ? stats.avgWinLossRatio.toFixed(2) : "—"
                     }
                   />
+                  <MetricCard
+                    label="Avg R"
+                    value={formatJournalR(stats.avgR)}
+                    hint={stats.avgR === null ? "Needs risk amount on trades" : "Mean R multiple"}
+                  />
+                  <MetricCard
+                    label="Best Streak"
+                    value={stats.maxConsecutiveWins ? `${stats.maxConsecutiveWins}W` : "—"}
+                    tone="positive"
+                  />
+                  <MetricCard
+                    label="Worst Streak"
+                    value={stats.maxConsecutiveLosses ? `${stats.maxConsecutiveLosses}L` : "—"}
+                    tone="negative"
+                  />
                 </div>
               </section>
 
@@ -497,7 +603,12 @@ export const JournalAnalyticsTabs = ({
                   />
                   <MetricCard
                     label="Profit Factor"
-                    value={stats.profitFactor !== null ? stats.profitFactor.toFixed(2) : "—"}
+                    value={formatProfitFactor(stats.profitFactor)}
+                    hint={
+                      stats.profitFactor === Number.POSITIVE_INFINITY
+                        ? "No losing trades"
+                        : undefined
+                    }
                   />
                   <MetricCard
                     label="Total P&L"
@@ -509,6 +620,28 @@ export const JournalAnalyticsTabs = ({
             </TabsContent>
 
             <TabsContent value="performance" className="mt-4 space-y-4">
+              <BreakdownSection
+                title="By Strategy"
+                subtitle="From Tags / Setup on closed trades"
+                rows={strategyBreakdown}
+                currencySymbol={currency.symbol}
+                emptyHint="Add Tags / Setup on closed trades to see strategy rollups."
+              />
+              <BreakdownSection
+                title="By Session"
+                subtitle="UTC session windows (Asian · London · NY)"
+                rows={sessionBreakdown}
+                currencySymbol={currency.symbol}
+                emptyHint="Close trades with dates to see session performance."
+              />
+              <BreakdownSection
+                title="By Instrument"
+                subtitle="Pair / symbol breakdown"
+                rows={instrumentBreakdown}
+                currencySymbol={currency.symbol}
+                emptyHint="Close trades with P&L to see instrument performance."
+              />
+
               <section className="rounded-2xl bg-secondary p-3 sm:p-4">
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-foreground">Daily Performance</h3>
@@ -569,9 +702,10 @@ export const JournalAnalyticsTabs = ({
               <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
                 <CumulativePnlAreaChart
                   trades={trades}
-                  calculatorResults={calculatorResults}
+                  calculatorResults={[]}
                   currencySymbol={currency.symbol}
                   startingBalance={startingBalance}
+                  timeZone={timeZone}
                 />
               </section>
 

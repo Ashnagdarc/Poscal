@@ -1,5 +1,5 @@
-import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../convex/_generated/api";
+import { getAuthenticatedConvexHttpClient, isConvexEnabled } from "@/lib/convexClient";
 import { STORAGE_KEYS } from "@/lib/constants";
 
 export type SavedCalculationSource = "manual" | "signal";
@@ -92,10 +92,8 @@ export interface SaveCalculatorHistoryInput extends CalculatorHistoryItem {
 
 const HISTORY_LIMIT = 20;
 const JOURNAL_HISTORY_LIMIT = 200;
-const convexUrl = import.meta.env.VITE_CONVEX_URL as string | undefined;
-const convexClient = convexUrl ? new ConvexHttpClient(convexUrl) : null;
 
-export const isConvexCalculatorHistoryEnabled = () => convexClient !== null;
+export const isConvexCalculatorHistoryEnabled = () => isConvexEnabled();
 
 const parseTimestamp = (value: unknown): Date => {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
@@ -334,7 +332,6 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
   const record = toSavedCalculationRecord(item, userId);
 
   return {
-    userId,
     journalId: (item.journalId as any) ?? null,
     clientId: item.id,
     symbol: record.symbol,
@@ -365,9 +362,8 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
   };
 };
 
-const toConvexInputFromSavedRecord = (userId: string, record: SavedCalculationRecord) => {
+const toConvexInputFromSavedRecord = (_userId: string, record: SavedCalculationRecord) => {
   return {
-    userId,
     journalId: (record.journalId as any) ?? null,
     clientId: record.id,
     symbol: record.symbol,
@@ -511,14 +507,14 @@ export const loadSavedCalculations = async (
   userId?: string | null,
   journalId?: string | null,
 ): Promise<SavedCalculationRecord[]> => {
-  if (!userId || !convexClient) {
+  if (!userId || !isConvexEnabled()) {
     return readLocalSavedCalculations().filter((item) =>
       !journalId || !item.journalId || item.journalId === journalId,
     );
   }
 
-  const rows = await convexClient.query(api.calculatorHistory.listForUser, {
-    userId,
+  const client = getAuthenticatedConvexHttpClient();
+  const rows = await client.query(api.calculatorHistory.listForUser, {
     journalId: (journalId as any) ?? null,
     limit: JOURNAL_HISTORY_LIMIT,
   });
@@ -545,8 +541,9 @@ export const saveCalculatorHistory = async (
     .slice(0, HISTORY_LIMIT);
   writeLocalSavedCalculations(localHistory);
 
-  if (userId && convexClient) {
-    await convexClient.mutation(api.calculatorHistory.save, toConvexInput(userId, item));
+  if (userId && isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.calculatorHistory.save, toConvexInput(userId, item));
     return await loadCalculatorHistory(userId, item.journalId);
   }
 
@@ -556,7 +553,7 @@ export const saveCalculatorHistory = async (
 export const saveJournalEntry = saveCalculatorHistory;
 
 export const migrateLocalCalculatorHistoryToConvex = async (userId?: string | null) => {
-  if (!userId || !convexClient) {
+  if (!userId || !isConvexEnabled()) {
     return;
   }
 
@@ -571,7 +568,8 @@ export const migrateLocalCalculatorHistoryToConvex = async (userId?: string | nu
     return;
   }
 
-  await convexClient.mutation(api.calculatorHistory.saveMany, {
+  const client = getAuthenticatedConvexHttpClient();
+  await client.mutation(api.calculatorHistory.saveMany, {
     items: localHistory.map((item) => toConvexInputFromSavedRecord(userId, item)),
   });
 
@@ -581,8 +579,9 @@ export const migrateLocalCalculatorHistoryToConvex = async (userId?: string | nu
 export const clearCalculatorHistory = async (userId?: string | null) => {
   clearLocalCalculatorHistory();
 
-  if (userId && convexClient) {
-    await convexClient.mutation(api.calculatorHistory.clearForUser, { userId });
+  if (userId && isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.calculatorHistory.clearForUser, {});
   }
 };
 
@@ -595,9 +594,9 @@ export const deleteCalculatorHistoryItem = async (
   const nextLocalHistory = readLocalSavedCalculations().filter((item) => item.id !== id);
   writeLocalSavedCalculations(nextLocalHistory);
 
-  if (userId && convexClient) {
-    await convexClient.mutation(api.calculatorHistory.remove, {
-      userId,
+  if (userId && isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.calculatorHistory.remove, {
       clientId: id,
     });
     return await loadSavedCalculations(userId);
@@ -638,8 +637,9 @@ export const updateSavedCalculation = async (
   const nextItems = currentItems.map((item) => (item.id === id ? nextRecord : item));
   writeLocalSavedCalculations(nextItems);
 
-  if (userId && convexClient) {
-    await convexClient.mutation(api.calculatorHistory.save, toConvexInputFromSavedRecord(userId, nextRecord));
+  if (userId && isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    await client.mutation(api.calculatorHistory.save, toConvexInputFromSavedRecord(userId, nextRecord));
     return await loadSavedCalculations(userId);
   }
 

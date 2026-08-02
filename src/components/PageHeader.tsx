@@ -28,11 +28,12 @@ export const PageHeader = ({
     <header
       className={cn(
         "z-30 shrink-0 px-6 pb-6 pt-12",
-        sticky && "sticky top-0 bg-background/85 backdrop-blur-md",
+        // pointer-events-none on sticky chrome so it doesn't intercept clicks on content below (ETH-005).
+        sticky && "sticky top-0 pointer-events-none bg-background/85 backdrop-blur-md",
         className,
       )}
     >
-      <div className="mx-auto flex max-w-2xl items-center justify-between gap-3 md:max-w-3xl">
+      <div className={cn("mx-auto flex max-w-2xl items-center justify-between gap-3 md:max-w-3xl", sticky && "pointer-events-auto")}>
         <div className="flex min-w-0 items-center gap-3">
           {leading}
           {logoSrc ? (

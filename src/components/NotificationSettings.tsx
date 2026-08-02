@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
-import { newsApi } from '@/lib/api';
+import { newsApi, preferencesApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface NotificationSettingsProps {
@@ -25,16 +25,27 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
   } = usePushNotifications();
   const [newsAlertsEnabled, setNewsAlertsEnabled] = useState(true);
   const [newsAlertsLoading, setNewsAlertsLoading] = useState(false);
+  const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
+  const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
+  const [tradingAlertsLoading, setTradingAlertsLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
     let mounted = true;
     (async () => {
       try {
-        const enabled = await newsApi.getNewsAlertsEnabled();
-        if (mounted) setNewsAlertsEnabled(enabled);
+        const [newsEnabled, prefs] = await Promise.all([
+          newsApi.getNewsAlertsEnabled(),
+          preferencesApi.get(),
+        ]);
+        if (!mounted) return;
+        setNewsAlertsEnabled(newsEnabled);
+        if (prefs) {
+          setRiskAlertsEnabled(prefs.trading_risk_alerts_enabled);
+          setMilestoneAlertsEnabled(prefs.trading_milestone_alerts_enabled);
+        }
       } catch {
-        // Default on
+        // Defaults on
       }
     })();
     return () => {
@@ -74,18 +85,83 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
     }
   };
 
+  const handleRiskAlertsToggle = async (enabled: boolean) => {
+    setTradingAlertsLoading(true);
+    setRiskAlertsEnabled(enabled);
+    try {
+      await preferencesApi.update({ tradingRiskAlertsEnabled: enabled });
+      toast.success(enabled ? 'Risk warnings on' : 'Risk warnings off');
+    } catch {
+      setRiskAlertsEnabled(!enabled);
+      toast.error('Could not update risk alert preference');
+    } finally {
+      setTradingAlertsLoading(false);
+    }
+  };
+
+  const handleMilestoneAlertsToggle = async (enabled: boolean) => {
+    setTradingAlertsLoading(true);
+    setMilestoneAlertsEnabled(enabled);
+    try {
+      await preferencesApi.update({ tradingMilestoneAlertsEnabled: enabled });
+      toast.success(enabled ? 'Milestone alerts on' : 'Milestone alerts off');
+    } catch {
+      setMilestoneAlertsEnabled(!enabled);
+      toast.error('Could not update milestone alert preference');
+    } finally {
+      setTradingAlertsLoading(false);
+    }
+  };
+
   const newsToggle = user ? (
     <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
       <div>
         <p className="text-sm font-medium text-foreground">Calendar alerts</p>
-        <p className="text-[11px] text-muted-foreground">High-impact economic events only</p>
+        <p className="text-[11px] text-muted-foreground">
+          {isSubscribed
+            ? "High-impact economic events only"
+            : "Enable push notifications first to turn calendar alerts on"}
+        </p>
       </div>
       <Switch
-        checked={newsAlertsEnabled}
+        checked={isSubscribed && newsAlertsEnabled}
         disabled={newsAlertsLoading || !isSubscribed}
         onCheckedChange={(checked) => void handleNewsAlertsToggle(checked)}
         aria-label="Toggle calendar alerts"
       />
+    </div>
+  ) : null;
+
+  const tradingToggles = user ? (
+    <div className="mt-3 space-y-2">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">Risk warnings</p>
+          <p className="text-[11px] text-muted-foreground">
+            Alert when a trade’s risk % exceeds your default
+          </p>
+        </div>
+        <Switch
+          checked={riskAlertsEnabled}
+          disabled={tradingAlertsLoading}
+          onCheckedChange={(checked) => void handleRiskAlertsToggle(checked)}
+          aria-label="Toggle risk warnings"
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">Milestone alerts</p>
+          <p className="text-[11px] text-muted-foreground">
+            Trade-count and equity % milestones (in-app toast + push/email when enabled)
+          </p>
+        </div>
+        <Switch
+          checked={milestoneAlertsEnabled}
+          disabled={tradingAlertsLoading}
+          onCheckedChange={(checked) => void handleMilestoneAlertsToggle(checked)}
+          aria-label="Toggle milestone alerts"
+        />
+      </div>
     </div>
   ) : null;
 
@@ -95,6 +171,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       <p className="text-xs text-muted-foreground">
         Use Chrome, Firefox, or Edge for push notifications.
       </p>
+      {tradingToggles}
     </div>
   ) : isSubscribed ? (
     <div>
@@ -114,6 +191,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
         </Button>
       </div>
       {newsToggle}
+      {tradingToggles}
     </div>
   ) : permission === 'denied' ? (
     <div className="space-y-1">
@@ -121,6 +199,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       <p className="text-xs text-muted-foreground">
         Allow notifications via the lock icon in your address bar.
       </p>
+      {tradingToggles}
     </div>
   ) : (
     <div>
@@ -138,6 +217,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
         Enable notifications
       </Button>
       {newsToggle}
+      {tradingToggles}
     </div>
   );
 
@@ -151,8 +231,10 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
             <Bell className="h-4 w-4 text-foreground" />
           )}
           <div>
-            <p className="font-medium text-foreground">Push notifications</p>
-            <p className="text-xs text-muted-foreground">Calendar alerts and app updates</p>
+            <p className="font-medium text-foreground">Notifications</p>
+            <p className="text-xs text-muted-foreground">
+              Calendar, risk warnings, and account milestones
+            </p>
           </div>
         </div>
         {content}
@@ -166,12 +248,13 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center gap-2 text-base">
             <BellOff className="h-4 w-4 text-muted-foreground" />
-            Push Notifications
+            Notifications
           </CardTitle>
           <CardDescription>
-            Your browser doesn't support push notifications. Try using a modern browser like Chrome, Firefox, or Edge.
+            Your browser doesn't support push notifications. Trading alert preferences still apply to in-app toasts.
           </CardDescription>
         </CardHeader>
+        <CardContent>{tradingToggles}</CardContent>
       </Card>
     );
   }
@@ -181,10 +264,10 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-base">
           <Bell className="h-4 w-4" />
-          Push Notifications
+          Notifications
         </CardTitle>
         <CardDescription>
-          Get alerts for high-impact economic calendar events and important app updates, even when the app is closed.
+          Calendar events, risk warnings when trades exceed your default risk %, and equity / trade-count milestones.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">{content}</CardContent>

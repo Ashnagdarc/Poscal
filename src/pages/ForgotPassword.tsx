@@ -1,0 +1,180 @@
+import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import { AuthFooter, AuthLayout } from "@/components/auth/AuthLayout";
+import { AuthField, AuthPasswordField, authInputClassName } from "@/components/auth/AuthField";
+import { useAuth } from "@/contexts/AuthContext";
+
+type Step = "request" | "verify";
+
+const ForgotPassword = () => {
+  const navigate = useNavigate();
+  const { resetPassword, verifyPasswordReset } = useAuth();
+  const [step, setStep] = useState<Step>("request");
+  const [email, setEmail] = useState("");
+  const [code, setCode] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const handleRequest = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!email.trim()) {
+      toast.error("Enter your email address");
+      return;
+    }
+
+    setIsLoading(true);
+    const { error } = await resetPassword(email.trim());
+    setIsLoading(false);
+
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    toast.success("If an account exists, a reset code was sent.");
+    setStep("verify");
+  };
+
+  const handleVerify = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!code.trim()) {
+      toast.error("Enter the reset code from your email");
+      return;
+    }
+    if (newPassword.length < 8) {
+      toast.error("Password must be at least 8 characters");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsLoading(true);
+    const { error } = await verifyPasswordReset(email.trim(), code.trim(), newPassword);
+    setIsLoading(false);
+
+    if (error) {
+      toast.error(error);
+      return;
+    }
+
+    toast.success("Password updated. You can sign in now.");
+    navigate("/signin", { state: { email: email.trim() } });
+  };
+
+  return (
+    <AuthLayout
+      title={step === "request" ? "Reset password" : "Enter reset code"}
+      subtitle={
+        step === "request"
+          ? "We’ll email you an 8-digit code if an account exists for that address."
+          : `Enter the code sent to ${email}, then choose a new password.`
+      }
+      footer={
+        <AuthFooter
+          prompt="Remembered your password?"
+          linkLabel="Sign In"
+          linkTo="/signin"
+          guestHref={null}
+        />
+      }
+    >
+      {step === "request" ? (
+        <form onSubmit={handleRequest} className="space-y-5">
+          <AuthField id="reset-email" label="Email address">
+            <input
+              id="reset-email"
+              type="email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+              className={authInputClassName}
+            />
+          </AuthField>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? "Sending..." : "Send reset code"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleVerify} className="space-y-5">
+          <AuthField id="reset-code" label="Reset code">
+            <input
+              id="reset-code"
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              placeholder="8-digit code"
+              required
+              className={authInputClassName}
+            />
+          </AuthField>
+
+          <AuthPasswordField
+            id="reset-new-password"
+            label="New password"
+            value={newPassword}
+            onChange={setNewPassword}
+            placeholder="At least 8 characters"
+            autoComplete="new-password"
+            showPassword={showPassword}
+            onTogglePassword={() => setShowPassword((current) => !current)}
+          />
+
+          <AuthField id="reset-confirm-password" label="Confirm password">
+            <input
+              id="reset-confirm-password"
+              type={showPassword ? "text" : "password"}
+              value={confirmPassword}
+              onChange={(event) => setConfirmPassword(event.target.value)}
+              placeholder="Confirm new password"
+              autoComplete="new-password"
+              required
+              className={authInputClassName}
+            />
+          </AuthField>
+
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="mt-1 h-14 w-full rounded-2xl bg-brand text-base font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {isLoading ? "Updating..." : "Update password"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setStep("request")}
+            className="w-full text-sm text-white/60 transition-colors hover:text-white"
+          >
+            Resend code / change email
+          </button>
+        </form>
+      )}
+
+      <p className="pt-2 text-center text-xs text-white/45">
+          <Link
+            to="/signin"
+            state={{ email: email.trim() || undefined }}
+            className="underline-offset-2 hover:underline"
+          >
+          Back to sign in
+        </Link>
+      </p>
+    </AuthLayout>
+  );
+};
+
+export default ForgotPassword;
