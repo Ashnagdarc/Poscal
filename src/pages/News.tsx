@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
 import {
   addDays,
@@ -19,13 +19,26 @@ import {
   RefreshCw,
 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "../../convex/_generated/api";
 import { cn } from "@/lib/utils";
 
 type ImpactFilter = "all" | "high" | "medium" | "low";
+
+type CalendarEvent = {
+  id: string;
+  country: string;
+  event: string;
+  impact: string;
+  scheduledAtMs: number;
+  actual: string | null;
+  estimate: string | null;
+  previous: string | null;
+  unit: string | null;
+};
+
+const PAGE_SIZE = 12;
 
 const getWeekMeta = (date: Date) => {
   const year = getISOWeekYear(date);
@@ -35,7 +48,7 @@ const getWeekMeta = (date: Date) => {
   return {
     weekParam: `${year}-W${String(week).padStart(2, "0")}`,
     label: `Week ${week}`,
-    rangeLabel: `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d, yyyy")}`,
+    rangeLabel: `${format(weekStart, "MMM d")} – ${format(weekEnd, "MMM d")}`,
     fromMs: startOfDay(weekStart).getTime(),
     toMs: endOfDay(weekEnd).getTime(),
     days: Array.from({ length: 7 }, (_, index) => addDays(weekStart, index)),
@@ -46,40 +59,97 @@ const impactTone = (impact: string) => {
   const value = impact.toLowerCase();
   if (value === "high") return "high";
   if (value === "medium") return "medium";
+  if (value === "holiday") return "holiday";
   return "low";
+};
+
+const formatValue = (value: string | null, unit: string | null) => {
+  if (!value) return "—";
+  return unit ? `${value}${unit}` : value;
 };
 
 const News = () => {
   const [impact, setImpact] = useState<ImpactFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
   const [calendarAnchor, setCalendarAnchor] = useState(() => new Date());
+  const [selectedDay, setSelectedDay] = useState(() => startOfDay(new Date()));
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
   const week = useMemo(() => getWeekMeta(calendarAnchor), [calendarAnchor]);
-  const isCurrentWeek = useMemo(() => {
-    return getWeekMeta(new Date()).weekParam === week.weekParam;
-  }, [week.weekParam]);
+  const isCurrentWeek = useMemo(
+    () => getWeekMeta(new Date()).weekParam === week.weekParam,
+    [week.weekParam],
+  );
 
   const events = useQuery(api.news.listEvents, {
     fromMs: week.fromMs,
     toMs: week.toMs,
-    impact: impact === "all" ? null : impact,
+    impact: null,
     country: null,
   });
   const ingestState = useQuery(api.news.getIngestState, {});
+
+  // Keep selected day inside the visible week; prefer today when available.
+  useEffect(() => {
+    const today = startOfDay(new Date());
+    const inWeek = week.days.some((day) => isSameDay(day, selectedDay));
+    if (inWeek) return;
+    const preferred = week.days.find((day) => isSameDay(day, today)) ?? week.days[0];
+    setSelectedDay(preferred);
+  }, [week.days, selectedDay]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [selectedDay, impact, week.weekParam]);
 
   const handleRefresh = () => {
     setRefreshing(true);
     window.setTimeout(() => setRefreshing(false), 600);
   };
 
-  const grouped = useMemo(() => {
+  const dayCounts = useMemo(() => {
     const rows = events ?? [];
     return week.days.map((day) => ({
       day,
-      items: rows.filter((event) => isSameDay(event.scheduledAtMs, day)),
+      count: rows.filter((event) => isSameDay(event.scheduledAtMs, day)).length,
     }));
   }, [events, week.days]);
 
+  const dayEvents = useMemo(() => {
+    const rows = (events ?? []) as CalendarEvent[];
+    return rows.filter((event) => isSameDay(event.scheduledAtMs, selectedDay));
+  }, [events, selectedDay]);
+
+  const impactCounts = useMemo(() => {
+    const rows = dayEvents;
+    return {
+      all: rows.length,
+      high: rows.filter((row) => impactTone(row.impact) === "high").length,
+      medium: rows.filter((row) => impactTone(row.impact) === "medium").length,
+      low: rows.filter((row) => {
+        const tone = impactTone(row.impact);
+        return tone === "low" || tone === "holiday";
+      }).length,
+    };
+  }, [dayEvents]);
+
+  const filteredDayEvents = useMemo(() => {
+    if (impact === "all") return dayEvents;
+    return dayEvents.filter((event) => {
+      const tone = impactTone(event.impact);
+      if (impact === "low") return tone === "low" || tone === "holiday";
+      return tone === impact;
+    });
+  }, [dayEvents, impact]);
+
+  const visibleEvents = filteredDayEvents.slice(0, visibleCount);
+  const hasMore = filteredDayEvents.length > visibleCount;
   const isLoading = events === undefined;
+  const isToday = isSameDay(selectedDay, new Date());
+
+  const shiftWeek = (delta: number) => {
+    setCalendarAnchor((value) => addWeeks(value, delta));
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-background pb-28">
@@ -105,184 +175,263 @@ const News = () => {
         }
       />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 space-y-4 px-4 py-4 sm:px-6 md:max-w-3xl">
-        <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h2 className="text-sm font-bold text-foreground">Economic calendar</h2>
-              <p className="mt-1 text-xs text-muted-foreground">{week.rangeLabel}</p>
-            </div>
-            {!isCurrentWeek ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 shrink-0 rounded-lg px-2 text-xs"
-                onClick={() => setCalendarAnchor(new Date())}
-              >
-                This week
-              </Button>
-            ) : null}
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-2">
+      <main className="mx-auto w-full max-w-2xl flex-1 space-y-3 px-4 pb-4 pt-1 sm:px-6 md:max-w-3xl">
+        {/* Week + day strip */}
+        <section className="rounded-2xl bg-secondary p-3">
+          <div className="flex items-center justify-between gap-2">
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-xl"
               aria-label="Previous week"
-              onClick={() => setCalendarAnchor((value) => addWeeks(value, -1))}
+              onClick={() => shiftWeek(-1)}
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-foreground">{week.label}</p>
-              <p className="text-[11px] tabular-nums text-muted-foreground">{week.weekParam}</p>
+            <div className="min-w-0 text-center">
+              <p className="font-display text-base font-bold text-foreground">{week.label}</p>
+              <p className="text-[11px] text-muted-foreground">{week.rangeLabel}</p>
             </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-xl"
-              aria-label="Next week"
-              onClick={() => setCalendarAnchor((value) => addWeeks(value, 1))}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-        </section>
-
-        <section className="rounded-2xl bg-secondary p-2">
-          <div className="flex gap-1 overflow-x-auto pb-0.5 [-webkit-overflow-scrolling:touch]">
-            {(
-              [
-                { id: "all", label: "All" },
-                { id: "high", label: "High" },
-                { id: "medium", label: "Medium" },
-                { id: "low", label: "Low" },
-              ] as const
-            ).map((filter) => (
-              <button
-                key={filter.id}
+            <div className="flex items-center gap-1">
+              {!isCurrentWeek ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 rounded-lg px-2 text-xs"
+                  onClick={() => {
+                    const now = new Date();
+                    setCalendarAnchor(now);
+                    setSelectedDay(startOfDay(now));
+                  }}
+                >
+                  Today
+                </Button>
+              ) : null}
+              <Button
                 type="button"
-                onClick={() => setImpact(filter.id)}
-                className={cn(
-                  "h-10 shrink-0 rounded-xl px-3 text-xs font-semibold transition-all active:scale-[0.98] sm:px-4 sm:text-sm",
-                  impact === filter.id
-                    ? "bg-background text-foreground"
-                    : "text-muted-foreground",
-                )}
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 rounded-xl"
+                aria-label="Next week"
+                onClick={() => shiftWeek(1)}
               >
-                {filter.label}
-              </button>
-            ))}
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="mt-3 grid grid-cols-7 gap-1">
+            {dayCounts.map(({ day, count }) => {
+              const selected = isSameDay(day, selectedDay);
+              const today = isSameDay(day, new Date());
+              return (
+                <button
+                  key={day.toISOString()}
+                  type="button"
+                  onClick={() => setSelectedDay(startOfDay(day))}
+                  className={cn(
+                    "flex flex-col items-center rounded-xl px-1 py-2 transition-all active:scale-[0.97]",
+                    selected
+                      ? "bg-brand text-brand-foreground"
+                      : "bg-background/70 text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={selected}
+                  aria-label={format(day, "EEEE, MMMM d")}
+                >
+                  <span className="text-[10px] font-semibold uppercase tracking-wide">
+                    {format(day, "EEE")}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-0.5 font-display text-sm font-bold tabular-nums",
+                      selected ? "text-brand-foreground" : "text-foreground",
+                    )}
+                  >
+                    {format(day, "d")}
+                  </span>
+                  <span
+                    className={cn(
+                      "mt-1 h-1 w-1 rounded-full",
+                      count > 0
+                        ? selected
+                          ? "bg-brand-foreground/80"
+                          : today
+                            ? "bg-brand"
+                            : "bg-muted-foreground/50"
+                        : "bg-transparent",
+                    )}
+                  />
+                </button>
+              );
+            })}
           </div>
         </section>
 
+        {/* Impact filter */}
+        <section className="flex gap-1 overflow-x-auto rounded-2xl bg-secondary p-1.5 [-webkit-overflow-scrolling:touch]">
+          {(
+            [
+              { id: "all", label: "All", count: impactCounts.all },
+              { id: "high", label: "High", count: impactCounts.high },
+              { id: "medium", label: "Med", count: impactCounts.medium },
+              { id: "low", label: "Low", count: impactCounts.low },
+            ] as const
+          ).map((filter) => (
+            <button
+              key={filter.id}
+              type="button"
+              onClick={() => setImpact(filter.id)}
+              className={cn(
+                "flex h-9 min-w-0 flex-1 items-center justify-center gap-1.5 rounded-xl px-2 text-xs font-semibold transition-all active:scale-[0.98]",
+                impact === filter.id
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground",
+              )}
+            >
+              <span>{filter.label}</span>
+              {!isLoading ? (
+                <span
+                  className={cn(
+                    "tabular-nums text-[10px]",
+                    impact === filter.id ? "text-foreground/70" : "text-muted-foreground/70",
+                  )}
+                >
+                  {filter.count}
+                </span>
+              ) : null}
+            </button>
+          ))}
+        </section>
+
+        {/* Day headline */}
+        <div className="flex items-end justify-between gap-3 px-0.5 pt-1">
+          <div>
+            <p className="font-display text-lg font-bold text-foreground">
+              {isToday ? "Today" : format(selectedDay, "EEEE")}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {format(selectedDay, "MMMM d, yyyy")}
+              {!isLoading ? ` · ${filteredDayEvents.length} events` : null}
+            </p>
+          </div>
+          <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Local time</p>
+        </div>
+
+        {/* Event feed */}
         {isLoading ? (
-          <div className="space-y-3">
-            {[1, 2, 3].map((item) => (
-              <Skeleton key={item} className="h-28 w-full rounded-2xl" />
+          <div className="space-y-2">
+            {[1, 2, 3, 4, 5].map((item) => (
+              <Skeleton key={item} className="h-[4.5rem] w-full rounded-2xl" />
             ))}
           </div>
-        ) : (events?.length ?? 0) === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-2xl bg-secondary px-6 py-14 text-center">
-            <CalendarDays className="mb-3 h-12 w-12 opacity-30" />
-            <p className="font-semibold text-foreground">No events this week</p>
-            <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Try another week, or wait for the next calendar ingest.
+        ) : filteredDayEvents.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-2xl bg-secondary px-6 py-16 text-center">
+            <CalendarDays className="mb-3 h-10 w-10 opacity-30" />
+            <p className="font-semibold text-foreground">No events</p>
+            <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+              {impact === "all"
+                ? "Nothing scheduled for this day."
+                : `No ${impact}-impact releases on this day.`}
             </p>
           </div>
         ) : (
-          <div className="space-y-4">
-            {grouped.map(({ day, items }) => {
-              if (items.length === 0) return null;
-              const isToday = isSameDay(day, new Date());
-              return (
-                <section key={day.toISOString()} className="space-y-2">
-                  <div className="flex items-center gap-2 px-1">
-                    <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
-                      {format(day, "EEEE, MMM d")}
-                    </h3>
-                    {isToday ? (
-                      <Badge className="rounded-md bg-brand text-[10px] text-brand-foreground hover:bg-brand">
-                        Today
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <div className="space-y-2">
-                    {items.map((item) => {
-                      const tone = impactTone(item.impact);
-                      return (
-                        <article
-                          key={item.id}
-                          className="rounded-2xl bg-secondary p-4"
+          <div className="overflow-hidden rounded-2xl bg-secondary">
+            <ul className="divide-y divide-border/50">
+              {visibleEvents.map((item) => {
+                const tone = impactTone(item.impact);
+                return (
+                  <li key={item.id} className="relative px-3 py-3.5 sm:px-4">
+                    <div
+                      className={cn(
+                        "absolute inset-y-3 left-0 w-0.5 rounded-full",
+                        tone === "high" && "bg-red-500",
+                        tone === "medium" && "bg-amber-500",
+                        tone === "low" && "bg-muted-foreground/35",
+                        tone === "holiday" && "bg-sky-500",
+                      )}
+                      aria-hidden
+                    />
+                    <div className="flex items-start gap-3 pl-2">
+                      <div className="w-12 shrink-0 pt-0.5 text-center">
+                        <p className="text-sm font-semibold tabular-nums text-foreground">
+                          {format(item.scheduledAtMs, "HH:mm")}
+                        </p>
+                        <p
+                          className={cn(
+                            "mt-1 text-[10px] font-bold uppercase tracking-wide",
+                            tone === "high" && "text-red-400",
+                            tone === "medium" && "text-amber-400",
+                            tone === "low" && "text-muted-foreground",
+                            tone === "holiday" && "text-sky-400",
+                          )}
                         >
-                          <div className="flex items-start justify-between gap-3">
-                            <div className="min-w-0 flex-1">
-                              <div className="mb-2 flex flex-wrap items-center gap-2">
-                                <Badge
-                                  variant="outline"
-                                  className={cn(
-                                    "rounded-lg text-[10px] font-semibold uppercase tracking-wide",
-                                    tone === "high" && "border-red-500/40 text-red-400",
-                                    tone === "medium" && "border-amber-500/40 text-amber-400",
-                                    tone === "low" && "border-border text-muted-foreground",
-                                    item.impact.toLowerCase() === "holiday" &&
-                                      "border-sky-500/40 text-sky-400",
-                                  )}
-                                >
-                                  {item.impact}
-                                </Badge>
-                                <span className="rounded-md bg-background px-2 py-0.5 text-[10px] font-semibold text-foreground">
-                                  {item.country}
-                                </span>
-                                <span className="text-[11px] tabular-nums text-muted-foreground">
-                                  {format(item.scheduledAtMs, "HH:mm")} UTC
-                                </span>
-                              </div>
-                              <h4 className="text-base font-semibold leading-snug text-foreground">
-                                {item.event}
-                              </h4>
-                              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                                <div className="rounded-xl bg-background px-2 py-2">
-                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Actual
-                                  </p>
-                                  <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
-                                    {item.actual ?? "—"}
-                                    {item.actual && item.unit ? item.unit : ""}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl bg-background px-2 py-2">
-                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Forecast
-                                  </p>
-                                  <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
-                                    {item.estimate ?? "—"}
-                                    {item.estimate && item.unit ? item.unit : ""}
-                                  </p>
-                                </div>
-                                <div className="rounded-xl bg-background px-2 py-2">
-                                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                                    Previous
-                                  </p>
-                                  <p className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
-                                    {item.previous ?? "—"}
-                                    {item.previous && item.unit ? item.unit : ""}
-                                  </p>
-                                </div>
-                              </div>
+                          {tone === "holiday" ? "Off" : tone}
+                        </p>
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded-md bg-background px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-foreground">
+                            {item.country}
+                          </span>
+                          <h3 className="truncate text-sm font-semibold leading-snug text-foreground">
+                            {item.event}
+                          </h3>
+                        </div>
+
+                        {tone !== "holiday" ? (
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Actual
+                              </p>
+                              <p className="text-xs font-semibold tabular-nums text-foreground">
+                                {formatValue(item.actual, item.unit)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Forecast
+                              </p>
+                              <p className="text-xs font-semibold tabular-nums text-foreground">
+                                {formatValue(item.estimate, item.unit)}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                                Previous
+                              </p>
+                              <p className="text-xs font-semibold tabular-nums text-foreground">
+                                {formatValue(item.previous, item.unit)}
+                              </p>
                             </div>
                           </div>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              );
-            })}
+                        ) : null}
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {hasMore ? (
+              <div className="border-t border-border/50 p-3">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="h-10 w-full rounded-xl text-sm"
+                  onClick={() => setVisibleCount((count) => count + PAGE_SIZE)}
+                >
+                  Show more ({filteredDayEvents.length - visibleCount} left)
+                </Button>
+              </div>
+            ) : filteredDayEvents.length > PAGE_SIZE ? (
+              <div className="border-t border-border/50 px-3 py-2.5 text-center text-[11px] text-muted-foreground">
+                Showing all {filteredDayEvents.length} events
+              </div>
+            ) : null}
           </div>
         )}
       </main>
