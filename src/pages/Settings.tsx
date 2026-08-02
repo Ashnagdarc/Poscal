@@ -174,27 +174,25 @@ const Settings = () => {
     }
   };
 
-  const handleCheckForUpdate = async () => {
+  const handleUpdateApp = async () => {
     lightTap();
     setIsCheckingUpdate(true);
     try {
       const found = await checkForUpdate();
       if (found || updateAvailable) {
-        toast.success("Update available — tap Update app");
-      } else {
-        toast.message("You're on the latest version");
+        toast.message("Updating Poscal…");
+        await updateApp();
+        return;
       }
+
+      // No waiting worker — hard reload to pick up a fresh NetworkFirst shell.
+      toast.message("Refreshing Poscal…");
+      window.location.reload();
     } catch {
-      toast.error("Could not check for updates");
+      toast.error("Could not update the app");
     } finally {
       setIsCheckingUpdate(false);
     }
-  };
-
-  const handleUpdateApp = async () => {
-    lightTap();
-    toast.message("Updating Poscal…");
-    await updateApp();
   };
 
   const handleRestorePurchase = async () => {
@@ -274,7 +272,7 @@ const Settings = () => {
               <SettingsRow
                 icon={<User className="h-4 w-4" />}
                 title="Sign in"
-                subtitle="Sync journal, signals, and subscription"
+                subtitle="Sync journal, news alerts, and subscription"
                 onClick={() => navigate("/signin")}
                 showChevron
               />
@@ -293,7 +291,7 @@ const Settings = () => {
                   <h3 className="font-semibold text-foreground">Unlock Premium</h3>
                 </div>
                 <p className="mb-4 text-sm text-muted-foreground">
-                  Get full signals access, advanced journal analytics, and more.
+                  Get calendar alerts, advanced journal analytics, and more.
                 </p>
                 <Button
                   className="w-full rounded-xl bg-brand text-brand-foreground hover:bg-brand/90"
@@ -530,24 +528,20 @@ const Settings = () => {
 
             <SettingsRow
               icon={<RefreshCw className={cn("h-4 w-4", (isCheckingUpdate || isUpdating) && "animate-spin")} />}
-              title={updateAvailable ? "Update app" : "Check for updates"}
+              title="Update app"
               subtitle={
                 updateAvailable
                   ? "A newer version is ready"
-                  : isCheckingUpdate
-                    ? "Checking…"
-                    : "Refresh the installed PWA"
+                  : isCheckingUpdate || isUpdating
+                    ? "Checking for a newer version…"
+                    : "Check for a newer version and reload"
               }
               onClick={() => {
-                if (updateAvailable) {
-                  void handleUpdateApp();
-                  return;
-                }
-                void handleCheckForUpdate();
+                void handleUpdateApp();
               }}
               trailing={
                 <span className="text-xs font-medium text-muted-foreground">
-                  {updateAvailable ? (isUpdating ? "Updating…" : "Update") : isCheckingUpdate ? "…" : "Check"}
+                  {isUpdating || isCheckingUpdate ? "Updating…" : updateAvailable ? "Update" : "Check"}
                 </span>
               }
               className="border-t border-border/40"

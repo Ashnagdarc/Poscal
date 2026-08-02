@@ -35,32 +35,6 @@ export const NewTradeFormSchema = z.object({
   notes: z.string().max(1000, "Notes too long (max 1000 characters)").optional(),
 });
 
-const SignalPriceField = z.union([z.string(), z.number()])
-  .refine(val => String(val).trim().length > 0, "Price is required")
-  .refine(val => !isNaN(parseFloat(String(val))), "Must be a valid number")
-  .refine(val => parseFloat(String(val)) > 0, "Must be greater than 0");
-
-const OptionalSignalPriceField = z.union([z.string(), z.number()])
-  .optional()
-  .refine(val => val === undefined || String(val).trim() === '' || !isNaN(parseFloat(String(val))), "Must be a valid number")
-  .refine(val => val === undefined || String(val).trim() === '' || parseFloat(String(val)) > 0, "Must be greater than 0");
-
-export const SignalFormSchema = z.object({
-  currency_pair: z.string()
-    .min(1, "Currency pair is required")
-    .max(20, "Pair name too long"),
-  order_type: z.enum(['buy', 'sell', 'buy_limit', 'sell_limit', 'buy_stop', 'sell_stop']).optional(),
-  direction: z.enum(['buy', 'sell']).optional(),
-  entry_price: OptionalSignalPriceField,
-  stop_loss: SignalPriceField,
-  take_profit_1: SignalPriceField,
-  take_profit_2: OptionalSignalPriceField,
-  take_profit_3: OptionalSignalPriceField,
-  trading_view_url: z.string().url("Must be a valid URL").or(z.literal('')).optional(),
-  chart_image_url: z.string().optional(),
-  notes: z.string().max(1000, "Notes too long").optional(),
-});
-
 export const AccountFormSchema = z.object({
   account_name: z.string()
     .min(1, "Account name is required")
@@ -86,6 +60,5 @@ export const PnLInputSchema = z.object({
 });
 
 export type NewTradeForm = z.infer<typeof NewTradeFormSchema>;
-export type SignalForm = z.infer<typeof SignalFormSchema>;
 export type AccountForm = z.infer<typeof AccountFormSchema>;
 export type PnLInput = z.infer<typeof PnLInputSchema>;

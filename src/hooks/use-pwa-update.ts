@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-
-const UPDATE_EVENT_NAME = "poscal:pwa-update-available";
-const PENDING_UPDATE_KEY = "poscal-pwa-pending-update";
-
-interface PWAUpdateEventDetail {
-  registration: ServiceWorkerRegistration;
-}
+import {
+  PENDING_UPDATE_KEY,
+  UPDATE_EVENT_NAME,
+  notifyPwaUpdateAvailable,
+  waitForServiceWorkerUpdate,
+  type PWAUpdateEventDetail,
+} from "@/lib/pwa-update";
 
 export const usePWAUpdate = () => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -17,7 +17,7 @@ export const usePWAUpdate = () => {
     if (!registration?.waiting) return false;
 
     registrationRef.current = registration;
-    localStorage.setItem(PENDING_UPDATE_KEY, "true");
+    notifyPwaUpdateAvailable(registration);
     setUpdateAvailable(true);
     return true;
   }, []);
@@ -33,7 +33,10 @@ export const usePWAUpdate = () => {
 
     const handleUpdateAvailable = (event: Event) => {
       const detail = (event as CustomEvent<PWAUpdateEventDetail>).detail;
-      showUpdate(detail?.registration);
+      if (!detail?.registration?.waiting) return;
+      registrationRef.current = detail.registration;
+      localStorage.setItem(PENDING_UPDATE_KEY, "true");
+      setUpdateAvailable(true);
     };
 
     const handleControllerChange = () => {
@@ -48,10 +51,11 @@ export const usePWAUpdate = () => {
 
     navigator.serviceWorker.ready
       .then((registration) => {
-        const hasPendingUpdate = localStorage.getItem(PENDING_UPDATE_KEY) === "true";
         if (registration.waiting) {
           showUpdate(registration);
-        } else if (!hasPendingUpdate) {
+          return;
+        }
+        if (localStorage.getItem(PENDING_UPDATE_KEY) !== "true") {
           setUpdateAvailable(false);
         }
       })
@@ -73,11 +77,13 @@ export const usePWAUpdate = () => {
       if (!hasPendingUpdate) return;
 
       try {
-        const registration = await navigator.serviceWorker.getRegistration("/");
+        const registration =
+          (await navigator.serviceWorker.getRegistration("/")) ?? (await navigator.serviceWorker.ready);
+
         if (showUpdate(registration)) return;
 
-        await registration?.update();
-        if (!showUpdate(registration)) {
+        const found = await waitForServiceWorkerUpdate(registration);
+        if (!found || !showUpdate(registration)) {
           clearPendingUpdate();
         }
       } catch {
@@ -94,7 +100,7 @@ export const usePWAUpdate = () => {
     setIsUpdating(true);
     isUpdatingRef.current = true;
 
-    const registration = registrationRef.current ?? await navigator.serviceWorker.getRegistration("/");
+    const registration = registrationRef.current ?? (await navigator.serviceWorker.getRegistration("/"));
     const waitingWorker = registration?.waiting;
 
     if (!waitingWorker) {
@@ -114,8 +120,10 @@ export const usePWAUpdate = () => {
       const registration = await navigator.serviceWorker.getRegistration("/");
       if (!registration) return false;
 
-      await registration.update();
-      return showUpdate(registration);
+      if (showUpdate(registration)) return true;
+
+      const found = await waitForServiceWorkerUpdate(registration);
+      return found ? showUpdate(registration) : false;
     } catch {
       return false;
     }

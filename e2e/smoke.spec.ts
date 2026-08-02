@@ -26,8 +26,8 @@ test.describe("Poscal smoke", () => {
     await expect(page.getByRole("heading", { name: /welcome back/i })).toBeVisible();
   });
 
-  test("unauthenticated signals redirects to sign-in", async ({ page }) => {
-    await page.goto("/signals");
+  test("unauthenticated news redirects to sign-in", async ({ page }) => {
+    await page.goto("/calendar");
     await expect(page).toHaveURL(/\/signin/);
   });
 

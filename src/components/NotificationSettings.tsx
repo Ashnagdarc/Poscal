@@ -1,7 +1,11 @@
+import { useEffect, useState } from 'react';
 import { Bell, BellOff, Check, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Switch } from '@/components/ui/switch';
+import { useAuth } from '@/contexts/AuthContext';
 import { usePushNotifications } from '@/hooks/use-push-notifications';
+import { newsApi } from '@/lib/api';
 import { toast } from 'sonner';
 
 interface NotificationSettingsProps {
@@ -9,6 +13,7 @@ interface NotificationSettingsProps {
 }
 
 export const NotificationSettings = ({ embedded = false }: NotificationSettingsProps) => {
+  const { user } = useAuth();
   const {
     permission,
     isSupported,
@@ -18,6 +23,24 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
     subscribe,
     unsubscribe,
   } = usePushNotifications();
+  const [newsAlertsEnabled, setNewsAlertsEnabled] = useState(true);
+  const [newsAlertsLoading, setNewsAlertsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    let mounted = true;
+    (async () => {
+      try {
+        const enabled = await newsApi.getNewsAlertsEnabled();
+        if (mounted) setNewsAlertsEnabled(enabled);
+      } catch {
+        // Default on
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, [user?.id]);
 
   const handleEnableNotifications = async () => {
     const success = await subscribe();
@@ -37,6 +60,35 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
     }
   };
 
+  const handleNewsAlertsToggle = async (enabled: boolean) => {
+    setNewsAlertsLoading(true);
+    setNewsAlertsEnabled(enabled);
+    try {
+      await newsApi.setNewsAlertsEnabled(enabled);
+      toast.success(enabled ? 'Calendar alerts on' : 'Calendar alerts off');
+    } catch {
+      setNewsAlertsEnabled(!enabled);
+      toast.error('Could not update calendar alert preference');
+    } finally {
+      setNewsAlertsLoading(false);
+    }
+  };
+
+  const newsToggle = user ? (
+    <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+      <div>
+        <p className="text-sm font-medium text-foreground">Calendar alerts</p>
+        <p className="text-[11px] text-muted-foreground">High-impact economic events only</p>
+      </div>
+      <Switch
+        checked={newsAlertsEnabled}
+        disabled={newsAlertsLoading || !isSubscribed}
+        onCheckedChange={(checked) => void handleNewsAlertsToggle(checked)}
+        aria-label="Toggle calendar alerts"
+      />
+    </div>
+  ) : null;
+
   const content = !isSupported ? (
     <div className="space-y-1">
       <p className="text-sm font-medium text-foreground">Not supported</p>
@@ -45,20 +97,23 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       </p>
     </div>
   ) : isSubscribed ? (
-    <div className="flex items-center justify-between gap-3">
-      <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-        <Check className="h-4 w-4" />
-        <span>Enabled</span>
+    <div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+          <Check className="h-4 w-4" />
+          <span>Enabled</span>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleDisableNotifications}
+          disabled={loading}
+          className="h-8 rounded-lg text-xs"
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Disable'}
+        </Button>
       </div>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={handleDisableNotifications}
-        disabled={loading}
-        className="h-8 rounded-lg text-xs"
-      >
-        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Disable'}
-      </Button>
+      {newsToggle}
     </div>
   ) : permission === 'denied' ? (
     <div className="space-y-1">
@@ -68,19 +123,22 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       </p>
     </div>
   ) : (
-    <Button
-      onClick={handleEnableNotifications}
-      size="sm"
-      className="h-9 rounded-xl"
-      disabled={loading}
-    >
-      {loading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <Bell className="mr-2 h-4 w-4" />
-      )}
-      Enable notifications
-    </Button>
+    <div>
+      <Button
+        onClick={handleEnableNotifications}
+        size="sm"
+        className="h-9 rounded-xl"
+        disabled={loading}
+      >
+        {loading ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Bell className="mr-2 h-4 w-4" />
+        )}
+        Enable notifications
+      </Button>
+      {newsToggle}
+    </div>
   );
 
   if (embedded) {
@@ -94,7 +152,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
           )}
           <div>
             <p className="font-medium text-foreground">Push notifications</p>
-            <p className="text-xs text-muted-foreground">Signals and app updates</p>
+            <p className="text-xs text-muted-foreground">Calendar alerts and app updates</p>
           </div>
         </div>
         {content}
@@ -126,7 +184,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
           Push Notifications
         </CardTitle>
         <CardDescription>
-          Get alerts for new trading signals and important app updates, even when the app is closed.
+          Get alerts for high-impact economic calendar events and important app updates, even when the app is closed.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">{content}</CardContent>

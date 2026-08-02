@@ -1,6 +1,7 @@
 import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { processNotifications } from "./notificationsHttp";
+import { ingestNews } from "./newsHttp";
 import { ingestPrices } from "./pricesHttp";
 
 const http = httpRouter();
@@ -10,6 +11,11 @@ http.route({
   path: "/prices/ingest",
   method: "POST",
   handler: ingestPrices,
+});
+http.route({
+  path: "/news/ingest",
+  method: "POST",
+  handler: ingestNews,
 });
 http.route({
   path: "/notifications/process",

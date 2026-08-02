@@ -1,10 +1,10 @@
-import { BookOpen, Calculator, Radio, Settings } from 'lucide-react';
+import { BookOpen, Calculator, CalendarDays, Settings } from 'lucide-react';
 import { motion } from 'motion/react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
 const navItems = [
   { path: '/', icon: Calculator, label: 'Calculate' },
-  { path: '/signals', icon: Radio, label: 'Signals' },
+  { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { path: '/journal', icon: BookOpen, label: 'Journal' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -17,11 +17,15 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const activeIndex = navItems.findIndex(({ path }) =>
-    path === '/'
-      ? location.pathname === '/' || location.pathname === '/calculator'
-      : location.pathname === path,
-  );
+  const activeIndex = navItems.findIndex(({ path }) => {
+    if (path === '/') {
+      return location.pathname === '/' || location.pathname === '/calculator';
+    }
+    if (path === '/calendar') {
+      return location.pathname === '/calendar' || location.pathname === '/news';
+    }
+    return location.pathname === path;
+  });
 
   // When a persistent nav is mounted at app shell level, suppress page-level nav instances.
   if (!persistent && (window as Window & { __POSCAL_PERSISTENT_NAV_MOUNTED?: boolean }).__POSCAL_PERSISTENT_NAV_MOUNTED) {

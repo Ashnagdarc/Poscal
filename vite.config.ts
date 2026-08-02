@@ -23,7 +23,7 @@ export default defineConfig(({ mode }) => ({
         id: "/",
         name: "Poscal",
         short_name: "Poscal",
-        description: "Forex and CFD position sizing, signals, and trading journal tools.",
+        description: "Forex and CFD position sizing, economic calendar, and trading journal tools.",
         lang: "en",
         dir: "ltr",
         categories: ["finance", "productivity", "utilities"],
@@ -43,10 +43,10 @@ export default defineConfig(({ mode }) => ({
             icons: [{ src: "pwa-192x192.png", sizes: "192x192", type: "image/png" }],
           },
           {
-            name: "Signals",
-            short_name: "Signals",
-            description: "Open trading signals.",
-            url: "/signals",
+            name: "Calendar",
+            short_name: "Calendar",
+            description: "Open the economic calendar.",
+            url: "/calendar",
             icons: [{ src: "pwa-192x192.png", sizes: "192x192", type: "image/png" }],
           },
           {

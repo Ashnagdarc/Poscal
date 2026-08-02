@@ -78,6 +78,7 @@ Typical secrets:
 - `CONVEX_SITE_URL`
 - `FINNHUB_API_KEY`
 - `PRICE_INGEST_SECRET`
+- `NEWS_INGEST_SECRET`
 - `NOTIFICATION_WORKER_SECRET`
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
@@ -105,6 +106,14 @@ Confirm:
 - the worker can reach Finnhub
 - the worker can call Convex HTTP actions
 - fresh price snapshots appear in Convex
+
+### Calendar Ingest
+
+Confirm:
+
+- `POST /news/ingest` with `NEWS_INGEST_SECRET` returns `{ ok: true }`
+- `economicEvents` / `marketSnapshots` rows appear in Convex
+- high-impact articles enqueue push/email for opted-in users
 
 ### Notifications
 

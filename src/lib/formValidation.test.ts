@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { NewTradeFormSchema, SignalFormSchema, AccountFormSchema, PnLInputSchema } from '@/lib/formValidation';
+import { NewTradeFormSchema, AccountFormSchema, PnLInputSchema } from '@/lib/formValidation';
 
 describe('formValidation', () => {
   describe('NewTradeFormSchema', () => {
@@ -71,35 +71,6 @@ describe('formValidation', () => {
 
       const result = NewTradeFormSchema.safeParse(invalidTrade);
       expect(result.success).toBe(false);
-    });
-  });
-
-  describe('SignalFormSchema', () => {
-    it('should validate a valid signal', () => {
-      const validSignal = {
-        currency_pair: 'USD/JPY',
-        direction: 'buy',
-        entry_price: 110.50,
-        stop_loss: 109.50,
-        take_profit_1: 112.50,
-        notes: 'Bullish breakout',
-      };
-
-      const result = SignalFormSchema.safeParse(validSignal);
-      expect(result.success).toBe(true);
-    });
-
-    it('should accept signal without notes', () => {
-      const validSignal = {
-        currency_pair: 'EUR/GBP',
-        direction: 'sell',
-        entry_price: 0.8500,
-        stop_loss: 0.8550,
-        take_profit_1: 0.8400,
-      };
-
-      const result = SignalFormSchema.safeParse(validSignal);
-      expect(result.success).toBe(true);
     });
   });
 

@@ -60,9 +60,9 @@ const Privacy = () => {
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-2 ml-4">
             <li><span className="font-medium text-foreground">Account Management:</span> Create and manage your account, authenticate your identity</li>
-            <li><span className="font-medium text-foreground">Service Delivery:</span> Provide calculator tools, trading journal, price data, and signals</li>
+            <li><span className="font-medium text-foreground">Service Delivery:</span> Provide calculator tools, trading journal, price data, and economic calendar</li>
             <li><span className="font-medium text-foreground">Personalization:</span> Customize your experience based on preferences</li>
-            <li><span className="font-medium text-foreground">Notifications:</span> Send push notifications about signals and updates (with your consent)</li>
+            <li><span className="font-medium text-foreground">Notifications:</span> Send push notifications about high-impact calendar events and updates (with your consent)</li>
             <li><span className="font-medium text-foreground">Analytics:</span> Understand how users interact with the App to improve features</li>
             <li><span className="font-medium text-foreground">Security:</span> Detect and prevent fraud, abuse, and security issues</li>
             <li><span className="font-medium text-foreground">Communication:</span> Respond to your inquiries and send important updates</li>
@@ -196,7 +196,7 @@ const Privacy = () => {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">11. Push Notifications</h2>
           <p className="text-muted-foreground leading-relaxed">
-            If you enable push notifications, we will collect your device token to send you alerts about trading signals and app updates. You can disable push notifications at any time through the App settings or your device settings.
+            If you enable push notifications, we will collect your device token to send you alerts about high-impact calendar events and app updates. You can disable push notifications at any time through the App settings or your device settings.
           </p>
         </section>
 

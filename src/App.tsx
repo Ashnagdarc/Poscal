@@ -24,7 +24,7 @@ const SignUp = lazy(() => import("./pages/SignUp"));
 const Profile = lazy(() => import("./pages/Profile"));
 const Journal = lazy(() => import("./pages/Journal"));
 const Settings = lazy(() => import("./pages/Settings"));
-const Signals = lazy(() => import("./pages/Signals"));
+const News = lazy(() => import("./pages/News"));
 const Upgrade = lazy(() => import("./pages/Upgrade"));
 const UserManagement = lazy(() => import("./pages/UserManagement"));
 const AdminUpdates = lazy(() => import("./pages/AdminUpdates"));
@@ -68,13 +68,15 @@ const AppContent = () => {
           <Route path="/pricing" element={<Upgrade />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route
-            path="/signals"
+            path="/calendar"
             element={
               <ProtectedRoute requiresPremium>
-                <Signals />
+                <News />
               </ProtectedRoute>
             }
           />
+          <Route path="/news" element={<Navigate to="/calendar" replace />} />
+          <Route path="/signals" element={<Navigate to="/calendar" replace />} />
           <Route
             path="/admin/users"
             element={

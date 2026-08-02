@@ -28,7 +28,7 @@ const PAYSTACK_FALLBACK_TIMEOUT_MS = 30_000;
 const CHECKLIST_ITEMS = [
   'Full access to trading journal',
   'Up to 5 trading journals',
-  'Full access to trading signals',
+  'Market news and updates',
   'Advanced Position Calculator',
 ];
 
@@ -288,7 +288,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                   Trade with full access
                 </h2>
                 <p className="mt-2 text-sm text-background/70">
-                  Unlock journal, signals, and the full calculator workflow.
+                  Unlock journal, economic calendar, and the full calculator workflow.
                 </p>
               </div>
 

@@ -1,7 +1,11 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v23-pwa-update-prompt';
+const SW_VERSION = 'v24-migrate-unstick';
+// One-time recovery: auto-activate so PWAs stuck on the old precached shell can
+// load the Update app UI. The next release should set this back to false so
+// updates wait for the in-app "Update app" prompt again.
+const MIGRATE_AUTO_ACTIVATE = true;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -46,6 +50,9 @@ workbox.routing.registerRoute(
 
 self.addEventListener('install', (event) => {
   log(`Installing ${SW_VERSION}...`);
+  if (MIGRATE_AUTO_ACTIVATE) {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener('message', (event) => {
@@ -73,9 +80,17 @@ self.addEventListener('activate', (event) => {
 
       await self.clients.claim();
       const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
-      allClients.forEach((client) => {
-        client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
-      });
+      await Promise.all(
+        allClients.map((client) => {
+          client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
+          // Force open clients onto the new NetworkFirst shell after migration /
+          // prompted updates activate. Without this, stuck PWAs keep old JS in memory.
+          if (typeof client.navigate === 'function') {
+            return client.navigate(client.url).catch(() => undefined);
+          }
+          return undefined;
+        }),
+      );
     })()
   );
 });
@@ -142,7 +157,7 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'general',
     data: {
       ...(data.data || {}),
-      url: data.url || data.data?.url || (data.data?.type === 'signal' ? '/signals' : '/'),
+      url: data.url || data.data?.url || (data.data?.type === 'news' ? '/calendar' : data.data?.type === 'signal' ? '/calendar' : '/'),
     },
     requireInteraction: true,
     renotify: true,

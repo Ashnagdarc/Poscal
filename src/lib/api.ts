@@ -165,62 +165,32 @@ export const adminUsersApi = {
   },
 };
 
-// Trading Signals API
-export const signalsApi = {
-  getAll: async (query?: { status?: string; currency_pair?: string; date?: string; limit?: number }): Promise<any[]> => {
-    return await convexClient.query(convexApi.signals.list, {
-      status: query?.status ?? null,
-      currencyPair: query?.currency_pair ?? null,
-      result: null,
-      date: query?.date ?? null,
+// Economic Calendar API
+export const newsApi = {
+  listEvents: async (query: {
+    fromMs: number;
+    toMs: number;
+    impact?: string | null;
+    country?: string | null;
+  }): Promise<any[]> => {
+    return await convexClient.query(convexApi.news.listEvents, {
+      fromMs: query.fromMs,
+      toMs: query.toMs,
+      impact: query.impact ?? null,
+      country: query.country ?? null,
     });
   },
 
-  getOne: async (id: string): Promise<any> => {
-    const rows = await convexClient.query(convexApi.signals.list, {
-      status: null,
-      currencyPair: null,
-      result: null,
-      date: null,
-    });
-    return rows.find((row: any) => row.id === id) ?? null;
+  snapshots: async (): Promise<any[]> => {
+    return await convexClient.query(convexApi.news.listSnapshots, {});
   },
 
-  create: async (signalData: any): Promise<any> => {
-    return await getAuthenticatedConvexClient().mutation(convexApi.signals.create, {
-      currencyPair: signalData.currency_pair,
-      orderType: signalData.order_type,
-      entryPrice: signalData.entry_price,
-      stopLoss: signalData.stop_loss,
-      takeProfit1: signalData.take_profit_1,
-      takeProfit2: signalData.take_profit_2 ?? null,
-      takeProfit3: signalData.take_profit_3 ?? null,
-      status: signalData.status ?? 'active',
-      notes: signalData.notes ?? null,
-      tradingViewUrl: signalData.trading_view_url ?? null,
-      chartImageUrl: signalData.chart_image_url ?? null,
-    });
+  getNewsAlertsEnabled: async (): Promise<boolean> => {
+    return await getAuthenticatedConvexClient().query(convexApi.news.getNewsAlertsEnabled, {});
   },
 
-  update: async (id: string, updates: any): Promise<any> => {
-    return await getAuthenticatedConvexClient().mutation(convexApi.signals.update, {
-      id: id as any,
-      currencyPair: updates.currency_pair ?? null,
-      orderType: updates.order_type,
-      entryPrice: updates.entry_price ?? null,
-      stopLoss: updates.stop_loss ?? null,
-      takeProfit1: updates.take_profit_1 ?? null,
-      takeProfit2: updates.take_profit_2 ?? null,
-      takeProfit3: updates.take_profit_3 ?? null,
-      status: updates.status,
-      notes: updates.notes ?? null,
-      tradingViewUrl: updates.trading_view_url ?? null,
-      chartImageUrl: updates.chart_image_url ?? null,
-    });
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await getAuthenticatedConvexClient().mutation(convexApi.signals.remove, { id: id as any });
+  setNewsAlertsEnabled: async (enabled: boolean): Promise<boolean> => {
+    return await getAuthenticatedConvexClient().mutation(convexApi.news.setNewsAlertsEnabled, { enabled });
   },
 };
 

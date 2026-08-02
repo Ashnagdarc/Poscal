@@ -689,7 +689,7 @@ const Journal = () => {
             <section className="mb-4" data-tour-id="journal-history">
               <h2 className="text-base font-bold text-foreground">Saved Calculations</h2>
               <p className="text-sm text-muted-foreground">
-                Position sizes from the calculator and signals
+                Position sizes from the calculator
               </p>
             </section>
             {isLoading ? (

@@ -48,7 +48,7 @@ export const useNotifications = (): UseNotificationsResult => {
       const notification = new Notification(title, {
         icon: '/pwa-192x192.png',
         badge: '/favicon.png',
-        tag: 'trading-signal',
+        tag: 'poscal-alert',
         requireInteraction: false,
         ...options
       });

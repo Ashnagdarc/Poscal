@@ -4,22 +4,13 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App.tsx";
 import { convexReactClient } from "@/lib/convexClient";
 import { initErrorReporting } from "@/lib/errorReporting";
+import { notifyPwaUpdateAvailable } from "@/lib/pwa-update";
 import "./index.css";
 
 initErrorReporting();
 
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
-const UPDATE_EVENT_NAME = "poscal:pwa-update-available";
 const UPDATE_POLL_MS = 5 * 60 * 1000;
-
-const notifyUpdateAvailable = (registration: ServiceWorkerRegistration) => {
-  if (!registration.waiting) return;
-  window.dispatchEvent(
-    new CustomEvent(UPDATE_EVENT_NAME, {
-      detail: { registration },
-    }),
-  );
-};
 
 const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
   void registration.update().catch((error) => {
@@ -31,7 +22,7 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
   // A waiting worker means a new build is ready — prompt the user instead of
   // silently swapping (which can strand PWAs on a half-applied cache).
   if (registration.waiting && navigator.serviceWorker.controller) {
-    notifyUpdateAvailable(registration);
+    notifyPwaUpdateAvailable(registration);
   }
 
   registration.addEventListener("updatefound", () => {
@@ -40,7 +31,7 @@ const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) =>
 
     installingWorker.addEventListener("statechange", () => {
       if (installingWorker.state === "installed" && navigator.serviceWorker.controller) {
-        notifyUpdateAvailable(registration);
+        notifyPwaUpdateAvailable(registration);
       }
     });
   });

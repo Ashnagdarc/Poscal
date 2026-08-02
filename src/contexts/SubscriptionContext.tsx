@@ -11,6 +11,7 @@ export type PaymentStatus = 'free' | 'paid' | 'trial' | 'expired';
 const FEATURE_ACCESS_MAP: Record<string, SubscriptionTier[]> = {
   journal_unlimited: ['premium', 'pro'],
   signals_take: ['premium', 'pro'],
+  news_feed: ['premium', 'pro'],
   history_unlimited: ['premium', 'pro'],
   export_csv: ['premium', 'pro'],
   advanced_analytics: ['pro'],

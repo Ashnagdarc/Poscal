@@ -39,6 +39,7 @@ export default defineSchema({
     subscriptionExpiresAtMs: nullableNumber,
     journalOnboardedAtMs: nullableNumber,
     journalTourCompletedAtMs: nullableNumber,
+    newsAlertsEnabled: v.optional(v.boolean()),
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })
@@ -181,51 +182,41 @@ export default defineSchema({
     updatedAtMs: v.number(),
   }).index("by_symbol", ["symbol"]),
 
-  signals: defineTable({
-    externalId: nullableString,
-    currencyPair: v.string(),
-    symbol: nullableString,
-    orderType: v.optional(v.union(
-      v.literal("buy"),
-      v.literal("sell"),
-      v.literal("buy_limit"),
-      v.literal("sell_limit"),
-      v.literal("buy_stop"),
-      v.literal("sell_stop"),
-      v.null(),
-    )),
-    direction: v.union(v.literal("buy"), v.literal("sell")),
-    marketExecution: nullableString,
-    entryPrice: nullableNumber,
-    stopLoss: v.number(),
-    takeProfit1: v.number(),
-    takeProfit2: nullableNumber,
-    takeProfit3: nullableNumber,
-    takeProfit: nullableNumber,
-    pipsToSl: v.number(),
-    pipsToTp1: v.number(),
-    pipsToTp2: nullableNumber,
-    pipsToTp3: nullableNumber,
-    analysis: nullableString,
-    timeframe: nullableString,
-    expiresAtMs: nullableNumber,
-    status: v.union(v.literal("active"), v.literal("hit_tp"), v.literal("hit_sl"), v.literal("cancelled"), v.literal("closed"), v.literal("expired")),
-    result: v.optional(v.union(v.literal("win"), v.literal("loss"), v.literal("breakeven"), v.null())),
-    tp1Hit: v.boolean(),
-    tp2Hit: v.boolean(),
-    tp3Hit: v.boolean(),
-    notes: nullableString,
-    tradingViewUrl: v.optional(v.union(v.string(), v.null())),
-    chartImageUrl: nullableString,
-    confidenceScore: nullableNumber,
-    takenCount: v.number(),
-    createdAtMs: v.number(),
+  marketSnapshots: defineTable({
+    key: v.string(),
+    label: v.string(),
+    kind: v.string(),
+    rate: nullableNumber,
+    bid: nullableNumber,
+    ask: nullableNumber,
+    changePercent: nullableNumber,
+    meta: nullableAny,
     updatedAtMs: v.number(),
-    closedAtMs: nullableNumber,
+  }).index("by_key", ["key"]),
+
+  economicEvents: defineTable({
+    externalId: v.string(),
+    country: v.string(),
+    event: v.string(),
+    impact: v.string(),
+    scheduledAtMs: v.number(),
+    actual: nullableString,
+    estimate: nullableString,
+    previous: nullableString,
+    unit: nullableString,
+    ingestedAtMs: v.number(),
   })
-    .index("by_created", ["createdAtMs"])
-    .index("by_status_created", ["status", "createdAtMs"])
-    .index("by_pair_created", ["currencyPair", "createdAtMs"]),
+    .index("by_external_id", ["externalId"])
+    .index("by_scheduled", ["scheduledAtMs"])
+    .index("by_impact_scheduled", ["impact", "scheduledAtMs"]),
+
+  newsIngestState: defineTable({
+    key: v.string(),
+    lastIngestAtMs: nullableNumber,
+    lastNewsCount: nullableNumber,
+    lastError: nullableString,
+    updatedAtMs: v.number(),
+  }).index("by_key", ["key"]),
 
   appSettings: defineTable({
     key: v.string(),

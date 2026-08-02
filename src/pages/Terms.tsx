@@ -35,7 +35,7 @@ const Terms = () => {
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
             <li>Calculate position sizes based on risk parameters</li>
             <li>Track and journal trading activities</li>
-            <li>View real-time price data and trading signals</li>
+            <li>View real-time price data and the economic calendar</li>
             <li>Manage multiple trading accounts</li>
             <li>Receive push notifications for trading updates</li>
           </ul>

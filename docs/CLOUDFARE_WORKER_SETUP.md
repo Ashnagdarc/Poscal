@@ -32,6 +32,7 @@ Set these in Cloudflare:
 - `CONVEX_SITE_URL`
 - `NOTIFICATION_WORKER_SECRET`
 - `PRICE_INGEST_SECRET`
+- `NEWS_INGEST_SECRET`
 - `FINNHUB_API_KEY`
 - `VAPID_PUBLIC_KEY`
 - `VAPID_PRIVATE_KEY`
@@ -42,7 +43,41 @@ Set these in Cloudflare:
 Current HTTP actions live under Convex:
 
 - `/prices/ingest`
+- `/news/ingest`
 - `/notifications/process`
+
+### 3. Calendar Ingest Worker
+
+Purpose:
+
+- call Convex `POST /news/ingest` on a schedule
+- economic calendar fetch + cache happens inside Convex (Forex Factory weekly feed)
+
+Suggested cadence:
+
+- every 30–60 minutes
+
+Convex env required:
+
+- `NEWS_INGEST_SECRET`
+
+Example:
+
+```bash
+curl -X POST "$CONVEX_SITE_URL/news/ingest" \
+  -H "Authorization: Bearer $NEWS_INGEST_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"force": false}'
+```
+
+Optional force (bypass min interval):
+
+```bash
+curl -X POST "$CONVEX_SITE_URL/news/ingest" \
+  -H "x-news-ingest-secret: $NEWS_INGEST_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"force": true}'
+```
 
 ## Deployment Rule
 
