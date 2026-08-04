@@ -12,9 +12,6 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
-import { AppUpdateModal } from "./components/AppUpdateModal";
-import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
-import { PWAUpdateBanner } from "./components/PWAUpdateBanner";
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -35,6 +32,18 @@ const Terms = lazyWithRetry(() => import("./pages/Terms"));
 const Privacy = lazyWithRetry(() => import("./pages/Privacy"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
 
+// Shell overlays use Dialog/Button — keep them out of the entry graph so public
+// routes (e.g. /welcome) do not download Dialog just for optional modals.
+const AppUpdateModal = lazyWithRetry(() =>
+  import("./components/AppUpdateModal").then((m) => ({ default: m.AppUpdateModal })),
+);
+const PWAInstallPrompt = lazyWithRetry(() =>
+  import("./components/PWAInstallPrompt").then((m) => ({ default: m.PWAInstallPrompt })),
+);
+const PWAUpdateBanner = lazyWithRetry(() =>
+  import("./components/PWAUpdateBanner").then((m) => ({ default: m.PWAUpdateBanner })),
+);
+
 const queryClient = new QueryClient();
 
 const AppContent = () => {
@@ -45,9 +54,11 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
-      <PWAUpdateBanner />
-      <AppUpdateModal />
-      <PWAInstallPrompt />
+      <Suspense fallback={null}>
+        <PWAUpdateBanner />
+        <AppUpdateModal />
+        <PWAInstallPrompt />
+      </Suspense>
       <Suspense
         fallback={
           <div className="flex min-h-screen items-center justify-center font-display text-muted-foreground">
