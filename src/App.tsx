@@ -15,6 +15,7 @@ import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
+import { PWAUpdateBanner } from "@/components/PWAUpdateBanner";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 
 const Welcome = lazyWithRetry(() => import("./pages/Welcome"));
@@ -41,9 +42,6 @@ const AppUpdateModal = lazyWithRetry(() =>
 const PWAInstallPrompt = lazyWithRetry(() =>
   import("./components/PWAInstallPrompt").then((m) => ({ default: m.PWAInstallPrompt })),
 );
-const PWAUpdateBanner = lazyWithRetry(() =>
-  import("./components/PWAUpdateBanner").then((m) => ({ default: m.PWAUpdateBanner })),
-);
 
 const queryClient = new QueryClient();
 
@@ -55,8 +53,8 @@ const AppContent = () => {
   return (
     <>
       <SkipLink />
+      <PWAUpdateBanner />
       <Suspense fallback={null}>
-        <PWAUpdateBanner />
         <AppUpdateModal />
         <PWAInstallPrompt />
       </Suspense>

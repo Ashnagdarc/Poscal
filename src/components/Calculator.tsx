@@ -7,7 +7,6 @@ import {
   Target,
   X,
 } from "lucide-react";
-import poscalLogo from "@/assets/poscal-logo.png";
 import { NumPad } from "./NumPad";
 import { PageHeader } from "./PageHeader";
 import { UserAvatar } from "./UserAvatar";
@@ -475,7 +474,6 @@ export const Calculator = () => {
       <PageHeader
         title="Poscal"
         subtitle="Position size"
-        logoSrc={poscalLogo}
         actions={
           <button
             onClick={() => navigate(user ? "/profile" : "/signin")}

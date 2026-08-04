@@ -23,9 +23,9 @@ export const PWAUpdateBanner = ({ className }: PWAUpdateBannerProps) => {
     >
       <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-foreground">Update available</p>
+          <p className="text-sm font-semibold text-foreground">New version ready</p>
           <p className="text-xs text-muted-foreground">
-            A newer version of Poscal is ready. Update to get the latest UI and fixes.
+            Update now to get the latest features and fixes. You stay signed in.
           </p>
         </div>
         <Button
@@ -36,7 +36,7 @@ export const PWAUpdateBanner = ({ className }: PWAUpdateBannerProps) => {
           onClick={() => void updateApp()}
         >
           <RefreshCw className={cn("h-3.5 w-3.5", isUpdating && "animate-spin")} />
-          {isUpdating ? "Updating…" : "Update app"}
+          {isUpdating ? "Updating…" : "Update now"}
         </Button>
       </div>
     </div>

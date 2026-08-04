@@ -4,23 +4,30 @@ import { ConvexAuthProvider } from "@convex-dev/auth/react";
 import App from "./App.tsx";
 import { convexReactClient } from "@/lib/convexClient";
 import { initErrorReporting } from "@/lib/errorReporting";
+import { isClientBuildStale, notifyBuildMismatch } from "@/lib/appVersion";
 import { notifyPwaUpdateAvailable } from "@/lib/pwa-update";
 import "./index.css";
 
 initErrorReporting();
 
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
-const UPDATE_POLL_MS = 5 * 60 * 1000;
+/** Check CDN + SW for a new release more often so sessions don't stick to a stale shell. */
+const UPDATE_POLL_MS = 60 * 1000;
 
 const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
   void registration.update().catch((error) => {
     if (import.meta.env.DEV) console.warn("[sw] Update check failed:", error);
   });
+  void isClientBuildStale()
+    .then((stale) => {
+      if (stale) notifyBuildMismatch();
+    })
+    .catch(() => undefined);
 };
 
 const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) => {
   // A waiting worker means a new build is ready — prompt the user instead of
-  // silently swapping (which can strand PWAs on a half-applied cache).
+  // silently swapping without a reload (which strands PWAs on half-applied caches).
   if (registration.waiting && navigator.serviceWorker.controller) {
     notifyPwaUpdateAvailable(registration);
   }
@@ -91,6 +98,21 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
   } else {
     window.addEventListener("load", () => void registerServiceWorker(), { once: true });
   }
+} else if (import.meta.env.PROD) {
+  // No SW: still detect deploys so tabs aren't stuck until the user re-auths.
+  const check = () => {
+    void isClientBuildStale()
+      .then((stale) => {
+        if (stale) notifyBuildMismatch();
+      })
+      .catch(() => undefined);
+  };
+  window.addEventListener("focus", check);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") check();
+  });
+  window.setInterval(check, UPDATE_POLL_MS);
+  window.setTimeout(check, 4_000);
 }
 
 createRoot(document.getElementById("root")!).render(

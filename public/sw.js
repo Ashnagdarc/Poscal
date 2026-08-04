@@ -1,10 +1,9 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v24-migrate-unstick';
-// One-time recovery: auto-activate so PWAs stuck on the old precached shell can
-// load the Update app UI. The next release should set this back to false so
-// updates wait for the in-app "Update app" prompt again.
+const SW_VERSION = 'v25-auto-refresh';
+// Auto-activate new SW builds so installs leave waiting state. Clients reload
+// on controllerchange / SW_ACTIVATED (see use-pwa-update + appVersion).
 const MIGRATE_AUTO_ACTIVATE = true;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 

@@ -6,8 +6,6 @@ interface PageHeaderProps {
   subtitle?: string;
   icon?: ReactNode;
   leading?: ReactNode;
-  logoSrc?: string;
-  logoAlt?: string;
   actions?: ReactNode;
   className?: string;
   sticky?: boolean;
@@ -18,8 +16,6 @@ export const PageHeader = ({
   subtitle,
   icon,
   leading,
-  logoSrc,
-  logoAlt = "Poscal",
   actions,
   className,
   sticky = true,
@@ -36,13 +32,7 @@ export const PageHeader = ({
       <div className={cn("mx-auto flex max-w-2xl items-center justify-between gap-3 md:max-w-3xl", sticky && "pointer-events-auto")}>
         <div className="flex min-w-0 items-center gap-3">
           {leading}
-          {logoSrc ? (
-            <img
-              src={logoSrc}
-              alt={logoAlt}
-              className="h-10 w-10 shrink-0 rounded-xl object-contain"
-            />
-          ) : icon ? (
+          {icon ? (
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
               {icon}
             </div>
