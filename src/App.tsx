@@ -143,7 +143,7 @@ const AppContent = () => {
       {shouldShowBottomNav ? (
         <div
           aria-hidden="true"
-          className="pointer-events-none h-[calc(5.75rem+env(safe-area-inset-bottom))] shrink-0"
+          className="pointer-events-none h-[calc(6rem+env(safe-area-inset-bottom))] shrink-0"
         />
       ) : null}
     </>

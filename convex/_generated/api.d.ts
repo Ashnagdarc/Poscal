@@ -18,6 +18,7 @@ import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_emailVerificationPolicy from "../lib/emailVerificationPolicy.js";
+import type * as lib_sessionInvalidation from "../lib/sessionInvalidation.js";
 import type * as lib_tradeValidation from "../lib/tradeValidation.js";
 import type * as lib_tradingAlerts from "../lib/tradingAlerts.js";
 import type * as news from "../news.js";
@@ -52,6 +53,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   "lib/auth": typeof lib_auth;
   "lib/emailVerificationPolicy": typeof lib_emailVerificationPolicy;
+  "lib/sessionInvalidation": typeof lib_sessionInvalidation;
   "lib/tradeValidation": typeof lib_tradeValidation;
   "lib/tradingAlerts": typeof lib_tradingAlerts;
   news: typeof news;

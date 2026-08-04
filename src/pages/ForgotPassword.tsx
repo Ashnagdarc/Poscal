@@ -17,6 +17,7 @@ const ForgotPassword = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
 
   const handleRequest = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -26,11 +27,13 @@ const ForgotPassword = () => {
     }
 
     setIsLoading(true);
+    setRequestError(null);
     const { error } = await resetPassword(email.trim());
     setIsLoading(false);
 
     if (error) {
-      // Soft-fail: mail key missing, Resend outage, rate limit — keep user on request step with clear copy.
+      // Soft-fail config / Resend outage: clear message, stay on request step.
+      setRequestError(error);
       toast.error(error, { duration: 7000 });
       return;
     }
@@ -48,8 +51,8 @@ const ForgotPassword = () => {
       toast.error("Enter the reset code from your email");
       return;
     }
-    if (newPassword.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    if (newPassword.length < 10 || !/[A-Za-z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      toast.error("Password must be at least 10 characters and include a letter and a number.");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -66,7 +69,11 @@ const ForgotPassword = () => {
       return;
     }
 
-    toast.success("Password updated. You can sign in now.");
+    // Convex Auth Password reset-verification already invalidates other sessions.
+    toast.success(
+      "Password updated. Other devices were signed out. Sign in with your new password.",
+      { duration: 7000 },
+    );
     navigate("/signin", { state: { email: email.trim() } });
   };
 
@@ -89,12 +96,24 @@ const ForgotPassword = () => {
     >
       {step === "request" ? (
         <form onSubmit={handleRequest} className="space-y-5">
+          {requestError ? (
+            <div
+              role="alert"
+              className="rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+            >
+              {requestError}
+            </div>
+          ) : null}
+
           <AuthField id="reset-email" label="Email address">
             <input
               id="reset-email"
               type="email"
               value={email}
-              onChange={(event) => setEmail(event.target.value)}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                if (requestError) setRequestError(null);
+              }}
               placeholder="you@example.com"
               autoComplete="email"
               required
@@ -131,7 +150,7 @@ const ForgotPassword = () => {
             label="New password"
             value={newPassword}
             onChange={setNewPassword}
-            placeholder="At least 8 characters"
+            placeholder="At least 10 characters"
             autoComplete="new-password"
             showPassword={showPassword}
             onTogglePassword={() => setShowPassword((current) => !current)}
@@ -160,7 +179,10 @@ const ForgotPassword = () => {
 
           <button
             type="button"
-            onClick={() => setStep("request")}
+            onClick={() => {
+              setStep("request");
+              setRequestError(null);
+            }}
             className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Resend code / change email

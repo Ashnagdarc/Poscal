@@ -48,6 +48,28 @@ export const ResendOTPPasswordReset = Resend({
 
     if (error) {
       console.error("[auth] Failed to send password reset email", error);
+      const status =
+        typeof error === "object" && error !== null && "statusCode" in error
+          ? Number((error as { statusCode?: number }).statusCode)
+          : typeof error === "object" && error !== null && "status" in error
+            ? Number((error as { status?: number }).status)
+            : NaN;
+      const detail =
+        typeof error === "object" && error !== null && "message" in error
+          ? String((error as { message?: string }).message ?? "")
+          : String(error ?? "");
+      const lower = detail.toLowerCase();
+      if (
+        status === 429
+        || status === 402
+        || lower.includes("quota")
+        || lower.includes("rate limit")
+        || lower.includes("too many")
+      ) {
+        throw new Error(
+          "Could not send password reset email (rate limit or quota). Please try again later.",
+        );
+      }
       throw new Error("Could not send password reset email. Please try again later.");
     }
   },

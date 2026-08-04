@@ -23,6 +23,7 @@ import {
   User,
   Users,
 } from "lucide-react";
+import { useMutation, useQuery } from "convex/react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
 import { useActionError } from "@/contexts/ActionErrorContext";
@@ -46,6 +47,7 @@ import { clearSensitiveLocalStorage } from "@/lib/privacyCleanup";
 import type { AppFontId } from "@/lib/fonts";
 import { COMMON_TIMEZONES, detectBrowserTimeZone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
+import { api } from "../../convex/_generated/api";
 
 const getErrorMessage = (error: unknown, fallback: string) => {
   if (!(error instanceof Error)) return fallback;
@@ -81,6 +83,9 @@ const Settings = () => {
   const { isPaid, isTrial, subscriptionTier, expiresAt, refreshSubscription } = useSubscription();
   const { isAdmin } = useAdmin();
   const { fontId, options: fontOptions, setFontId } = useAppFont();
+  const sessionSummary = useQuery(api.users.sessionSummary, user ? {} : "skip");
+  const revokeOtherSessions = useMutation(api.users.revokeOtherSessions);
+  const revokeAllSessions = useMutation(api.users.revokeAllSessions);
   const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
@@ -98,6 +103,9 @@ const Settings = () => {
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
+  const [showRevokeOtherConfirm, setShowRevokeOtherConfirm] = useState(false);
+  const [showRevokeAllConfirm, setShowRevokeAllConfirm] = useState(false);
+  const [isRevokingSessions, setIsRevokingSessions] = useState(false);
   const supportsHaptics = typeof isSupported === "function" ? isSupported() : !!isSupported;
 
   const subscriptionLabel = getSubscriptionLabel({ isPaid, isTrial, subscriptionTier });
@@ -245,6 +253,48 @@ const Settings = () => {
     navigate("/signin");
   };
 
+  const handleRevokeOtherSessions = async () => {
+    setIsRevokingSessions(true);
+    try {
+      const result = await revokeOtherSessions({});
+      lightTap();
+      const n = result?.revoked ?? 0;
+      toast.success(
+        n === 0
+          ? "No other devices were signed in"
+          : `Signed out ${n} other session${n === 1 ? "" : "s"}`,
+      );
+    } catch (err: unknown) {
+      toast.error(getErrorMessage(err, "Could not sign out other devices"));
+    } finally {
+      setIsRevokingSessions(false);
+    }
+  };
+
+  const handleSignOutEverywhere = async () => {
+    setIsRevokingSessions(true);
+    try {
+      await revokeAllSessions({});
+      lightTap();
+      await signOut();
+      clearSensitiveLocalStorage();
+      toast.success("Signed out everywhere");
+      navigate("/signin");
+    } catch (err: unknown) {
+      // Session may already be dead after revokeAll — still clear local auth.
+      try {
+        await signOut();
+      } catch {
+        // ignore
+      }
+      clearSensitiveLocalStorage();
+      toast.error(getErrorMessage(err, "Could not sign out everywhere"));
+      navigate("/signin");
+    } finally {
+      setIsRevokingSessions(false);
+    }
+  };
+
   const handleInstall = async () => {
     lightTap();
     const installed = await promptInstall();
@@ -311,7 +361,7 @@ const Settings = () => {
         icon={<SettingsIcon className="h-5 w-5" />}
       />
 
-      <main id="main-content" className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-36 md:max-w-3xl">
+      <main id="main-content" className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-40 md:max-w-3xl">
         {/* Account hero */}
         <section>
           {user ? (
@@ -362,6 +412,45 @@ const Settings = () => {
             </SettingsGroup>
           )}
         </section>
+
+        {/* Security — multi-device session control (MC-032 / AP-012) */}
+        {user ? (
+          <section>
+            <SettingsSection title="Security" />
+            <SettingsGroup>
+              <SettingsRow
+                icon={<Smartphone className="h-4 w-4" />}
+                title="Sign out other devices"
+                subtitle={
+                  sessionSummary == null
+                    ? "Ends sessions on phones and browsers that are not this one"
+                    : sessionSummary.otherCount === 0
+                      ? "Only this device is signed in"
+                      : `${sessionSummary.otherCount} other session${sessionSummary.otherCount === 1 ? "" : "s"} active`
+                }
+                onClick={() => setShowRevokeOtherConfirm(true)}
+                showChevron
+              />
+              <SettingsRow
+                icon={<Shield className="h-4 w-4 text-destructive" />}
+                iconClassName="bg-destructive/10"
+                title="Sign out everywhere"
+                subtitle="Ends every session, including this device"
+                onClick={() => setShowRevokeAllConfirm(true)}
+                className="border-t border-border/40"
+                showChevron
+              />
+              <SettingsRow
+                icon={<Lock className="h-4 w-4" />}
+                title="Reset password"
+                subtitle="Email a code, then set a new password (signs out other devices)"
+                onClick={() => navigate("/forgot-password")}
+                className="border-t border-border/40"
+                showChevron
+              />
+            </SettingsGroup>
+          </section>
+        ) : null}
 
         {/* Subscription upsell — only when the admin paid lock is on */}
         {user && !isPremium && paidLockEnabled ? (
@@ -824,6 +913,32 @@ const Settings = () => {
         description="You will need your email and password to sign back in."
         confirmText="Sign out"
         cancelText="Stay signed in"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={showRevokeOtherConfirm}
+        onClose={() => !isRevokingSessions && setShowRevokeOtherConfirm(false)}
+        onConfirm={() => {
+          void handleRevokeOtherSessions().then(() => setShowRevokeOtherConfirm(false));
+        }}
+        title="Sign out other devices?"
+        description="Other phones and browsers will need your email and password again. This device stays signed in. Your trades and journals are not deleted."
+        confirmText={isRevokingSessions ? "Signing out…" : "Sign out others"}
+        cancelText="Cancel"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={showRevokeAllConfirm}
+        onClose={() => !isRevokingSessions && setShowRevokeAllConfirm(false)}
+        onConfirm={() => {
+          void handleSignOutEverywhere().then(() => setShowRevokeAllConfirm(false));
+        }}
+        title="Sign out everywhere?"
+        description="Every session, including this one, will end. You will need to sign in again. Your trades and journals are not deleted."
+        confirmText={isRevokingSessions ? "Signing out…" : "Sign out everywhere"}
+        cancelText="Cancel"
         variant="destructive"
       />
     </div>

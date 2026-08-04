@@ -1,8 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
+import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { deleteAuthSessionsForUser } from "./lib/sessionInvalidation";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 
@@ -381,6 +382,73 @@ export const saveAvatar = mutation({
 });
 
 /**
+ * Session summary for multi-device security UI (MC-032 / AP-012).
+ * Returns null when unauthenticated.
+ */
+export const sessionSummary = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) {
+      return null;
+    }
+
+    const currentSessionId = await getAuthSessionId(ctx);
+    const sessions = await ctx.db
+      .query("authSessions")
+      .withIndex("userId", (q) => q.eq("userId", userId))
+      .collect();
+
+    const otherCount = sessions.filter(
+      (session) => session._id !== currentSessionId,
+    ).length;
+
+    return {
+      total: sessions.length,
+      otherCount,
+      hasCurrent: currentSessionId !== null,
+    };
+  },
+});
+
+/**
+ * Invalidate every auth session for the caller except the current device.
+ * Does not delete user data. Stolen refresh tokens on other devices die.
+ *
+ * "Sign out everywhere" = this mutation + client signOut (kills current too).
+ */
+export const revokeOtherSessions = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const currentSessionId = await getAuthSessionId(ctx);
+    if (!currentSessionId) {
+      throw new Error("Not authenticated");
+    }
+
+    const revoked = await deleteAuthSessionsForUser(ctx.db, userId, {
+      exceptSessionId: currentSessionId,
+    });
+
+    return { success: true as const, revoked };
+  },
+});
+
+/**
+ * Invalidate ALL auth sessions for the caller, including this device.
+ * Client should call signOut and clear local state after success.
+ * Prefer for "Sign out everywhere"; leave user data intact.
+ */
+export const revokeAllSessions = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const revoked = await deleteAuthSessionsForUser(ctx.db, userId);
+    return { success: true as const, revoked };
+  },
+});
+
+/**
  * Hard-delete the authenticated user's Poscal data + auth records (GDPR-style).
  * Irreversible. Client must sign out after success.
  */
@@ -514,21 +582,7 @@ export const deleteAccount = mutation({
       }
     }
 
-    const authSessions = await ctx.db
-      .query("authSessions")
-      .withIndex("userId", (q) => q.eq("userId", userId))
-      .collect();
-    for (const session of authSessions) {
-      const refreshTokens = await ctx.db
-        .query("authRefreshTokens")
-        .withIndex("sessionId", (q) => q.eq("sessionId", session._id))
-        .collect();
-      for (const token of refreshTokens) {
-        await ctx.db.delete(token._id);
-      }
-      await ctx.db.delete(session._id);
-      counts.authSessions += 1;
-    }
+    counts.authSessions = await deleteAuthSessionsForUser(ctx.db, userId);
 
     const authAccounts = await ctx.db
       .query("authAccounts")

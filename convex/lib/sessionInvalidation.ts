@@ -1,18 +1,22 @@
 import type { GenericDatabaseWriter } from "convex/server";
 import type { DataModel, Id } from "../_generated/dataModel";
 
+type SessionDb = GenericDatabaseWriter<DataModel>;
+
 /**
  * Delete Convex Auth sessions (+ refresh tokens) for a user.
- * Non-destructive to journal/profile data — only auth session rows.
+ * Non-destructive to app data — only auth session rows.
  *
- * Mirrors @convex-dev/auth `invalidateSessionsImpl` / `deleteSession` so app-layer
- * mutations can revoke sessions without requiring ActionCtx helpers.
+ * Used for "sign out other devices", account delete, and password-reset
+ * post-effects when the client needs to mirror auth-layer invalidation.
+ * Password `reset-verification` already calls library `invalidateSessions`
+ * (except the new session); this path is for authenticated mutations.
  */
 export async function deleteAuthSessionsForUser(
-  db: GenericDatabaseWriter<DataModel>,
+  db: SessionDb,
   userId: Id<"users">,
   options?: {
-    /** Keep this session (e.g. the caller's current device). */
+    /** Keep this session alive (usually the caller's current session). */
     exceptSessionId?: Id<"authSessions"> | null;
   },
 ): Promise<number> {
