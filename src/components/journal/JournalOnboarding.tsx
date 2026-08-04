@@ -116,7 +116,7 @@ export const JournalOnboarding = ({
   };
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center px-1">
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center px-1 pb-28">
       <AnimatePresence mode="wait">
         {step === "welcome" ? (
           <motion.div
@@ -127,20 +127,20 @@ export const JournalOnboarding = ({
             exit={{ opacity: 0 }}
             transition={{ duration: 1.1, ease: "easeInOut" }}
           >
-            <motion.p
+            <motion.h1
               className="font-display text-2xl font-semibold leading-snug text-foreground sm:text-3xl"
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 1.2, ease: "easeOut" }}
             >
-              Hey Boss, let&apos;s track your trading journey together
-            </motion.p>
+              Let&apos;s set up your trading journal
+            </motion.h1>
           </motion.div>
         ) : (
           <motion.form
             key="setup"
             onSubmit={handleSubmit}
-            className="space-y-4 rounded-2xl bg-secondary p-4 sm:p-5"
+            className="space-y-4 rounded-2xl bg-secondary p-4 pb-6 sm:p-5"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.45, ease: "easeOut" }}
@@ -161,7 +161,7 @@ export const JournalOnboarding = ({
                   id="fullName"
                   value={fullName}
                   onChange={(event) => setFullName(event.target.value)}
-                  placeholder="Daniel Samuel"
+                  placeholder="Your full name"
                   autoComplete="name"
                 />
               </div>
@@ -173,7 +173,7 @@ export const JournalOnboarding = ({
                 id="journalName"
                 value={journalName}
                 onChange={(event) => setJournalName(event.target.value)}
-                placeholder="Main account"
+                placeholder="e.g. Live, Prop eval, Demo"
                 autoFocus={mode !== "first"}
               />
             </div>
@@ -208,13 +208,13 @@ export const JournalOnboarding = ({
               </Select>
             </div>
 
-            <div className="flex gap-2 pt-1">
+            <div className="flex gap-2 pt-2 pb-1">
               {mode === "create" && onCancel ? (
-                <Button type="button" variant="outline" className="flex-1" onClick={onCancel} disabled={isSaving}>
+                <Button type="button" variant="outline" className="flex-1 h-12" onClick={onCancel} disabled={isSaving}>
                   Cancel
                 </Button>
               ) : null}
-              <Button type="submit" className="flex-1" disabled={isSaving}>
+              <Button type="submit" className="flex-1 h-12" disabled={isSaving}>
                 {isSaving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

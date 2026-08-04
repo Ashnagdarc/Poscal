@@ -1,10 +1,9 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 import { assertValidTradeFields } from "./lib/tradeValidation";
 import {
   CLOSED_TRADE_ALERT_SCAN_LIMIT,
@@ -139,12 +138,12 @@ export const listForUser = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return [];
     }
 
-    const limit = args.limit ?? 200;
+    const limit = Math.min(Math.max(args.limit ?? 200, 1), 500);
     const statusFilter = parseTradeStatusFilter(args.status);
 
     if (args.journalId) {
@@ -325,7 +324,7 @@ export const evaluateTradeAlerts = internalMutation({
 export const createEntry = mutation({
   args: tradeCreateFields,
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
     assertValidTradeFields(args);
 
@@ -376,7 +375,7 @@ export const updateEntry = mutation({
     exitDateMs: nullableNumberArg,
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -427,7 +426,7 @@ export const deleteEntry = mutation({
     id: v.id("tradingJournal"),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -443,7 +442,10 @@ export const saveMany = mutation({
     items: v.array(v.object(tradeCreateFields)),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
+    if (args.items.length > 100) {
+      throw new Error("Batch too large (max 100 trades)");
+    }
     const ids = [];
     const now = Date.now();
 

@@ -1,5 +1,7 @@
 import React, { createContext, useContext } from 'react';
-import { useAuth } from './AuthContext';
+import { useConvexAuth } from '@convex-dev/auth/react';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 
 // Subscription tier types
 export type SubscriptionTier = 'free' | 'premium' | 'pro';
@@ -62,26 +64,34 @@ interface SubscriptionContextType {
 
 const SubscriptionContext = createContext<SubscriptionContextType | undefined>(undefined);
 
+/**
+ * Subscription state is derived from Convex Auth + `users.viewer` directly.
+ * Do NOT call `useAuth` here: AuthContext HMR recreates that module's
+ * createContext, which can leave this provider reading an empty context and
+ * crash with "useAuth must be used within an AuthProvider" even when nested
+ * under AuthProvider in App.tsx. The viewer query is shared/cached with Auth.
+ */
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, loading: authLoading, viewerSubscription } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  // Same query key as AuthContext — Convex dedupes to one reactive subscription.
+  const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : 'skip');
 
-  // Derive paid/lock state from the same reactive `users.viewer` query as AuthContext
-  // (previously a second HTTP `users.viewerProfile` call on every auth change).
-  const paymentStatus = asPaymentStatus(viewerSubscription?.paymentStatus);
-  const subscriptionTier = asSubscriptionTier(viewerSubscription?.subscriptionTier);
-  const expiresAt = viewerSubscription?.expiresAtMs
-    ? new Date(viewerSubscription.expiresAtMs)
+  const paymentStatus = asPaymentStatus(viewer?.paymentStatus);
+  const subscriptionTier = asSubscriptionTier(viewer?.subscriptionTier);
+  const expiresAt = viewer?.subscriptionExpiresAtMs
+    ? new Date(viewer.subscriptionExpiresAtMs)
     : null;
   const trialEndsAt: Date | null = null;
-  const isActive = Boolean(user)
+  const hasUser = Boolean(viewer);
+  const isActive = hasUser
     && subscriptionTier !== 'free'
     && paymentStatus !== 'expired';
-  const isLoading = authLoading || Boolean(user && !viewerSubscription);
+  const isLoading = authLoading || (isAuthenticated && viewer === undefined);
 
   // Check if user can access a specific feature
   const checkFeatureAccess = (feature: string): boolean => {
     // If no user, deny access
-    if (!user) return false;
+    if (!hasUser) return false;
 
     // If not an active subscription, deny access
     if (!isActive) {

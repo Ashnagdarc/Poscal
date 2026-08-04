@@ -21,6 +21,7 @@ import {
   calculatePositionSize,
   getInstrumentSpec,
   isCrossPair,
+  requiredAccountCurrencyUsdPair,
   requiredConversionPair,
   requiresEntryForPipValue,
 } from "@/lib/positionSizeCalculator";
@@ -102,6 +103,7 @@ export const Calculator = () => {
   const [stopLossPrice, setStopLossPrice] = useState("");
   const [takeProfitPrice, setTakeProfitPrice] = useState("");
   const [conversionRate, setConversionRate] = useState("");
+  const [accountCcyRate, setAccountCcyRate] = useState("");
   const [selectedPair, setSelectedPair] = useState<CurrencyPair>(FEATURED_CURRENCY_PAIRS[0]);
   
   // UI State
@@ -111,7 +113,8 @@ export const Calculator = () => {
     | "entryPrice"
     | "stopLossPrice"
     | "takeProfitPrice"
-    | "conversionRate";
+    | "conversionRate"
+    | "accountCcyRate";
   const [showNumPad, setShowNumPad] = useState<NumPadField | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
   const [showStopLossSelector, setShowStopLossSelector] = useState(false);
@@ -119,22 +122,42 @@ export const Calculator = () => {
 
   const { currency } = useCurrency();
   const [isSavingToJournal, setIsSavingToJournal] = useState(false);
-  // Lot math is USD-pip based until FX conversion ships (DAN-001).
-  const riskDisplayCurrency = currency.code === "USD" ? currency : { code: "USD", symbol: "$", name: "US Dollar" };
-  const showCurrencyEstimateNote = currency.code !== "USD";
+  const riskDisplayCurrency = currency;
 
   const needsEntryForPipValue = requiresEntryForPipValue(selectedPair.symbol);
   const selectedIsCross = isCrossPair(selectedPair.symbol);
   const conversionPair = selectedIsCross
     ? requiredConversionPair(selectedPair.symbol)
     : null;
+  const accountCcyPair = requiredAccountCurrencyUsdPair(currency.code);
+  // When cross and account FX need the same pair, one field is enough.
+  const accountFxSharesCrossField =
+    Boolean(accountCcyPair) && Boolean(conversionPair) && accountCcyPair === conversionPair;
+  const needsSeparateAccountFx =
+    Boolean(accountCcyPair) && !accountFxSharesCrossField;
 
   const userMarketPrices = useMemo(() => {
-    if (!conversionPair) return null;
-    const rate = parseFloat(conversionRate);
-    if (!Number.isFinite(rate) || rate <= 0) return null;
-    return { [conversionPair]: rate };
-  }, [conversionPair, conversionRate]);
+    const prices: Record<string, number> = {};
+    if (conversionPair) {
+      const rate = parseFloat(conversionRate);
+      if (Number.isFinite(rate) && rate > 0) {
+        prices[conversionPair] = rate;
+      }
+    }
+    if (accountCcyPair && !accountFxSharesCrossField) {
+      const rate = parseFloat(accountCcyRate);
+      if (Number.isFinite(rate) && rate > 0) {
+        prices[accountCcyPair] = rate;
+      }
+    }
+    return Object.keys(prices).length > 0 ? prices : null;
+  }, [
+    conversionPair,
+    conversionRate,
+    accountCcyPair,
+    accountCcyRate,
+    accountFxSharesCrossField,
+  ]);
   
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
@@ -151,6 +174,10 @@ export const Calculator = () => {
   useEffect(() => {
     setConversionRate("");
   }, [conversionPair]);
+
+  useEffect(() => {
+    setAccountCcyRate("");
+  }, [accountCcyPair]);
 
   useEffect(() => {
     const spec = getInstrumentSpec(selectedPair.symbol);
@@ -219,6 +246,7 @@ export const Calculator = () => {
       stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
       takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
       marketPrices: userMarketPrices,
+      accountCurrency: currency.code,
     });
   }, [
     accountBalance,
@@ -231,6 +259,7 @@ export const Calculator = () => {
     takeProfitPrice,
     selectedPair,
     userMarketPrices,
+    currency.code,
   ]);
 
   const stopLossUnit = getStopLossUnitLabel(selectedPair.symbol);
@@ -388,6 +417,7 @@ export const Calculator = () => {
       stopLossPrice,
       takeProfitPrice,
       conversionRate,
+      accountCcyRate,
     };
     setNumPadValue(values[type]);
     setShowNumPad(type);
@@ -428,6 +458,9 @@ export const Calculator = () => {
       case "conversionRate":
         setConversionRate(numPadValue);
         break;
+      case "accountCcyRate":
+        setAccountCcyRate(numPadValue);
+        break;
       case null:
         break;
       default: {
@@ -456,6 +489,9 @@ export const Calculator = () => {
     conversionRate: conversionPair
       ? `${conversionPair} conversion rate`
       : "Conversion rate",
+    accountCcyRate: accountCcyPair
+      ? `${accountCcyPair} (account FX)`
+      : "Account currency FX",
   }[showNumPad ?? "balance"];
 
   const numPadSuffix = showNumPad === "balance"
@@ -506,7 +542,7 @@ export const Calculator = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <p className="mb-1 text-xs font-medium opacity-60">
-                  Risk{showCurrencyEstimateNote ? " (USD)" : ""}
+                  Risk ({riskDisplayCurrency.code})
                 </p>
                 <p className="text-lg font-semibold">
                   {riskDisplayCurrency.symbol}
@@ -532,11 +568,16 @@ export const Calculator = () => {
                   </div>
                   <div className="text-center">
                     <p className="mb-1 text-xs font-medium opacity-60">
-                      Potential{showCurrencyEstimateNote ? " (USD)" : ""}
+                      Potential ({riskDisplayCurrency.code})
                     </p>
                     <p className="text-lg font-semibold">
                       +{riskDisplayCurrency.symbol}
-                      {formatNumber(calculation.potentialProfit, 0)}
+                      {formatNumber(
+                        calculation.potentialProfitAccount > 0
+                          ? calculation.potentialProfitAccount
+                          : calculation.potentialProfit,
+                        0,
+                      )}
                     </p>
                   </div>
                 </div>
@@ -711,10 +752,28 @@ export const Calculator = () => {
                   <div className="mb-1 flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-foreground" />
                     <p className="text-xs text-muted-foreground">
-                      {conversionPair} rate (required for USD sizing)
+                      {conversionPair} rate
+                      {accountFxSharesCrossField
+                        ? ` (cross + ${currency.code} account FX)`
+                        : " (required for USD pip value)"}
                     </p>
                   </div>
                   <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
+                </button>
+              )}
+              {needsSeparateAccountFx && accountCcyPair && (
+                <button
+                  type="button"
+                  onClick={() => openNumPad("accountCcyRate")}
+                  className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {accountCcyPair} rate (convert {currency.code} risk → USD)
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{accountCcyRate || "—"}</p>
                 </button>
               )}
               <button
@@ -783,10 +842,28 @@ export const Calculator = () => {
                   <div className="mb-1 flex items-center gap-2">
                     <TrendingUp className="h-4 w-4 text-foreground" />
                     <p className="text-xs text-muted-foreground">
-                      {conversionPair} rate (required for USD sizing)
+                      {conversionPair} rate
+                      {accountFxSharesCrossField
+                        ? ` (cross + ${currency.code} account FX)`
+                        : " (required for USD pip value)"}
                     </p>
                   </div>
                   <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
+                </button>
+              )}
+              {needsSeparateAccountFx && accountCcyPair && (
+                <button
+                  type="button"
+                  onClick={() => openNumPad("accountCcyRate")}
+                  className="col-span-2 flex flex-col items-start rounded-2xl bg-secondary p-4 transition-all active:scale-[0.98]"
+                >
+                  <div className="mb-1 flex items-center gap-2">
+                    <TrendingUp className="h-4 w-4 text-foreground" />
+                    <p className="text-xs text-muted-foreground">
+                      {accountCcyPair} rate (convert {currency.code} risk → USD)
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold text-foreground">{accountCcyRate || "—"}</p>
                 </button>
               )}
             </div>
@@ -799,9 +876,14 @@ export const Calculator = () => {
             : "Unsupported instrument"}
           {calculation.warning ? ` · ${calculation.warning}` : ""}
         </p>
-        {selectedIsCross && conversionPair && !userMarketPrices && (
+        {selectedIsCross && conversionPair && !(userMarketPrices && userMarketPrices[conversionPair]) && (
           <p className="mt-2 px-1 text-xs text-muted-foreground">
             Enter a {conversionPair} conversion rate to size this cross in USD.
+          </p>
+        )}
+        {needsSeparateAccountFx && accountCcyPair && !(userMarketPrices && userMarketPrices[accountCcyPair]) && (
+          <p className="mt-2 px-1 text-xs text-amber-600 dark:text-amber-400">
+            Account currency is {currency.code}. Enter {accountCcyPair} so risk is converted before lot sizing — sizing without it is blocked.
           </p>
         )}
       </main>
@@ -835,8 +917,7 @@ export const Calculator = () => {
               <div>
                 <h1 className="text-2xl font-bold text-foreground">Select Stop Loss</h1>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Risk: {riskDisplayCurrency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} ({riskPercent}%)
-                  {showCurrencyEstimateNote ? " USD" : ""}
+                  Risk: {riskDisplayCurrency.symbol}{formatNumber((parseFloat(accountBalance) || 0) * riskPercent / 100, 0)} {riskDisplayCurrency.code} ({riskPercent}%)
                 </p>
               </div>
               <button

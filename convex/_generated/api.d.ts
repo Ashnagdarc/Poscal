@@ -8,13 +8,16 @@
  * @module
  */
 
+import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as authRateLimit from "../authRateLimit.js";
+import type * as authSettings from "../authSettings.js";
 import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_emailVerificationPolicy from "../lib/emailVerificationPolicy.js";
 import type * as lib_tradeValidation from "../lib/tradeValidation.js";
 import type * as lib_tradingAlerts from "../lib/tradingAlerts.js";
 import type * as news from "../news.js";
@@ -39,13 +42,16 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   admin: typeof admin;
   auth: typeof auth;
   authRateLimit: typeof authRateLimit;
+  authSettings: typeof authSettings;
   calculatorHistory: typeof calculatorHistory;
   http: typeof http;
   "lib/auth": typeof lib_auth;
+  "lib/emailVerificationPolicy": typeof lib_emailVerificationPolicy;
   "lib/tradeValidation": typeof lib_tradeValidation;
   "lib/tradingAlerts": typeof lib_tradingAlerts;
   news: typeof news;

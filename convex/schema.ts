@@ -15,6 +15,8 @@ export default defineSchema({
     image: nullableString,
     avatarUrl: nullableString,
     avatarStorageId: v.optional(v.id("_storage")),
+    /** Set when generateUploadUrl is called; consumed by saveAvatar (MC-017). */
+    pendingAvatarUploadAtMs: nullableNumber,
     email: v.optional(v.string()),
     emailVerificationTime: v.optional(v.number()),
     phone: v.optional(v.string()),

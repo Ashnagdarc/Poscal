@@ -1,4 +1,5 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { BookOpen, Calculator, Camera, Clock3, Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
@@ -136,6 +137,7 @@ const parseNumericInput = (value: string) => {
 };
 
 const Journal = () => {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { showErrorFromUnknown } = useActionError();
   const {
@@ -466,7 +468,7 @@ const Journal = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-24">
+    <div className="flex min-h-screen flex-col bg-background pb-32">
       <PageHeader
         title="Journal"
         subtitle={
@@ -481,7 +483,7 @@ const Journal = () => {
         icon={<BookOpen className="h-5 w-5" />}
       />
 
-      <main className="mx-auto w-full max-w-2xl flex-1 px-4 py-4 sm:px-6 md:max-w-3xl">
+      <main id="main-content" className="mx-auto w-full max-w-2xl flex-1 px-4 py-4 sm:px-6 md:max-w-3xl">
         {isJournalsLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-24 w-full rounded-2xl" />
@@ -522,6 +524,25 @@ const Journal = () => {
 
         {pageSection === "today" ? (
           <div className="space-y-4 animate-slide-up">
+            {manualTrades.length === 0 && items.length === 0 ? (
+              <section className="rounded-2xl border border-dashed border-border bg-secondary/50 px-4 py-6 text-center">
+                <p className="text-sm font-semibold text-foreground">No trades yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Log your first closed trade to update growth and results.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTradeToEdit(null);
+                    setIsTradeSheetOpen(true);
+                  }}
+                  className="mt-4 h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-brand-foreground transition-all active:scale-[0.98]"
+                >
+                  Log a trade
+                </button>
+              </section>
+            ) : null}
+
             <div data-tour-id="journal-growth">
               <TradingGrowthChart
                 trades={manualTrades}
@@ -1011,8 +1032,30 @@ const Journal = () => {
 
             <div className="mt-5 grid grid-cols-2 gap-3">
               <button
-                disabled
-                className="h-11 rounded-xl bg-secondary text-sm font-semibold text-muted-foreground opacity-60"
+                type="button"
+                onClick={() => {
+                  const params = new URLSearchParams();
+                  params.set("symbol", selectedItem.symbol);
+                  if (selectedItem.entryPrice != null) {
+                    params.set("entry", String(selectedItem.entryPrice));
+                  }
+                  if (selectedItem.stopLossPrice != null) {
+                    params.set("stopLoss", String(selectedItem.stopLossPrice));
+                  }
+                  if (selectedItem.takeProfitPrice != null) {
+                    params.set("takeProfit", String(selectedItem.takeProfitPrice));
+                  }
+                  if (selectedItem.orderType) {
+                    params.set("orderType", selectedItem.orderType);
+                  }
+                  params.set("reuse", "1");
+                  setSelectedItem(null);
+                  navigate(`/?${params.toString()}`);
+                  toast.message("Prefilled calculator", {
+                    description: "Review balance, risk, and stop loss before sizing.",
+                  });
+                }}
+                className="h-11 rounded-xl bg-secondary text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
               >
                 <Copy className="mr-2 inline-block w-4 h-4" />
                 Reuse

@@ -1,9 +1,8 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { requireAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -49,7 +48,7 @@ export const listForUser = query({
     includeArchived: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return [];
     }
@@ -67,6 +66,9 @@ export const listForUser = query({
   },
 });
 
+// Soft status whitelist (AP-013 / MC-033).
+const ALLOWED_JOURNAL_STATUS = new Set(["active", "archived", "funded", "demo", "live", "eval"]);
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -75,13 +77,17 @@ export const create = mutation({
     fullName: nullableStringArg,
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const trimmedName = args.name.trim();
     if (!trimmedName) {
       throw new Error("Journal name is required");
     }
-    if (!Number.isFinite(args.startingBalance) || args.startingBalance <= 0) {
-      throw new Error("Account size must be greater than zero");
+    if (!Number.isFinite(args.startingBalance) || args.startingBalance <= 0 || args.startingBalance > 1e9) {
+      throw new Error("Account size must be greater than zero and under 1,000,000,000");
+    }
+    const currency = args.currency.trim().toUpperCase();
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      throw new Error("Currency must be a 3-letter code (e.g. USD)");
     }
 
     // Tier is always server-derived — never accept client subscriptionTier.
@@ -98,7 +104,7 @@ export const create = mutation({
       externalId: null,
       name: trimmedName,
       broker: null,
-      currency: args.currency.trim().toUpperCase() || "USD",
+      currency,
       balance: args.startingBalance,
       startingBalance: args.startingBalance,
       status: "active",
@@ -169,7 +175,7 @@ export const update = mutation({
     status: nullableStringArg,
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
@@ -185,19 +191,30 @@ export const update = mutation({
       patch.name = trimmed;
     }
     if (args.currency !== undefined && args.currency !== null) {
-      patch.currency = args.currency.trim().toUpperCase() || existing.currency;
+      const nextCurrency = args.currency.trim().toUpperCase();
+      if (!/^[A-Z]{3}$/.test(nextCurrency)) {
+        throw new Error("Currency must be a 3-letter code (e.g. USD)");
+      }
+      patch.currency = nextCurrency;
     }
     if (args.startingBalance !== undefined && args.startingBalance !== null) {
-      if (!Number.isFinite(args.startingBalance) || args.startingBalance <= 0) {
+      if (!Number.isFinite(args.startingBalance) || args.startingBalance <= 0 || args.startingBalance > 1e9) {
         throw new Error("Account size must be greater than zero");
       }
       patch.startingBalance = args.startingBalance;
     }
     if (args.balance !== undefined && args.balance !== null) {
+      if (!Number.isFinite(args.balance) || args.balance < -1e9 || args.balance > 1e9) {
+        throw new Error("Balance out of range");
+      }
       patch.balance = args.balance;
     }
     if (args.status !== undefined && args.status !== null) {
-      patch.status = args.status;
+      const status = args.status.trim().toLowerCase();
+      if (!ALLOWED_JOURNAL_STATUS.has(status)) {
+        throw new Error("Invalid journal status");
+      }
+      patch.status = status;
     }
 
     await ctx.db.patch(args.id, patch);
@@ -210,7 +227,7 @@ export const archive = mutation({
     id: v.id("tradingAccounts"),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
@@ -230,7 +247,7 @@ export const remove = mutation({
     id: v.id("tradingAccounts"),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
@@ -284,7 +301,7 @@ export const attachOrphanData = mutation({
     journalId: v.id("tradingAccounts"),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const journal = await ctx.db.get(args.journalId);
     if (!journal || journal.userId !== userId) {
       throw new Error("Journal not found");
@@ -340,7 +357,7 @@ export const attachOrphanData = mutation({
 export const getLimits = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return {
         tier: "free" as const,

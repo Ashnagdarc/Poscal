@@ -2,7 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireAuthUserId } from "./lib/auth";
+import { requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -34,7 +34,7 @@ export const updateViewerSafeFields = mutation({
     avatarUrl: nullableStringArg,
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db
       .query("profiles")
       .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
@@ -68,7 +68,7 @@ export const updateViewerPreferences = mutation({
     tradingMilestoneAlertsEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const user = await ctx.db.get(userId);
     if (!user) {
       throw new Error("User not found");
@@ -195,6 +195,7 @@ export const upsertFromAuth = mutation({
 export const deleteByUserId = mutation({
   args: {},
   handler: async (ctx) => {
+    // Profile erasure still allowed while unverified (GDPR cleanup path).
     const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db
       .query("profiles")

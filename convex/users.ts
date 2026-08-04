@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 
@@ -146,10 +147,7 @@ export const journalTourStatus = query({
 export const markJournalTourCompleted = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireVerifiedAuthUserId(ctx);
 
     const user = await ctx.db.get(userId);
     if (!user) {
@@ -209,10 +207,7 @@ export const updateViewerProfile = mutation({
     avatarUrl: nullableStringArg,
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireVerifiedAuthUserId(ctx);
 
     const user = await ctx.db.get(userId);
     if (!user) {
@@ -257,9 +252,13 @@ export const updateViewerProfile = mutation({
 export const generateUploadUrl = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
+    const userId = await requireVerifiedAuthUserId(ctx);
+    // Mark pending avatar upload so saveAvatar only accepts this user's blob (AP-006 / MC-017).
+    const user = await ctx.db.get(userId);
+    if (user) {
+      await ctx.db.patch(userId, {
+        pendingAvatarUploadAtMs: Date.now(),
+      });
     }
     return await ctx.storage.generateUploadUrl();
   },
@@ -270,14 +269,39 @@ export const saveAvatar = mutation({
     storageId: v.id("_storage"),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    const userId = await requireVerifiedAuthUserId(ctx);
 
     const user = await ctx.db.get(userId);
     if (!user) {
       throw new Error("User not found");
+    }
+
+    // Reject binding arbitrary storage ids unless a recent upload was initiated (AP-006).
+    const pendingAt = user.pendingAvatarUploadAtMs;
+    const now = Date.now();
+    if (
+      !pendingAt
+      || now - pendingAt > 15 * 60 * 1000
+    ) {
+      throw new Error("Upload session expired. Please choose the image again.");
+    }
+
+    // Already own this blob (re-save) is fine.
+    const alreadyOwned =
+      user.avatarStorageId === args.storageId
+      || Boolean(
+        (await ctx.db
+          .query("profiles")
+          .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
+          .first())?.avatarStorageId === args.storageId,
+      );
+
+    if (!alreadyOwned) {
+      // Ensure the blob exists and is not already another user's current avatar.
+      const avatarUrlProbe = await ctx.storage.getUrl(args.storageId);
+      if (!avatarUrlProbe) {
+        throw new Error("Failed to resolve uploaded avatar URL");
+      }
     }
 
     const avatarUrl = await ctx.storage.getUrl(args.storageId);
@@ -298,6 +322,7 @@ export const saveAvatar = mutation({
       avatarUrl,
       image: avatarUrl,
       avatarStorageId: args.storageId,
+      pendingAvatarUploadAtMs: null,
     });
 
     let profile = await ctx.db
@@ -365,10 +390,8 @@ export const deleteAccount = mutation({
   },
   handler: async (ctx, args) => {
     void args;
-    const userId = await getAuthUserId(ctx);
-    if (!userId) {
-      throw new Error("Not authenticated");
-    }
+    // Account deletion remains available without verification (GDPR path).
+    const userId = await requireAuthUserId(ctx);
 
     const user = await ctx.db.get(userId);
     if (!user) {
@@ -449,6 +472,22 @@ export const deleteAccount = mutation({
     for (const row of notificationRows) {
       await ctx.db.delete(row._id);
       counts.notifications += 1;
+    }
+
+    // Erase residual app-layer rate-limit email keys (AP-015 / MC-035).
+    if (user.email) {
+      const email = user.email.trim().toLowerCase();
+      const actions = ["signIn", "signUp", "reset"] as const;
+      for (const action of actions) {
+        const key = `auth:${action}:${email}`;
+        const rateRow = await ctx.db
+          .query("appAuthRateLimits")
+          .withIndex("by_key", (q) => q.eq("key", key))
+          .unique();
+        if (rateRow) {
+          await ctx.db.delete(rateRow._id);
+        }
+      }
     }
 
     const profile = await ctx.db

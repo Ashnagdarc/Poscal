@@ -28,6 +28,7 @@ export const usePWAUpdate = () => {
       ? Boolean(navigator.serviceWorker.controller)
       : false,
   );
+  const userRequestedUpdateRef = useRef(false);
   const versionCheckInFlight = useRef(false);
   const lastVersionCheckAt = useRef(0);
 
@@ -100,26 +101,25 @@ export const usePWAUpdate = () => {
       markUpdateAvailable();
     };
 
-    // Any new controlling worker means this tab's JS graph may be obsolete.
-    // Always reload once the new SW takes over (standard PWA safe reload).
+    // Reload only after the user asked to update (skipWaiting → new controller).
+    // Do not also reload on SW_ACTIVATED + navigate races (that caused ERR_FAILED).
     const handleControllerChange = () => {
       if (!hadControllerRef.current) {
         hadControllerRef.current = true;
         return;
       }
-      void forceAppRefresh();
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "SW_ACTIVATED") {
-        // SW auto-activated (migration). Force a clean load of the new shell.
-        void forceAppRefresh();
+      if (!userRequestedUpdateRef.current) {
+        // New SW claimed without explicit update click — surface the banner instead
+        // of force-navigating (avoids mid-session hard reload loops).
+        markUpdateAvailable();
+        return;
       }
+      userRequestedUpdateRef.current = false;
+      window.location.reload();
     };
 
     window.addEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-    navigator.serviceWorker.addEventListener("message", handleMessage);
 
     navigator.serviceWorker.ready
       .then((registration) => {
@@ -141,7 +141,6 @@ export const usePWAUpdate = () => {
     return () => {
       window.removeEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.removeEventListener("message", handleMessage);
     };
   }, [markUpdateAvailable, showUpdate]);
 
@@ -216,6 +215,7 @@ export const usePWAUpdate = () => {
 
   const updateApp = useCallback(async () => {
     setIsUpdating(true);
+    userRequestedUpdateRef.current = true;
     await forceAppRefresh();
   }, []);
 

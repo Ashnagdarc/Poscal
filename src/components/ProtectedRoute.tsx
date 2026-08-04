@@ -1,4 +1,6 @@
 import { Navigate, useLocation } from 'react-router-dom';
+import { useQuery } from 'convex/react';
+import { api } from '../../convex/_generated/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAdmin } from '@/hooks/use-admin';
@@ -13,6 +15,14 @@ interface ProtectedRouteProps {
   requiresAdmin?: boolean;
 }
 
+const buildSignInRedirect = (pathname: string, search: string, reason: string) => {
+  const returnTo = `${pathname}${search || ""}` || "/";
+  const params = new URLSearchParams();
+  params.set("returnTo", returnTo);
+  params.set("reason", reason);
+  return `/signin?${params.toString()}`;
+};
+
 export const ProtectedRoute = ({
   children,
   requiresPremium = false,
@@ -23,19 +33,49 @@ export const ProtectedRoute = ({
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { paidLockEnabled } = usePaidLock();
   const location = useLocation();
+  // Public policy from Convex env; fail-open to soft mode (no hard /verify-email redirect).
+  const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy);
+  const requireEmailVerification = verificationPolicy?.requireEmailVerification === true;
 
   // Show loading spinner while checking auth or subscription
   if (authLoading || subLoading || adminLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+          <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>
+        </div>
       </div>
     );
   }
 
-  // Check authentication first
+  // Check authentication first — preserve intent (MC-006 / EB-003).
   if (!user) {
-    return <Navigate to="/signin" replace />;
+    const reason =
+      location.pathname.startsWith("/journal") ? "journal"
+        : "session";
+    return (
+      <Navigate
+        to={buildSignInRedirect(location.pathname, location.search, reason)}
+        replace
+        state={{ from: `${location.pathname}${location.search}`, reason }}
+      />
+    );
+  }
+
+  // Hard email gate only when Convex env REQUIRE_EMAIL_VERIFICATION is on (MC-010).
+  // Soft mode (default): verified and unverified users both get full app access.
+  if (requireEmailVerification && !user.email_verified) {
+    return (
+      <Navigate
+        to="/verify-email"
+        replace
+        state={{
+          email: user.email || undefined,
+          returnTo: `${location.pathname}${location.search}` || "/journal",
+        }}
+      />
+    );
   }
 
   if (requiresAdmin && !isAdmin) {

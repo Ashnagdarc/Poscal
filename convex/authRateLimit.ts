@@ -1,12 +1,18 @@
 import { v } from "convex/values";
 
-import { mutation } from "./_generated/server";
+import { internalMutation } from "./_generated/server";
 
 /**
- * Application-layer auth attempt limiter (AIS-009).
- * Complements Convex Auth's built-in OTP/password rate table.
+ * Application-layer auth attempt limiter (AIS-009 / MC-004 / MC-005).
  *
- * Limits (per email key, fixed window):
+ * Complements Convex Auth's built-in OTP/password rate tables (~10 failed
+ * credential/OTP attempts per hour per identifier).
+ *
+ * These mutations are **internal-only** — not callable from the SPA. Public
+ * unauthenticated `consume` / `reset` allowed lockout DoS and throttle
+ * clearing for any email (AP-001 / AP-002).
+ *
+ * Limits (per email key, fixed window) — for future server-side orchestration:
  * - signIn:  10 attempts / 15 minutes
  * - signUp:  5 attempts / hour
  * - reset:   5 attempts / hour
@@ -25,7 +31,7 @@ const normalizeEmail = (email: string) => email.trim().toLowerCase();
 const rateKey = (action: AuthAction, email: string) =>
   `auth:${action}:${normalizeEmail(email)}`;
 
-export const consume = mutation({
+export const consume = internalMutation({
   args: {
     action: v.union(v.literal("signIn"), v.literal("signUp"), v.literal("reset")),
     email: v.string(),
@@ -92,7 +98,7 @@ export const consume = mutation({
   },
 });
 
-export const reset = mutation({
+export const reset = internalMutation({
   args: {
     action: v.union(v.literal("signIn"), v.literal("signUp"), v.literal("reset")),
     email: v.string(),
@@ -107,5 +113,30 @@ export const reset = mutation({
       await ctx.db.delete(existing._id);
     }
     return { ok: true as const };
+  },
+});
+
+/** Cascade delete rate-limit rows for an email on account erasure (AP-015). */
+export const clearForEmail = internalMutation({
+  args: {
+    email: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const email = normalizeEmail(args.email);
+    if (!email) return { deleted: 0 };
+
+    let deleted = 0;
+    for (const action of Object.keys(WINDOWS) as AuthAction[]) {
+      const key = rateKey(action, email);
+      const existing = await ctx.db
+        .query("appAuthRateLimits")
+        .withIndex("by_key", (q) => q.eq("key", key))
+        .unique();
+      if (existing) {
+        await ctx.db.delete(existing._id);
+        deleted += 1;
+      }
+    }
+    return { deleted };
   },
 });

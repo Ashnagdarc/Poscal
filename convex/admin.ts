@@ -3,6 +3,10 @@ import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  getVerifiedAuthUserId,
+  requireVerifiedAuthUserId,
+} from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -351,14 +355,20 @@ export const subscribePush = mutation({
     authKey: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
+
     const existing = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_endpoint", (q) => q.eq("endpoint", args.endpoint))
       .unique();
 
+    // Do not allow unauthenticated or cross-user endpoint rebinding (AP-004 / MC-015).
+    if (existing && existing.userId && existing.userId !== userId) {
+      throw new Error("Push subscription endpoint is already registered");
+    }
+
     const payload = {
-      userId: userId ?? null,
+      userId,
       endpoint: args.endpoint,
       p256dhKey: args.p256dhKey,
       authKey: args.authKey,
@@ -382,7 +392,7 @@ export const subscribePush = mutation({
 export const listPushSubscriptions = query({
   args: {},
   handler: async (ctx) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) return [];
 
     const rows = await ctx.db
@@ -390,13 +400,12 @@ export const listPushSubscriptions = query({
       .withIndex("by_user", (q) => q.eq("userId", userId))
       .collect();
 
+    // Never return p256dh / auth keys to the client (AP-005 / MC-016).
     return rows
       .filter((row) => row.isActive)
       .map((row) => ({
         id: row._id,
         endpoint: row.endpoint,
-        p256dh_key: row.p256dhKey,
-        auth_key: row.authKey,
         created_at: new Date(row.createdAtMs).toISOString(),
       }));
   },
@@ -408,8 +417,7 @@ export const unsubscribePush = mutation({
     id: v.optional(v.id("pushSubscriptions")),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireVerifiedAuthUserId(ctx);
 
     const target = args.id
       ? await ctx.db.get(args.id)

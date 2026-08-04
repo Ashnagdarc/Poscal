@@ -8,6 +8,14 @@ import { useAuth } from "@/contexts/AuthContext";
 type SignInLocationState = {
   email?: string;
   fromSignup?: boolean;
+  from?: string;
+  reason?: string;
+};
+
+const safeInternalPath = (value: string | null | undefined): string | null => {
+  if (!value) return null;
+  if (!value.startsWith("/") || value.startsWith("//")) return null;
+  return value;
 };
 
 const SignIn = () => {
@@ -20,16 +28,38 @@ const SignIn = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [fromSignupBanner, setFromSignupBanner] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
 
   const locationState = (location.state as SignInLocationState | null) ?? null;
 
+  const returnTo = useMemo(() => {
+    return (
+      safeInternalPath(searchParams.get("returnTo"))
+      ?? safeInternalPath(locationState?.from)
+      ?? "/"
+    );
+  }, [searchParams, locationState?.from]);
+
+  const reasonBanner = useMemo(() => {
+    const reason = searchParams.get("reason") ?? locationState?.reason ?? "";
+    switch (reason) {
+      case "session":
+        return "Your session expired. Sign in again to continue.";
+      case "journal":
+        return "Sign in to open your trading journal.";
+      case "protected":
+        return "Sign in to continue to that page.";
+      default:
+        return "";
+    }
+  }, [searchParams, locationState?.reason]);
+
   const bannerMessage = useMemo(() => {
     if (fromSignupBanner || searchParams.get("fromSignup") === "1") {
-      // Email verification is not enforced by the Password provider (ETH-006 / AIS-015).
-      return "Account created. You can sign in with your email and password.";
+      return "Account created. Enter the verification code we emailed you — then you can sign in anytime.";
     }
-    return "";
-  }, [fromSignupBanner, searchParams]);
+    return reasonBanner;
+  }, [fromSignupBanner, searchParams, reasonBanner]);
 
   useEffect(() => {
     const stateEmail = locationState?.email?.trim();
@@ -64,30 +94,55 @@ const SignIn = () => {
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    setFormError(null);
 
     if (!email || !password) {
-      toast.error("Please fill in all fields");
+      const message = "Please fill in all fields";
+      setFormError(message);
+      toast.error(message, { duration: 5000 });
       return;
     }
 
     if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
+      const message = "Password must be at least 8 characters";
+      setFormError(message);
+      toast.error(message, { duration: 5000 });
       return;
     }
 
     setIsLoading(true);
 
-    const { error } = await signIn(email, password);
+    try {
+      const { error, signedIn } = await signIn(email, password);
 
-    if (error) {
-      toast.error(error);
+      if (error) {
+        setFormError(error);
+        toast.error(error, { duration: 6000 });
+        return;
+      }
+
+      if (!signedIn) {
+        toast.success("Check your email for a verification code");
+        navigate("/verify-email", {
+          replace: true,
+          state: {
+            email: email.trim().toLowerCase(),
+            returnTo,
+          },
+        });
+        return;
+      }
+
+      toast.success("Welcome back!");
+      navigate(returnTo, { replace: true });
+    } catch (err: unknown) {
+      void err;
+      const message = "Invalid email or password";
+      setFormError(message);
+      toast.error(message, { duration: 6000 });
+    } finally {
       setIsLoading(false);
-      return;
     }
-
-    toast.success("Welcome back!");
-    navigate("/");
-    setIsLoading(false);
   };
 
   return (
@@ -105,17 +160,30 @@ const SignIn = () => {
         <AuthFooter
           prompt="Don't have an account?"
           linkLabel="Sign Up"
-          linkTo="/signup"
+          linkTo={returnTo !== "/" ? `/signup?returnTo=${encodeURIComponent(returnTo)}` : "/signup"}
         />
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5">
+      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+        {formError ? (
+          <div
+            role="alert"
+            aria-live="assertive"
+            className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive"
+          >
+            {formError}
+          </div>
+        ) : null}
+
         <AuthField id="signin-email" label="Email address">
           <input
             id="signin-email"
             type="email"
             value={email}
-            onChange={(event) => setEmail(event.target.value)}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              if (formError) setFormError(null);
+            }}
             placeholder="you@example.com"
             autoComplete="email"
             required
@@ -127,7 +195,10 @@ const SignIn = () => {
           id="signin-password"
           label="Password"
           value={password}
-          onChange={setPassword}
+          onChange={(value) => {
+            setPassword(value);
+            if (formError) setFormError(null);
+          }}
           placeholder="Enter your password"
           autoComplete="current-password"
           showPassword={showPassword}

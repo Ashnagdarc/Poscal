@@ -22,6 +22,7 @@ const Welcome = lazyWithRetry(() => import("./pages/Welcome"));
 const SignIn = lazyWithRetry(() => import("./pages/SignIn"));
 const SignUp = lazyWithRetry(() => import("./pages/SignUp"));
 const ForgotPassword = lazyWithRetry(() => import("./pages/ForgotPassword"));
+const VerifyEmail = lazyWithRetry(() => import("./pages/VerifyEmail"));
 const Profile = lazyWithRetry(() => import("./pages/Profile"));
 const Journal = lazyWithRetry(() => import("./pages/Journal"));
 const Settings = lazyWithRetry(() => import("./pages/Settings"));
@@ -47,7 +48,15 @@ const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
-  const hideBottomNavOn = ["/signin", "/signup", "/forgot-password", "/welcome", "/terms", "/privacy"];
+  const hideBottomNavOn = [
+    "/signin",
+    "/signup",
+    "/forgot-password",
+    "/verify-email",
+    "/welcome",
+    "/terms",
+    "/privacy",
+  ];
   const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
 
   return (
@@ -60,8 +69,9 @@ const AppContent = () => {
       </Suspense>
       <Suspense
         fallback={
-          <div className="flex min-h-screen items-center justify-center font-display text-muted-foreground">
-            Loading...
+          <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+            <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>
           </div>
         }
       >
@@ -72,6 +82,7 @@ const AppContent = () => {
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
           <Route
             path="/history"
@@ -128,6 +139,13 @@ const AppContent = () => {
         </Routes>
       </Suspense>
       {shouldShowBottomNav && <BottomNav persistent />}
+      {/* Spacer so last CTAs clear the floating island + iOS safe area (MC-002 / EB-002). */}
+      {shouldShowBottomNav ? (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none h-[calc(5.75rem+env(safe-area-inset-bottom))] shrink-0"
+        />
+      ) : null}
     </>
   );
 };

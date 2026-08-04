@@ -2,6 +2,7 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -90,10 +91,11 @@ export const getIngestState = query({
       .query("newsIngestState")
       .withIndex("by_key", (q) => q.eq("key", "primary"))
       .unique();
+    // Do not expose raw lastError strings publicly (AP-014 / MC-034).
     return {
       lastIngestAtMs: row?.lastIngestAtMs ?? null,
       lastNewsCount: row?.lastNewsCount ?? null,
-      lastError: row?.lastError ?? null,
+      hasError: Boolean(row?.lastError),
       updatedAtMs: row?.updatedAtMs ?? null,
     };
   },
@@ -120,8 +122,7 @@ export const setNewsAlertsEnabled = mutation({
     enabled: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
-    if (!userId) throw new Error("Not authenticated");
+    const userId = await requireVerifiedAuthUserId(ctx);
 
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");

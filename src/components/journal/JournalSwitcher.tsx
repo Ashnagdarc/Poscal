@@ -135,7 +135,7 @@ export const JournalSwitcher = () => {
                 >
                   Upgrade for more journals
                   <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                    Your plan allows {journalLimit} journal{journalLimit === 1 ? "" : "s"}
+                    Free plans include {journalLimit} journals (premium up to 5). Each journal is one account book.
                   </span>
                 </Link>
               )}

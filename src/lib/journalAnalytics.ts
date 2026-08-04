@@ -208,9 +208,15 @@ const resolveCalculatorPnl = (item: JournalEntry): number | null => {
   return 0;
 };
 
+/**
+ * Collect closed P&L values for stats.
+ * By default ONLY manual journal trades are included (MC-030 / DR-005).
+ * Pass `includeCalculatorHistory: true` only when explicitly analyzing calc saves.
+ */
 const collectClosedPnlValues = (
   trades: JournalTrade[],
   calculatorResults: JournalEntry[] = [],
+  includeCalculatorHistory = false,
 ): number[] => {
   const values: number[] = [];
 
@@ -219,9 +225,11 @@ const collectClosedPnlValues = (
     if (pnl !== null) values.push(pnl);
   }
 
-  for (const item of calculatorResults) {
-    const pnl = resolveCalculatorPnl(item);
-    if (pnl !== null) values.push(pnl);
+  if (includeCalculatorHistory) {
+    for (const item of calculatorResults) {
+      const pnl = resolveCalculatorPnl(item);
+      if (pnl !== null) values.push(pnl);
+    }
   }
 
   return values;
@@ -231,6 +239,7 @@ const collectClosedPnlValues = (
 const collectClosedPnlChronological = (
   trades: JournalTrade[],
   calculatorResults: JournalEntry[] = [],
+  includeCalculatorHistory = false,
 ): number[] => {
   type Timed = { at: number; tie: string; pnl: number };
   const timed: Timed[] = [];
@@ -242,12 +251,14 @@ const collectClosedPnlChronological = (
     timed.push({ at: date.getTime(), tie: trade.created_at, pnl });
   }
 
-  for (const item of calculatorResults) {
-    const pnl = resolveCalculatorPnl(item);
-    if (pnl === null) continue;
-    const date = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
-    if (!date || Number.isNaN(date.getTime())) continue;
-    timed.push({ at: date.getTime(), tie: item.createdAt.toISOString(), pnl });
+  if (includeCalculatorHistory) {
+    for (const item of calculatorResults) {
+      const pnl = resolveCalculatorPnl(item);
+      if (pnl === null) continue;
+      const date = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
+      if (!date || Number.isNaN(date.getTime())) continue;
+      timed.push({ at: date.getTime(), tie: item.id, pnl });
+    }
   }
 
   timed.sort((left, right) => {
@@ -339,15 +350,18 @@ const collectRMultiples = (
 
 export const computeJournalStats = (
   trades: JournalTrade[],
-  calculatorResults: JournalEntry[] = [],
+  /**
+   * Unused for P&L stats by default (MC-030 / DR-005). Kept for call-site
+   * compatibility; pass results only to other chart helpers when needed.
+   */
+  _calculatorResults: JournalEntry[] = [],
   startingBalance = 0,
 ): JournalStats => {
+  void _calculatorResults;
   const closedManual = trades.filter((trade) => trade.status === "closed");
-  const closedCalculator = calculatorResults.filter(
-    (item) => item.status === "win" || item.status === "loss" || item.status === "breakeven",
-  );
-  const pnlValues = collectClosedPnlValues(trades, calculatorResults);
-  const chronological = collectClosedPnlChronological(trades, calculatorResults);
+  // Manual journal trades only — calculator history is a separate series.
+  const pnlValues = collectClosedPnlValues(trades, [], false);
+  const chronological = collectClosedPnlChronological(trades, [], false);
 
   const wins = pnlValues.filter((value) => value > 0).length;
   const losses = pnlValues.filter((value) => value < 0).length;
@@ -359,7 +373,7 @@ export const computeJournalStats = (
   const lossValues = pnlValues.filter((value) => value < 0).map(Math.abs);
   const avgWin = winValues.length ? winValues.reduce((sum, value) => sum + value, 0) / winValues.length : null;
   const avgLoss = lossValues.length ? lossValues.reduce((sum, value) => sum + value, 0) / lossValues.length : null;
-  const rMultiples = collectRMultiples(trades, calculatorResults);
+  const rMultiples = collectRMultiples(trades, []);
   const streaks = computeStreaks(chronological);
 
   let profitFactor: number | null = null;
@@ -374,8 +388,8 @@ export const computeJournalStats = (
   }
 
   return {
-    totalTrades: trades.length + closedCalculator.length,
-    closedTrades: closedManual.length + closedCalculator.length,
+    totalTrades: trades.length,
+    closedTrades: closedManual.length,
     openTrades: trades.filter((trade) => trade.status === "open").length,
     wins,
     losses,

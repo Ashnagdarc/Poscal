@@ -225,5 +225,37 @@ describe("positionSizeCalculator", () => {
     expect(withoutRate.isValid).toBe(false);
     expect(withoutRate.reason).toMatch(/Enter USD\/JPY conversion rate/i);
   });
+
+  it("converts non-USD account risk before lot math (MC-003)", () => {
+    const usd = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 25,
+      accountCurrency: "USD",
+    });
+    const gbp = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 25,
+      accountCurrency: "GBP",
+      marketPrices: { "GBP/USD": 1.27 },
+    });
+    const blocked = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 25,
+      accountCurrency: "GBP",
+    });
+
+    expect(usd.isValid).toBe(true);
+    expect(usd.positionSize).toBe(0.4);
+    expect(gbp.isValid).toBe(true);
+    expect(gbp.positionSize).toBe(0.5);
+    expect(gbp.riskAmountUsd).toBeCloseTo(127, 5);
+    expect(blocked.isValid).toBe(false);
+  });
 });
 

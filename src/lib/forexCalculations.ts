@@ -276,17 +276,15 @@ export function getPipValueInUSD(
   // Special handling for metals, crypto, and indices
   if (config.isMetalOrCrypto) {
     // Indices (US30 = Dow Jones, US100 = Nasdaq, etc.)
+    // Align with primary INSTRUMENT_SPECS: $1 per point per lot (MC-029 / DR-004).
     if (config.baseCurrency === 'US30') {
-      // US30/Dow Jones: 1 contract = $5 per point
-      return 5;
+      return 1;
     }
     if (config.baseCurrency === 'US100') {
-      // US100/Nasdaq: 1 contract = $2 per point
-      return 2;
+      return 1;
     }
     if (config.baseCurrency === 'SPX' || config.baseCurrency === 'GER30' || config.baseCurrency === 'UK100') {
-      // Other major indices: typically $10-25 per point, use conservative $10
-      return 10;
+      return 1;
     }
     
     // Metals

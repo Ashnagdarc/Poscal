@@ -1,8 +1,7 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
-import { requireAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -109,10 +108,12 @@ export const listForUser = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return [];
     }
+
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 500);
 
     if (args.journalId) {
       await assertJournalOwned(ctx, userId, args.journalId);
@@ -122,22 +123,48 @@ export const listForUser = query({
           q.eq("userId", userId).eq("journalId", args.journalId),
         )
         .order("desc")
-        .take(args.limit ?? 20);
+        .take(limit);
     }
 
     return await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
-      .take(args.limit ?? 20);
+      .take(limit);
   },
 });
+
+const assertHistoryFinancials = (args: {
+  accountBalance: number;
+  riskPercent: number;
+  riskAmount: number;
+  lotSize: number;
+  note?: string | null;
+}) => {
+  const { accountBalance, riskPercent, riskAmount, lotSize, note } = args;
+  if (!Number.isFinite(accountBalance) || accountBalance < 0 || accountBalance > 1e9) {
+    throw new Error("Account balance out of range");
+  }
+  if (!Number.isFinite(riskPercent) || riskPercent < 0 || riskPercent > 100) {
+    throw new Error("Risk percent out of range");
+  }
+  if (!Number.isFinite(riskAmount) || Math.abs(riskAmount) > 1e8) {
+    throw new Error("Risk amount out of range");
+  }
+  if (!Number.isFinite(lotSize) || lotSize < 0 || lotSize > 1000) {
+    throw new Error("Lot size out of range");
+  }
+  if (note != null && note.length > 5000) {
+    throw new Error("Note is too long");
+  }
+};
 
 export const save = mutation({
   args: historyFieldsWithoutUser,
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
+    assertHistoryFinancials(args);
     const now = Date.now();
     const existing = args.clientId
       ? await ctx.db
@@ -166,12 +193,16 @@ export const saveMany = mutation({
     items: v.array(v.object(historyFieldsWithoutUser)),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
+    if (args.items.length > 100) {
+      throw new Error("Batch too large (max 100 history items)");
+    }
     const ids = [];
     const now = Date.now();
 
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
+      assertHistoryFinancials(item);
       const existing = item.clientId
         ? await ctx.db
             .query("calculatorHistory")
@@ -196,7 +227,7 @@ export const saveMany = mutation({
 export const clearForUser = mutation({
   args: {},
   handler: async (ctx) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const rows = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
@@ -213,7 +244,7 @@ export const remove = mutation({
     clientId: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_client", (q) => q.eq("userId", userId).eq("clientId", args.clientId))

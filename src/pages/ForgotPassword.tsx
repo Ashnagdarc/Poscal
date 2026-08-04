@@ -30,11 +30,15 @@ const ForgotPassword = () => {
     setIsLoading(false);
 
     if (error) {
-      toast.error(error);
+      // Soft-fail: mail key missing, Resend outage, rate limit — keep user on request step with clear copy.
+      toast.error(error, { duration: 7000 });
       return;
     }
 
-    toast.success("If an account exists, a reset code was sent.");
+    toast.success(
+      "If an account exists for that address, a reset code was emailed. Check spam if it is missing.",
+      { duration: 7000 },
+    );
     setStep("verify");
   };
 
@@ -157,14 +161,14 @@ const ForgotPassword = () => {
           <button
             type="button"
             onClick={() => setStep("request")}
-            className="w-full text-sm text-white/60 transition-colors hover:text-white"
+            className="w-full text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             Resend code / change email
           </button>
         </form>
       )}
 
-      <p className="pt-2 text-center text-xs text-white/45">
+      <p className="pt-2 text-center text-xs text-muted-foreground">
           <Link
             to="/signin"
             state={{ email: email.trim() || undefined }}

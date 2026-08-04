@@ -18,6 +18,17 @@ export interface CalculatePositionSizeInput {
   takeProfitPrice?: number | null;
   /** Mid prices for conversion pairs, e.g. { "GBP/USD": 1.27, "USD/JPY": 150 }. User-supplied only. */
   marketPrices?: Record<string, number> | null;
+  /**
+   * Account currency ISO code (e.g. USD, GBP, EUR). When not USD, either
+   * `accountCurrencyUsdRate` or the matching pair rate in `marketPrices` is required
+   * so risk money is converted to the USD pip/point model (DR-001 / MC-003).
+   */
+  accountCurrency?: string | null;
+  /**
+   * How many USD one unit of account currency is worth (e.g. GBPUSD = 1.27 for GBP accounts).
+   * Prefer this when the UI already collected a rate; otherwise look up in marketPrices.
+   */
+  accountCurrencyUsdRate?: number | null;
 }
 
 export interface CalculatePositionSizeResult {
@@ -26,14 +37,23 @@ export interface CalculatePositionSizeResult {
   mode: StopInputMode;
   symbol: string;
   spec?: InstrumentSpec;
+  /** Risk in account currency (balance × risk%). */
   riskAmount: number;
+  /** Risk converted to USD when account currency ≠ USD (else same as riskAmount). */
+  riskAmountUsd: number;
+  accountCurrency: string;
   stopLossPips: number;
   rawLotSize: number;
   positionSize: number;
   units: number;
+  /** Actual risk in account currency after lot rounding. */
   actualRisk: number;
+  /** Actual risk in USD after lot rounding. */
+  actualRiskUsd: number;
   rewardToRisk: number;
   potentialProfit: number;
+  /** Potential profit in account currency. */
+  potentialProfitAccount: number;
   pipValue: number;
   wasRounded: boolean;
   wasMinLotClamped: boolean;
@@ -47,13 +67,17 @@ const EMPTY_RESULT: Omit<
 > = {
   isValid: false,
   riskAmount: 0,
+  riskAmountUsd: 0,
+  accountCurrency: "USD",
   stopLossPips: 0,
   rawLotSize: 0,
   positionSize: 0,
   units: 0,
   actualRisk: 0,
+  actualRiskUsd: 0,
   rewardToRisk: 0,
   potentialProfit: 0,
+  potentialProfitAccount: 0,
   pipValue: 0,
   wasRounded: false,
   wasMinLotClamped: false,
@@ -114,24 +138,37 @@ export function calculatePositionSize(
   const symbol = resolveInstrumentSymbol(input.symbol);
   const spec = getInstrumentSpec(symbol);
   const mode = isPositiveNumber(input.stopLossPips) ? "pips" : "price";
+  const accountCurrency = normalizeAccountCurrency(input.accountCurrency);
 
   if (!spec) {
-    return invalidResult(symbol, mode, "Unsupported instrument");
+    return invalidResult(symbol, mode, "Unsupported instrument", undefined, 0, accountCurrency);
   }
 
   const riskAmount = calculateRiskAmount(input.accountBalance, input.riskPercent);
   const stop = calculateStopDistance({ spec, ...input });
 
   if (riskAmount <= 0) {
-    return invalidResult(symbol, stop.mode, "Enter account balance and risk percent", spec);
+    return invalidResult(symbol, stop.mode, "Enter account balance and risk percent", spec, 0, accountCurrency);
   }
 
   if (stop.stopLossPips <= 0) {
-    return invalidResult(symbol, stop.mode, "Enter stop loss", spec, riskAmount);
+    return invalidResult(symbol, stop.mode, "Enter stop loss", spec, riskAmount, accountCurrency);
   }
 
+  // Convert account-currency risk → USD for USD-pip lot math (MC-003 / DR-001).
+  const fx = resolveAccountCurrencyToUsdRate(
+    accountCurrency,
+    input.accountCurrencyUsdRate,
+    input.marketPrices,
+  );
+  if (fx.error) {
+    return invalidResult(symbol, stop.mode, fx.error, spec, riskAmount, accountCurrency);
+  }
+  const accountToUsd = fx.rate;
+  const riskAmountUsd = riskAmount * accountToUsd;
+
   if (spec.pipValuePerStandardLot <= 0 && !isCrossPair(symbol)) {
-    return invalidResult(symbol, stop.mode, "Instrument pip value is missing", spec, riskAmount);
+    return invalidResult(symbol, stop.mode, "Instrument pip value is missing", spec, riskAmount, accountCurrency);
   }
 
   const pipValuePerLot = resolveEffectivePipValue(spec, symbol, input.entryPrice, input.marketPrices);
@@ -146,10 +183,11 @@ export function calculatePositionSize(
           : "Instrument pip value is missing",
       spec,
       riskAmount,
+      accountCurrency,
     );
   }
 
-  const rawLotSize = riskAmount / (stop.stopLossPips * pipValuePerLot);
+  const rawLotSize = riskAmountUsd / (stop.stopLossPips * pipValuePerLot);
   const roundedLotSize = roundToLotStep(rawLotSize, spec.lotStep);
   const wasMinLotClamped = roundedLotSize > 0 && roundedLotSize < spec.minLot;
   const wasMaxLotClamped = roundedLotSize > spec.maxLot;
@@ -157,12 +195,21 @@ export function calculatePositionSize(
     Math.max(roundedLotSize, wasMinLotClamped ? spec.minLot : 0),
     spec.maxLot,
   );
-  const actualRisk = positionSize * stop.stopLossPips * pipValuePerLot;
+  const actualRiskUsd = positionSize * stop.stopLossPips * pipValuePerLot;
+  const actualRisk = accountToUsd > 0 ? actualRiskUsd / accountToUsd : actualRiskUsd;
   const takeProfitPips = getTakeProfitPips(input, stop.mode, spec);
   const rewardToRisk = takeProfitPips > 0 ? takeProfitPips / stop.stopLossPips : 0;
-  const potentialProfit = takeProfitPips > 0
+  const potentialProfitUsd = takeProfitPips > 0
     ? positionSize * takeProfitPips * pipValuePerLot
     : 0;
+  const potentialProfitAccount = accountToUsd > 0
+    ? potentialProfitUsd / accountToUsd
+    : potentialProfitUsd;
+
+  const multiCcyNote =
+    accountCurrency !== "USD"
+      ? `Risk ${riskAmount.toFixed(2)} ${accountCurrency} ≈ $${riskAmountUsd.toFixed(2)} USD (rate ${accountToUsd.toFixed(4)}).`
+      : undefined;
 
   return {
     isValid: true,
@@ -170,18 +217,22 @@ export function calculatePositionSize(
     symbol,
     spec,
     riskAmount,
+    riskAmountUsd,
+    accountCurrency,
     stopLossPips: stop.stopLossPips,
     rawLotSize,
     positionSize,
     units: positionSize * spec.contractSize,
     actualRisk,
+    actualRiskUsd,
     rewardToRisk,
-    potentialProfit,
+    potentialProfit: potentialProfitUsd,
+    potentialProfitAccount,
     pipValue: pipValuePerLot,
     wasRounded: roundedLotSize !== rawLotSize,
     wasMinLotClamped,
     wasMaxLotClamped,
-    warning: spec.warning,
+    warning: [spec.warning, multiCcyNote].filter(Boolean).join(" "),
   };
 }
 
@@ -214,6 +265,7 @@ function invalidResult(
   reason: string,
   spec?: InstrumentSpec,
   riskAmount = 0,
+  accountCurrency = "USD",
 ): CalculatePositionSizeResult {
   return {
     ...EMPTY_RESULT,
@@ -222,6 +274,8 @@ function invalidResult(
     spec,
     reason,
     riskAmount,
+    riskAmountUsd: accountCurrency === "USD" ? riskAmount : 0,
+    accountCurrency,
     pipValue: spec?.pipValuePerStandardLot ?? 0,
     warning: spec?.warning,
   };
@@ -234,6 +288,65 @@ function isPositiveNumber(value: number | null | undefined): value is number {
 function getDecimalPrecision(value: number): number {
   const decimal = value.toString().split(".")[1];
   return decimal ? decimal.length : 0;
+}
+
+export function normalizeAccountCurrency(code?: string | null): string {
+  const normalized = (code ?? "USD").trim().toUpperCase();
+  return normalized || "USD";
+}
+
+/** Pair that prices 1 unit of account currency in USD (e.g. GBP → GBP/USD). */
+export function requiredAccountCurrencyUsdPair(accountCurrency: string): string | null {
+  const code = normalizeAccountCurrency(accountCurrency);
+  if (code === "USD") return null;
+  // JPY, CHF, CAD commonly quote as USD/XXX
+  if (code === "JPY" || code === "CHF" || code === "CAD") {
+    return `USD/${code}`;
+  }
+  return `${code}/USD`;
+}
+
+/**
+ * Resolve how many USD one unit of account currency is worth.
+ * - GBP/EUR/AUD/NZD: use XXX/USD rate directly (multiply)
+ * - JPY/CHF/CAD: use USD/XXX and invert (1 / rate)
+ */
+export function resolveAccountCurrencyToUsdRate(
+  accountCurrency: string,
+  explicitRate?: number | null,
+  marketPrices?: Record<string, number> | null,
+): { rate: number; error?: undefined } | { rate: 0; error: string } {
+  const code = normalizeAccountCurrency(accountCurrency);
+  if (code === "USD") {
+    return { rate: 1 };
+  }
+
+  if (isPositiveNumber(explicitRate)) {
+    // For USD/XXX quote conventions (JPY etc.), callers pass the inverted USD-per-unit rate.
+    return { rate: explicitRate };
+  }
+
+  const pair = requiredAccountCurrencyUsdPair(code);
+  if (!pair) {
+    return { rate: 1 };
+  }
+
+  const raw =
+    marketPrices && isPositiveNumber(marketPrices[pair])
+      ? marketPrices[pair]
+      : null;
+
+  if (!isPositiveNumber(raw)) {
+    return {
+      rate: 0,
+      error: `Enter ${pair} conversion rate to size risk in ${code} (account currency ≠ USD)`,
+    };
+  }
+
+  if (pair.startsWith("USD/")) {
+    return { rate: 1 / raw };
+  }
+  return { rate: raw };
 }
 
 /** USD-base pairs (USD/JPY, USD/CHF, USD/CAD) need a user-entered quote for accurate pip value. */

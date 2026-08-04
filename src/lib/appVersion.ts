@@ -133,13 +133,15 @@ export function clearBuildMismatchFlag(): void {
 /**
  * Drop page/runtime caches, activate waiting SW if any, then hard-reload.
  * Prefer this over logout — same outcome without clearing the session.
+ *
+ * Important: use a plain reload (no __poscal_reload query). Concurrent
+ * location.replace + SW client.navigate races and can surface ERR_FAILED.
  */
 export async function forceAppRefresh(): Promise<void> {
   const GUARD_KEY = "poscal-last-force-refresh";
   try {
     const last = Number(sessionStorage.getItem(GUARD_KEY) || "0");
-    if (Date.now() - last < 15_000) {
-      // Avoid reload loops when SW activate + controllerchange both fire.
+    if (Date.now() - last < 8_000) {
       return;
     }
     sessionStorage.setItem(GUARD_KEY, String(Date.now()));
@@ -160,13 +162,10 @@ export async function forceAppRefresh(): Promise<void> {
       await Promise.all(
         registrations.map(async (registration) => {
           registration.waiting?.postMessage({ type: "SKIP_WAITING" });
-          try {
-            await registration.update();
-          } catch {
-            // ignore
-          }
         }),
       );
+      // Give skipWaiting a beat before reload so the new controller can attach.
+      await new Promise((resolve) => window.setTimeout(resolve, 150));
     }
   } catch {
     // ignore
@@ -179,12 +178,9 @@ export async function forceAppRefresh(): Promise<void> {
         keys
           .filter(
             (key) =>
-              key.includes("poscal")
-              || key.includes("workbox")
-              || key.includes("precache")
-              || key.startsWith("pages-")
-              || key === "poscal-pages"
-              || key === "poscal-static-runtime",
+              key === "poscal-pages"
+              || key === "poscal-static-runtime"
+              || key.includes("workbox-precache"),
           )
           .map((key) => caches.delete(key)),
       );
@@ -193,10 +189,19 @@ export async function forceAppRefresh(): Promise<void> {
     // ignore
   }
 
-  // Cache-bust navigation so NetworkFirst / CDN cannot reuse the old shell tab state.
-  const url = new URL(window.location.href);
-  // Drop prior bounce markers, then add a fresh one once.
-  url.searchParams.delete("__poscal_reload");
-  url.searchParams.set("__poscal_reload", String(Date.now()));
-  window.location.replace(url.toString());
+  // Strip previous botched cache-bust params, then plain reload of the same path.
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("__poscal_reload") || url.searchParams.has("__poscal_version")) {
+      url.searchParams.delete("__poscal_reload");
+      url.searchParams.delete("__poscal_version");
+      const cleaned = `${url.pathname}${url.search}${url.hash}` || "/";
+      window.location.replace(cleaned);
+      return;
+    }
+  } catch {
+    // fall through to reload
+  }
+
+  window.location.reload();
 }

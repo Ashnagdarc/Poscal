@@ -38,9 +38,11 @@ import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { usePWAUpdate } from "@/hooks/use-pwa-update";
 import { NotificationSettings } from "@/components/NotificationSettings";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { featureFlagApi, preferencesApi, subscriptionApi } from "@/lib/api";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
+import { clearSensitiveLocalStorage } from "@/lib/privacyCleanup";
 import type { AppFontId } from "@/lib/fonts";
 import { COMMON_TIMEZONES, detectBrowserTimeZone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
@@ -94,6 +96,8 @@ const Settings = () => {
   const { currency, setCurrency } = useCurrency();
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
+  const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
+  const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const supportsHaptics = typeof isSupported === "function" ? isSupported() : !!isSupported;
 
   const subscriptionLabel = getSubscriptionLabel({ isPaid, isTrial, subscriptionTier });
@@ -223,7 +227,7 @@ const Settings = () => {
   const clearHistory = async () => {
     await clearJournalEntries(user?.id);
     lightTap();
-    toast.success("Journal cleared");
+    toast.success("Saved calculations cleared");
   };
 
   const resetOnboarding = () => {
@@ -236,6 +240,7 @@ const Settings = () => {
   const handleLogout = async () => {
     lightTap();
     await signOut();
+    clearSensitiveLocalStorage();
     toast.success("Signed out");
     navigate("/signin");
   };
@@ -306,7 +311,7 @@ const Settings = () => {
         icon={<SettingsIcon className="h-5 w-5" />}
       />
 
-      <main className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-28 md:max-w-3xl">
+      <main id="main-content" className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-36 md:max-w-3xl">
         {/* Account hero */}
         <section>
           {user ? (
@@ -650,7 +655,13 @@ const Settings = () => {
               icon={<Smartphone className="h-4 w-4" />}
               title="Haptic feedback"
               subtitle={supportsHaptics ? "Vibration on interactions" : "Audio feedback active"}
-              trailing={<SettingsToggle enabled={hapticsEnabled} onToggle={toggleHaptics} />}
+              trailing={
+                <SettingsToggle
+                  enabled={hapticsEnabled}
+                  onToggle={toggleHaptics}
+                  ariaLabel="Haptic feedback"
+                />
+              }
               className="border-t border-border/40"
             />
 
@@ -734,9 +745,9 @@ const Settings = () => {
             <SettingsRow
               icon={<Trash2 className="h-4 w-4 text-destructive" />}
               iconClassName="bg-destructive/10"
-              title="Clear journal"
-              subtitle="Remove all saved entries"
-              onClick={clearHistory}
+              title="Clear saved calculations"
+              subtitle="Deletes calculator history only — not journal trades"
+              onClick={() => setShowClearHistoryConfirm(true)}
             />
             <SettingsRow
               icon={<RotateCcw className="h-4 w-4" />}
@@ -772,10 +783,10 @@ const Settings = () => {
         </section>
 
         {user && (
-          <section>
+          <section className="pb-4">
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => setShowSignOutConfirm(true)}
               className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/30 bg-destructive/10 px-5 py-4 font-semibold text-destructive transition-all active:scale-[0.98] hover:bg-destructive/15"
             >
               <LogOut className="h-4 w-4" />
@@ -784,11 +795,37 @@ const Settings = () => {
           </section>
         )}
 
-        <footer className="space-y-1 pb-2 pt-2 text-center">
+        <footer className="space-y-1 pb-8 pt-2 text-center">
           <p className="text-xs text-muted-foreground">Poscal · Position Size Calculator</p>
           <p className="text-[11px] text-muted-foreground/60">Officially sponsored by MandeFX</p>
         </footer>
       </main>
+
+      <ConfirmDialog
+        isOpen={showClearHistoryConfirm}
+        onClose={() => setShowClearHistoryConfirm(false)}
+        onConfirm={() => {
+          void clearHistory();
+        }}
+        title="Clear saved calculations?"
+        description="This removes calculator history only. Your journal trades, progress notes, and account data stay intact."
+        confirmText="Clear calculations"
+        cancelText="Cancel"
+        variant="destructive"
+      />
+
+      <ConfirmDialog
+        isOpen={showSignOutConfirm}
+        onClose={() => setShowSignOutConfirm(false)}
+        onConfirm={() => {
+          void handleLogout();
+        }}
+        title="Sign out?"
+        description="You will need your email and password to sign back in."
+        confirmText="Sign out"
+        cancelText="Stay signed in"
+        variant="destructive"
+      />
     </div>
   );
 };
@@ -912,15 +949,18 @@ function SettingsRow({
 function SettingsToggle({
   enabled,
   onToggle,
+  ariaLabel,
 }: {
   enabled: boolean;
   onToggle: () => void;
+  ariaLabel?: string;
 }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={enabled}
+      aria-label={ariaLabel ?? "Toggle"}
       onClick={onToggle}
       className={cn(
         "relative h-7 w-12 shrink-0 rounded-full transition-colors",

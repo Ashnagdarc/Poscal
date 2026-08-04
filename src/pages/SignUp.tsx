@@ -25,8 +25,12 @@ const SignUp = () => {
       return;
     }
 
-    if (password.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    if (password.length < 10) {
+      toast.error("Password must be at least 10 characters");
+      return;
+    }
+    if (!/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      toast.error("Password must include at least one letter and one number");
       return;
     }
 
@@ -37,7 +41,7 @@ const SignUp = () => {
 
     setIsLoading(true);
 
-    const { error } = await signUp(email, password, name);
+    const { error, signedIn } = await signUp(email, password, name);
 
     if (error) {
       if (error.includes("User already registered") || error.includes("already exists")) {
@@ -49,8 +53,31 @@ const SignUp = () => {
       return;
     }
 
-    toast.success("Account created!");
-    navigate("/");
+    const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+    const target =
+      returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
+        ? returnTo
+        : "/journal";
+
+    if (signedIn) {
+      // Soft mode (REQUIRE_EMAIL_VERIFICATION off) issues a session immediately.
+      // Hard mode only reaches here if the user is already verified.
+      toast.success("Account created!");
+      navigate(target, { replace: true });
+      setIsLoading(false);
+      return;
+    }
+
+    // Hard verification: Password `verify` did not open a session — finish OTP.
+    toast.success("Check your email for a verification code");
+    navigate("/verify-email", {
+      replace: true,
+      state: {
+        email: email.trim().toLowerCase(),
+        returnTo: target,
+        fromSignup: true,
+      },
+    });
     setIsLoading(false);
   };
 
@@ -109,8 +136,8 @@ const SignUp = () => {
           autoComplete="new-password"
           showPassword={showPassword}
           onTogglePassword={() => setShowPassword((current) => !current)}
-          hint="Must be at least 8 characters"
-          minLength={8}
+          hint="At least 10 characters, with a letter and a number"
+          minLength={10}
         />
 
         <AuthField
@@ -126,7 +153,7 @@ const SignUp = () => {
             placeholder="Re-enter your password"
             autoComplete="new-password"
             required
-            minLength={8}
+            minLength={10}
             className={authInputClassName}
           />
         </AuthField>
@@ -146,7 +173,7 @@ const SignUp = () => {
           )}
         </button>
 
-        <p className="pt-1 text-center text-xs leading-relaxed text-white/50">
+        <p className="pt-1 text-center text-xs leading-relaxed text-muted-foreground">
           By signing up, you agree to our{" "}
           <Link to="/terms" className="text-brand hover:underline">
             Terms

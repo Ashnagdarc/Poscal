@@ -1,8 +1,7 @@
-import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
-import { requireAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 
@@ -33,7 +32,7 @@ export const getForDay = query({
     journalId: journalIdArg,
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return null;
     }
@@ -68,7 +67,7 @@ export const listForUser = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx);
+    const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) {
       return [];
     }
@@ -104,8 +103,19 @@ export const upsertDay = mutation({
     journalCreated: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const userId = await requireAuthUserId(ctx);
+    const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
+
+    const noteCap = 8_000;
+    if (args.preMarketNotes && args.preMarketNotes.length > noteCap) {
+      throw new Error("Pre-market notes are too long");
+    }
+    if (args.postMarketNotes && args.postMarketNotes.length > noteCap) {
+      throw new Error("Post-market notes are too long");
+    }
+    if (args.tasks.length > 100) {
+      throw new Error("Too many checklist tasks");
+    }
 
     let existing =
       args.journalId
