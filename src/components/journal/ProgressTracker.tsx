@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useActionError } from "@/contexts/ActionErrorContext";
 import {
   useProgressDayQuery,
   useSaveProgressSessionMutation,
@@ -47,6 +48,7 @@ export const ProgressTracker = ({
   onDateKeyChange,
 }: ProgressTrackerProps) => {
   const { currency } = useCurrency();
+  const { showErrorFromUnknown } = useActionError();
   const [draft, setDraft] = useState<ProgressSession | null>(null);
 
   const dayQuery = useProgressDayQuery(dateKey);
@@ -130,7 +132,11 @@ export const ProgressTracker = ({
       toast.success("Day saved");
     } catch (error) {
       console.error("[progressTracker] Failed to save session", error);
-      toast.error("Failed to save day");
+      showErrorFromUnknown(error, {
+        title: "Couldn't save day",
+        fallbackMessage: "We couldn’t save today’s session notes.",
+        code: "PROGRESS",
+      });
     }
   };
 

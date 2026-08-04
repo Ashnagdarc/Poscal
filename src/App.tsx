@@ -3,6 +3,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { Suspense } from "react";
+import { ActionErrorProvider } from "@/contexts/ActionErrorContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
 import { FontProvider } from "@/contexts/FontContext";
@@ -137,21 +138,23 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <ErrorBoundary>
-        <Sonner />
-        <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          <AuthProvider>
-            <SubscriptionProvider>
-              <FontProvider>
-                <CurrencyProvider>
-                  <JournalProvider>
-                    <AppContent />
-                  </JournalProvider>
-                </CurrencyProvider>
-              </FontProvider>
-            </SubscriptionProvider>
-          </AuthProvider>
-        </BrowserRouter>
-        <Analytics />
+        <ActionErrorProvider>
+          <Sonner />
+          <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <AuthProvider>
+              <SubscriptionProvider>
+                <FontProvider>
+                  <CurrencyProvider>
+                    <JournalProvider>
+                      <AppContent />
+                    </JournalProvider>
+                  </CurrencyProvider>
+                </FontProvider>
+              </SubscriptionProvider>
+            </AuthProvider>
+          </BrowserRouter>
+          <Analytics />
+        </ActionErrorProvider>
       </ErrorBoundary>
     </TooltipProvider>
   </QueryClientProvider>

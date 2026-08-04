@@ -13,6 +13,7 @@ import {
 import type { TradingJournal } from "@/lib/tradingJournals";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useActionError } from "@/contexts/ActionErrorContext";
 
 export const JournalSwitcher = () => {
   const {
@@ -23,6 +24,7 @@ export const JournalSwitcher = () => {
     journalLimit,
     deleteJournal,
   } = useJournal();
+  const { showErrorFromUnknown } = useActionError();
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [journalToDelete, setJournalToDelete] = useState<TradingJournal | null>(null);
@@ -41,11 +43,11 @@ export const JournalSwitcher = () => {
       toast.success(`Deleted “${name}”`);
     } catch (error) {
       console.error("[journalSwitcher] Failed to delete journal", error);
-      toast.error(
-        error instanceof Error && !/Convex|VITE_|API_KEY|unavailable/i.test(error.message)
-          ? error.message
-          : "Failed to delete journal",
-      );
+      showErrorFromUnknown(error, {
+        title: "Couldn't delete journal",
+        fallbackMessage: "We couldn’t delete that journal.",
+        code: "JNL-DEL-BOOK",
+      });
     } finally {
       setIsDeleting(false);
     }

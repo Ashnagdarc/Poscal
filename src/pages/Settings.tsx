@@ -25,6 +25,7 @@ import {
 } from "lucide-react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
+import { useActionError } from "@/contexts/ActionErrorContext";
 import { useAppFont } from "@/contexts/useAppFont";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -74,6 +75,7 @@ const getSubscriptionLabel = ({
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
+  const { showErrorFromUnknown } = useActionError();
   const { isPaid, isTrial, subscriptionTier, expiresAt, refreshSubscription } = useSubscription();
   const { isAdmin } = useAdmin();
   const { fontId, options: fontOptions, setFontId } = useAppFont();
@@ -285,7 +287,11 @@ const Settings = () => {
       const tier = result?.data?.tier || "premium";
       toast.success(`Purchase restored successfully (${tier}).`);
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Restore failed. Please contact support."));
+      showErrorFromUnknown(error, {
+        title: "Restore failed",
+        fallbackMessage: "We couldn’t restore your purchase. Try again or contact support.",
+        code: "RESTORE",
+      });
     } finally {
       setIsRestoringPurchase(false);
     }

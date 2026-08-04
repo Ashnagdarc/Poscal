@@ -37,6 +37,7 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import { toast } from "sonner";
+import { useActionError } from "@/contexts/ActionErrorContext";
 import { preferencesApi } from "@/lib/api";
 import {
   buildMonthlyReturnsGrid,
@@ -74,31 +75,6 @@ const RESULT_OPTIONS: Array<{ value: SavedCalculationStatus; label: string }> = 
   { value: "breakeven", label: "Breakeven" },
   { value: "cancelled", label: "Cancelled" },
 ];
-
-/** Surface Convex auth / validation reasons instead of a generic failure toast. */
-const toTradeSaveToastMessage = (error: unknown, fallback: string): string => {
-  const raw = error instanceof Error ? error.message : String(error ?? "");
-  const uncaught = raw.match(/Uncaught Error:\s*(.+?)(?:\n|$)/i)?.[1]?.trim();
-  const candidate = uncaught || raw;
-
-  if (/not authenticated/i.test(candidate)) {
-    return "Please sign in again to save trades";
-  }
-  if (/journal not found/i.test(candidate)) {
-    return "Journal not found. Switch journals and try again.";
-  }
-  if (/unsupported|invalid trade pair|trade pair is required|p&l|position size|risk percent|notes are too long/i.test(candidate)) {
-    return candidate.length <= 160 ? candidate : fallback;
-  }
-  if (
-    candidate
-    && !/\[CONVEX|VITE_|API_KEY|Request ID|@convex|\.ts:|\.js:|\n/i.test(candidate)
-    && candidate.length <= 160
-  ) {
-    return candidate;
-  }
-  return fallback;
-};
 
 const STATUS_META: Record<SavedCalculationStatus, { label: string; className: string }> = {
   open: {
@@ -161,6 +137,7 @@ const parseNumericInput = (value: string) => {
 
 const Journal = () => {
   const { user } = useAuth();
+  const { showErrorFromUnknown } = useActionError();
   const {
     activeJournal,
     activeJournalId,
@@ -367,7 +344,11 @@ const Journal = () => {
       toast.success("Calculation deleted");
     } catch (error) {
       console.error("[journal] Failed to delete calculation", error);
-      toast.error("Failed to delete calculation");
+      showErrorFromUnknown(error, {
+        title: "Couldn't delete calculation",
+        fallbackMessage: "We couldn’t delete that calculation.",
+        code: "JNL-DEL-CALC",
+      });
     } finally {
       setItemToDelete(null);
     }
@@ -395,7 +376,11 @@ const Journal = () => {
       toast.success("Trade result saved");
     } catch (error) {
       console.error("[journal] Failed to save trade result", error);
-      toast.error("Failed to save trade result");
+      showErrorFromUnknown(error, {
+        title: "Couldn't save trade result",
+        fallbackMessage: "We couldn’t save that trade result.",
+        code: "JNL-RESULT",
+      });
     }
   };
 
@@ -454,7 +439,11 @@ const Journal = () => {
       setTradeToEdit(null);
     } catch (error) {
       console.error("[journal] Failed to save manual trade", error);
-      toast.error(toTradeSaveToastMessage(error, "Failed to save trade"));
+      showErrorFromUnknown(error, {
+        title: "Couldn't save trade",
+        fallbackMessage: "We couldn’t save that trade. Check the symbol and details, then try again.",
+        code: "JNL-SAVE",
+      });
     }
   };
 
@@ -466,7 +455,11 @@ const Journal = () => {
       toast.success("Trade deleted");
     } catch (error) {
       console.error("[journal] Failed to delete manual trade", error);
-      toast.error(toTradeSaveToastMessage(error, "Failed to delete trade"));
+      showErrorFromUnknown(error, {
+        title: "Couldn't delete trade",
+        fallbackMessage: "We couldn’t delete that trade.",
+        code: "JNL-DEL",
+      });
     } finally {
       setTradeToDelete(null);
     }

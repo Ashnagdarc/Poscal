@@ -32,6 +32,11 @@ import {
   priceStepForPair,
   sanitizePriceInput,
 } from "@/lib/pairFormat";
+import {
+  SUPPORTED_PAIR_SUGGESTIONS,
+  formatPairTokenForDisplay,
+  validateTradePairInput,
+} from "@/lib/supportedPairs";
 import { cn } from "@/lib/utils";
 
 interface ManualTradeSheetProps {
@@ -104,6 +109,8 @@ export const ManualTradeSheet = ({
 }: ManualTradeSheetProps) => {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [showMore, setShowMore] = useState(false);
+  const [pairError, setPairError] = useState<string | null>(null);
+  const [pairSuggestion, setPairSuggestion] = useState<string | null>(null);
 
   const priceDecimals = useMemo(() => getPairPriceDecimals(form.pair), [form.pair]);
   const pricePlaceholder = useMemo(() => pricePlaceholderForPair(form.pair), [form.pair]);
@@ -112,6 +119,9 @@ export const ManualTradeSheet = ({
 
   useEffect(() => {
     if (!open) return;
+
+    setPairError(null);
+    setPairSuggestion(null);
 
     if (trade) {
       const pair = canonicalizePairSymbol(trade.pair);
@@ -164,9 +174,9 @@ export const ManualTradeSheet = ({
     });
   };
 
-  const handlePairBlur = () => {
+  const applyPairSymbol = (raw: string) => {
+    const pair = canonicalizePairSymbol(raw);
     setForm((current) => {
-      const pair = canonicalizePairSymbol(current.pair);
       if (!pair || pair === current.pair) {
         return current.pair === pair ? current : { ...current, pair };
       }
@@ -188,22 +198,46 @@ export const ManualTradeSheet = ({
           : "",
       };
     });
+
+    if (!pair.trim()) {
+      setPairError(null);
+      setPairSuggestion(null);
+      return;
+    }
+
+    const validation = validateTradePairInput(pair);
+    if (validation.ok) {
+      setPairError(null);
+      setPairSuggestion(null);
+      return;
+    }
+    setPairError(validation.message);
+    setPairSuggestion(validation.suggestion);
+  };
+
+  const handlePairBlur = () => {
+    applyPairSymbol(form.pair);
+  };
+
+  const acceptPairSuggestion = () => {
+    if (!pairSuggestion) return;
+    applyPairSymbol(formatPairTokenForDisplay(pairSuggestion));
   };
 
   const handleSubmit = async () => {
     if (isSaving) return;
 
     const pair = canonicalizePairSymbol(form.pair);
-    if (!pair) {
-      toast.error("Enter a symbol");
+    const pairValidation = validateTradePairInput(pair);
+    if (!pairValidation.ok) {
+      setPairError(pairValidation.message);
+      setPairSuggestion(pairValidation.suggestion);
+      toast.error(pairValidation.message);
       return;
     }
 
-    const pairToken = pair.toUpperCase().replace(/[^A-Z0-9]/g, "");
-    if (pairToken === "INVALID" || pairToken.includes("INVALID")) {
-      toast.error("Enter a valid trading symbol");
-      return;
-    }
+    setPairError(null);
+    setPairSuggestion(null);
 
     const pnlValue = isClosed ? parsePriceInput(form.pnl) : null;
     if (isClosed && (pnlValue === null || !Number.isFinite(pnlValue))) {
@@ -262,16 +296,48 @@ export const ManualTradeSheet = ({
               <Label htmlFor="pair">Symbol</Label>
               <Input
                 id="pair"
-                placeholder="EURUSD or EUR/USD"
+                list="supported-trade-pairs"
+                placeholder="XAUUSD or EUR/USD"
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck={false}
+                aria-invalid={Boolean(pairError)}
+                aria-describedby={pairError ? "pair-error" : undefined}
                 value={form.pair}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, pair: event.target.value.toUpperCase() }))
-                }
+                onChange={(event) => {
+                  setPairError(null);
+                  setPairSuggestion(null);
+                  setForm((current) => ({ ...current, pair: event.target.value.toUpperCase() }));
+                }}
                 onBlur={handlePairBlur}
+                className={cn(pairError && "border-destructive focus-visible:ring-destructive")}
               />
+              <datalist id="supported-trade-pairs">
+                {SUPPORTED_PAIR_SUGGESTIONS.map((symbol) => (
+                  <option key={symbol} value={symbol} />
+                ))}
+              </datalist>
+              {pairError ? (
+                <div
+                  id="pair-error"
+                  className="space-y-1.5 rounded-xl border border-destructive/30 bg-destructive/5 px-3 py-2"
+                >
+                  <p className="text-xs leading-relaxed text-destructive">{pairError}</p>
+                  {pairSuggestion ? (
+                    <button
+                      type="button"
+                      onClick={acceptPairSuggestion}
+                      className="text-xs font-semibold text-foreground underline-offset-2 hover:underline"
+                    >
+                      Use {formatPairTokenForDisplay(pairSuggestion)}
+                    </button>
+                  ) : null}
+                </div>
+              ) : (
+                <p className="text-[11px] text-muted-foreground">
+                  Full symbols only — e.g. XAUUSD (not XAUUS), EURUSD, BTCUSD.
+                </p>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
