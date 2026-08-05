@@ -11,7 +11,11 @@ export const notifyPwaUpdateAvailable = (
 ): boolean => {
   if (!registration?.waiting || typeof window === "undefined") return false;
 
-  localStorage.setItem(PENDING_UPDATE_KEY, "true");
+  try {
+    localStorage.setItem(PENDING_UPDATE_KEY, "true");
+  } catch {
+    // Storage can be unavailable in private browsing or under quota pressure.
+  }
   window.dispatchEvent(
     new CustomEvent<PWAUpdateEventDetail>(UPDATE_EVENT_NAME, {
       detail: { registration },
@@ -71,12 +75,12 @@ export const waitForServiceWorkerUpdate = async (
       watchWorker(registration.installing);
     };
 
-    registration.addEventListener("updatefound", onUpdateFound);
-    watchWorker(registration.installing);
-
     const timeoutId = window.setTimeout(() => {
       finish(Boolean(registration.waiting));
     }, timeoutMs);
+
+    registration.addEventListener("updatefound", onUpdateFound);
+    watchWorker(registration.installing);
 
     void registration
       .update()

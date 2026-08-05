@@ -2,11 +2,6 @@
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
 const SW_VERSION = 'v29-nav-request-fix';
-// Auto-activate new SW builds so installs leave waiting state. Clients reload
-// on controllerchange / SW_ACTIVATED (see use-pwa-update + appVersion).
-// Do NOT client.navigate() on activate — that races with location.replace
-// (?__poscal_reload=…) and produces NetworkFirst crashes + error responses.
-const MIGRATE_AUTO_ACTIVATE = true;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -149,9 +144,6 @@ workbox.routing.setCatchHandler(async ({ request }) => {
 
 self.addEventListener('install', (event) => {
   log(`Installing ${SW_VERSION}...`);
-  if (MIGRATE_AUTO_ACTIVATE) {
-    self.skipWaiting();
-  }
 });
 
 self.addEventListener('message', (event) => {

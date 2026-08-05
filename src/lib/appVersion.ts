@@ -267,30 +267,9 @@ export async function forceAppRefresh(): Promise<void> {
       });
     }
 
-    // 3) Drop offline shells so the next load cannot serve dead chunks.
-    try {
-      if ("caches" in window) {
-        const keys = await caches.keys();
-        await Promise.all(
-          keys
-            .filter(
-              (key) =>
-                key.includes("poscal")
-                || key.includes("workbox")
-                || key.includes("precache")
-                || key.startsWith("pages-")
-                || key === "poscal-pages"
-                || key === "poscal-static-runtime"
-                || key.startsWith("poscal-assets"),
-            )
-            .map((key) => caches.delete(key)),
-        );
-      }
-    } catch {
-      // ignore
-    }
-
-    // 4) Always leave this document. No silent return paths.
+    // 3) Workbox owns its precache lifecycle. Deleting it here would leave the
+    // active worker without its offline app shell before the next navigation.
+    // Always leave this document. No silent return paths.
     hardNavigateAway();
   })().finally(() => {
     // Keep the promise sticky until unload; if still alive, allow a retry.
