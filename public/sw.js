@@ -1,9 +1,11 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v28-swr-safe';
+const SW_VERSION = 'v29-nav-request-fix';
 // Auto-activate new SW builds so installs leave waiting state. Clients reload
 // on controllerchange / SW_ACTIVATED (see use-pwa-update + appVersion).
+// Do NOT client.navigate() on activate — that races with location.replace
+// (?__poscal_reload=…) and produces NetworkFirst crashes + error responses.
 const MIGRATE_AUTO_ACTIVATE = true;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
@@ -97,28 +99,52 @@ const navigationStrategy = new workbox.strategies.NetworkFirst({
 
 workbox.routing.registerRoute(
   ({ request, url }) => request.mode === 'navigate' && url.origin === self.location.origin,
-  async ({ event }) => {
+  async ({ event, request }) => {
+    // Workbox StrategyHandler requires `request` — `.handle({ event })` alone
+    // throws: Cannot read properties of undefined (reading 'url') in getCacheKey.
     try {
-      return await navigationStrategy.handle({ event });
+      return await navigationStrategy.handle({ event, request });
     } catch (err) {
-      const cachedIndex = await caches.match(workbox.precaching.getCacheKeyForURL('/index.html'));
+      log('navigation strategy failed, trying cached shell', request.url, err);
+      const cachedIndex =
+        (await caches.match(workbox.precaching.getCacheKeyForURL('/index.html')))
+        || (await caches.match('/index.html'));
       if (cachedIndex) return cachedIndex;
-      const offline = await caches.match('/index.html');
-      if (offline) return offline;
-      throw err;
+      try {
+        return await fetch(request);
+      } catch {
+        return new Response('Offline', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: { 'Content-Type': 'text/plain' },
+        });
+      }
     }
   }
 );
 
-// Last resort: uncaught route failures should not surface as fatal SW errors.
+// Last resort for unmatched failures — prefer a real shell over Response.error()
+// (error responses surface as "FetchEvent … network error response" in Chrome).
 workbox.routing.setCatchHandler(async ({ request }) => {
-  if (request.mode === 'navigate') {
+  if (request?.mode === 'navigate') {
     const cachedIndex =
       (await caches.match(workbox.precaching.getCacheKeyForURL('/index.html')))
       || (await caches.match('/index.html'));
     if (cachedIndex) return cachedIndex;
+    try {
+      return await fetch(request);
+    } catch {
+      return new Response('Offline', {
+        status: 503,
+        headers: { 'Content-Type': 'text/plain' },
+      });
+    }
   }
-  return Response.error();
+  try {
+    return await fetch(request);
+  } catch {
+    return new Response('', { status: 503, statusText: 'Service Unavailable' });
+  }
 });
 
 self.addEventListener('install', (event) => {
@@ -157,15 +183,13 @@ self.addEventListener('activate', (event) => {
       );
 
       await self.clients.claim();
+      // Notify open tabs only. Never client.navigate() here — concurrent
+      // location.replace with ?__poscal_reload races NetworkFirst and can show
+      // "FetchEvent resulted in a network error response".
       const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       await Promise.all(
         allClients.map((client) => {
           client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
-          // Force open clients onto the new NetworkFirst shell after migration /
-          // prompted updates activate. Without this, stuck PWAs keep old JS in memory.
-          if (typeof client.navigate === 'function') {
-            return client.navigate(client.url).catch(() => undefined);
-          }
           return undefined;
         }),
       );

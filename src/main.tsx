@@ -10,6 +10,20 @@ import "./index.css";
 
 initErrorReporting();
 
+// Unstick tabs that landed on the old ?__poscal_reload cache-bust URL
+// (SW NetworkFirst crashed navigating those; clean the bar then continue).
+try {
+  const stranded = new URL(window.location.href);
+  if (stranded.searchParams.has("__poscal_reload") || stranded.searchParams.has("__poscal_version")) {
+    stranded.searchParams.delete("__poscal_reload");
+    stranded.searchParams.delete("__poscal_version");
+    const clean = `${stranded.pathname}${stranded.search}${stranded.hash}` || "/";
+    window.location.replace(clean);
+  }
+} catch {
+  // ignore
+}
+
 const SW_REGISTRATION_TIMEOUT_MS = 5000;
 /** Check CDN + SW for a new release more often so sessions don't stick to a stale shell. */
 const UPDATE_POLL_MS = 60 * 1000;

@@ -193,10 +193,7 @@ export async function forceAppRefresh(): Promise<void> {
     // ignore
   }
 
-  // Cache-bust navigation so NetworkFirst / CDN cannot reuse the old shell tab state.
-  const url = new URL(window.location.href);
-  // Drop prior bounce markers, then add a fresh one once.
-  url.searchParams.delete("__poscal_reload");
-  url.searchParams.set("__poscal_reload", String(Date.now()));
-  window.location.replace(url.toString());
+  // Plain reload — avoid __poscal_reload query params that race the SW on
+  // navigation (NetworkFirst + activate navigate caused production crashes).
+  window.location.reload();
 }
