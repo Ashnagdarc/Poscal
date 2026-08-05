@@ -7,7 +7,7 @@
       "destination": "/api/$1"
     },
     {
-      "source": "/((?!api/|sw\\.js|manifest\\.webmanifest|workbox-).*)",
+      "source": "/((?!api/|assets/|sw\\.js|manifest\\.webmanifest|workbox-).*)",
       "destination": "/index.html"
     }
   ],
