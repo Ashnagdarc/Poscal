@@ -28,7 +28,6 @@ export const usePWAUpdate = () => {
       ? Boolean(navigator.serviceWorker.controller)
       : false,
   );
-  const userRequestedUpdateRef = useRef(false);
   const versionCheckInFlight = useRef(false);
   const lastVersionCheckAt = useRef(0);
 
@@ -37,7 +36,7 @@ export const usePWAUpdate = () => {
   }, []);
 
   const showUpdate = useCallback((registration: ServiceWorkerRegistration | null | undefined) => {
-    if (!registration?.waiting && !registration?.installing) return false;
+    if (!registration?.waiting) return false;
 
     registrationRef.current = registration;
     notifyPwaUpdateAvailable(registration);
@@ -91,8 +90,7 @@ export const usePWAUpdate = () => {
 
     const handleUpdateAvailable = (event: Event) => {
       const detail = (event as CustomEvent<PWAUpdateEventDetail>).detail;
-      if (!detail?.registration) return;
-      if (!detail.registration.waiting && !detail.registration.installing) return;
+      if (!detail?.registration?.waiting) return;
       registrationRef.current = detail.registration;
       try {
         localStorage.setItem(PENDING_UPDATE_KEY, "true");
@@ -102,41 +100,30 @@ export const usePWAUpdate = () => {
       markUpdateAvailable();
     };
 
-    // Reload only after the user asked to update (skipWaiting → new controller).
-    // Do not also reload on SW_ACTIVATED + navigate races (that caused ERR_FAILED).
+    // Any new controlling worker means this tab's JS graph may be obsolete.
+    // Always reload once the new SW takes over (standard PWA safe reload).
     const handleControllerChange = () => {
       if (!hadControllerRef.current) {
         hadControllerRef.current = true;
         return;
       }
-      if (!userRequestedUpdateRef.current) {
-        // New SW claimed without explicit update click — surface the banner instead
-        // of force-navigating (avoids mid-session hard reload loops).
-        markUpdateAvailable();
-        return;
-      }
-      userRequestedUpdateRef.current = false;
-      window.location.reload();
+      void forceAppRefresh();
     };
 
-    const handleSwMessage = (event: MessageEvent) => {
-      if (event.data?.type !== "SW_ACTIVATED") return;
-      if (userRequestedUpdateRef.current) {
-        userRequestedUpdateRef.current = false;
-        window.location.reload();
-        return;
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "SW_ACTIVATED") {
+        // SW auto-activated (migration). Force a clean load of the new shell.
+        void forceAppRefresh();
       }
-      // New SW claimed without explicit click — prompt, don't force-navigate.
-      markUpdateAvailable();
     };
 
     window.addEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-    navigator.serviceWorker.addEventListener("message", handleSwMessage);
+    navigator.serviceWorker.addEventListener("message", handleMessage);
 
     navigator.serviceWorker.ready
       .then((registration) => {
-        if (registration.waiting || registration.installing) {
+        if (registration.waiting) {
           showUpdate(registration);
           return;
         }
@@ -154,7 +141,7 @@ export const usePWAUpdate = () => {
     return () => {
       window.removeEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.removeEventListener("message", handleSwMessage);
+      navigator.serviceWorker.removeEventListener("message", handleMessage);
     };
   }, [markUpdateAvailable, showUpdate]);
 
@@ -229,7 +216,6 @@ export const usePWAUpdate = () => {
 
   const updateApp = useCallback(async () => {
     setIsUpdating(true);
-    userRequestedUpdateRef.current = true;
     await forceAppRefresh();
   }, []);
 

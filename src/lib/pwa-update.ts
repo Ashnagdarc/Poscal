@@ -5,19 +5,13 @@ export interface PWAUpdateEventDetail {
   registration: ServiceWorkerRegistration;
 }
 
-/** Mark a waiting/installing worker as an available update and notify UI listeners. */
+/** Mark a waiting worker as an available update and notify all UI listeners. */
 export const notifyPwaUpdateAvailable = (
   registration: ServiceWorkerRegistration | null | undefined,
 ): boolean => {
-  if (typeof window === "undefined" || !registration) return false;
-  // Prefer waiting; installing is also a signal (about to wait after install).
-  if (!registration.waiting && !registration.installing) return false;
+  if (!registration?.waiting || typeof window === "undefined") return false;
 
-  try {
-    localStorage.setItem(PENDING_UPDATE_KEY, "true");
-  } catch {
-    // ignore
-  }
+  localStorage.setItem(PENDING_UPDATE_KEY, "true");
   window.dispatchEvent(
     new CustomEvent<PWAUpdateEventDetail>(UPDATE_EVENT_NAME, {
       detail: { registration },

@@ -1,11 +1,10 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v27-prompt-update';
-// Keep new SW in `waiting` until the in-app "Update now" sends SKIP_WAITING.
-// Auto skipWaiting stranded PWAs: no waiting worker → update banner never
-// wired → mid-session claim mixed old JS with new caches and crashed.
-const MIGRATE_AUTO_ACTIVATE = false;
+const SW_VERSION = 'v25-auto-refresh';
+// Auto-activate new SW builds so installs leave waiting state. Clients reload
+// on controllerchange / SW_ACTIVATED (see use-pwa-update + appVersion).
+const MIGRATE_AUTO_ACTIVATE = true;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -79,12 +78,15 @@ self.addEventListener('activate', (event) => {
       );
 
       await self.clients.claim();
-      // Notify open tabs so the in-app banner can appear. Do NOT client.navigate —
-      // that races with location.reload/replace and causes ERR_FAILED in Chrome.
       const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
       await Promise.all(
         allClients.map((client) => {
           client.postMessage({ type: 'SW_ACTIVATED', version: SW_VERSION });
+          // Force open clients onto the new NetworkFirst shell after migration /
+          // prompted updates activate. Without this, stuck PWAs keep old JS in memory.
+          if (typeof client.navigate === 'function') {
+            return client.navigate(client.url).catch(() => undefined);
+          }
           return undefined;
         }),
       );
