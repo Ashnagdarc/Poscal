@@ -307,18 +307,18 @@ const Settings = () => {
     lightTap();
     setIsCheckingUpdate(true);
     try {
-      // Always force cache drop + SW skipWaiting + reload. A plain reload alone
-      // leaves a stuck workbox precache and can boot into the crash shell.
-      void checkForUpdate();
-      toast.message("Updating Poscal…");
-      await updateApp();
+      const found = await checkForUpdate();
+      if (found || updateAvailable) {
+        toast.message("Updating Poscal…");
+        await updateApp();
+        return;
+      }
+
+      // No waiting worker — hard reload to pick up a fresh NetworkFirst shell.
+      toast.message("Refreshing Poscal…");
+      window.location.reload();
     } catch {
       toast.error("Could not update the app");
-      try {
-        await updateApp();
-      } catch {
-        window.location.reload();
-      }
     } finally {
       setIsCheckingUpdate(false);
     }
