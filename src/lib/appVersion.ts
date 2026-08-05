@@ -5,6 +5,8 @@
 
 export const BUILD_MISMATCH_EVENT = "poscal:build-mismatch";
 export const STALE_BUILD_KEY = "poscal-stale-build";
+/** After a user-triggered update, suppress the banner until the entry hash changes. */
+export const UPDATE_DISMISS_ENTRY_KEY = "poscal-update-dismissed-entry";
 
 /** Hash/list of module scripts currently running in this document. */
 export function getLoadedBuildSignature(): string {
@@ -39,6 +41,13 @@ function normalizeAssetUrl(url: string): string {
   }
 }
 
+/** Prefer the Vite entry chunk (`/assets/index-*.js`) for staleness checks. */
+export function pickIndexEntry(signature: string): string | null {
+  const parts = signature.split("|").filter(Boolean);
+  const entry = parts.find((p) => /\/index-[^/]+\.js$/.test(p));
+  return entry ?? null;
+}
+
 /** Extract asset paths from a freshly fetched index.html. */
 export function extractBuildSignatureFromHtml(html: string): string {
   const assets = new Set<string>();
@@ -63,6 +72,7 @@ export async function fetchRemoteBuildSignature(): Promise<string | null> {
   if (typeof window === "undefined") return null;
 
   try {
+    // Cache-bust query only — keep path stable so CDN serves the current index.
     const response = await fetch(`/?__poscal_version=${Date.now()}`, {
       cache: "no-store",
       credentials: "same-origin",
@@ -73,6 +83,8 @@ export async function fetchRemoteBuildSignature(): Promise<string | null> {
     });
     if (!response.ok) return null;
     const html = await response.text();
+    // Guard against SW/SPA mistakes serving non-HTML bodies.
+    if (!html.includes("<html") && !html.includes("<script")) return null;
     const signature = extractBuildSignatureFromHtml(html);
     return signature || null;
   } catch {
@@ -80,6 +92,11 @@ export async function fetchRemoteBuildSignature(): Promise<string | null> {
   }
 }
 
+/**
+ * True only when the running Vite entry differs from the one on the CDN.
+ * Avoid full asset-graph compares — DOM loads a subset of index modulepreloads,
+ * which previously false-flagged "stale" forever and stuck the Update banner.
+ */
 export async function isClientBuildStale(): Promise<boolean> {
   const remote = await fetchRemoteBuildSignature();
   if (!remote) return false;
@@ -87,29 +104,18 @@ export async function isClientBuildStale(): Promise<boolean> {
   const local = getLoadedBuildSignature();
   if (!local) return false;
 
-  // Compare entry-ish assets: local may only include the entry module + preloads;
-  // remote index lists all modulepreloads. If every local asset is present remotely
-  // and remote has a different entry graph, still count as stale when signatures differ.
-  if (local === remote) return false;
+  const remoteEntry = pickIndexEntry(remote);
+  const localEntry = pickIndexEntry(local);
 
-  // Require the main entry chunk in local to appear in remote to avoid partial HTML parses.
-  const localParts = local.split("|").filter(Boolean);
-  const remoteParts = new Set(remote.split("|").filter(Boolean));
-  const shared = localParts.filter((part) => remoteParts.has(part));
-  // Stale if the page lost more than half its current asset graph against the new index.
-  if (shared.length === localParts.length && localParts.length > 0) {
-    // Local is a subset of remote — usual when remote has more preloads. Not stale yet
-    // unless remote introduced a NEW index entry that local doesn't know.
-    // Check index entry scripts (non-chunk names often start with index-).
-    const remoteEntries = remote.split("|").filter((p) => /\/index-[^/]+\.js$/.test(p));
-    const localEntries = localParts.filter((p) => /\/index-[^/]+\.js$/.test(p));
-    if (remoteEntries.length > 0 && localEntries.length > 0) {
-      return remoteEntries.some((entry) => !localEntries.includes(entry));
-    }
-    return false;
+  if (localEntry && remoteEntry) {
+    return localEntry !== remoteEntry;
   }
 
-  return true;
+  // Fallback without entry names: only "stale" if a loaded local asset is gone remotely.
+  const remoteParts = new Set(remote.split("|").filter(Boolean));
+  const localParts = local.split("|").filter(Boolean);
+  if (localParts.length === 0) return false;
+  return localParts.some((part) => !remoteParts.has(part));
 }
 
 export function notifyBuildMismatch(): void {
@@ -130,6 +136,30 @@ export function clearBuildMismatchFlag(): void {
   }
 }
 
+/** Remember which entry the user already refreshed onto so the banner stays down. */
+export function dismissUpdateForCurrentBuild(): void {
+  if (typeof window === "undefined") return;
+  const entry = pickIndexEntry(getLoadedBuildSignature());
+  if (!entry) return;
+  try {
+    sessionStorage.setItem(UPDATE_DISMISS_ENTRY_KEY, entry);
+  } catch {
+    // ignore
+  }
+}
+
+export function isUpdateDismissedForCurrentBuild(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const dismissed = sessionStorage.getItem(UPDATE_DISMISS_ENTRY_KEY);
+    if (!dismissed) return false;
+    const current = pickIndexEntry(getLoadedBuildSignature());
+    return Boolean(current && current === dismissed);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Drop page/runtime caches, activate waiting SW if any, then hard-navigate.
  * Prefer this over logout — same outcome without clearing the session.
@@ -145,6 +175,8 @@ function cleanNavigationUrl(): string {
     const url = new URL(window.location.href);
     url.searchParams.delete("__poscal_reload");
     url.searchParams.delete("__poscal_version");
+    url.searchParams.delete("_");
+    url.searchParams.delete("_t");
     return `${url.pathname}${url.search}${url.hash}` || "/";
   } catch {
     return "/";
@@ -154,6 +186,7 @@ function cleanNavigationUrl(): string {
 function hardNavigateAway(): void {
   const target = cleanNavigationUrl();
   try {
+    // Bust intermediate caches without a sticky ?__poscal_reload param.
     window.location.replace(target);
   } catch {
     // ignore
@@ -162,7 +195,7 @@ function hardNavigateAway(): void {
   // escalate after a short delay.
   window.setTimeout(() => {
     try {
-      window.location.href = target === "/" ? `/?_=${Date.now()}` : `${target}${target.includes("?") ? "&" : "?"}_=${Date.now()}`;
+      window.location.reload();
     } catch {
       // ignore
     }
@@ -183,6 +216,7 @@ export async function forceAppRefresh(): Promise<void> {
 
   forceRefreshInFlight = (async () => {
     clearBuildMismatchFlag();
+    dismissUpdateForCurrentBuild();
     try {
       localStorage.removeItem("poscal-pwa-pending-update");
     } catch {

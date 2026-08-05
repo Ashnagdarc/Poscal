@@ -3,8 +3,10 @@ import {
   BUILD_MISMATCH_EVENT,
   STALE_BUILD_KEY,
   clearBuildMismatchFlag,
+  dismissUpdateForCurrentBuild,
   forceAppRefresh,
   isClientBuildStale,
+  isUpdateDismissedForCurrentBuild,
   notifyBuildMismatch,
 } from "@/lib/appVersion";
 import {
@@ -16,8 +18,8 @@ import {
 } from "@/lib/pwa-update";
 
 /** How often to probe the CDN for a newer index (focused tab only). */
-const VERSION_POLL_MS = 60_000;
-const VERSION_CHECK_DEBOUNCE_MS = 2_500;
+const VERSION_POLL_MS = 90_000;
+const VERSION_CHECK_DEBOUNCE_MS = 5_000;
 
 export const usePWAUpdate = () => {
   const [updateAvailable, setUpdateAvailable] = useState(false);
@@ -28,11 +30,26 @@ export const usePWAUpdate = () => {
       ? Boolean(navigator.serviceWorker.controller)
       : false,
   );
+  /** Only auto-reload on controllerchange when the user clicked Update. */
+  const userRequestedUpdateRef = useRef(false);
   const versionCheckInFlight = useRef(false);
   const lastVersionCheckAt = useRef(0);
 
   const markUpdateAvailable = useCallback(() => {
+    if (isUpdateDismissedForCurrentBuild()) return;
     setUpdateAvailable(true);
+  }, []);
+
+  const hideUpdate = useCallback(() => {
+    registrationRef.current = null;
+    try {
+      localStorage.removeItem(PENDING_UPDATE_KEY);
+    } catch {
+      // ignore
+    }
+    clearBuildMismatchFlag();
+    dismissUpdateForCurrentBuild();
+    setUpdateAvailable(false);
   }, []);
 
   const showUpdate = useCallback((registration: ServiceWorkerRegistration | null | undefined) => {
@@ -43,17 +60,6 @@ export const usePWAUpdate = () => {
     markUpdateAvailable();
     return true;
   }, [markUpdateAvailable]);
-
-  const clearPendingUpdate = useCallback(() => {
-    registrationRef.current = null;
-    try {
-      localStorage.removeItem(PENDING_UPDATE_KEY);
-    } catch {
-      // ignore
-    }
-    clearBuildMismatchFlag();
-    setUpdateAvailable(false);
-  }, []);
 
   const checkBuildVersion = useCallback(async () => {
     if (typeof document !== "undefined" && document.visibilityState === "hidden") {
@@ -70,21 +76,32 @@ export const usePWAUpdate = () => {
     try {
       const stale = await isClientBuildStale();
       if (stale) {
+        // Real new entry on CDN — ignore session dismiss for that older entry.
         notifyBuildMismatch();
-        markUpdateAvailable();
+        if (!isUpdateDismissedForCurrentBuild()) {
+          setUpdateAvailable(true);
+        }
         return true;
       }
+
+      // Fresh enough — never keep a leftover banner.
+      clearBuildMismatchFlag();
+      try {
+        localStorage.removeItem(PENDING_UPDATE_KEY);
+      } catch {
+        // ignore
+      }
+      setUpdateAvailable(false);
       return false;
     } catch {
       return false;
     } finally {
       versionCheckInFlight.current = false;
     }
-  }, [markUpdateAvailable]);
+  }, []);
 
   useEffect(() => {
     if (!("serviceWorker" in navigator)) {
-      // Still version-check non-SW clients (desktop browser without SW).
       return;
     }
 
@@ -100,38 +117,39 @@ export const usePWAUpdate = () => {
       markUpdateAvailable();
     };
 
-    // Any new controlling worker means this tab's JS graph may be obsolete.
-    // Always reload once the new SW takes over (standard PWA safe reload).
     const handleControllerChange = () => {
       if (!hadControllerRef.current) {
         hadControllerRef.current = true;
         return;
       }
-      void forceAppRefresh();
-    };
-
-    const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === "SW_ACTIVATED") {
-        // SW auto-activated (migration). Force a clean load of the new shell.
+      // Auto skipWaiting used to force reload on every SW_ACTIVATED and trap
+      // users in a refresh/banner loop. Only reload after explicit "Update now".
+      if (userRequestedUpdateRef.current) {
+        userRequestedUpdateRef.current = false;
         void forceAppRefresh();
       }
     };
 
     window.addEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
-    navigator.serviceWorker.addEventListener("message", handleMessage);
 
     navigator.serviceWorker.ready
-      .then((registration) => {
+      .then(async (registration) => {
         if (registration.waiting) {
           showUpdate(registration);
           return;
         }
+        // Never trust leftover flags alone — re-verify against the CDN.
         if (
           localStorage.getItem(PENDING_UPDATE_KEY) === "true"
           || localStorage.getItem(STALE_BUILD_KEY) === "true"
         ) {
-          markUpdateAvailable();
+          const stillStale = await isClientBuildStale();
+          if (stillStale) {
+            markUpdateAvailable();
+          } else {
+            hideUpdate();
+          }
         }
       })
       .catch(() => {
@@ -141,19 +159,13 @@ export const usePWAUpdate = () => {
     return () => {
       window.removeEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
-      navigator.serviceWorker.removeEventListener("message", handleMessage);
     };
-  }, [markUpdateAvailable, showUpdate]);
+  }, [hideUpdate, markUpdateAvailable, showUpdate]);
 
   useEffect(() => {
     const onBuildMismatch = () => markUpdateAvailable();
     window.addEventListener(BUILD_MISMATCH_EVENT, onBuildMismatch);
 
-    if (localStorage.getItem(STALE_BUILD_KEY) === "true") {
-      markUpdateAvailable();
-    }
-
-    // Immediate + periodic probe so users see deploys without logging out.
     void checkBuildVersion();
     const intervalId = window.setInterval(() => {
       void checkBuildVersion();
@@ -194,37 +206,34 @@ export const usePWAUpdate = () => {
         if (showUpdate(registration)) return;
 
         const found = await waitForServiceWorkerUpdate(registration);
-        if (!found || !showUpdate(registration)) {
-          // Pending SW flag may be stale — still check CDN version.
-          const stale = await checkBuildVersion();
-          if (!stale) {
-            try {
-              localStorage.removeItem(PENDING_UPDATE_KEY);
-            } catch {
-              // ignore
-            }
-          }
+        if (found && showUpdate(registration)) return;
+
+        const stale = await isClientBuildStale();
+        if (stale) {
+          markUpdateAvailable();
+          return;
         }
+        hideUpdate();
       } catch {
-        // keep banner if build is stale
         void checkBuildVersion();
       }
     };
 
     void verifyPendingUpdate();
-  }, [checkBuildVersion, showUpdate]);
+  }, [checkBuildVersion, hideUpdate, markUpdateAvailable, showUpdate]);
 
   const updateApp = useCallback(async () => {
     if (isUpdating) return;
     setIsUpdating(true);
+    userRequestedUpdateRef.current = true;
 
-    // Leave this arming until the document unloads. forceAppRefresh() resolves
-    // as soon as navigation is *started*, not after it finishes — clearing a
-    // timer in `finally` used to cancel the only escape hatch.
-    window.setTimeout(() => {
+    // Hide immediately — clicking Update should not leave a ghost banner after reload.
+    hideUpdate();
+
+    const stuckTimer = window.setTimeout(() => {
       setIsUpdating(false);
       try {
-        window.location.href = `/?_t=${Date.now()}`;
+        window.location.reload();
       } catch {
         // ignore
       }
@@ -249,8 +258,9 @@ export const usePWAUpdate = () => {
         // ignore
       }
       setIsUpdating(false);
+      window.clearTimeout(stuckTimer);
     }
-  }, [isUpdating]);
+  }, [hideUpdate, isUpdating]);
 
   const checkForUpdate = useCallback(async () => {
     let found = false;
