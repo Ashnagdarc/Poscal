@@ -131,69 +131,139 @@ export function clearBuildMismatchFlag(): void {
 }
 
 /**
- * Drop page/runtime caches, activate waiting SW if any, then hard-reload.
+ * Drop page/runtime caches, activate waiting SW if any, then hard-navigate.
  * Prefer this over logout — same outcome without clearing the session.
+ *
+ * Important: always ends in a document navigation. Early returns used to leave
+ * the "Updating…" button spinning forever when a prior refresh was guarded
+ * or when the SW failed the reload FetchEvent.
  */
+let forceRefreshInFlight: Promise<void> | null = null;
+
+function cleanNavigationUrl(): string {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("__poscal_reload");
+    url.searchParams.delete("__poscal_version");
+    return `${url.pathname}${url.search}${url.hash}` || "/";
+  } catch {
+    return "/";
+  }
+}
+
+function hardNavigateAway(): void {
+  const target = cleanNavigationUrl();
+  try {
+    window.location.replace(target);
+  } catch {
+    // ignore
+  }
+  // If the replace is swallowed by a broken SW (navigation never unloads),
+  // escalate after a short delay.
+  window.setTimeout(() => {
+    try {
+      window.location.href = target === "/" ? `/?_=${Date.now()}` : `${target}${target.includes("?") ? "&" : "?"}_=${Date.now()}`;
+    } catch {
+      // ignore
+    }
+  }, 1_500);
+  window.setTimeout(() => {
+    try {
+      window.location.href = "/";
+    } catch {
+      // ignore
+    }
+  }, 3_500);
+}
+
 export async function forceAppRefresh(): Promise<void> {
-  const GUARD_KEY = "poscal-last-force-refresh";
-  try {
-    const last = Number(sessionStorage.getItem(GUARD_KEY) || "0");
-    if (Date.now() - last < 15_000) {
-      // Avoid reload loops when SW activate + controllerchange both fire.
-      return;
+  if (forceRefreshInFlight) {
+    return forceRefreshInFlight;
+  }
+
+  forceRefreshInFlight = (async () => {
+    clearBuildMismatchFlag();
+    try {
+      localStorage.removeItem("poscal-pwa-pending-update");
+    } catch {
+      // ignore
     }
-    sessionStorage.setItem(GUARD_KEY, String(Date.now()));
-  } catch {
-    // sessionStorage unavailable — continue
-  }
 
-  clearBuildMismatchFlag();
-  try {
-    localStorage.removeItem("poscal-pwa-pending-update");
-  } catch {
-    // ignore
-  }
-
-  try {
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      await Promise.all(
-        registrations.map(async (registration) => {
-          registration.waiting?.postMessage({ type: "SKIP_WAITING" });
-          try {
-            await registration.update();
-          } catch {
-            // ignore
-          }
-        }),
-      );
+    // 1) Ask any waiting worker to become active.
+    let hasWaiting = false;
+    try {
+      if ("serviceWorker" in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(
+          registrations.map(async (registration) => {
+            if (registration.waiting) {
+              hasWaiting = true;
+              registration.waiting.postMessage({ type: "SKIP_WAITING" });
+            }
+            try {
+              await registration.update();
+            } catch {
+              // ignore
+            }
+          }),
+        );
+      }
+    } catch {
+      // ignore
     }
-  } catch {
-    // ignore
-  }
 
-  try {
-    if ("caches" in window) {
-      const keys = await caches.keys();
-      await Promise.all(
-        keys
-          .filter(
-            (key) =>
-              key.includes("poscal")
-              || key.includes("workbox")
-              || key.includes("precache")
-              || key.startsWith("pages-")
-              || key === "poscal-pages"
-              || key === "poscal-static-runtime",
-          )
-          .map((key) => caches.delete(key)),
-      );
+    // 2) Give controllerchange a moment when we just SKIP_WAITED.
+    if (hasWaiting && "serviceWorker" in navigator) {
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+          window.clearTimeout(timeoutId);
+          resolve();
+        };
+        const onChange = () => done();
+        navigator.serviceWorker.addEventListener("controllerchange", onChange);
+        const timeoutId = window.setTimeout(done, 2_000);
+        // Already active / no controller yet — don't block the full 2s forever.
+        if (!navigator.serviceWorker.controller) {
+          window.setTimeout(done, 300);
+        }
+      });
     }
-  } catch {
-    // ignore
-  }
 
-  // Plain reload — avoid __poscal_reload query params that race the SW on
-  // navigation (NetworkFirst + activate navigate caused production crashes).
-  window.location.reload();
+    // 3) Drop offline shells so the next load cannot serve dead chunks.
+    try {
+      if ("caches" in window) {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys
+            .filter(
+              (key) =>
+                key.includes("poscal")
+                || key.includes("workbox")
+                || key.includes("precache")
+                || key.startsWith("pages-")
+                || key === "poscal-pages"
+                || key === "poscal-static-runtime"
+                || key.startsWith("poscal-assets"),
+            )
+            .map((key) => caches.delete(key)),
+        );
+      }
+    } catch {
+      // ignore
+    }
+
+    // 4) Always leave this document. No silent return paths.
+    hardNavigateAway();
+  })().finally(() => {
+    // Keep the promise sticky until unload; if still alive, allow a retry.
+    window.setTimeout(() => {
+      forceRefreshInFlight = null;
+    }, 4_000);
+  });
+
+  return forceRefreshInFlight;
 }

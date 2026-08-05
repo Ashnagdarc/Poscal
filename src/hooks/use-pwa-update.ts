@@ -215,9 +215,42 @@ export const usePWAUpdate = () => {
   }, [checkBuildVersion, showUpdate]);
 
   const updateApp = useCallback(async () => {
+    if (isUpdating) return;
     setIsUpdating(true);
-    await forceAppRefresh();
-  }, []);
+
+    // Leave this arming until the document unloads. forceAppRefresh() resolves
+    // as soon as navigation is *started*, not after it finishes — clearing a
+    // timer in `finally` used to cancel the only escape hatch.
+    window.setTimeout(() => {
+      setIsUpdating(false);
+      try {
+        window.location.href = `/?_t=${Date.now()}`;
+      } catch {
+        // ignore
+      }
+    }, 6_000);
+
+    try {
+      const registration =
+        registrationRef.current
+        ?? ("serviceWorker" in navigator
+          ? (await navigator.serviceWorker.getRegistration("/")) ?? null
+          : null);
+
+      if (registration?.waiting) {
+        registration.waiting.postMessage({ type: "SKIP_WAITING" });
+      }
+
+      await forceAppRefresh();
+    } catch {
+      try {
+        window.location.href = "/";
+      } catch {
+        // ignore
+      }
+      setIsUpdating(false);
+    }
+  }, [isUpdating]);
 
   const checkForUpdate = useCallback(async () => {
     let found = false;
