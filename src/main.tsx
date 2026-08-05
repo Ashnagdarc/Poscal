@@ -40,9 +40,9 @@ const requestUpdateCheck = (registration: ServiceWorkerRegistration) => {
 };
 
 const watchRegistrationForUpdates = (registration: ServiceWorkerRegistration) => {
-  // A waiting worker means a new build is ready — prompt the user instead of
-  // silently swapping without a reload (which strands PWAs on half-applied caches).
-  if (registration.waiting && navigator.serviceWorker.controller) {
+  // A waiting or installing worker means a new build is ready — prompt the user
+  // instead of silently swapping without a reload (strands PWAs mid-session).
+  if ((registration.waiting || registration.installing) && navigator.serviceWorker.controller) {
     notifyPwaUpdateAvailable(registration);
   }
 

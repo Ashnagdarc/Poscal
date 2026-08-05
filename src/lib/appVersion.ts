@@ -142,6 +142,8 @@ export async function forceAppRefresh(): Promise<void> {
   try {
     const last = Number(sessionStorage.getItem(GUARD_KEY) || "0");
     if (Date.now() - last < 8_000) {
+      // Already mid-refresh — one plain reload is enough to break loops.
+      window.location.reload();
       return;
     }
     sessionStorage.setItem(GUARD_KEY, String(Date.now()));
@@ -159,13 +161,40 @@ export async function forceAppRefresh(): Promise<void> {
   try {
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
+      const controllerChanged = new Promise<void>((resolve) => {
+        let settled = false;
+        const done = () => {
+          if (settled) return;
+          settled = true;
+          navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+          resolve();
+        };
+        const onChange = () => done();
+        navigator.serviceWorker.addEventListener("controllerchange", onChange);
+        window.setTimeout(done, 2_000);
+      });
+
       await Promise.all(
         registrations.map(async (registration) => {
-          registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+          // Waiting worker is the normal path after install without auto skipWaiting.
+          if (registration.waiting) {
+            registration.waiting.postMessage({ type: "SKIP_WAITING" });
+            return;
+          }
+          // Rare: still installing; kick update and wait a beat.
+          if (registration.installing) {
+            registration.installing.postMessage({ type: "SKIP_WAITING" });
+          }
+          try {
+            await registration.update();
+            registration.waiting?.postMessage({ type: "SKIP_WAITING" });
+          } catch {
+            // ignore
+          }
         }),
       );
-      // Give skipWaiting a beat before reload so the new controller can attach.
-      await new Promise((resolve) => window.setTimeout(resolve, 150));
+
+      await controllerChanged;
     }
   } catch {
     // ignore

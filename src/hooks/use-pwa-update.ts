@@ -37,7 +37,7 @@ export const usePWAUpdate = () => {
   }, []);
 
   const showUpdate = useCallback((registration: ServiceWorkerRegistration | null | undefined) => {
-    if (!registration?.waiting) return false;
+    if (!registration?.waiting && !registration?.installing) return false;
 
     registrationRef.current = registration;
     notifyPwaUpdateAvailable(registration);
@@ -91,7 +91,8 @@ export const usePWAUpdate = () => {
 
     const handleUpdateAvailable = (event: Event) => {
       const detail = (event as CustomEvent<PWAUpdateEventDetail>).detail;
-      if (!detail?.registration?.waiting) return;
+      if (!detail?.registration) return;
+      if (!detail.registration.waiting && !detail.registration.installing) return;
       registrationRef.current = detail.registration;
       try {
         localStorage.setItem(PENDING_UPDATE_KEY, "true");
@@ -118,12 +119,24 @@ export const usePWAUpdate = () => {
       window.location.reload();
     };
 
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type !== "SW_ACTIVATED") return;
+      if (userRequestedUpdateRef.current) {
+        userRequestedUpdateRef.current = false;
+        window.location.reload();
+        return;
+      }
+      // New SW claimed without explicit click — prompt, don't force-navigate.
+      markUpdateAvailable();
+    };
+
     window.addEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
     navigator.serviceWorker.addEventListener("controllerchange", handleControllerChange);
+    navigator.serviceWorker.addEventListener("message", handleSwMessage);
 
     navigator.serviceWorker.ready
       .then((registration) => {
-        if (registration.waiting) {
+        if (registration.waiting || registration.installing) {
           showUpdate(registration);
           return;
         }
@@ -141,6 +154,7 @@ export const usePWAUpdate = () => {
     return () => {
       window.removeEventListener(UPDATE_EVENT_NAME, handleUpdateAvailable);
       navigator.serviceWorker.removeEventListener("controllerchange", handleControllerChange);
+      navigator.serviceWorker.removeEventListener("message", handleSwMessage);
     };
   }, [markUpdateAvailable, showUpdate]);
 

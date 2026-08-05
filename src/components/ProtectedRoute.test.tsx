@@ -8,7 +8,7 @@ const mockGetPaidLock = vi.fn();
 const mockUseAuth = vi.fn();
 const mockUseSubscription = vi.fn();
 const mockUseAdmin = vi.fn();
-const mockUseQuery = vi.fn();
+const mockIsClientEmailVerificationRequired = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   featureFlagApi: {
@@ -16,8 +16,8 @@ vi.mock("@/lib/api", () => ({
   },
 }));
 
-vi.mock("convex/react", () => ({
-  useQuery: (...args: unknown[]) => mockUseQuery(...args),
+vi.mock("@/lib/emailVerificationClient", () => ({
+  isClientEmailVerificationRequired: () => mockIsClientEmailVerificationRequired(),
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -57,9 +57,9 @@ describe("ProtectedRoute", () => {
   beforeEach(() => {
     vi.useRealTimers();
     mockGetPaidLock.mockReset();
-    mockUseQuery.mockReset();
-    // Default: soft mode (REQUIRE_EMAIL_VERIFICATION off).
-    mockUseQuery.mockReturnValue({ requireEmailVerification: false });
+    mockIsClientEmailVerificationRequired.mockReset();
+    // Default: soft mode
+    mockIsClientEmailVerificationRequired.mockReturnValue(false);
     mockUseAuth.mockReturnValue({
       user: { id: "u1", email: "u@test.com", email_verified: true },
       loading: false,
@@ -86,7 +86,7 @@ describe("ProtectedRoute", () => {
       user: { id: "u1", email: "u@test.com", email_verified: false },
       loading: false,
     });
-    mockUseQuery.mockReturnValue({ requireEmailVerification: false });
+    mockIsClientEmailVerificationRequired.mockReturnValue(false);
     mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
@@ -100,7 +100,7 @@ describe("ProtectedRoute", () => {
       user: { id: "u1", email: "u@test.com", email_verified: false },
       loading: false,
     });
-    mockUseQuery.mockReturnValue({ requireEmailVerification: true });
+    mockIsClientEmailVerificationRequired.mockReturnValue(true);
     mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
@@ -108,12 +108,12 @@ describe("ProtectedRoute", () => {
     expect(await screen.findByText("Verify Email Page")).toBeInTheDocument();
   });
 
-  it("fails open (no verify redirect) while verification policy is loading", async () => {
+  it("fails open (no verify redirect) when client hard-verify env is unset", async () => {
     mockUseAuth.mockReturnValue({
       user: { id: "u1", email: "u@test.com", email_verified: false },
       loading: false,
     });
-    mockUseQuery.mockReturnValue(undefined);
+    mockIsClientEmailVerificationRequired.mockReturnValue(false);
     mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
@@ -121,15 +121,31 @@ describe("ProtectedRoute", () => {
     expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 
-  it("allows unpaid users when paid lock is disabled", async () => {
-    mockGetPaidLock.mockResolvedValue(false);
+  it("fails open when paid lock request hangs", async () => {
+    vi.useFakeTimers();
+    mockGetPaidLock.mockImplementation(() => new Promise(() => {}));
+
+    renderAt("/journal");
+
+    expect(screen.getByText("Journal Content")).toBeInTheDocument();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+
+    expect(screen.getByText("Journal Content")).toBeInTheDocument();
+    expect(screen.queryByText("Upgrade Page")).not.toBeInTheDocument();
+  });
+
+  it("fails open when paid lock request rejects", async () => {
+    mockGetPaidLock.mockRejectedValue(new Error("network"));
 
     renderAt("/journal");
 
     expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 
-  it("redirects unpaid users to upgrade when paid lock is enabled", async () => {
+  it("redirects free users only after paid lock is confirmed on", async () => {
     mockGetPaidLock.mockResolvedValue(true);
 
     renderAt("/journal");
@@ -137,30 +153,15 @@ describe("ProtectedRoute", () => {
     expect(await screen.findByText("Upgrade Page")).toBeInTheDocument();
   });
 
-  it("fails open when paid lock fetch errors", async () => {
-    mockGetPaidLock.mockRejectedValue(new Error("flag down"));
+  it("allows free users when paid lock is confirmed off", async () => {
+    mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
 
     expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 
-  it("fails open when paid lock fetch times out", async () => {
-    vi.useFakeTimers();
-    mockGetPaidLock.mockImplementation(() => new Promise(() => undefined));
-
-    renderAt("/journal");
-
-    expect(screen.getByText("Journal Content")).toBeInTheDocument();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-
-    expect(screen.getByText("Journal Content")).toBeInTheDocument();
-  });
-
-  it("allows paid users when paid lock is enabled", async () => {
+  it("allows paid users regardless of paid lock", async () => {
     mockUseSubscription.mockReturnValue({ isPaid: true, isTrial: false, isLoading: false });
     mockGetPaidLock.mockResolvedValue(true);
 

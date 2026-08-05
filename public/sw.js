@@ -1,10 +1,11 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v26-safe-reload';
-// Auto-activate new SW builds so installs leave waiting state. Clients reload
-// only after an in-app "Update now" (see use-pwa-update) — do not client.navigate here.
-const MIGRATE_AUTO_ACTIVATE = true;
+const SW_VERSION = 'v27-prompt-update';
+// Keep new SW in `waiting` until the in-app "Update now" sends SKIP_WAITING.
+// Auto skipWaiting stranded PWAs: no waiting worker → update banner never
+// wired → mid-session claim mixed old JS with new caches and crashed.
+const MIGRATE_AUTO_ACTIVATE = false;
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper

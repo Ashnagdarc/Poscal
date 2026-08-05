@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useQuery } from "convex/react";
 import { toast } from "sonner";
 import { AuthFooter, AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField, authInputClassName } from "@/components/auth/AuthField";
 import { useAuth } from "@/contexts/AuthContext";
-import { api } from "../../convex/_generated/api";
+import { isClientEmailVerificationRequired } from "@/lib/emailVerificationClient";
 
 type VerifyLocationState = {
   email?: string;
@@ -26,9 +25,8 @@ const VerifyEmail = () => {
   const location = useLocation();
   const { user, loading, verifyEmail, resendVerification, signOut } = useAuth();
   const locationState = (location.state as VerifyLocationState | null) ?? null;
-  const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy);
-  const requireEmailVerification = verificationPolicy?.requireEmailVerification === true;
-  const softMode = verificationPolicy !== undefined && !requireEmailVerification;
+  const requireEmailVerification = isClientEmailVerificationRequired();
+  const softMode = !requireEmailVerification;
 
   const [email, setEmail] = useState(
     () => locationState?.email?.trim().toLowerCase() || user?.email || "",
@@ -137,7 +135,7 @@ const VerifyEmail = () => {
     toast.success("If verification is pending, a new code was sent.");
   };
 
-  if (loading || verificationPolicy === undefined) {
+  if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">

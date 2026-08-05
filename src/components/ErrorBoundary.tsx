@@ -73,7 +73,10 @@ export class ErrorBoundary extends Component<Props, State> {
     const needsHardReload =
       message.includes("dynamically imported module") ||
       message.includes("Failed to fetch") ||
-      message.includes("must be used within");
+      message.includes("must be used within") ||
+      // Stale PWA after deploy often hits missing Convex functions once.
+      message.includes("Could not find public function") ||
+      message.includes("authSettings:getVerificationPolicy");
 
     this.setState({
       hasError: false,
@@ -82,7 +85,27 @@ export class ErrorBoundary extends Component<Props, State> {
     });
 
     if (needsHardReload) {
-      window.location.reload();
+      // Drop page caches + plain reload so "Try again" escapes a bad SW shell.
+      void (async () => {
+        try {
+          if ("caches" in window) {
+            const keys = await caches.keys();
+            await Promise.all(
+              keys
+                .filter(
+                  (key) =>
+                    key === "poscal-pages"
+                    || key === "poscal-static-runtime"
+                    || key.includes("workbox-precache"),
+                )
+                .map((key) => caches.delete(key)),
+            );
+          }
+        } catch {
+          // ignore
+        }
+        window.location.reload();
+      })();
     }
   };
 
