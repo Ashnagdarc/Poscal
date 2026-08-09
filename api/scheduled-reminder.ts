@@ -1,4 +1,4 @@
-import { convexServerClient, api } from './_convex.js';
+import { listExpiringSubscriptionsHttp } from './lib/paymentSyncClient.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
@@ -59,11 +59,15 @@ export default async function handler(req: any, res: any) {
   const now = new Date();
   const soon = new Date(now.getTime() + REMINDER_DAYS * 24 * 60 * 60 * 1000);
 
-  const expiring = await convexServerClient.mutation(api.admin.listExpiringSubscriptions, {
-    secret: PAYMENT_SYNC_SECRET,
-    fromMs: now.getTime(),
-    toMs: soon.getTime(),
-  });
+  let expiring;
+  try {
+    expiring = await listExpiringSubscriptionsHttp(now.getTime(), soon.getTime());
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Failed to list expiring subscriptions',
+    });
+  }
 
   // 2. Send reminder emails via Resend (if configured)
   const results: Array<any> = [];

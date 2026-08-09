@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
 import { deleteAuthSessionsForUser } from "./lib/sessionInvalidation";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
@@ -20,20 +21,8 @@ export const viewer = query({
       return null;
     }
 
-    const byUserId = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
-      .first();
-
-    const email = user.email?.trim().toLowerCase();
-    const byEmail = email
-      ? await ctx.db
-          .query("profiles")
-          .withIndex("by_email", (q) => q.eq("email", email))
-          .first()
-      : null;
-
-    const profile = byUserId ?? byEmail;
+    // Privileged fields only from own profile — never fall back to a foreign email match.
+    const profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
 
     return {
       id: user._id,
@@ -66,23 +55,9 @@ export const viewerProfile = query({
       return null;
     }
 
-    const byUserId = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
-      .first();
-
-    const email = user.email?.trim().toLowerCase();
-    const byEmail = email
-      ? await ctx.db
-          .query("profiles")
-          .withIndex("by_email", (q) => q.eq("email", email))
-          .first()
-      : null;
-
-    const profile = byUserId ?? byEmail;
+    const profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
     const avatarUrl =
       profile?.avatarUrl ??
-      byEmail?.avatarUrl ??
       user.avatarUrl ??
       user.image ??
       null;
@@ -156,17 +131,7 @@ export const markJournalTourCompleted = mutation({
     }
 
     const now = Date.now();
-    let profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
-      .first();
-
-    if (!profile && user.email) {
-      profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_email", (q) => q.eq("email", user.email!.trim().toLowerCase()))
-        .first();
-    }
+    let profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
 
     if (profile) {
       if (profile.journalTourCompletedAtMs) {
@@ -326,17 +291,7 @@ export const saveAvatar = mutation({
       pendingAvatarUploadAtMs: null,
     });
 
-    let profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
-      .first();
-
-    if (!profile && user.email) {
-      profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_email", (q) => q.eq("email", user.email!.trim().toLowerCase()))
-        .first();
-    }
+    let profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
 
     if (profile) {
       const previousProfileStorageId = profile.avatarStorageId;

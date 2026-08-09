@@ -133,15 +133,15 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
   "EUR/GBP": {
     ...forexMajor("EUR/GBP", "Euro / British Pound"),
     pipValuePerStandardLot: 0,
-    warning: "Enter a GBP/USD conversion rate for USD account sizing.",
+    warning: "Pip value uses automatic GBP/USD conversion.",
   },
   "EUR/JPY": {
     ...forexJpy("EUR/JPY", "Euro / Japanese Yen"),
-    warning: "Enter a USD/JPY conversion rate for USD account sizing.",
+    warning: "Pip value uses automatic USD/JPY conversion.",
   },
   "GBP/JPY": {
     ...forexJpy("GBP/JPY", "British Pound / Japanese Yen"),
-    warning: "Enter a USD/JPY conversion rate for USD account sizing.",
+    warning: "Pip value uses automatic USD/JPY conversion.",
   },
 
   // ============== CRYPTO ==============

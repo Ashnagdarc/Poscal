@@ -9,6 +9,7 @@ const mockUseAuth = vi.fn();
 const mockUseSubscription = vi.fn();
 const mockUseAdmin = vi.fn();
 const mockIsClientEmailVerificationRequired = vi.fn();
+const mockUseQuery = vi.fn();
 
 vi.mock("@/lib/api", () => ({
   featureFlagApi: {
@@ -18,6 +19,22 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/emailVerificationClient", () => ({
   isClientEmailVerificationRequired: () => mockIsClientEmailVerificationRequired(),
+}));
+
+vi.mock("@/lib/paymentsConfig", () => ({
+  isPaymentsEnabled: () => true,
+}));
+
+vi.mock("convex/react", () => ({
+  useQuery: (...args: unknown[]) => mockUseQuery(...args),
+}));
+
+vi.mock("../../convex/_generated/api", () => ({
+  api: {
+    authSettings: {
+      getVerificationPolicy: "authSettings.getVerificationPolicy",
+    },
+  },
 }));
 
 vi.mock("@/contexts/AuthContext", () => ({
@@ -58,8 +75,10 @@ describe("ProtectedRoute", () => {
     vi.useRealTimers();
     mockGetPaidLock.mockReset();
     mockIsClientEmailVerificationRequired.mockReset();
+    mockUseQuery.mockReset();
     // Default: soft mode
     mockIsClientEmailVerificationRequired.mockReturnValue(false);
+    mockUseQuery.mockReturnValue({ requireEmailVerification: false });
     mockUseAuth.mockReturnValue({
       user: { id: "u1", email: "u@test.com", email_verified: true },
       loading: false,
@@ -100,6 +119,7 @@ describe("ProtectedRoute", () => {
       user: { id: "u1", email: "u@test.com", email_verified: false },
       loading: false,
     });
+    mockUseQuery.mockReturnValue({ requireEmailVerification: true });
     mockIsClientEmailVerificationRequired.mockReturnValue(true);
     mockGetPaidLock.mockResolvedValue(false);
 

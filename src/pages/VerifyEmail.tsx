@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQuery } from "convex/react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { AuthFooter, AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField, authInputClassName } from "@/components/auth/AuthField";
 import { useAuth } from "@/contexts/AuthContext";
 import { isClientEmailVerificationRequired } from "@/lib/emailVerificationClient";
+import { api } from "../../convex/_generated/api";
 
 type VerifyLocationState = {
   email?: string;
@@ -25,7 +27,10 @@ const VerifyEmail = () => {
   const location = useLocation();
   const { user, loading, verifyEmail, resendVerification, signOut } = useAuth();
   const locationState = (location.state as VerifyLocationState | null) ?? null;
-  const requireEmailVerification = isClientEmailVerificationRequired();
+  // Convex REQUIRE_EMAIL_VERIFICATION is authoritative; Vite env is load-time fallback only.
+  const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy, {});
+  const requireEmailVerification =
+    verificationPolicy?.requireEmailVerification ?? isClientEmailVerificationRequired();
   const softMode = !requireEmailVerification;
 
   const [email, setEmail] = useState(

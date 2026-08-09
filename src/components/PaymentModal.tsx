@@ -21,9 +21,11 @@ import { Badge } from '@/components/ui/badge';
 import { AlertCircle, Check, CheckCircle2, ShieldCheck } from 'lucide-react';
 import { toast } from 'sonner';
 import { subscriptionApi } from '@/lib/api';
+import { isPaymentsEnabled } from '@/lib/paymentsConfig';
 import { PLAN_OPTIONS, PAYMENT_CURRENCY, type PlanId } from '@/lib/pricing';
 
 const PAYSTACK_FALLBACK_TIMEOUT_MS = 30_000;
+const PAYMENTS_ENABLED = isPaymentsEnabled();
 
 const CHECKLIST_ITEMS = [
   'Full access to trading journal',
@@ -63,6 +65,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
   const userId = user?.id || '';
 
   useEffect(() => {
+    if (!PAYMENTS_ENABLED) return;
     if (!document.getElementById('paystack-inline-js')) {
       const script = document.createElement('script');
       script.id = 'paystack-inline-js';
@@ -85,24 +88,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     }
   }, [isOpen]);
 
-  const computeExpiryIso = (planId: PlanId): string => {
-    const date = new Date();
-    switch (planId) {
-      case 'monthly':
-        date.setMonth(date.getMonth() + 1);
-        break;
-      case 'yearly':
-        date.setFullYear(date.getFullYear() + 1);
-        break;
-      default: {
-        const _exhaustive: never = planId;
-        throw new Error(`Unhandled plan: ${_exhaustive}`);
-      }
-    }
-    return date.toISOString();
-  };
-
   const handlePay = () => {
+    if (!PAYMENTS_ENABLED) {
+      toast.info('Checkout is temporarily turned off. Premium sales will return soon.');
+      return;
+    }
     if (!publicKey) {
       setErrorMessage('Payments are temporarily unavailable. Please contact support.');
       setPaymentStatus('error');
@@ -156,12 +146,21 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
     setErrorMessage('');
     try {
       if (typeof window.PaystackPop.setup === 'function') {
+        if (!userId) {
+          throw new Error('Missing user id. Please sign in again.');
+        }
+        // Must match api/lib/paymentReference parseChargeSuccessReference.
+        const paymentReference = `psk_${userId}_${selectedPlan.id}_${Date.now()}`;
         const handler = window.PaystackPop.setup({
           key: publicKey,
           email: effectiveUserEmail,
           amount: selectedPlan.amount,
           currency: PAYMENT_CURRENCY,
+          ref: paymentReference,
           metadata: {
+            userId,
+            planId: selectedPlan.id,
+            productTier: tier,
             custom_fields: [
               {
                 display_name: 'Plan',
@@ -177,23 +176,12 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             setPaymentStatus('success');
             suppressCloseToastRef.current = false;
             try {
-              if (!response?.reference) {
+              const reference = response?.reference || paymentReference;
+              if (!reference) {
                 throw new Error('Missing payment reference from Paystack.');
               }
-              if (!userId) {
-                throw new Error('Missing user id. Please sign in again.');
-              }
               await subscriptionApi.verifyPayment({
-                reference: response.reference,
-                userId,
-                tier,
-                amount: selectedPlan.amount,
-                currency: PAYMENT_CURRENCY,
-                expiresAt: computeExpiryIso(selectedPlan.id),
-                metadata: {
-                  planId: selectedPlan.id,
-                  planName: selectedPlan.name,
-                },
+                reference,
               });
               await refreshSubscription();
               toast.success('Subscription activated. Welcome aboard.');
@@ -282,7 +270,25 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
             </div>
           )}
 
-          {paymentStatus !== 'success' && paymentStatus !== 'error' && (
+          {paymentStatus !== 'success' && paymentStatus !== 'error' && !PAYMENTS_ENABLED && (
+            <div className="space-y-4 px-6 py-10 text-center">
+              <ShieldCheck className="mx-auto h-14 w-14 text-muted-foreground" />
+              <div>
+                <h3 className="mb-2 font-display text-lg font-semibold text-foreground">
+                  Checkout is paused
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  Paystack billing is temporarily turned off. You still have full access to the
+                  calculator and journal while checkout is offline.
+                </p>
+              </div>
+              <Button onClick={onClose} className="w-full rounded-xl">
+                Back to app
+              </Button>
+            </div>
+          )}
+
+          {paymentStatus !== 'success' && paymentStatus !== 'error' && PAYMENTS_ENABLED && (
             <div>
               <div className="relative overflow-hidden bg-foreground px-6 pb-10 pt-12 text-background">
                 <p className="font-display text-sm font-semibold uppercase tracking-[0.18em] text-brand-foreground/70">

@@ -20,7 +20,9 @@ describe("supportedPairs", () => {
   it("explains unknown symbols with a suggestion when possible", () => {
     const result = validateTradePairInput("XAUUS");
     expect(result.ok).toBe(false);
-    if (result.ok) return;
+    if (result.ok === true) {
+      throw new Error("expected invalid pair");
+    }
     expect(result.suggestion).toBe("XAUUSD");
     expect(result.message).toMatch(/Did you mean XAU\/USD/i);
   });

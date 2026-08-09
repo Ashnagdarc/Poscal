@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 describe("Calculator sizing dependencies", () => {
-  it("does not import useRealtimePrices for position sizing", () => {
+  it("auto-loads conversion rates instead of a realtime price hook", () => {
     const source = readFileSync(
       join(dirname(fileURLToPath(import.meta.url)), "Calculator.tsx"),
       "utf8",
@@ -12,7 +12,7 @@ describe("Calculator sizing dependencies", () => {
 
     expect(source).not.toMatch(/useRealtimePrices/);
     expect(source).not.toMatch(/use-realtime-prices/);
-    expect(source).not.toMatch(/priceSnapshots/);
+    expect(source).toMatch(/useAutoMarketPrices/);
     expect(source).toMatch(/conversionRate/);
     expect(source).toMatch(/userMarketPrices/);
   });

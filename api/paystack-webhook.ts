@@ -1,9 +1,9 @@
-import { convexServerClient, api } from './_convex.js';
 import {
   parseSuccessfulCharge,
   verifyPaystackSignature,
   type PaystackWebhookEvent,
 } from './lib/paystackWebhookCore.js';
+import { syncSubscriptionFromPaymentHttp } from './lib/paymentSyncClient.js';
 
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
@@ -57,8 +57,7 @@ export default async function handler(req: any, res: any) {
     }
 
     if (parsed) {
-      await convexServerClient.mutation(api.admin.syncSubscriptionFromPayment, {
-        secret: PAYMENT_SYNC_SECRET,
+      await syncSubscriptionFromPaymentHttp({
         userId: parsed.userId,
         reference: parsed.reference,
         tier: parsed.tier,

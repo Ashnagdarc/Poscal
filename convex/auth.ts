@@ -69,26 +69,35 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         .withIndex("by_email", (q: any) => q.eq("email", email))
         .first();
 
-      // Prefer legacy email-linked profile (may hold uploaded avatar_url from Nest/Postgres).
-      const legacy = byEmail && byEmail._id !== byUserId?._id ? byEmail : null;
-      const source = legacy ?? byUserId;
+      // Only adopt orphan email profiles (no other auth user bound). Never steal
+      // role/payment from a profile already linked to someone else (soft-verify risk).
+      const emailBoundTo = (byEmail?.externalUserId ?? "").trim();
+      const orphanLegacy =
+        byEmail
+        && byEmail._id !== byUserId?._id
+        && (!emailBoundTo || emailBoundTo === args.userId)
+          ? byEmail
+          : null;
 
+      const avatarSource = orphanLegacy ?? byUserId;
       const avatarUrl =
         user.avatarUrl ??
         user.image ??
-        source?.avatarUrl ??
+        avatarSource?.avatarUrl ??
         null;
 
+      // Privileges come from the auth user / own profile only — not from email matches.
+      const privilegeSource = byUserId;
       const payload = {
         externalUserId: args.userId,
         email,
-        fullName: user.fullName ?? user.name ?? source?.fullName ?? null,
+        fullName: user.fullName ?? user.name ?? avatarSource?.fullName ?? null,
         avatarUrl,
-        role: user.role ?? source?.role ?? "user",
-        paymentStatus: user.paymentStatus ?? source?.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? source?.subscriptionTier ?? "free",
+        role: user.role ?? privilegeSource?.role ?? "user",
+        paymentStatus: user.paymentStatus ?? privilegeSource?.paymentStatus ?? "free",
+        subscriptionTier: user.subscriptionTier ?? privilegeSource?.subscriptionTier ?? "free",
         subscriptionExpiresAtMs:
-          user.subscriptionExpiresAtMs ?? source?.subscriptionExpiresAtMs ?? null,
+          user.subscriptionExpiresAtMs ?? privilegeSource?.subscriptionExpiresAtMs ?? null,
         updatedAtMs: Date.now(),
       };
 
@@ -100,25 +109,31 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         });
       }
 
-      if (legacy) {
-        await ctx.db.patch(legacy._id, payload);
-        // Drop empty duplicate created under the new Convex auth id.
-        if (byUserId && byUserId._id !== legacy._id) {
-          await ctx.db.delete(byUserId._id);
+      if (orphanLegacy) {
+        await db.patch(orphanLegacy._id, {
+          ...payload,
+          // Preserve orphan display fields; do not import their paid/admin state.
+          role: privilegeSource?.role ?? user.role ?? "user",
+          paymentStatus: privilegeSource?.paymentStatus ?? user.paymentStatus ?? "free",
+          subscriptionTier: privilegeSource?.subscriptionTier ?? user.subscriptionTier ?? "free",
+          subscriptionExpiresAtMs:
+            privilegeSource?.subscriptionExpiresAtMs ?? user.subscriptionExpiresAtMs ?? null,
+        });
+        if (byUserId && byUserId._id !== orphanLegacy._id) {
+          await db.delete(byUserId._id);
         }
         return;
       }
 
       if (byUserId) {
-        await ctx.db.patch(byUserId._id, {
+        await db.patch(byUserId._id, {
           ...payload,
-          // Never wipe an existing avatar with null on routine auth updates.
           avatarUrl: avatarUrl ?? byUserId.avatarUrl ?? null,
         });
         return;
       }
 
-      await ctx.db.insert("profiles", {
+      await db.insert("profiles", {
         ...payload,
         createdAtMs: Date.now(),
       });

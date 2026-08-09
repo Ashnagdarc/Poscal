@@ -42,6 +42,7 @@ import { NotificationSettings } from "@/components/NotificationSettings";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { featureFlagApi, preferencesApi, subscriptionApi } from "@/lib/api";
+import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
 import { clearSensitiveLocalStorage } from "@/lib/privacyCleanup";
 import type { AppFontId } from "@/lib/fonts";
@@ -452,26 +453,40 @@ const Settings = () => {
           </section>
         ) : null}
 
-        {/* Subscription upsell — only when the admin paid lock is on */}
-        {user && !isPremium && paidLockEnabled ? (
+        {/* Subscription — restore always available; checkout only when payments enabled */}
+        {user && !isPremium ? (
           <section>
             <SettingsSection title="Subscription" />
             <div className="overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-secondary/40 to-secondary/20">
-              <div className="px-5 py-5">
-                <div className="mb-3 flex items-center gap-2">
-                  <Sparkles className="h-5 w-5 text-brand" />
-                  <h3 className="font-semibold text-foreground">Unlock Premium</h3>
+              {isPaymentsEnabled() && paidLockEnabled ? (
+                <div className="px-5 py-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-brand" />
+                    <h3 className="font-semibold text-foreground">Unlock Premium</h3>
+                  </div>
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    Get calendar alerts, advanced journal analytics, and more.
+                  </p>
+                  <Button
+                    className="w-full rounded-xl bg-brand text-brand-foreground hover:bg-brand/90"
+                    onClick={() => navigate("/upgrade?tier=premium&redirectPath=/settings")}
+                  >
+                    View plans
+                  </Button>
                 </div>
-                <p className="mb-4 text-sm text-muted-foreground">
-                  Get calendar alerts, advanced journal analytics, and more.
-                </p>
-                <Button
-                  className="w-full rounded-xl bg-brand text-brand-foreground hover:bg-brand/90"
-                  onClick={() => navigate("/upgrade?tier=premium&redirectPath=/settings")}
-                >
-                  View plans
-                </Button>
-              </div>
+              ) : (
+                <div className="px-5 py-5">
+                  <div className="mb-3 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-brand" />
+                    <h3 className="font-semibold text-foreground">Subscription</h3>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    {isPaymentsEnabled()
+                      ? "Restore a previous purchase if your access did not sync."
+                      : "Checkout is paused. Restore a previous purchase if you already paid."}
+                  </p>
+                </div>
+              )}
               <div className="border-t border-border/40 bg-background/30">
                 <SettingsRow
                   icon={<RotateCcw className="h-4 w-4" />}

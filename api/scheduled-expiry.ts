@@ -1,4 +1,4 @@
-import { convexServerClient, api } from './_convex.js';
+import { expireSubscriptionsBeforeHttp } from './lib/paymentSyncClient.js';
 
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
 
@@ -8,16 +8,21 @@ export const config = {
 };
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') {
+  // Vercel Cron invokes GET; allow POST for manual ops.
+  if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
   if (!PAYMENT_SYNC_SECRET) {
     return res.status(500).json({ success: false, message: 'Server not configured (missing PAYMENT_SYNC_SECRET)' });
   }
-  const result = await convexServerClient.mutation(api.admin.expireSubscriptionsBefore, {
-    secret: PAYMENT_SYNC_SECRET,
-    beforeMs: Date.now(),
-  });
 
-  return res.status(200).json({ success: true, message: 'Expired old subscriptions', ...result });
+  try {
+    const result = await expireSubscriptionsBeforeHttp(Date.now());
+    return res.status(200).json({ success: true, message: 'Expired old subscriptions', ...result });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: error instanceof Error ? error.message : 'Expiry job failed',
+    });
+  }
 }

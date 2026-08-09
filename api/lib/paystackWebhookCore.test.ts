@@ -6,6 +6,7 @@ import {
   parseSuccessfulCharge,
   verifyPaystackSignature,
 } from "./paystackWebhookCore";
+import { buildPaymentReference } from "./paymentReference";
 
 const SECRET = "test_webhook_secret";
 
@@ -33,10 +34,18 @@ describe("verifyPaystackSignature", () => {
 });
 
 describe("parseChargeSuccessReference", () => {
-  it("parses userId and tier from reference", () => {
-    expect(parseChargeSuccessReference("psk_user123_monthly")).toEqual({
+  it("parses userId and plan from modern references", () => {
+    const ref = buildPaymentReference("user123", "monthly", 1_700_000_000_000);
+    expect(parseChargeSuccessReference(ref)).toEqual({
       userId: "user123",
-      tier: "monthly",
+      planPeriod: "monthly",
+    });
+  });
+
+  it("parses legacy psk_user_plan references", () => {
+    expect(parseChargeSuccessReference("psk_user123_yearly")).toEqual({
+      userId: "user123",
+      planPeriod: "yearly",
     });
   });
 
@@ -45,6 +54,9 @@ describe("parseChargeSuccessReference", () => {
       error: "Invalid reference format",
     });
     expect(parseChargeSuccessReference(undefined)).toEqual({
+      error: "Invalid reference format",
+    });
+    expect(parseChargeSuccessReference("psk_user_premium")).toEqual({
       error: "Invalid reference format",
     });
   });
@@ -90,13 +102,13 @@ describe("parseSuccessfulCharge", () => {
     ).toEqual({ error: "Invalid reference format", status: 400 });
   });
 
-  it("parses a valid charge.success payload", () => {
+  it("parses a valid charge.success payload and stores premium tier", () => {
     const result = parseSuccessfulCharge(
       {
         event: "charge.success",
         data: {
           status: "success",
-          reference: "psk_user99_yearly",
+          reference: "psk_user99_yearly_1700000000000",
           amount: 5880,
           currency: "USD",
           channel: "card",
@@ -108,12 +120,14 @@ describe("parseSuccessfulCharge", () => {
 
     expect(result).toMatchObject({
       userId: "user99",
-      tier: "yearly",
-      reference: "psk_user99_yearly",
+      planPeriod: "yearly",
+      tier: "premium",
+      reference: "psk_user99_yearly_1700000000000",
       amount: 58.8,
       currency: "USD",
       paidAtMs: paidAt,
     });
     expect(result && "expiresAtMs" in result && result.expiresAtMs).toBeGreaterThan(paidAt);
+    expect(result && "metadata" in result && result.metadata.planId).toBe("yearly");
   });
 });

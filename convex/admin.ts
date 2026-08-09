@@ -2,7 +2,12 @@ import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
 import type { Id } from "./_generated/dataModel";
-import { internalMutation, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import {
   getVerifiedAuthUserId,
   requireVerifiedAuthUserId,
@@ -484,18 +489,13 @@ export const queueNotification = mutation({
   },
 });
 
-export const listExpiringSubscriptions = mutation({
+/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer (never secret-in-args). */
+export const listExpiringSubscriptions = internalQuery({
   args: {
-    secret: v.string(),
     fromMs: v.number(),
     toMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const expected = process.env.PAYMENT_SYNC_SECRET;
-    if (!expected || args.secret !== expected) {
-      throw new Error("Invalid payment sync secret");
-    }
-
     const profiles = await ctx.db
       .query("profiles")
       .withIndex("by_payment_expires", (q) =>
@@ -515,17 +515,12 @@ export const listExpiringSubscriptions = mutation({
   },
 });
 
-export const expireSubscriptionsBefore = mutation({
+/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer. */
+export const expireSubscriptionsBefore = internalMutation({
   args: {
-    secret: v.string(),
     beforeMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const expected = process.env.PAYMENT_SYNC_SECRET;
-    if (!expected || args.secret !== expected) {
-      throw new Error("Invalid payment sync secret");
-    }
-
     const now = Date.now();
     const profiles = await ctx.db
       .query("profiles")
@@ -557,9 +552,9 @@ export const expireSubscriptionsBefore = mutation({
   },
 });
 
-export const syncSubscriptionFromPayment = mutation({
+/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer. */
+export const syncSubscriptionFromPayment = internalMutation({
   args: {
-    secret: v.string(),
     userId: v.string(),
     reference: v.string(),
     tier: v.string(),
@@ -571,21 +566,18 @@ export const syncSubscriptionFromPayment = mutation({
     metadata: nullableAnyArg,
   },
   handler: async (ctx, args) => {
-    const expected = process.env.PAYMENT_SYNC_SECRET;
-    if (!expected || args.secret !== expected) {
-      throw new Error("Invalid payment sync secret");
-    }
-
     const existingRecord = await ctx.db
       .query("paymentRecords")
       .withIndex("by_reference", (q) => q.eq("reference", args.reference))
       .unique();
 
     const now = Date.now();
+    const normalizedTier =
+      args.tier === "monthly" || args.tier === "yearly" ? "premium" : args.tier;
     const payload = {
       userId: args.userId,
       reference: args.reference,
-      tier: args.tier,
+      tier: normalizedTier,
       amount: args.amount,
       currency: args.currency,
       status: args.status,
@@ -608,7 +600,7 @@ export const syncSubscriptionFromPayment = mutation({
     if (user) {
       await ctx.db.patch(user._id, {
         paymentStatus: args.status === "success" ? "paid" : user.paymentStatus ?? "free",
-        subscriptionTier: args.tier,
+        subscriptionTier: normalizedTier,
         subscriptionExpiresAtMs: args.expiresAtMs ?? null,
       });
     }
@@ -621,7 +613,7 @@ export const syncSubscriptionFromPayment = mutation({
     if (profile) {
       await ctx.db.patch(profile._id, {
         paymentStatus: args.status === "success" ? "paid" : profile.paymentStatus ?? "free",
-        subscriptionTier: args.tier,
+        subscriptionTier: normalizedTier,
         subscriptionExpiresAtMs: args.expiresAtMs ?? null,
         updatedAtMs: now,
       });
@@ -653,11 +645,25 @@ export const restoreLatestPaymentForUser = mutation({
     }
 
     const now = Date.now();
+    if (
+      payment.expiresAtMs != null
+      && Number.isFinite(payment.expiresAtMs)
+      && payment.expiresAtMs <= now
+    ) {
+      return { success: false, message: "Latest purchase has expired." };
+    }
+
+    // Normalize legacy plan-period tiers (monthly/yearly) to product tier.
+    const restoredTier =
+      payment.tier === "monthly" || payment.tier === "yearly"
+        ? "premium"
+        : payment.tier;
+
     const user = await ctx.db.get(args.userId as any);
     if (user) {
       await ctx.db.patch(args.userId as any, {
         paymentStatus: "paid",
-        subscriptionTier: payment.tier,
+        subscriptionTier: restoredTier,
         subscriptionExpiresAtMs: payment.expiresAtMs ?? null,
       });
     }
@@ -670,7 +676,7 @@ export const restoreLatestPaymentForUser = mutation({
     if (profile) {
       await ctx.db.patch(profile._id, {
         paymentStatus: "paid",
-        subscriptionTier: payment.tier,
+        subscriptionTier: restoredTier,
         subscriptionExpiresAtMs: payment.expiresAtMs ?? null,
         updatedAtMs: now,
       });
@@ -680,7 +686,7 @@ export const restoreLatestPaymentForUser = mutation({
       success: true,
       message: "Purchase restored",
       data: {
-        tier: payment.tier,
+        tier: restoredTier,
         expiry: payment.expiresAtMs ? new Date(payment.expiresAtMs).toISOString() : null,
       },
     };

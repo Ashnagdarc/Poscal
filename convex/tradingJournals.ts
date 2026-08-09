@@ -18,6 +18,8 @@ type UserId = Id<"users">;
 
 const normalizeTier = (tier?: string | null): SubscriptionTier => {
   if (tier === "premium" || tier === "pro") return tier;
+  // Legacy rows stored plan period as tier.
+  if (tier === "monthly" || tier === "yearly") return "premium";
   return "free";
 };
 

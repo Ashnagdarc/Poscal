@@ -1,9 +1,11 @@
+import { useQuery } from 'convex/react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAdmin } from '@/hooks/use-admin';
 import { usePaidLock } from '@/hooks/use-paid-lock';
 import { isClientEmailVerificationRequired } from '@/lib/emailVerificationClient';
+import { api } from '../../convex/_generated/api';
 
 // Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
 // Fail-open: payment wall stays off until an admin turns the lock on (and on fetch errors/timeouts).
@@ -32,9 +34,11 @@ export const ProtectedRoute = ({
   const { isAdmin, loading: adminLoading } = useAdmin();
   const { paidLockEnabled } = usePaidLock();
   const location = useLocation();
-  // Soft default OFF via Vite env mirror — never query Convex for this so a
-  // missing/undeployed authSettings:getVerificationPolicy cannot crash the app.
-  const requireEmailVerification = isClientEmailVerificationRequired();
+  // Prefer Convex server policy when available so UI matches API hard-gates.
+  // Fall back to Vite mirror while the query loads / if it errors.
+  const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy, {});
+  const requireEmailVerification =
+    verificationPolicy?.requireEmailVerification ?? isClientEmailVerificationRequired();
 
   // Show loading spinner while checking auth or subscription
   if (authLoading || subLoading || adminLoading) {

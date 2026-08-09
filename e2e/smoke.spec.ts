@@ -31,10 +31,10 @@ test.describe("Poscal smoke", () => {
     await expect(page).toHaveURL(/\/signin/);
   });
 
-  test("upgrade path sends guests to sign-in with next", async ({ page }) => {
+  test("upgrade path sends guests to sign-in with returnTo", async ({ page }) => {
     await page.goto("/upgrade?tier=premium&redirectPath=%2Fjournal");
     await expect(page).toHaveURL(/\/signin/);
-    await expect(page.url()).toMatch(/next=/);
+    await expect(page.url()).toMatch(/returnTo=/);
   });
 
   test("welcome onboarding is reachable for first-time users", async ({ page }) => {

@@ -35,6 +35,7 @@ const SignIn = () => {
   const returnTo = useMemo(() => {
     return (
       safeInternalPath(searchParams.get("returnTo"))
+      ?? safeInternalPath(searchParams.get("next"))
       ?? safeInternalPath(locationState?.from)
       ?? "/"
     );
@@ -103,8 +104,8 @@ const SignIn = () => {
       return;
     }
 
-    if (password.length < 8) {
-      const message = "Password must be at least 8 characters";
+    if (password.length < 10) {
+      const message = "Password must be at least 10 characters";
       setFormError(message);
       toast.error(message, { duration: 5000 });
       return;
@@ -201,6 +202,7 @@ const SignIn = () => {
           }}
           placeholder="Enter your password"
           autoComplete="current-password"
+          minLength={10}
           showPassword={showPassword}
           onTogglePassword={() => setShowPassword((current) => !current)}
         />

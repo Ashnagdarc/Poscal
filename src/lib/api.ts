@@ -231,7 +231,7 @@ export const tradesApi = {
     const client = getAuthenticatedConvexClient();
     return await client.query(convexApi.tradingJournal.listForUser, {
       status: query?.status ?? null,
-      limit: 300,
+      limit: 500,
     });
   },
 
@@ -339,16 +339,13 @@ export const subscriptionApi = {
   },
 
   verifyPayment: async (payload: {
-    userId: string;
     reference: string;
-    tier: string;
-    amount: number;
-    currency: string;
-    expiresAt: string;
-    paystack_customer_code?: string;
-    metadata?: any;
   }): Promise<any> => {
-    const { data } = await serverlessApi.post('/api/verify-payment', payload);
+    const { data } = await serverlessApi.post('/api/verify-payment', payload, {
+      headers: {
+        Authorization: `Bearer ${getStoredConvexAuthToken() ?? ''}`,
+      },
+    });
     return data;
   },
 
@@ -383,9 +380,10 @@ export const notificationsApi = {
   },
 
   // Delete a push subscription
-  unsubscribe: async (id: string): Promise<void> => {
+  unsubscribe: async (args: { id?: string; endpoint?: string }): Promise<void> => {
     await getAuthenticatedConvexClient().mutation(convexApi.admin.unsubscribePush, {
-      id: id as any,
+      id: args.id as any,
+      endpoint: args.endpoint ?? null,
     });
   },
 

@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireVerifiedAuthUserId } from "./lib/auth";
+import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -40,8 +41,11 @@ export const listEvents = query({
     toMs: v.number(),
     impact: nullableStringArg,
     country: nullableStringArg,
+    /** Client-only cache bust for manual refresh; ignored by the query body. */
+    refreshToken: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    void args.refreshToken;
     const rows = await ctx.db
       .query("economicEvents")
       .withIndex("by_scheduled", (q) =>
@@ -85,8 +89,11 @@ export const listSnapshotsInternal = internalQuery({
 });
 
 export const getIngestState = query({
-  args: {},
-  handler: async (ctx) => {
+  args: {
+    refreshToken: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    void args.refreshToken;
     const row = await ctx.db
       .query("newsIngestState")
       .withIndex("by_key", (q) => q.eq("key", "primary"))
@@ -127,17 +134,7 @@ export const setNewsAlertsEnabled = mutation({
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
 
-    let profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
-      .first();
-
-    if (!profile && user.email) {
-      profile = await ctx.db
-        .query("profiles")
-        .withIndex("by_email", (q) => q.eq("email", user.email!.trim().toLowerCase()))
-        .first();
-    }
+    let profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
 
     const now = Date.now();
     if (profile) {

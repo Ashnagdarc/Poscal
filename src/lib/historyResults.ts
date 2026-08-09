@@ -1,5 +1,6 @@
 import type { JournalEntry } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
+import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 
 export type ResultDayTone = "positive" | "negative" | "neutral" | "missed" | "none";
 
@@ -52,9 +53,10 @@ const formatDaySummaryAmount = (value: number, suffix = "") => {
 };
 
 const resolveCalculatorResultDate = (item: JournalEntry) => {
-  if (item.closedAt) return startOfDay(item.closedAt);
-  if (item.openedAt) return startOfDay(item.openedAt);
-  return startOfDay(item.updatedAt ?? item.createdAt);
+  // Keep the instant — bucket with preferred timezone later (not browser-local midnight).
+  if (item.closedAt) return item.closedAt;
+  if (item.openedAt) return item.openedAt;
+  return item.updatedAt ?? item.createdAt;
 };
 
 const normalizeCalculatorResults = (items: JournalEntry[]): NormalizedResult[] => {
@@ -84,7 +86,7 @@ const normalizeManualTrades = (trades: JournalTrade[]): NormalizedResult[] => {
               : "breakeven";
 
       return {
-        date: startOfDay(new Date(rawDate)),
+        date: new Date(rawDate),
         status,
         pnlAmount: pnl ?? 0,
         resultR: null,
@@ -129,6 +131,7 @@ const summarizeDay = (dayItems: NormalizedResult[]): Omit<ResultDaySummary, "dat
 export const buildResultDaySummaries = (
   items: JournalEntry[],
   manualTrades: JournalTrade[] = [],
+  timeZone?: string | null,
 ) => {
   const summaries = new Map<string, ResultDaySummary>();
   const normalized = [
@@ -138,7 +141,7 @@ export const buildResultDaySummaries = (
 
   const byDay = new Map<string, NormalizedResult[]>();
   for (const item of normalized) {
-    const dateKey = toDateKey(item.date);
+    const dateKey = toDateKeyInTimeZone(item.date, timeZone);
     const bucket = byDay.get(dateKey);
     if (bucket) {
       bucket.push(item);
@@ -161,8 +164,10 @@ export const buildResultHeatmapDays = (
   summaries: Map<string, ResultDaySummary>,
   today: Date,
   rangeDays = 120,
+  timeZone?: string | null,
 ): ResultHeatmapDay[] => {
-  const end = startOfDay(today);
+  const todayKey = toDateKeyInTimeZone(today, timeZone);
+  const end = parseDateKey(todayKey);
   const start = new Date(end);
   start.setDate(start.getDate() - rangeDays);
 
@@ -175,7 +180,7 @@ export const buildResultHeatmapDays = (
 
     days.push({
       dateKey,
-      tone: summary?.tone ?? (cursor < end ? "missed" : "none"),
+      tone: summary?.tone ?? (dateKey < todayKey ? "missed" : "none"),
       label: summary?.label ?? "",
       tradeCount: summary?.tradeCount ?? 0,
     });
@@ -197,6 +202,7 @@ export const buildMonthlyReturnsGrid = (
   manualTrades: JournalTrade[] = [],
   today: Date = new Date(),
   startingBalance?: number | null,
+  timeZone?: string | null,
 ): MonthlyReturnsGrid => {
   const normalized = [
     ...normalizeCalculatorResults(items),
@@ -216,16 +222,19 @@ export const buildMonthlyReturnsGrid = (
   const monthlyPnl = new Map<string, number>();
   for (const item of normalized) {
     if (item.pnlAmount === null || item.pnlAmount === undefined) continue;
-    const key = `${item.date.getFullYear()}-${item.date.getMonth()}`;
+    const dateKey = toDateKeyInTimeZone(item.date, timeZone);
+    const [yearStr, monthStr] = dateKey.split("-");
+    const key = `${Number(yearStr)}-${Number(monthStr) - 1}`;
     monthlyPnl.set(key, (monthlyPnl.get(key) ?? 0) + item.pnlAmount);
   }
 
-  const currentYear = today.getFullYear();
+  const todayKey = toDateKeyInTimeZone(today, timeZone);
+  const currentYear = Number(todayKey.slice(0, 4));
   let minYear = currentYear;
   let maxYear = currentYear;
 
   for (const item of normalized) {
-    const year = item.date.getFullYear();
+    const year = Number(toDateKeyInTimeZone(item.date, timeZone).slice(0, 4));
     minYear = Math.min(minYear, year);
     maxYear = Math.max(maxYear, year);
   }

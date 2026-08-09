@@ -10,7 +10,12 @@ import {
 import { NumPad } from "./NumPad";
 import { PageHeader } from "./PageHeader";
 import { UserAvatar } from "./UserAvatar";
-import { CurrencyGrid, FEATURED_CURRENCY_PAIRS, CurrencyPair } from "./CurrencyGrid";
+import {
+  CurrencyGrid,
+  FEATURED_CURRENCY_PAIRS,
+  CurrencyPair,
+  detectPipDecimal,
+} from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -25,6 +30,7 @@ import {
   requiredConversionPair,
   requiresEntryForPipValue,
 } from "@/lib/positionSizeCalculator";
+import { useAutoMarketPrices } from "@/hooks/use-auto-market-prices";
 import { toast } from "sonner";
 
 export interface HistoryItem {
@@ -45,15 +51,6 @@ const normalizePrefillSymbol = (symbol: string) => {
   if (normalized.includes("/")) return normalized;
   if (normalized.length === 6) return `${normalized.slice(0, 3)}/${normalized.slice(3)}`;
   return normalized;
-};
-
-const detectPipDecimal = (symbol: string): number => {
-  const upperSymbol = symbol.toUpperCase();
-  if (upperSymbol.includes("JPY")) return 2;
-  if (upperSymbol.includes("XAG")) return 3;
-  if (upperSymbol.includes("XAU") || upperSymbol.includes("BTC") || upperSymbol.includes("ETH")) return 2;
-  if (upperSymbol.includes("US30") || upperSymbol.includes("US100") || upperSymbol.includes("US500")) return 0;
-  return 4;
 };
 
 const getDirectionFromOrderType = (orderType: string | null): "buy" | "sell" => {
@@ -136,8 +133,19 @@ export const Calculator = () => {
   const needsSeparateAccountFx =
     Boolean(accountCcyPair) && !accountFxSharesCrossField;
 
+  const {
+    prices: autoMarketPrices,
+    allPrices: autoAllPrices,
+    isLoading: autoRatesLoading,
+    isError: autoRatesError,
+  } = useAutoMarketPrices([
+    conversionPair,
+    accountCcyPair,
+    needsEntryForPipValue ? selectedPair.symbol : null,
+  ]);
+
   const userMarketPrices = useMemo(() => {
-    const prices: Record<string, number> = {};
+    const prices: Record<string, number> = { ...(autoMarketPrices ?? {}) };
     if (conversionPair) {
       const rate = parseFloat(conversionRate);
       if (Number.isFinite(rate) && rate > 0) {
@@ -152,12 +160,35 @@ export const Calculator = () => {
     }
     return Object.keys(prices).length > 0 ? prices : null;
   }, [
+    autoMarketPrices,
     conversionPair,
     conversionRate,
     accountCcyPair,
     accountCcyRate,
     accountFxSharesCrossField,
   ]);
+
+  const hasAutoConversionRate = Boolean(
+    conversionPair && autoMarketPrices && autoMarketPrices[conversionPair],
+  );
+  const hasAutoAccountFxRate = Boolean(
+    accountCcyPair && autoMarketPrices && autoMarketPrices[accountCcyPair],
+  );
+  const showConversionRateField =
+    selectedIsCross && Boolean(conversionPair) && !hasAutoConversionRate;
+  const showAccountFxField =
+    needsSeparateAccountFx && Boolean(accountCcyPair) && !hasAutoAccountFxRate;
+
+  // USD/XXX pip value needs a mid; prefer typed entry, else live mid.
+  const effectiveEntryPrice = useMemo(() => {
+    const typed = parseFloat(entryPrice);
+    if (Number.isFinite(typed) && typed > 0) return typed;
+    if (needsEntryForPipValue && autoAllPrices) {
+      const live = autoAllPrices[selectedPair.symbol];
+      if (Number.isFinite(live) && live > 0) return live;
+    }
+    return null;
+  }, [entryPrice, needsEntryForPipValue, autoAllPrices, selectedPair.symbol]);
   
   const [showCustomRisk, setShowCustomRisk] = useState(false);
   const [customRiskInput, setCustomRiskInput] = useState("");
@@ -242,7 +273,10 @@ export const Calculator = () => {
       riskPercent,
       stopLossPips: calculationMode === "pips" ? parseFloat(stopLossPips) || null : null,
       takeProfitPips: calculationMode === "pips" ? parseFloat(takeProfitPips) || null : null,
-      entryPrice: parseFloat(entryPrice) || null,
+      entryPrice:
+        calculationMode === "price"
+          ? parseFloat(entryPrice) || null
+          : effectiveEntryPrice,
       stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
       takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
       marketPrices: userMarketPrices,
@@ -255,6 +289,7 @@ export const Calculator = () => {
     takeProfitPips,
     calculationMode,
     entryPrice,
+    effectiveEntryPrice,
     stopLossPrice,
     takeProfitPrice,
     selectedPair,
@@ -343,7 +378,10 @@ export const Calculator = () => {
     const prefilledOrderType = normalizeOrderType(searchParams.get("orderType"));
     const orderType = prefilledOrderType ?? tradeDirection;
     // Persist entry whenever the user typed one (Price mode, or Pips mode for USD-base pairs).
-    const resolvedEntryPrice = parseFloat(entryPrice) || null;
+    const resolvedEntryPrice =
+      parseFloat(entryPrice)
+      || effectiveEntryPrice
+      || null;
     const resolvedStopLossPrice = calculationMode === "price" ? parseFloat(stopLossPrice) || null : null;
     const resolvedTakeProfitPrice = calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null;
 
@@ -728,7 +766,7 @@ export const Calculator = () => {
         <section className="mt-5 animate-slide-up" style={{ animationDelay: "80ms" }}>
           {calculationMode === "pips" ? (
             <div className="grid grid-cols-2 gap-3">
-              {needsEntryForPipValue && (
+              {needsEntryForPipValue && !effectiveEntryPrice && (
                 <button
                   type="button"
                   onClick={() => openNumPad("entryPrice")}
@@ -743,7 +781,7 @@ export const Calculator = () => {
                   <p className="text-lg font-bold text-foreground">{entryPrice || "—"}</p>
                 </button>
               )}
-              {selectedIsCross && conversionPair && (
+              {showConversionRateField && (
                 <button
                   type="button"
                   onClick={() => openNumPad("conversionRate")}
@@ -761,7 +799,7 @@ export const Calculator = () => {
                   <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
                 </button>
               )}
-              {needsSeparateAccountFx && accountCcyPair && (
+              {showAccountFxField && (
                 <button
                   type="button"
                   onClick={() => openNumPad("accountCcyRate")}
@@ -833,7 +871,7 @@ export const Calculator = () => {
                 </div>
                 <p className="text-lg font-bold text-foreground">{takeProfitPrice || "—"}</p>
               </button>
-              {selectedIsCross && conversionPair && (
+              {showConversionRateField && (
                 <button
                   type="button"
                   onClick={() => openNumPad("conversionRate")}
@@ -851,7 +889,7 @@ export const Calculator = () => {
                   <p className="text-lg font-bold text-foreground">{conversionRate || "—"}</p>
                 </button>
               )}
-              {needsSeparateAccountFx && accountCcyPair && (
+              {showAccountFxField && (
                 <button
                   type="button"
                   onClick={() => openNumPad("accountCcyRate")}
@@ -875,13 +913,23 @@ export const Calculator = () => {
             ? `${calculation.spec.displayName} · ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / ${stopLossUnit} · SL ${formatNumber(calculation.stopLossPips, 1)} ${stopLossUnit}`
             : "Unsupported instrument"}
           {calculation.warning ? ` · ${calculation.warning}` : ""}
+          {hasAutoConversionRate && conversionPair && autoMarketPrices?.[conversionPair]
+            ? ` · ${conversionPair} ${autoMarketPrices[conversionPair].toLocaleString("en-US", { maximumFractionDigits: 4 })}`
+            : ""}
         </p>
-        {selectedIsCross && conversionPair && !(userMarketPrices && userMarketPrices[conversionPair]) && (
+        {autoRatesLoading && (selectedIsCross || needsSeparateAccountFx || needsEntryForPipValue) && (
           <p className="mt-2 px-1 text-xs text-muted-foreground">
-            Enter a {conversionPair} conversion rate to size this cross in USD.
+            Loading live conversion rates…
           </p>
         )}
-        {needsSeparateAccountFx && accountCcyPair && !(userMarketPrices && userMarketPrices[accountCcyPair]) && (
+        {showConversionRateField && !autoRatesLoading && (
+          <p className="mt-2 px-1 text-xs text-amber-600 dark:text-amber-400">
+            {autoRatesError
+              ? `Could not load ${conversionPair}. Enter it manually to size this cross.`
+              : `Enter a ${conversionPair} conversion rate to size this cross in USD.`}
+          </p>
+        )}
+        {showAccountFxField && !autoRatesLoading && (
           <p className="mt-2 px-1 text-xs text-amber-600 dark:text-amber-400">
             Account currency is {currency.code}. Enter {accountCcyPair} so risk is converted before lot sizing — sizing without it is blocked.
           </p>
@@ -942,6 +990,9 @@ export const Calculator = () => {
               }}
               accountBalance={parseFloat(accountBalance) || 0}
               riskPercent={riskPercent}
+              entryPrice={effectiveEntryPrice}
+              marketPrices={userMarketPrices}
+              accountCurrency={currency.code}
             />
           </div>
         </div>

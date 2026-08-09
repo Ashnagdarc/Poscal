@@ -252,6 +252,11 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     try {
       const subscription = await swRegistration.pushManager.getSubscription();
       if (subscription) {
+        try {
+          await notificationsApi.unsubscribe({ endpoint: subscription.endpoint });
+        } catch (serverError) {
+          logger.warn('[push] Server unsubscribe failed; continuing local unsubscribe', serverError);
+        }
         await subscription.unsubscribe();
       }
       setIsSubscribed(false);

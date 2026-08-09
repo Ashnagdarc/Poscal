@@ -71,6 +71,7 @@ const formatValue = (value: string | null, unit: string | null) => {
 const News = () => {
   const [impact, setImpact] = useState<ImpactFilter>("all");
   const [refreshing, setRefreshing] = useState(false);
+  const [refreshToken, setRefreshToken] = useState(0);
   const [calendarAnchor, setCalendarAnchor] = useState(() => new Date());
   const [selectedDay, setSelectedDay] = useState(() => startOfDay(new Date()));
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
@@ -86,8 +87,9 @@ const News = () => {
     toMs: week.toMs,
     impact: null,
     country: null,
+    refreshToken,
   });
-  const ingestState = useQuery(api.news.getIngestState, {});
+  const ingestState = useQuery(api.news.getIngestState, { refreshToken });
 
   // Keep selected day inside the visible week; prefer today when available.
   useEffect(() => {
@@ -104,6 +106,8 @@ const News = () => {
 
   const handleRefresh = () => {
     setRefreshing(true);
+    setRefreshToken(Date.now());
+    setVisibleCount(PAGE_SIZE);
     window.setTimeout(() => setRefreshing(false), 600);
   };
 

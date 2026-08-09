@@ -1,17 +1,28 @@
 import { useEffect, useState } from "react";
 import { featureFlagApi } from "@/lib/api";
+import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 
 /**
  * Admin-controlled paid lock. Defaults to OFF so premium routes stay open
  * until an admin explicitly enables the wall.
+ * When Paystack checkout is deactivated, the wall stays off so users are not trapped.
  */
 export const usePaidLock = () => {
   const [paidLockEnabled, setPaidLockEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const paymentsEnabled = isPaymentsEnabled();
 
   useEffect(() => {
     let mounted = true;
     let timeoutId: ReturnType<typeof setTimeout>;
+
+    if (!paymentsEnabled) {
+      setPaidLockEnabled(false);
+      setIsLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
 
     setIsLoading(true);
 
@@ -38,7 +49,7 @@ export const usePaidLock = () => {
       mounted = false;
       clearTimeout(timeoutId);
     };
-  }, []);
+  }, [paymentsEnabled]);
 
-  return { paidLockEnabled, isLoading };
+  return { paidLockEnabled: paymentsEnabled ? paidLockEnabled : false, isLoading };
 };

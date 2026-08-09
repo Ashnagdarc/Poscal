@@ -206,7 +206,7 @@ export const ManualTradeSheet = ({
     }
 
     const validation = validateTradePairInput(pair);
-    if (validation.ok) {
+    if (validation.ok === true) {
       setPairError(null);
       setPairSuggestion(null);
       return;
@@ -229,7 +229,7 @@ export const ManualTradeSheet = ({
 
     const pair = canonicalizePairSymbol(form.pair);
     const pairValidation = validateTradePairInput(pair);
-    if (!pairValidation.ok) {
+    if (pairValidation.ok === false) {
       setPairError(pairValidation.message);
       setPairSuggestion(pairValidation.suggestion);
       toast.error(pairValidation.message);

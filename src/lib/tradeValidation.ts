@@ -10,19 +10,26 @@ export const TradeImportSchema = z.object({
       return token.length >= 2 && token !== "INVALID" && !token.includes("INVALID");
     }, "Invalid trade pair")
     .transform(val => val.toUpperCase()),
-  direction: z.enum(['long', 'short'], {
-    errorMap: () => ({ message: "Direction must be 'long' or 'short'" })
-  }),
+  direction: z
+    .enum(['long', 'short', 'buy', 'sell'], {
+      errorMap: () => ({ message: "Direction must be 'long' or 'short'" }),
+    })
+    .transform((value) => (value === 'buy' ? 'long' : value === 'sell' ? 'short' : value)),
   entry_price: z.number().nonnegative().optional().nullable(),
   exit_price: z.number().nonnegative().optional().nullable(),
   stop_loss: z.number().nonnegative().optional().nullable(),
   take_profit: z.number().nonnegative().optional().nullable(),
   position_size: z.number().nonnegative().max(1000, "Position size too large").optional().nullable(),
   risk_percent: z.number().min(0).max(100, "Risk percent must be between 0-100").optional().nullable(),
+  risk_amount: z.number().optional().nullable(),
   pnl: z.number().min(-1000000).max(1000000, "P&L value too large").optional().nullable(),
+  pnl_percent: z.number().optional().nullable(),
   status: z.enum(['open', 'closed', 'cancelled']).default('open'),
   notes: z.string().max(1000, "Notes must be less than 1000 characters").optional().nullable(),
   entry_date: z.string().optional().nullable(),
+  exit_date: z.string().optional().nullable(),
+  tags: z.string().max(500).optional().nullable(),
+  market_condition: z.string().max(200).optional().nullable(),
 });
 
 export type ValidatedTrade = z.infer<typeof TradeImportSchema>;

@@ -1,30 +1,34 @@
-import React, { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
-import { PaymentModal } from '@/components/PaymentModal';
-import { useAuth } from '@/contexts/AuthContext';
+import React, { useEffect, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import { PaymentModal } from "@/components/PaymentModal";
+import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
+import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 
 const UpgradePage: React.FC = () => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const [showModal, setShowModal] = useState(false);
+  const paymentsEnabled = isPaymentsEnabled();
 
-  // Read query params: ?tier=premium&redirectPath=/calculator
   const qp = new URLSearchParams(location.search);
-  const tierParam = (qp.get('tier') as 'premium' | 'pro') || 'premium';
-  const redirectPath = qp.get('redirectPath') || '/';
+  const tierParam = (qp.get("tier") as "premium" | "pro") || "premium";
+  const redirectPath = qp.get("redirectPath") || "/";
 
   useEffect(() => {
-    // If user is not signed in, send them to signin with next back to this page
+    if (authLoading) return;
+
     if (!user) {
       const next = `${location.pathname}${location.search}`;
-      navigate(`/signin?next=${encodeURIComponent(next)}`);
+      navigate(
+        `/signin?returnTo=${encodeURIComponent(next)}&next=${encodeURIComponent(next)}`,
+      );
       return;
     }
 
-    // Open modal once user is present
     setShowModal(true);
-  }, [user]);
+  }, [user, authLoading, location.pathname, location.search, navigate]);
 
   return (
     <>
@@ -37,11 +41,21 @@ const UpgradePage: React.FC = () => {
         tier={tierParam}
         redirectPath={redirectPath}
       />
-      {/* In case modal cannot render, show fallback link */}
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-lg font-semibold">Upgrade</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Opening payment dialog…</p>
+      <div className="flex min-h-screen items-center justify-center px-6">
+        <div className="max-w-sm text-center">
+          <h2 className="font-display text-lg font-semibold">
+            {paymentsEnabled ? "Upgrade" : "Checkout paused"}
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {paymentsEnabled
+              ? "Opening payment dialog…"
+              : "Paystack billing is temporarily off. You can keep using the app."}
+          </p>
+          {!paymentsEnabled && (
+            <Button className="mt-6 w-full rounded-xl" onClick={() => navigate(redirectPath)}>
+              Back to app
+            </Button>
+          )}
         </div>
       </div>
     </>

@@ -1,18 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  ArrowLeft, 
-  User as UserIcon, 
-  Mail, 
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  ArrowLeft,
+  User as UserIcon,
+  Mail,
   Calendar,
   LogOut,
   Settings as SettingsIcon,
   Crown,
   Bell,
   Download,
-  Zap,
-  Eye,
-  EyeOff,
+  Upload,
   Trash2,
   Shield,
   Camera,
@@ -21,7 +20,22 @@ import {
 import { toast } from "sonner";
 import { useMutation } from "convex/react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useJournal } from "@/contexts/JournalContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { TRADES_QUERY_KEY } from "@/hooks/queries/use-trades-query";
 import { logger } from "@/lib/logger";
+import {
+  importJournalEntries,
+  JOURNAL_FETCH_LIMIT,
+  listJournalEntriesWithMeta,
+} from "@/lib/convexJournal";
+import {
+  buildExportFilename,
+  downloadCsv,
+  tradesToCsv,
+} from "@/lib/exportJournalCsv";
+import { parseAndValidateJournalCsv } from "@/lib/importJournalCsv";
+import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
@@ -37,25 +51,29 @@ interface Profile {
 
 const Profile = () => {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user, signOut } = useAuth();
+  const { activeJournalId } = useJournal();
+  const { checkFeatureAccess } = useSubscription();
   const deleteAccount = useMutation(api.users.deleteAccount);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
   const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (user) {
       fetchProfile();
-      loadPreferences();
     }
   }, [user]);
 
@@ -89,20 +107,96 @@ const Profile = () => {
     setIsLoading(false);
   };
 
-  const loadPreferences = () => {
-    const saved = localStorage.getItem('notificationsEnabled');
-    if (saved !== null) setNotificationsEnabled(saved === 'true');
+  const handleExportData = async () => {
+    if (!user || isExporting) return;
+
+    // While checkout is paused, keep export available to signed-in users.
+    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
+      toast.info("CSV export is a premium feature.");
+      navigate("/upgrade?tier=premium&redirectPath=/profile");
+      return;
+    }
+
+    setIsExporting(true);
+    try {
+      const { trades, truncated } = await listJournalEntriesWithMeta(user.id);
+      if (trades.length === 0) {
+        toast.info("No trades to export yet.");
+        return;
+      }
+
+      const csv = tradesToCsv(trades);
+      downloadCsv(buildExportFilename(), csv);
+      toast.success(
+        truncated
+          ? `Exported the ${JOURNAL_FETCH_LIMIT} most recent trades.`
+          : `Exported ${trades.length} trade${trades.length === 1 ? "" : "s"}.`,
+      );
+    } catch (error) {
+      logger.error("CSV export failed", error);
+      toast.error(
+        error instanceof Error ? error.message : "Could not export trades. Try again.",
+      );
+    } finally {
+      setIsExporting(false);
+    }
   };
 
-  const savePreferences = () => {
-    localStorage.setItem('notificationsEnabled', String(notificationsEnabled));
-    toast.success("Preferences saved!");
+  const handleImportCsvClick = () => {
+    if (!user || isImporting) return;
+    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
+      toast.info("CSV import is a premium feature.");
+      navigate("/upgrade?tier=premium&redirectPath=/profile");
+      return;
+    }
+    if (!activeJournalId) {
+      toast.info("Create or select a journal before importing trades.");
+      navigate("/journal");
+      return;
+    }
+    csvInputRef.current?.click();
   };
 
-  const handleExportData = () => {
-    // Generate CSV with trades data
-    toast.info("Export feature coming soon!");
-    // TODO: Implement CSV export
+  const handleImportCsvFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file || !user || !activeJournalId || isImporting) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      const { validTrades, errors } = parseAndValidateJournalCsv(text);
+      if (validTrades.length === 0) {
+        toast.error(errors[0] ?? "No valid trades found in CSV.");
+        return;
+      }
+
+      await importJournalEntries(
+        user.id,
+        validTrades.map((trade) => ({
+          ...trade,
+          journal_id: activeJournalId,
+        })),
+      );
+      await queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
+
+      if (errors.length > 0) {
+        toast.warning(
+          `Imported ${validTrades.length} trade${validTrades.length === 1 ? "" : "s"}; skipped ${errors.length} row${errors.length === 1 ? "" : "s"}.`,
+        );
+      } else {
+        toast.success(
+          `Imported ${validTrades.length} trade${validTrades.length === 1 ? "" : "s"}.`,
+        );
+      }
+    } catch (error) {
+      logger.error("CSV import failed", error);
+      toast.error(
+        error instanceof Error ? error.message : "Could not import trades. Try again.",
+      );
+    } finally {
+      setIsImporting(false);
+    }
   };
 
   const handleDeleteAccount = async () => {
@@ -358,50 +452,60 @@ const Profile = () => {
             <span className="text-xs font-medium text-brand">Open Settings</span>
           </button>
 
-          {/* Notifications Toggle */}
-          <div className="bg-secondary rounded-2xl p-4 flex items-center justify-between">
+          <button
+            onClick={() => navigate("/settings")}
+            className="flex w-full items-center justify-between rounded-2xl bg-secondary p-4 transition-colors hover:bg-secondary/80"
+          >
             <div className="flex items-center gap-3">
-              <Bell className="w-5 h-5 text-muted-foreground" />
-              <div>
+              <Bell className="h-5 w-5 text-muted-foreground" />
+              <div className="text-left">
                 <span className="text-sm font-medium text-foreground">Notifications</span>
-                <p className="text-xs text-muted-foreground">{notificationsEnabled ? 'Enabled' : 'Disabled'}</p>
+                <p className="text-xs text-muted-foreground">Push and calendar alerts in Settings</p>
               </div>
             </div>
-            <button
-              onClick={() => setNotificationsEnabled(!notificationsEnabled)}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200 ${
-                notificationsEnabled ? 'bg-brand/20' : 'bg-background'
-              }`}
-            >
-              {notificationsEnabled ? (
-                <Eye className="w-5 h-5 text-brand" />
-              ) : (
-                <EyeOff className="w-5 h-5 text-muted-foreground" />
-              )}
-            </button>
-          </div>
+            <span className="text-xs font-medium text-brand">Open Settings</span>
+          </button>
         </div>
 
         {/* Account Actions */}
         <div className="space-y-3 pt-2">
           <h3 className="text-sm font-semibold text-muted-foreground px-2">ACCOUNT</h3>
-          
-          {/* Save Preferences Button */}
-          <button
-            onClick={savePreferences}
-            className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
-          >
-            <Zap className="w-5 h-5" />
-            Save Preferences
-          </button>
+
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,text/csv"
+            className="hidden"
+            onChange={(event) => void handleImportCsvFile(event)}
+          />
 
           {/* Export Data Button */}
           <button
-            onClick={handleExportData}
-            className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
+            type="button"
+            onClick={() => void handleExportData()}
+            disabled={isExporting || isImporting}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-foreground transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
           >
-            <Download className="w-5 h-5" />
-            Export Trading Data
+            {isExporting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Download className="h-5 w-5" />
+            )}
+            {isExporting ? "Exporting…" : "Export Trading Data"}
+          </button>
+
+          <button
+            type="button"
+            onClick={handleImportCsvClick}
+            disabled={isImporting || isExporting}
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-foreground transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
+          >
+            {isImporting ? (
+              <Loader2 className="h-5 w-5 animate-spin" />
+            ) : (
+              <Upload className="h-5 w-5" />
+            )}
+            {isImporting ? "Importing…" : "Import Trading CSV"}
           </button>
 
           {/* Change Password Button */}

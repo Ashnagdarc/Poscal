@@ -1,4 +1,10 @@
 import crypto from "crypto";
+import {
+  computeSubscriptionExpiry,
+  parseChargeSuccessReference,
+  subscriptionTierForPlan,
+  type PlanPeriod,
+} from "./paymentReference.js";
 
 export type PaystackChargeData = {
   reference?: string;
@@ -20,6 +26,9 @@ export type PaystackWebhookEvent = {
 
 export type ParsedChargeSuccess = {
   userId: string;
+  /** Billing period from reference (monthly/yearly). */
+  planPeriod: PlanPeriod;
+  /** Entitlement tier stored on the user/profile. */
   tier: string;
   reference: string;
   amount: number;
@@ -39,39 +48,16 @@ export function verifyPaystackSignature(
   }
 
   const computed = crypto.createHmac("sha512", secret).update(rawBody).digest("hex");
-  if (computed !== signature) {
+  const a = Buffer.from(computed, "utf8");
+  const b = Buffer.from(signature, "utf8");
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
     return { ok: false, status: 401, error: "Invalid signature" };
   }
 
   return { ok: true };
 }
 
-export function computeSubscriptionExpiry(tier: string, paidAtMs: number): number {
-  const expiryDate = new Date(paidAtMs);
-  if (tier === "yearly" || tier === "pro") {
-    expiryDate.setFullYear(expiryDate.getFullYear() + 1);
-  } else if (tier === "lifetime") {
-    // Legacy: lifetime is no longer sold; keep expiry handling for old charges.
-    expiryDate.setFullYear(expiryDate.getFullYear() + 100);
-  } else {
-    expiryDate.setMonth(expiryDate.getMonth() + 1);
-  }
-  return expiryDate.getTime();
-}
-
-export function parseChargeSuccessReference(
-  reference: string | undefined,
-): { userId: string; tier: string } | { error: string } {
-  const refParts = (reference || "").split("_");
-  const userId = refParts[1];
-  const tier = refParts[2];
-
-  if (!userId || !tier) {
-    return { error: "Invalid reference format" };
-  }
-
-  return { userId, tier };
-}
+export { computeSubscriptionExpiry, parseChargeSuccessReference };
 
 export function parseSuccessfulCharge(
   event: PaystackWebhookEvent,
@@ -86,19 +72,22 @@ export function parseSuccessfulCharge(
     return { error: parsedRef.error, status: 400 };
   }
 
-  const { userId, tier } = parsedRef;
+  const { userId, planPeriod } = parsedRef;
   const reference = event.data?.reference as string;
+  const tier = subscriptionTierForPlan(planPeriod);
 
   return {
     userId,
+    planPeriod,
     tier,
     reference,
     amount: Number(event?.data?.amount || 0) / 100,
     currency: event?.data?.currency || "USD",
-    expiresAtMs: computeSubscriptionExpiry(tier, paidAtMs),
+    expiresAtMs: computeSubscriptionExpiry(planPeriod, paidAtMs),
     paidAtMs,
     metadata: {
       source: "paystack-webhook",
+      planId: planPeriod,
       channel: event?.data?.channel,
       ip_address: event?.data?.ip_address,
       fees: event?.data?.fees || 0,

@@ -4,6 +4,7 @@
  */
 
 export const SUPPORTED_PAIR_TOKENS = [
+  // Forex majors
   "EURUSD",
   "GBPUSD",
   "AUDUSD",
@@ -11,20 +12,48 @@ export const SUPPORTED_PAIR_TOKENS = [
   "USDCAD",
   "USDCHF",
   "USDJPY",
+  // Crosses
   "EURGBP",
   "EURJPY",
   "GBPJPY",
-  "XAUUSD",
-  "XAGUSD",
+  // Crypto
   "BTCUSD",
   "ETHUSD",
+  "SOLUSD",
+  "XRPUSD",
+  "ADAUSD",
+  // Metals
+  "XAUUSD",
+  "XAGUSD",
+  "XPTUSD",
+  "XCUUSD",
+  "COPPERUSD",
+  // Indices
   "US30",
   "US100",
   "US500",
   "NAS100",
+  "NDX100",
   "SPX500",
+  "DE40",
   "GER40",
+  "GER30",
   "UK100",
+  "JP225",
+  "JPN225",
+  "NIKKEI",
+  "DAX",
+  "DJI",
+  // Energy / commodities
+  "WTIUSD",
+  "BRENTUSD",
+  "BCOUSD",
+  "CLUSD",
+  "NATGASUSD",
+  "NGUSD",
+  "SOYBEANUSD",
+  "ZSUSD",
+  "IRONUSD",
 ] as const;
 
 const SUPPORTED_SET = new Set<string>(SUPPORTED_PAIR_TOKENS);

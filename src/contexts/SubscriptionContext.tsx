@@ -33,9 +33,13 @@ const asPaymentStatus = (value: string | undefined): PaymentStatus => {
 const asSubscriptionTier = (value: string | undefined): SubscriptionTier => {
   switch (value) {
     case 'free':
-    case 'premium':
+      return 'free';
     case 'pro':
-      return value;
+      return 'pro';
+    case 'premium':
+    case 'monthly': // legacy plan-period stored as tier
+    case 'yearly':
+      return 'premium';
     default:
       return 'free';
   }
@@ -83,9 +87,11 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({ 
     : null;
   const trialEndsAt: Date | null = null;
   const hasUser = Boolean(viewer);
+  const isPastExpiry = Boolean(expiresAt && expiresAt.getTime() <= Date.now());
   const isActive = hasUser
     && subscriptionTier !== 'free'
-    && paymentStatus !== 'expired';
+    && (paymentStatus === 'paid' || paymentStatus === 'trial')
+    && !isPastExpiry;
   const isLoading = authLoading || (isAuthenticated && viewer === undefined);
 
   // Check if user can access a specific feature

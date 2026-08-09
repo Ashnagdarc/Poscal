@@ -78,7 +78,12 @@ const toConvexTradeInput = (trade: Record<string, any>) => ({
   journalId: trade.journal_id ?? trade.journalId ?? null,
   externalId: trade.externalId ?? null,
   pair: trade.pair || trade.symbol || "JOURNAL",
-  direction: trade.direction === "sell" || trade.direction === "short" ? trade.direction : "buy",
+  direction:
+    trade.direction === "sell" || trade.direction === "short"
+      ? trade.direction
+      : trade.direction === "long"
+        ? "long"
+        : "buy",
   entryPrice: parseNumberish(trade.entry_price),
   exitPrice: parseNumberish(trade.exit_price),
   stopLoss: parseNumberish(trade.stop_loss),
@@ -174,22 +179,47 @@ const toConvexTradePatch = (updates: Record<string, any>) => {
   return patch;
 };
 
-export const listJournalEntries = async (
+/** Matches Convex `listForUser` max; UI should warn when a fetch hits this ceiling. */
+export const JOURNAL_FETCH_LIMIT = 500;
+
+export type JournalListResult = {
+  trades: JournalTrade[];
+  truncated: boolean;
+};
+
+export const listJournalEntriesWithMeta = async (
   _userId: string,
   status?: string,
   journalId?: string | null,
-): Promise<JournalTrade[]> => {
+): Promise<JournalListResult> => {
   if (isConvexEnabled()) {
     const client = getAuthenticatedConvexHttpClient();
     const rows = await client.query(api.tradingJournal.listForUser, {
       journalId: (journalId as any) ?? null,
       status: status ?? null,
-      limit: 300,
+      limit: JOURNAL_FETCH_LIMIT,
     });
-    return rows.map(fromConvexTrade);
+    const trades = rows.map(fromConvexTrade);
+    return {
+      trades,
+      truncated: trades.length >= JOURNAL_FETCH_LIMIT,
+    };
   }
 
-  return await tradesApi.getAll(status ? { status } : undefined);
+  const trades = await tradesApi.getAll(status ? { status } : undefined);
+  return {
+    trades,
+    truncated: trades.length >= JOURNAL_FETCH_LIMIT,
+  };
+};
+
+export const listJournalEntries = async (
+  _userId: string,
+  status?: string,
+  journalId?: string | null,
+): Promise<JournalTrade[]> => {
+  const { trades } = await listJournalEntriesWithMeta(_userId, status, journalId);
+  return trades;
 };
 
 export const createJournalEntry = async (_userId: string, trade: Record<string, any>): Promise<JournalTrade> => {
@@ -227,12 +257,17 @@ export const deleteJournalEntry = async (_userId: string, id: string): Promise<v
   await tradesApi.delete(id);
 };
 
+/** Server `saveMany` rejects batches larger than this. */
+export const JOURNAL_IMPORT_BATCH_SIZE = 100;
+
 export const importJournalEntries = async (_userId: string, trades: Record<string, any>[]) => {
   if (isConvexEnabled()) {
     const client = getAuthenticatedConvexHttpClient();
-    await client.mutation(api.tradingJournal.saveMany, {
-      items: trades.map((trade) => toConvexTradeInput(trade)),
-    });
+    const items = trades.map((trade) => toConvexTradeInput(trade));
+    for (let i = 0; i < items.length; i += JOURNAL_IMPORT_BATCH_SIZE) {
+      const chunk = items.slice(i, i + JOURNAL_IMPORT_BATCH_SIZE);
+      await client.mutation(api.tradingJournal.saveMany, { items: chunk });
+    }
     return;
   }
 

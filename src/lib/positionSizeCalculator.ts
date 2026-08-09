@@ -16,7 +16,7 @@ export interface CalculatePositionSizeInput {
   stopLossPrice?: number | null;
   takeProfitPips?: number | null;
   takeProfitPrice?: number | null;
-  /** Mid prices for conversion pairs, e.g. { "GBP/USD": 1.27, "USD/JPY": 150 }. User-supplied only. */
+  /** Mid prices for conversion pairs, e.g. { "GBP/USD": 1.27, "USD/JPY": 150 }. From live feed and/or user override. */
   marketPrices?: Record<string, number> | null;
   /**
    * Account currency ISO code (e.g. USD, GBP, EUR). When not USD, either
@@ -356,7 +356,7 @@ export function requiresEntryForPipValue(symbol: string): boolean {
   return base === "USD" && !normalized.endsWith("/USD");
 }
 
-/** Non-USD quote crosses need a user-supplied conversion pair rate to express pip value in USD. */
+/** Non-USD quote crosses need a conversion pair rate (live or typed) to express pip value in USD. */
 export function isCrossPair(symbol: string): boolean {
   const normalized = resolveInstrumentSymbol(symbol);
   if (!normalized.includes("/")) return false;

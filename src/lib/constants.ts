@@ -62,7 +62,7 @@ export const DATE_FORMATS = {
   TIME_ONLY: 'HH:mm',
 } as const;
 
-// Currency Pairs — featured calculator instruments (must exist in CURRENCY_PAIRS + INSTRUMENT_SPECS)
+// Currency Pairs — calculator instruments (must exist in INSTRUMENT_SPECS; drives CurrencyGrid)
 export const COMMON_PAIRS = [
   // Forex majors
   'EUR/USD',

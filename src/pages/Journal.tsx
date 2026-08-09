@@ -43,10 +43,10 @@ import { preferencesApi } from "@/lib/api";
 import {
   buildMonthlyReturnsGrid,
   buildResultDaySummaries,
-  isSameDay,
   startOfDay,
   toDateKey,
 } from "@/lib/historyResults";
+import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 import { formatProgressDateKey } from "@/lib/progressSessions";
 import {
   evaluateEquityMilestone,
@@ -244,13 +244,13 @@ const Journal = () => {
   const today = useMemo(() => startOfDay(new Date()), []);
 
   const resultDaySummaries = useMemo(
-    () => buildResultDaySummaries(items, manualTrades),
-    [items, manualTrades],
+    () => buildResultDaySummaries(items, manualTrades, preferredTimeZone),
+    [items, manualTrades, preferredTimeZone],
   );
 
   const monthlyReturns = useMemo(
-    () => buildMonthlyReturnsGrid(items, manualTrades, today, startingBalance),
-    [items, manualTrades, today, startingBalance],
+    () => buildMonthlyReturnsGrid(items, manualTrades, today, startingBalance, preferredTimeZone),
+    [items, manualTrades, today, startingBalance, preferredTimeZone],
   );
 
   const filteredItems = useMemo(() => {
@@ -258,7 +258,7 @@ const Journal = () => {
       return items.filter((item) => {
         if (item.status === "open") return false;
         const resultDate = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
-        return toDateKey(resultDate).startsWith(selectedMonthKey);
+        return toDateKeyInTimeZone(resultDate, preferredTimeZone).startsWith(selectedMonthKey);
       });
     }
 
@@ -266,19 +266,23 @@ const Journal = () => {
       return items;
     }
 
-    const targetDay = startOfDay(selectedCalendarDate);
+    // Calendar cells use YYYY-MM-DD keys; selection Date is noon local for that key.
+    const targetKey = toDateKey(selectedCalendarDate);
     return items.filter((item) => {
       const resultDate = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
-      return item.status !== "open" && isSameDay(resultDate, targetDay);
+      return (
+        item.status !== "open"
+        && toDateKeyInTimeZone(resultDate, preferredTimeZone) === targetKey
+      );
     });
-  }, [items, selectedCalendarDate, selectedMonthKey]);
+  }, [items, selectedCalendarDate, selectedMonthKey, preferredTimeZone]);
 
   const filteredManualTrades = useMemo(() => {
     if (selectedMonthKey) {
       return manualTrades.filter((trade) => {
         if (trade.status !== "closed") return false;
         const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
-        return toDateKey(new Date(raw)).startsWith(selectedMonthKey);
+        return toDateKeyInTimeZone(new Date(raw), preferredTimeZone).startsWith(selectedMonthKey);
       });
     }
 
@@ -286,13 +290,13 @@ const Journal = () => {
       return [];
     }
 
-    const targetDay = startOfDay(selectedCalendarDate);
+    const targetKey = toDateKey(selectedCalendarDate);
     return manualTrades.filter((trade) => {
       if (trade.status !== "closed") return false;
       const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
-      return isSameDay(new Date(raw), targetDay);
+      return toDateKeyInTimeZone(new Date(raw), preferredTimeZone) === targetKey;
     });
-  }, [manualTrades, selectedCalendarDate, selectedMonthKey]);
+  }, [manualTrades, selectedCalendarDate, selectedMonthKey, preferredTimeZone]);
 
   const openResultEditor = (item: JournalEntry) => {
     setItemForResult(item);

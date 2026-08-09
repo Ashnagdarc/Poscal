@@ -1,10 +1,13 @@
+import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useJournal } from '@/contexts/JournalContext';
 import {
   createJournalEntry,
   deleteJournalEntry,
-  listJournalEntries,
+  JOURNAL_FETCH_LIMIT,
+  listJournalEntriesWithMeta,
   updateJournalEntry,
   type JournalTrade,
 } from '@/lib/convexJournal';
@@ -16,20 +19,40 @@ type Trade = JournalTrade;
 export const useTradesQuery = () => {
   const { user } = useAuth();
   const { activeJournalId } = useJournal();
+  const warnedTruncationKey = useRef<string | null>(null);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: [...TRADES_QUERY_KEY, user?.id, activeJournalId],
-    queryFn: async (): Promise<Trade[]> => {
+    queryFn: async (): Promise<{ trades: Trade[]; truncated: boolean }> => {
       if (!user) {
         throw new Error('User not authenticated');
       }
 
-      return await listJournalEntries(user.id, undefined, activeJournalId);
+      return await listJournalEntriesWithMeta(user.id, undefined, activeJournalId);
     },
     enabled: !!user && !!activeJournalId,
     staleTime: 1000 * 30,
     gcTime: 1000 * 60 * 5,
   });
+
+  useEffect(() => {
+    if (!query.isSuccess || !query.data || !user || !activeJournalId) return;
+    const metaKey = `${user.id}:${activeJournalId}`;
+    if (query.data.truncated && warnedTruncationKey.current !== metaKey) {
+      warnedTruncationKey.current = metaKey;
+      toast.warning(
+        `Showing the ${JOURNAL_FETCH_LIMIT} most recent trades. Older trades are hidden from analytics until pagination ships.`,
+      );
+    }
+    if (!query.data.truncated) {
+      warnedTruncationKey.current = null;
+    }
+  }, [query.isSuccess, query.data, user, activeJournalId]);
+
+  return {
+    ...query,
+    data: query.data?.trades,
+  };
 };
 
 export interface ManualTradeInput {

@@ -205,7 +205,7 @@ describe("positionSizeCalculator", () => {
     expect(result.rewardToRisk).toBeCloseTo(2, 6);
   });
 
-  it("sizes crosses from user-supplied marketPrices only (no live feed required)", () => {
+  it("sizes crosses when marketPrices include the conversion pair (live or typed)", () => {
     const withRate = calculatePositionSize({
       symbol: "GBP/JPY",
       accountBalance: 10000,
