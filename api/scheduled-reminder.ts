@@ -1,4 +1,4 @@
-import { listExpiringSubscriptionsHttp } from './lib/paymentSyncClient.js';
+import { listExpiringSubscriptionsHttp } from './_lib/paymentSyncClient.js';
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;

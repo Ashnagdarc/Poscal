@@ -1,4 +1,4 @@
-import { expireSubscriptionsBeforeHttp } from './lib/paymentSyncClient.js';
+import { expireSubscriptionsBeforeHttp } from './_lib/paymentSyncClient.js';
 
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
 

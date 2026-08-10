@@ -6,9 +6,9 @@ import {
   expectedAmountMinorUnits,
   parseChargeSuccessReference,
   subscriptionTierForPlan,
-} from "./lib/paymentReference.js";
-import { syncSubscriptionFromPaymentHttp } from "./lib/paymentSyncClient.js";
-import { verifyPaystackTransaction } from "./lib/paystackVerify.js";
+} from "./_lib/paymentReference.js";
+import { syncSubscriptionFromPaymentHttp } from "./_lib/paymentSyncClient.js";
+import { verifyPaystackTransaction } from "./_lib/paystackVerify.js";
 
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
 const PAYSTACK_SECRET_KEY = process.env.PAYSTACK_SECRET_KEY;

@@ -2,8 +2,8 @@ import {
   parseSuccessfulCharge,
   verifyPaystackSignature,
   type PaystackWebhookEvent,
-} from './lib/paystackWebhookCore.js';
-import { syncSubscriptionFromPaymentHttp } from './lib/paymentSyncClient.js';
+} from './_lib/paystackWebhookCore.js';
+import { syncSubscriptionFromPaymentHttp } from './_lib/paymentSyncClient.js';
 
 const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;

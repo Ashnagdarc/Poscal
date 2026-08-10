@@ -149,7 +149,7 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
         if (!userId) {
           throw new Error('Missing user id. Please sign in again.');
         }
-        // Must match api/lib/paymentReference parseChargeSuccessReference.
+        // Must match api/_lib/paymentReference parseChargeSuccessReference.
         const paymentReference = `psk_${userId}_${selectedPlan.id}_${Date.now()}`;
         const handler = window.PaystackPop.setup({
           key: publicKey,

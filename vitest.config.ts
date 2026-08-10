@@ -19,7 +19,7 @@ export default defineConfig({
         'src/lib/journalReducers.ts',
         'src/lib/calculatorModeSync.ts',
         'src/components/ProtectedRoute.tsx',
-        'api/lib/paystackWebhookCore.ts',
+        'api/_lib/paystackWebhookCore.ts',
       ],
       thresholds: {
         lines: 70,
