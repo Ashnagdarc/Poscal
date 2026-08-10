@@ -5,8 +5,8 @@ import {
   parseChargeSuccessReference,
   parseSuccessfulCharge,
   verifyPaystackSignature,
-} from "./paystackWebhookCore";
-import { buildPaymentReference } from "./paymentReference";
+} from "./paystackWebhookCore.js";
+import { buildPaymentReference } from "./paymentReference.js";
 
 const SECRET = "test_webhook_secret";
 

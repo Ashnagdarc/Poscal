@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from "@vercel/node";
 import { ConvexHttpClient } from "convex/browser";
-import { api, convexServerClient } from "./_convex.js";
+import { api } from "./_convex.js";
 import {
   computeSubscriptionExpiry,
   expectedAmountMinorUnits,
