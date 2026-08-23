@@ -1,58 +1,60 @@
 # Poscal
 
-Poscal is a trading journal and signal platform built around a Vite/React frontend, Convex for auth/database/backend logic, and Cloudflare Workers for lightweight background jobs.
+Trading tools for forex traders: position sizing, trade journaling, market-price snapshots, and supporting workflow features.
 
-## Current Stack
+Poscal is a product project, not financial advice. Calculations and price data should be independently verified before making trading decisions.
 
-- Frontend: Vercel
-- App backend + database + auth: Convex
-- Background workers: Cloudflare Workers
-- Payments/webhooks: Vercel `/api` routes + Convex sync
+## What it does
 
-## Repo Layout
+- Calculates position sizes from account, risk, instrument, and stop-loss inputs
+- Lets traders record, review, and analyse trades
+- Displays normalized shared market-price snapshots
+- Provides authentication, notifications, and subscription/payment-related flows
 
-- `src/`: React frontend
-- `convex/`: schema, auth, signals, journal, notifications, and HTTP actions
-- `api/`: Vercel serverless routes still used for payment-related flows
-- `docs/`: setup and architecture notes
+## Architecture
 
-## Live Pricing Model
+```mermaid
+flowchart LR
+  app[React + Vite application] --> convex[Convex: auth, data, app logic]
+  worker[Cloudflare Worker] -->|normalizes prices| convex
+  payments[Vercel API routes] --> convex
+```
 
-Poscal uses shared price snapshots:
+The pricing worker fetches vendor prices, normalizes bid, ask, mid, and timestamp values, then writes a shared snapshot to Convex. Clients read that snapshot rather than each browser polling price vendors independently.
 
-1. A worker fetches prices from vendors.
-2. The worker normalizes `bid_price`, `ask_price`, `mid_price`, and `timestamp`.
-3. The worker writes those values into Convex.
-4. All users read the shared Convex snapshot instead of hitting vendors directly.
+## Stack
 
-## Quick Start
+React · TypeScript · Vite · Convex · Cloudflare Workers · Vitest · Playwright
+
+## Run locally
 
 ```bash
 npm install
+npm run convex:dev
 npm run dev
 ```
 
-## Quality gates
+The frontend is served at `http://localhost:8080`. Configure the necessary Convex and optional Vercel environment values before using connected features; see [`.env.vercel.example`](.env.vercel.example).
+
+## Checks
 
 ```bash
 npm run lint
 npm run typecheck
-npm run test
+npm test
 npm run test:coverage
 npm run build
+```
+
+End-to-end tests need the local app and their required services available:
+
+```bash
 npm run test:e2e
 ```
 
-CI runs these on every PR via `.github/workflows/ci.yml`.
+The GitHub Actions workflow runs linting, type checking, unit tests with coverage, build verification, and browser tests.
 
-Optional production error reporting: set `VITE_SENTRY_DSN` (Sentry). Without it, errors still log to the console via `reportError`.
+## Documentation
 
-## Local URLs
-
-- Frontend: `http://localhost:8080`
-- Convex dev: run `npm run convex:dev` in another terminal when needed
-
-## Docs
-
-- [Docs Index](./docs/README.md)
-- [Ask Price Implementation](./docs/ASK_PRICE_IMPLEMENTATION.md)
+- [Documentation index](docs/README.md)
+- [Ask-price implementation notes](docs/ASK_PRICE_IMPLEMENTATION.md)
