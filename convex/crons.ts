@@ -11,4 +11,13 @@ crons.interval(
   { limit: 50 },
 );
 
+// Capture ff_calendar_thisweek.json several times a day, before the feed rolls
+// to the next week. The action is one JSON fetch plus an upsert.
+crons.interval(
+  "ingest economic calendar",
+  { hours: 6 },
+  internal.newsIngest.runIngest,
+  {},
+);
+
 export default crons;

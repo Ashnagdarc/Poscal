@@ -6,6 +6,8 @@ import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
 const MIN_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+// Fair Economy only publishes this week. lastweek/nextweek return 404.
+// Each run upserts by externalId, so earlier weeks already stored are kept.
 const FEEDS = [
   "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
 ] as const;

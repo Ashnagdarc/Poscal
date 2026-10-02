@@ -3,6 +3,7 @@ import { v } from "convex/values";
 
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireVerifiedAuthUserId } from "./lib/auth";
+import { economicEventWrite } from "./lib/economicEventMerge";
 import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
@@ -239,22 +240,34 @@ export const upsertEventsBatch = internalMutation({
         ingestedAtMs: now,
       };
 
-      if (existing) {
-        await ctx.db.patch(existing._id, payload);
-        continue;
+      const write = economicEventWrite(existing !== null);
+      switch (write) {
+        case "patch": {
+          if (!existing) {
+            throw new Error("Expected stored economic event");
+          }
+          await ctx.db.patch(existing._id, payload);
+          break;
+        }
+        case "insert": {
+          const id = await ctx.db.insert("economicEvents", {
+            externalId: item.externalId,
+            ...payload,
+          });
+          inserted.push({
+            id,
+            event: item.event,
+            country: item.country,
+            impact: item.impact,
+            scheduledAtMs: item.scheduledAtMs,
+          });
+          break;
+        }
+        default: {
+          const _exhaustive: never = write;
+          throw new Error(`Unhandled economic event write: ${_exhaustive}`);
+        }
       }
-
-      const id = await ctx.db.insert("economicEvents", {
-        externalId: item.externalId,
-        ...payload,
-      });
-      inserted.push({
-        id,
-        event: item.event,
-        country: item.country,
-        impact: item.impact,
-        scheduledAtMs: item.scheduledAtMs,
-      });
     }
 
     return { insertedCount: inserted.length, inserted };
