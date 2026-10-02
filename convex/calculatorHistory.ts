@@ -26,6 +26,7 @@ const statusArg = v.optional(v.union(
 
 const historyFieldsWithoutUser = {
   journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
+  accountCurrency: nullableStringArg,
   clientId: nullableStringArg,
   symbol: v.string(),
   orderType: orderTypeArg,
@@ -74,6 +75,7 @@ const buildHistoryRow = (
 ) => ({
   userId,
   journalId: args.journalId ?? existing?.journalId ?? null,
+  accountCurrency: args.accountCurrency ?? existing?.accountCurrency ?? null,
   clientId: args.clientId ?? null,
   symbol: args.symbol,
   orderType: args.orderType ?? null,
@@ -263,18 +265,19 @@ export const remove = mutation({
 export const backfillLegacyRows = internalMutation({
   args: {
     limit: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args) => {
-    const rows = await ctx.db.query("calculatorHistory").collect();
-    const limit = args.limit ?? rows.length;
+    const limit = Math.min(Math.max(args.limit ?? 100, 1), 200);
+    const page = await ctx.db.query("calculatorHistory").paginate({
+      numItems: limit,
+      cursor: args.cursor ?? null,
+    });
     let scanned = 0;
     let patched = 0;
     let skipped = 0;
 
-    for (const row of rows) {
-      if (scanned >= limit) {
-        break;
-      }
+    for (const row of page.page) {
       scanned += 1;
 
       const rawPair = typeof row.pair === "string" ? row.pair.trim() : "";
@@ -336,6 +339,8 @@ export const backfillLegacyRows = internalMutation({
       scanned,
       patched,
       skipped,
+      isDone: page.isDone,
+      continueCursor: page.continueCursor,
     };
   },
 });

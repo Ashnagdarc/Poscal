@@ -1,0 +1,10 @@
+[mcp_servers.convex]
+command = "npx"
+args = [
+    "-y",
+    "convex@latest",
+    "mcp",
+    "start",
+    "--project-dir",
+    "/Users/vfx3edenoasis/Documents/Development Server/Poscal",
+]

@@ -128,6 +128,7 @@ export default defineSchema({
   calculatorHistory: defineTable({
     userId: nullableString,
     journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
+    accountCurrency: nullableString,
     clientId: nullableString,
     pair: nullableString,
     direction: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.null())),
@@ -258,7 +259,8 @@ export default defineSchema({
     lastVerifiedAtMs: nullableNumber,
   })
     .index("by_user", ["userId"])
-    .index("by_endpoint", ["endpoint"]),
+    .index("by_endpoint", ["endpoint"])
+    .index("by_active", ["isActive"]),
 
   ingestorHealth: defineTable({
     key: v.string(),

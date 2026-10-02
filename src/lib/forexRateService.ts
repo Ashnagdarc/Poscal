@@ -5,6 +5,8 @@
  */
 
 const FRANKFURTER_LATEST = "https://api.frankfurter.dev/v1/latest";
+/** ECB via Frankfurter omits NGN. This public feed fills only the currencies Frankfurter left out. */
+const OPEN_ER_API_LATEST = "https://open.er-api.com/v6/latest/USD";
 
 /** Currencies we may need as quote/base for featured forex instruments. */
 const TRACKED_VS_USD = [
@@ -65,7 +67,26 @@ export async function fetchForexMidPrices(
     throw new Error("Forex rate feed returned no rates");
   }
 
-  const prices = midPricesFromUsdRates(body.rates);
+  const rates: Record<string, number> = { ...body.rates };
+  const missing = TRACKED_VS_USD.filter((ccy) => !isPositiveNumber(rates[ccy]));
+  if (missing.length > 0) {
+    try {
+      const extra = await fetchImpl(OPEN_ER_API_LATEST);
+      if (extra.ok) {
+        const extraBody = (await extra.json()) as { rates?: Record<string, number> };
+        for (const ccy of missing) {
+          const value = extraBody.rates?.[ccy];
+          if (isPositiveNumber(value)) {
+            rates[ccy] = value;
+          }
+        }
+      }
+    } catch {
+      // Leave the missing pair unset so the calculator asks for a typed rate.
+    }
+  }
+
+  const prices = midPricesFromUsdRates(rates);
   if (Object.keys(prices).length === 0) {
     throw new Error("Forex rate feed returned empty conversion map");
   }

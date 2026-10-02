@@ -5,14 +5,12 @@ import { notificationsApi } from '@/lib/api';
 
 const PERMISSION_REQUEST_TIMEOUT_MS = 10_000;
 
-const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined
-  ?? (() => {
-    logger.warn('[push-notifications] VITE_VAPID_PUBLIC_KEY is not set. Using fallback key.');
-    return 'BE7EfMew8pPJTxly2cBT7PxInN62M2HWPB0yB-bNGwUniu0b2ouoLbEmfiQjHu5vowBcW0caNzaWpwP9mBZ0CM0';
-  })();
+const VAPID_PUBLIC_KEY = (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined)?.trim() ?? "";
+const pushConfigured = VAPID_PUBLIC_KEY.length > 0;
 
 interface UsePushNotificationsResult {
   isSupported: boolean;
+  isConfigured: boolean;
   isSubscribed: boolean;
   permission: NotificationPermission;
   loading: boolean;
@@ -108,6 +106,11 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
   }, []);
 
   const subscribe = useCallback(async (): Promise<boolean> => {
+    if (!pushConfigured) {
+      setLastError("Push is unavailable until VITE_VAPID_PUBLIC_KEY is set.");
+      return false;
+    }
+
     setLastError(null);
 
     if (!isSupported) {
@@ -271,6 +274,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
 
   return {
     isSupported,
+    isConfigured: pushConfigured,
     isSubscribed,
     permission,
     loading,

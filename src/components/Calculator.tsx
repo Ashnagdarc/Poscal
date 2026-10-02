@@ -18,6 +18,7 @@ import {
 } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
+import { useJournal } from "@/contexts/JournalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveJournalEntry } from "@/lib/calculatorHistory";
 import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
@@ -90,6 +91,7 @@ export const Calculator = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { activeJournalId } = useJournal();
   const [accountBalance, setAccountBalance] = useState("");
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [riskPercent, setRiskPercent] = useState(1);
@@ -194,15 +196,6 @@ export const Calculator = () => {
   const [customRiskInput, setCustomRiskInput] = useState("");
 
   useEffect(() => {
-    if (
-      !FEATURED_CURRENCY_PAIRS.some((pair) => pair.symbol === selectedPair.symbol) &&
-      !getInstrumentSpec(selectedPair.symbol)
-    ) {
-      setSelectedPair(FEATURED_CURRENCY_PAIRS[0]);
-    }
-  }, [selectedPair.symbol]);
-
-  useEffect(() => {
     setConversionRate("");
   }, [conversionPair]);
 
@@ -211,6 +204,10 @@ export const Calculator = () => {
   }, [accountCcyPair]);
 
   useEffect(() => {
+    // Price mode keeps the stop the user typed. Only pip mode derives prices,
+    // including when buy/sell flips the stop to the correct side of entry.
+    if (calculationMode !== "pips") return;
+
     const spec = getInstrumentSpec(selectedPair.symbol);
     const entry = parseFloat(entryPrice);
     const stopPips = parseFloat(stopLossPips);
@@ -228,7 +225,7 @@ export const Calculator = () => {
     if (converted.takeProfitPrice) {
       setTakeProfitPrice(converted.takeProfitPrice);
     }
-  }, [tradeDirection, selectedPair.symbol, entryPrice, stopLossPips, takeProfitPips]);
+  }, [calculationMode, tradeDirection, selectedPair.symbol, entryPrice, stopLossPips, takeProfitPips]);
 
   useEffect(() => {
     const symbol = searchParams.get("symbol");
@@ -279,6 +276,7 @@ export const Calculator = () => {
           : effectiveEntryPrice,
       stopLossPrice: calculationMode === "price" ? parseFloat(stopLossPrice) || null : null,
       takeProfitPrice: calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null,
+      direction: calculationMode === "price" ? tradeDirection : null,
       marketPrices: userMarketPrices,
       accountCurrency: currency.code,
     });
@@ -292,6 +290,7 @@ export const Calculator = () => {
     effectiveEntryPrice,
     stopLossPrice,
     takeProfitPrice,
+    tradeDirection,
     selectedPair,
     userMarketPrices,
     currency.code,
@@ -372,6 +371,13 @@ export const Calculator = () => {
 
   const saveToHistory = async () => {
     if (!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal) return;
+    if (user?.id && !activeJournalId) {
+      toast.error("Create a journal before saving. Calculations attach to the active journal.");
+      return;
+    }
+
+    const savedPotentialProfit =
+      calculation.potentialProfitAccount > 0 ? calculation.potentialProfitAccount : null;
 
     const source = searchParams.get("fromSignal") === "true" ? "signal" : "manual";
     const signalId = searchParams.get("signalId");
@@ -412,7 +418,9 @@ export const Calculator = () => {
         takeProfitPrice: resolvedTakeProfitPrice,
         lotSize: calculation.positionSize,
         actualRisk: calculation.actualRisk,
-        potentialProfit: calculation.potentialProfit > 0 ? calculation.potentialProfit : null,
+        potentialProfit: savedPotentialProfit,
+        accountCurrency: currency.code,
+        journalId: activeJournalId,
         source,
         signalId,
       }, user?.id);
@@ -429,7 +437,9 @@ export const Calculator = () => {
         takeProfitPrice: resolvedTakeProfitPrice,
         lotSize: calculation.positionSize,
         actualRisk: calculation.actualRisk,
-        potentialProfit: calculation.potentialProfit > 0 ? calculation.potentialProfit : null,
+        potentialProfit: savedPotentialProfit,
+        accountCurrency: currency.code,
+        journalId: activeJournalId,
         source,
         signalId,
       });
@@ -610,12 +620,7 @@ export const Calculator = () => {
                     </p>
                     <p className="text-lg font-semibold">
                       +{riskDisplayCurrency.symbol}
-                      {formatNumber(
-                        calculation.potentialProfitAccount > 0
-                          ? calculation.potentialProfitAccount
-                          : calculation.potentialProfit,
-                        0,
-                      )}
+                      {formatNumber(calculation.potentialProfitAccount, 0)}
                     </p>
                   </div>
                 </div>
@@ -639,11 +644,21 @@ export const Calculator = () => {
 
           {calculation.wasMinLotClamped && (
             <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-center text-xs text-muted-foreground">
-              Minimum lot size ({formatNumber(calculation.spec?.minLot ?? 0.01)} lots) caps actual risk at{" "}
+              Minimum lot ({formatNumber(calculation.spec?.minLot ?? 0.01)} lots) raises actual risk to{" "}
               {riskDisplayCurrency.symbol}
-              {formatNumber(calculation.actualRisk, 0)} instead of{" "}
+              {formatNumber(calculation.actualRisk, 0)}, above the{" "}
               {riskDisplayCurrency.symbol}
-              {formatNumber(calculation.riskAmount, 0)}.
+              {formatNumber(calculation.riskAmount, 0)} you set.
+            </p>
+          )}
+
+          {calculation.wasMaxLotClamped && (
+            <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-center text-xs text-muted-foreground">
+              Position size is capped at {formatNumber(calculation.spec?.maxLot ?? 100, 0)} lots. Actual risk is{" "}
+              {riskDisplayCurrency.symbol}
+              {formatNumber(calculation.actualRisk, 0)}, below the{" "}
+              {riskDisplayCurrency.symbol}
+              {formatNumber(calculation.riskAmount, 0)} you set.
             </p>
           )}
         </section>
@@ -910,8 +925,16 @@ export const Calculator = () => {
 
         <p className="mt-4 px-1 text-xs text-muted-foreground">
           {calculation.spec
-            ? `${calculation.spec.displayName} · ${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / ${stopLossUnit} · SL ${formatNumber(calculation.stopLossPips, 1)} ${stopLossUnit}`
-            : "Unsupported instrument"}
+            ? [
+                calculation.spec.displayName,
+                calculation.isValid && calculation.pipValue > 0
+                  ? `${calculation.pipValue.toLocaleString("en-US", { maximumFractionDigits: 4 })} / ${stopLossUnit}`
+                  : null,
+                calculation.stopLossPips > 0
+                  ? `SL ${formatNumber(calculation.stopLossPips, 1)} ${stopLossUnit}`
+                  : null,
+              ].filter(Boolean).join(" · ")
+            : calculation.reason ?? "Unsupported instrument"}
           {calculation.warning ? ` · ${calculation.warning}` : ""}
           {hasAutoConversionRate && conversionPair && autoMarketPrices?.[conversionPair]
             ? ` · ${conversionPair} ${autoMarketPrices[conversionPair].toLocaleString("en-US", { maximumFractionDigits: 4 })}`
@@ -931,7 +954,7 @@ export const Calculator = () => {
         )}
         {showAccountFxField && !autoRatesLoading && (
           <p className="mt-2 px-1 text-xs text-amber-600 dark:text-amber-400">
-            Account currency is {currency.code}. Enter {accountCcyPair} so risk is converted before lot sizing — sizing without it is blocked.
+            Account currency is {currency.code}. Type the {accountCcyPair} rate. Sizing stays blocked until that rate is entered.
           </p>
         )}
       </main>

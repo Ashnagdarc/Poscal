@@ -35,6 +35,25 @@ const toClientSnapshot = (row: any) => ({
   updatedAtMs: row.updatedAtMs,
 });
 
+const EVENT_LIST_CAP = 500;
+const KNOWN_IMPACTS = ["high", "medium", "low", "holiday"] as const;
+
+function impactsForFilter(impact: string | null): readonly string[] {
+  if (!impact || impact === "all") return KNOWN_IMPACTS;
+  switch (impact) {
+    case "high":
+    case "medium":
+    case "holiday":
+      return [impact];
+    case "low":
+      return ["low", "holiday"];
+    default: {
+      const custom: string = impact;
+      return [custom];
+    }
+  }
+}
+
 export const listEvents = query({
   args: {
     fromMs: v.number(),
@@ -46,19 +65,24 @@ export const listEvents = query({
   },
   handler: async (ctx, args) => {
     void args.refreshToken;
-    const rows = await ctx.db
-      .query("economicEvents")
-      .withIndex("by_scheduled", (q) =>
-        q.gte("scheduledAtMs", args.fromMs).lte("scheduledAtMs", args.toMs),
-      )
-      .take(500);
-
     const impact = args.impact?.toLowerCase() ?? null;
     const country = args.country?.toUpperCase() ?? null;
+    const impacts = impactsForFilter(impact && impact !== "all" ? impact : null);
 
-    return rows
+    const batches = await Promise.all(
+      impacts.map((value) =>
+        ctx.db
+          .query("economicEvents")
+          .withIndex("by_impact_scheduled", (q) =>
+            q.eq("impact", value).gte("scheduledAtMs", args.fromMs).lte("scheduledAtMs", args.toMs),
+          )
+          .take(EVENT_LIST_CAP),
+      ),
+    );
+
+    return batches
+      .flat()
       .filter((row) => {
-        if (impact && impact !== "all" && row.impact.toLowerCase() !== impact) return false;
         if (country && country !== "ALL" && row.country.toUpperCase() !== country) return false;
         return true;
       })
@@ -67,10 +91,15 @@ export const listEvents = query({
   },
 });
 
+const SNAPSHOT_LIMIT = 200;
+
 export const listSnapshots = query({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.query("marketSnapshots").collect();
+    const rows = await ctx.db
+      .query("marketSnapshots")
+      .withIndex("by_key")
+      .take(SNAPSHOT_LIMIT);
     return rows
       .sort((a, b) => a.key.localeCompare(b.key))
       .map(toClientSnapshot);
@@ -80,7 +109,10 @@ export const listSnapshots = query({
 export const listSnapshotsInternal = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.query("marketSnapshots").collect();
+    const rows = await ctx.db
+      .query("marketSnapshots")
+      .withIndex("by_key")
+      .take(SNAPSHOT_LIMIT);
     return rows.map((row) => ({
       key: row.key,
       kind: row.kind,
@@ -370,8 +402,8 @@ export const queueHighImpactAlerts = internalMutation({
     const now = Date.now();
     const activeSubs = await ctx.db
       .query("pushSubscriptions")
-      .withIndex("by_endpoint")
-      .collect();
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .take(1000);
 
     const optedInUsers = new Map<string, string | null>();
     for (const sub of activeSubs) {

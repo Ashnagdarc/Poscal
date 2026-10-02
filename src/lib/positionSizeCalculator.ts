@@ -16,6 +16,11 @@ export interface CalculatePositionSizeInput {
   stopLossPrice?: number | null;
   takeProfitPips?: number | null;
   takeProfitPrice?: number | null;
+  /**
+   * Trade direction. In price mode, a buy stop must sit below entry and a sell
+   * stop above entry. Pip mode is a distance, so direction is ignored there.
+   */
+  direction?: "buy" | "sell" | null;
   /** Mid prices for conversion pairs, e.g. { "GBP/USD": 1.27, "USD/JPY": 150 }. From live feed and/or user override. */
   marketPrices?: Record<string, number> | null;
   /**
@@ -141,7 +146,16 @@ export function calculatePositionSize(
   const accountCurrency = normalizeAccountCurrency(input.accountCurrency);
 
   if (!spec) {
-    return invalidResult(symbol, mode, "Unsupported instrument", undefined, 0, accountCurrency);
+    return invalidResult(
+      symbol,
+      mode,
+      symbol
+        ? `${symbol} is not a supported instrument. Pick a pair from the list.`
+        : "Pick a pair from the list.",
+      undefined,
+      0,
+      accountCurrency,
+    );
   }
 
   const riskAmount = calculateRiskAmount(input.accountBalance, input.riskPercent);
@@ -149,6 +163,13 @@ export function calculatePositionSize(
 
   if (riskAmount <= 0) {
     return invalidResult(symbol, stop.mode, "Enter account balance and risk percent", spec, 0, accountCurrency);
+  }
+
+  if (!isPositiveNumber(input.stopLossPips)) {
+    const sideError = priceStopSideError(input);
+    if (sideError) {
+      return invalidResult(symbol, "price", sideError, spec, riskAmount, accountCurrency);
+    }
   }
 
   if (stop.stopLossPips <= 0) {
@@ -167,7 +188,11 @@ export function calculatePositionSize(
   const accountToUsd = fx.rate;
   const riskAmountUsd = riskAmount * accountToUsd;
 
-  if (spec.pipValuePerStandardLot <= 0 && !isCrossPair(symbol)) {
+  if (
+    spec.pipValuePerStandardLot <= 0 &&
+    !isCrossPair(symbol) &&
+    !requiresEntryForPipValue(symbol)
+  ) {
     return invalidResult(symbol, stop.mode, "Instrument pip value is missing", spec, riskAmount, accountCurrency);
   }
 
@@ -189,6 +214,21 @@ export function calculatePositionSize(
 
   const rawLotSize = riskAmountUsd / (stop.stopLossPips * pipValuePerLot);
   const roundedLotSize = roundToLotStep(rawLotSize, spec.lotStep);
+  const flooredToZero = rawLotSize > 0 && roundedLotSize <= 0;
+  if (flooredToZero) {
+    const minLotRiskUsd = spec.minLot * stop.stopLossPips * pipValuePerLot;
+    const minLotRisk = accountToUsd > 0 ? minLotRiskUsd / accountToUsd : minLotRiskUsd;
+    return invalidResult(
+      symbol,
+      stop.mode,
+      `Risk is too small for the minimum lot (${spec.minLot}). That lot would risk ${minLotRisk.toFixed(2)} ${accountCurrency}, above the ${riskAmount.toFixed(2)} ${accountCurrency} you set.`,
+      spec,
+      riskAmount,
+      accountCurrency,
+      pipValuePerLot,
+    );
+  }
+
   const wasMinLotClamped = roundedLotSize > 0 && roundedLotSize < spec.minLot;
   const wasMaxLotClamped = roundedLotSize > spec.maxLot;
   const positionSize = Math.min(
@@ -210,6 +250,14 @@ export function calculatePositionSize(
     accountCurrency !== "USD"
       ? `Risk ${riskAmount.toFixed(2)} ${accountCurrency} ≈ $${riskAmountUsd.toFixed(2)} USD (rate ${accountToUsd.toFixed(4)}).`
       : undefined;
+  const lotBoundNote = describeLotBound(
+    wasMinLotClamped,
+    wasMaxLotClamped,
+    spec,
+    actualRisk,
+    riskAmount,
+    accountCurrency,
+  );
 
   return {
     isValid: true,
@@ -232,8 +280,50 @@ export function calculatePositionSize(
     wasRounded: roundedLotSize !== rawLotSize,
     wasMinLotClamped,
     wasMaxLotClamped,
-    warning: [spec.warning, multiCcyNote].filter(Boolean).join(" "),
+    warning: [spec.warning, multiCcyNote, lotBoundNote].filter(Boolean).join(" "),
   };
+}
+
+function describeLotBound(
+  wasMinLotClamped: boolean,
+  wasMaxLotClamped: boolean,
+  spec: InstrumentSpec,
+  actualRisk: number,
+  riskAmount: number,
+  accountCurrency: string,
+): string | undefined {
+  if (wasMaxLotClamped) {
+    return `Position size is capped at ${spec.maxLot} lots. Actual risk is ${actualRisk.toFixed(2)} ${accountCurrency}, below the ${riskAmount.toFixed(2)} ${accountCurrency} you set.`;
+  }
+  if (wasMinLotClamped) {
+    return `Minimum lot (${spec.minLot}) raises actual risk to ${actualRisk.toFixed(2)} ${accountCurrency}, above the ${riskAmount.toFixed(2)} ${accountCurrency} you set.`;
+  }
+  return undefined;
+}
+
+function priceStopSideError(input: CalculatePositionSizeInput): string | null {
+  const direction = input.direction;
+  if (direction !== "buy" && direction !== "sell") {
+    return null;
+  }
+  if (!isPositiveNumber(input.entryPrice) || !isPositiveNumber(input.stopLossPrice)) {
+    return null;
+  }
+
+  switch (direction) {
+    case "buy":
+      return input.stopLossPrice >= input.entryPrice
+        ? "Buy stop must be below the entry price"
+        : null;
+    case "sell":
+      return input.stopLossPrice <= input.entryPrice
+        ? "Sell stop must be above the entry price"
+        : null;
+    default: {
+      const unreachable: never = direction;
+      return unreachable;
+    }
+  }
 }
 
 function getTakeProfitPips(
@@ -266,7 +356,10 @@ function invalidResult(
   spec?: InstrumentSpec,
   riskAmount = 0,
   accountCurrency = "USD",
+  pipValue?: number,
 ): CalculatePositionSizeResult {
+  const staticPip = spec?.pipValuePerStandardLot ?? 0;
+  const showStaticPip = staticPip > 0 && !requiresEntryForPipValue(symbol);
   return {
     ...EMPTY_RESULT,
     mode,
@@ -276,7 +369,7 @@ function invalidResult(
     riskAmount,
     riskAmountUsd: accountCurrency === "USD" ? riskAmount : 0,
     accountCurrency,
-    pipValue: spec?.pipValuePerStandardLot ?? 0,
+    pipValue: pipValue ?? (showStaticPip ? staticPip : 0),
     warning: spec?.warning,
   };
 }

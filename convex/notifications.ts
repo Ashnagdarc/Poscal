@@ -3,6 +3,7 @@ import type { Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
+const MAX_NOTIFICATION_ATTEMPTS = 3;
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 const nullableAnyArg = v.optional(v.union(v.any(), v.null()));
@@ -62,14 +63,18 @@ export const listActivePushSubscriptions = internalQuery({
     userId: nullableStringArg,
   },
   handler: async (ctx, args) => {
-    const rows = args.userId
-      ? await ctx.db
-          .query("pushSubscriptions")
-          .withIndex("by_user", (q) => q.eq("userId", args.userId!))
-          .collect()
-      : await ctx.db.query("pushSubscriptions").collect();
+    if (args.userId) {
+      const rows = await ctx.db
+        .query("pushSubscriptions")
+        .withIndex("by_user", (q) => q.eq("userId", args.userId!))
+        .take(100);
+      return rows.filter((row) => row.isActive);
+    }
 
-    return rows.filter((row) => row.isActive);
+    return await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .take(1000);
   },
 });
 
@@ -116,22 +121,31 @@ export const finalizeNotification = internalMutation({
     id: v.id("notificationQueue"),
     status: v.union(v.literal("sent"), v.literal("failed")),
     errorMessage: nullableStringArg,
+    retryable: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db.get(args.id);
     if (!existing) {
-      return { success: false };
+      return { success: false, retried: false };
     }
 
+    const attempts = existing.attempts + 1;
+    const retry =
+      args.status === "failed" &&
+      args.retryable === true &&
+      attempts < MAX_NOTIFICATION_ATTEMPTS;
+    const now = Date.now();
+
     await ctx.db.patch(args.id, {
-      status: args.status,
+      status: retry ? "pending" : args.status,
       processingStartedAtMs: null,
-      attempts: existing.attempts + 1,
+      attempts,
       errorMessage: args.errorMessage ?? null,
-      updatedAtMs: Date.now(),
+      scheduledForMs: retry ? now + attempts * 60_000 : existing.scheduledForMs,
+      updatedAtMs: now,
     });
 
-    return { success: true };
+    return { success: true, retried: retry, attempts };
   },
 });
 

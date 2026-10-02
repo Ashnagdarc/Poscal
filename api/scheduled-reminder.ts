@@ -19,11 +19,10 @@ async function sendReminderEmail(to: string, name: string | null, expiresAt: str
 <p>Thanks — the Poscal team</p>`;
 
   if (!RESEND_API_KEY) {
-    console.log(`[REMINDER][DRY-RUN] to=${to} subject=${subject}`);
-    return { success: true, dryRun: true };
+    return { success: false, error: 'RESEND_API_KEY is not configured' };
   }
 
-  const from = process.env.EMAIL_FROM || 'no-reply@poscalfx.com';
+  const from = process.env.EMAIL_FROM || 'Poscal <noreply@poscalfx.com>';
 
   try {
     const resp = await fetch('https://api.resend.com/emails', {
@@ -50,7 +49,8 @@ async function sendReminderEmail(to: string, name: string | null, expiresAt: str
 }
 
 export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') {
+  // Vercel Cron invokes GET; allow POST for manual ops.
+  if (req.method !== 'POST' && req.method !== 'GET') {
     return res.status(405).json({ success: false, message: 'Method not allowed' });
   }
   if (!PAYMENT_SYNC_SECRET) {
@@ -69,9 +69,18 @@ export default async function handler(req: any, res: any) {
     });
   }
 
+  const due = expiring || [];
+  if (!RESEND_API_KEY && due.length > 0) {
+    return res.status(503).json({
+      success: false,
+      message: 'RESEND_API_KEY is not configured; reminder emails were not sent',
+      count: due.length,
+    });
+  }
+
   // 2. Send reminder emails via Resend (if configured)
   const results: Array<any> = [];
-  for (const user of expiring || []) {
+  for (const user of due) {
     if (!user.email) {
       results.push({ id: user.userId, success: false, error: 'missing email' });
       continue;
@@ -84,5 +93,10 @@ export default async function handler(req: any, res: any) {
     results.push({ id: user.userId, email: user.email, ...r });
   }
 
-  return res.status(200).json({ success: true, count: (expiring || []).length, results });
+  const failed = results.some((result) => result.success === false);
+  return res.status(failed ? 502 : 200).json({
+    success: !failed,
+    count: due.length,
+    results,
+  });
 }

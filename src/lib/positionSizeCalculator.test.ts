@@ -257,5 +257,130 @@ describe("positionSizeCalculator", () => {
     expect(gbp.riskAmountUsd).toBeCloseTo(127, 5);
     expect(blocked.isValid).toBe(false);
   });
+
+  it("rejects a risk that floors to 0 lots and explains the minimum lot", () => {
+    const result = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 100,
+      riskPercent: 0.5,
+      stopLossPips: 50,
+    });
+
+    expect(result.isValid).toBe(false);
+    expect(result.positionSize).toBe(0);
+    expect(result.reason).toMatch(/too small for the minimum lot/i);
+    expect(result.reason).toMatch(/above the 0\.50 USD you set/i);
+  });
+
+  it("tells the user when size is capped at 100 lots and reports the smaller actual risk", () => {
+    const result = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 1_000_000,
+      riskPercent: 10,
+      stopLossPips: 1,
+    });
+
+    expect(result.isValid).toBe(true);
+    expect(result.wasMaxLotClamped).toBe(true);
+    expect(result.positionSize).toBe(100);
+    expect(result.actualRisk).toBe(1000);
+    expect(result.warning).toMatch(/capped at 100 lots/i);
+    expect(result.warning).toMatch(/1000\.00 USD/);
+  });
+
+  it("rejects a buy stop above entry and a sell stop below entry", () => {
+    const buy = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      entryPrice: 1.1,
+      stopLossPrice: 1.105,
+      direction: "buy",
+    });
+    const sell = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      entryPrice: 1.1,
+      stopLossPrice: 1.095,
+      direction: "sell",
+    });
+    const validBuy = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      entryPrice: 1.1,
+      stopLossPrice: 1.095,
+      direction: "buy",
+    });
+
+    expect(buy.isValid).toBe(false);
+    expect(buy.reason).toMatch(/Buy stop must be below/i);
+    expect(buy.positionSize).toBe(0);
+    expect(sell.isValid).toBe(false);
+    expect(sell.reason).toMatch(/Sell stop must be above/i);
+    expect(validBuy.isValid).toBe(true);
+    expect(validBuy.positionSize).toBe(0.2);
+  });
+
+  it("does not expose stale static pip values when USD-quote price is missing", () => {
+    for (const symbol of ["USD/JPY", "USD/CHF", "USD/CAD"]) {
+      const result = calculatePositionSize({
+        symbol,
+        accountBalance: 10000,
+        riskPercent: 1,
+        stopLossPips: 20,
+      });
+      expect(result.isValid).toBe(false);
+      expect(result.pipValue).toBe(0);
+      expect(result.pipValue).not.toBeCloseTo(6.15);
+      expect(result.pipValue).not.toBeCloseTo(11.3);
+      expect(result.pipValue).not.toBeCloseTo(7.38);
+    }
+  });
+
+  it("keeps copper units consistent with $25 per 0.01", () => {
+    const spec = getInstrumentSpec("XCU/USD");
+    expect(spec?.pipValuePerStandardLot).toBe(25);
+    expect(spec?.contractSize).toBe(2500);
+    expect((spec?.contractSize ?? 0) * (spec?.pipSize ?? 0)).toBe(25);
+
+    const result = calculatePositionSize({
+      symbol: "XCU/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 20,
+    });
+    expect(result.positionSize).toBe(0.2);
+    expect(result.units).toBe(500);
+  });
+
+  it("stores potential profit in account currency for non-USD accounts", () => {
+    const result = calculatePositionSize({
+      symbol: "EUR/USD",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 25,
+      takeProfitPips: 50,
+      accountCurrency: "GBP",
+      marketPrices: { "GBP/USD": 1.25 },
+    });
+
+    expect(result.isValid).toBe(true);
+    expect(result.potentialProfitAccount).toBeCloseTo(result.potentialProfit / 1.25, 4);
+    expect(result.actualRisk).toBeCloseTo(result.actualRiskUsd / 1.25, 4);
+  });
+
+  it("rejects an unknown symbol instead of sizing EUR/USD", () => {
+    const result = calculatePositionSize({
+      symbol: "FOO/BAR",
+      accountBalance: 10000,
+      riskPercent: 1,
+      stopLossPips: 25,
+    });
+    expect(result.isValid).toBe(false);
+    expect(result.symbol).toBe("FOO/BAR");
+    expect(result.reason).toMatch(/not a supported instrument/i);
+  });
 });
 

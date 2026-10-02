@@ -15,5 +15,11 @@ describe("Calculator sizing dependencies", () => {
     expect(source).toMatch(/useAutoMarketPrices/);
     expect(source).toMatch(/conversionRate/);
     expect(source).toMatch(/userMarketPrices/);
+    expect(source).toMatch(/if \(calculationMode !== "pips"\) return/);
+    expect(source).toMatch(/journalId: activeJournalId/);
+    expect(source).toMatch(/potentialProfitAccount/);
+    expect(source).not.toMatch(/setSelectedPair\(FEATURED_CURRENCY_PAIRS\[0\]\)/);
+    expect(source).toMatch(/raises actual risk/);
+    expect(source).toMatch(/capped at/);
   });
 });

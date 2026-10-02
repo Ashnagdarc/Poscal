@@ -91,12 +91,31 @@ function configureWebPush() {
   );
 }
 
+function isRetryableNotificationError(message: string): boolean {
+  if (/No active push subscriptions|No recipient email|Unsupported notification channel/i.test(message)) {
+    return false;
+  }
+  if (/\b404\b|\b410\b/i.test(message)) {
+    return false;
+  }
+  return true;
+}
+
 export const processPendingBatch = internalAction({
   args: {
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args: { limit?: number }) => {
-    configureWebPush();
+    let webPushReady = true;
+    try {
+      configureWebPush();
+    } catch (error) {
+      webPushReady = false;
+      console.error(
+        "Push disabled for this batch; email will still send.",
+        error instanceof Error ? error.message : "VAPID configuration failed",
+      );
+    }
 
     const claimed = await ctx.runMutation(internal.notifications.claimPendingBatch, {
       limit: Math.max(1, Math.min(args.limit ?? DEFAULT_BATCH_LIMIT, 100)),
@@ -119,6 +138,10 @@ export const processPendingBatch = internalAction({
     for (const notification of claimed as QueuedNotification[]) {
       try {
         if (notification.channel === "push") {
+          if (!webPushReady) {
+            throw new Error("VAPID keys are not configured");
+          }
+
           const cacheKey = notification.userId ?? "__broadcast__";
           let subscriptions = subscriptionCache.get(cacheKey);
           if (!subscriptions) {
@@ -225,6 +248,7 @@ export const processPendingBatch = internalAction({
           id: notification._id,
           status: "failed",
           errorMessage: message,
+          retryable: isRetryableNotificationError(message),
         });
         summary.failed += 1;
         summary.errors.push({ id: String(notification._id), message });

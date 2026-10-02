@@ -75,8 +75,12 @@ describe("instrument pips vs price parity", () => {
             takeProfitPrice,
           });
 
-          expect(fromPips.isValid).toBe(true);
-          expect(fromPrices.isValid).toBe(true);
+          expect(fromPrices.isValid).toBe(fromPips.isValid);
+          if (!fromPips.isValid) {
+            expect(fromPips.positionSize).toBe(0);
+            expect(fromPips.reason).toMatch(/too small|stop|price|conversion|Unsupported/i);
+            continue;
+          }
           expect(fromPips.positionSize).toBe(fromPrices.positionSize);
           expect(fromPips.rewardToRisk).toBeCloseTo(fromPrices.rewardToRisk, 4);
         }

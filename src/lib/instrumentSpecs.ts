@@ -113,19 +113,17 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
   // ============== FOREX MAJORS ==============
   "EUR/USD": forexMajor("EUR/USD", "Euro / US Dollar"),
   "GBP/USD": forexMajor("GBP/USD", "British Pound / US Dollar"),
-  "USD/JPY": {
-    ...forexJpy("USD/JPY", "US Dollar / Japanese Yen"),
-    // Fallback only; live sizing prefers entry-based pip value.
-    pipValuePerStandardLot: 6.15,
-  },
+  "USD/JPY": forexJpy("USD/JPY", "US Dollar / Japanese Yen"),
   "USD/CHF": {
     ...forexMajor("USD/CHF", "US Dollar / Swiss Franc"),
-    pipValuePerStandardLot: 11.3,
+    // Quote is not USD; pip value is computed from the entry price.
+    pipValuePerStandardLot: 0,
   },
   "AUD/USD": forexMajor("AUD/USD", "Australian Dollar / US Dollar"),
   "USD/CAD": {
     ...forexMajor("USD/CAD", "US Dollar / Canadian Dollar"),
-    pipValuePerStandardLot: 7.38,
+    // Quote is not USD; pip value is computed from the entry price.
+    pipValuePerStandardLot: 0,
   },
   "NZD/USD": forexMajor("NZD/USD", "New Zealand Dollar / US Dollar"),
 
@@ -196,8 +194,9 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     displayName: "Copper / US Dollar",
     assetClass: "metal",
     pipSize: 0.01,
+    // $25 per 0.01 price move. contractSize × pipSize must equal that pip value.
     pipValuePerStandardLot: 25,
-    contractSize: 25000,
+    contractSize: 2500,
     minLot: 0.01,
     maxLot: 100,
     lotStep: 0.01,

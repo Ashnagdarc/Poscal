@@ -17,6 +17,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
   const {
     permission,
     isSupported,
+    isConfigured,
     isSubscribed,
     loading,
     lastError,
@@ -170,6 +171,14 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
       <p className="text-sm font-medium text-foreground">Not supported</p>
       <p className="text-xs text-muted-foreground">
         Use Chrome, Firefox, or Edge for push notifications.
+      </p>
+      {tradingToggles}
+    </div>
+  ) : !isConfigured ? (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-foreground">Push is unavailable</p>
+      <p className="text-xs text-muted-foreground">
+        This build has no VAPID public key, so push cannot be turned on.
       </p>
       {tradingToggles}
     </div>

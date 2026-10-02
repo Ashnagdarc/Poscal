@@ -2,6 +2,7 @@ import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { BookOpen, Calculator, Camera, Clock3, Copy, MoreHorizontal, Trash2, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { ACCOUNT_CURRENCIES, useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { PageHeader } from "@/components/PageHeader";
 import { JournalAnalyticsTabs, type JournalTab } from "@/components/journal/JournalAnalyticsTabs";
@@ -111,6 +112,11 @@ const formatPrice = (value: number | null | undefined) => {
   });
 };
 
+const symbolForCurrency = (code: string | null | undefined, fallback: string) => {
+  if (!code) return fallback;
+  return ACCOUNT_CURRENCIES.find((item) => item.code === code)?.symbol ?? fallback;
+};
+
 const formatMoney = (value: number | null | undefined, decimals = 2) => {
   if (value === null || value === undefined || !Number.isFinite(value)) {
     return "—";
@@ -139,6 +145,16 @@ const parseNumericInput = (value: string) => {
 const Journal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { currency } = useCurrency();
+  const formatAccountMoney = (
+    value: number | null | undefined,
+    code?: string | null,
+    decimals = 2,
+  ) => {
+    const text = formatMoney(value, decimals);
+    if (text === "—") return text;
+    return `${symbolForCurrency(code, currency.symbol)}${text}`;
+  };
   const { showErrorFromUnknown } = useActionError();
   const {
     activeJournal,
@@ -883,7 +899,7 @@ const Journal = () => {
                       <div className="rounded-xl bg-background px-3 py-3">
                         <p className="text-xs text-muted-foreground">Risk</p>
                         <p className="mt-1 font-semibold text-foreground">
-                          ${formatMoney(item.riskAmount, 2)} ({formatMoney(item.riskPercent, 1)}%)
+                          {formatAccountMoney(item.riskAmount, item.accountCurrency, 2)} ({formatMoney(item.riskPercent, 1)}%)
                         </p>
                       </div>
                     </div>
@@ -957,15 +973,15 @@ const Journal = () => {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Account Balance</p>
-                  <p className="mt-1 font-semibold text-foreground">${formatMoney(selectedItem.accountBalance, 2)}</p>
+                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.accountBalance, selectedItem.accountCurrency, 2)}</p>
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Risk Amount</p>
-                  <p className="mt-1 font-semibold text-foreground">${formatMoney(selectedItem.riskAmount, 2)}</p>
+                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.riskAmount, selectedItem.accountCurrency, 2)}</p>
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Actual Risk</p>
-                  <p className="mt-1 font-semibold text-foreground">${formatMoney(selectedItem.actualRisk, 2)}</p>
+                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.actualRisk, selectedItem.accountCurrency, 2)}</p>
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Reward to Risk</p>
@@ -975,7 +991,7 @@ const Journal = () => {
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Potential Profit</p>
-                  <p className="mt-1 font-semibold text-foreground">${formatMoney(selectedItem.potentialProfit, 2)}</p>
+                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.potentialProfit, selectedItem.accountCurrency, 2)}</p>
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Saved</p>
@@ -990,7 +1006,7 @@ const Journal = () => {
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">P/L Amount</p>
-                  <p className="mt-1 font-semibold text-foreground">${formatMoney(selectedItem.pnlAmount, 2)}</p>
+                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.pnlAmount, selectedItem.accountCurrency, 2)}</p>
                 </div>
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Result R</p>

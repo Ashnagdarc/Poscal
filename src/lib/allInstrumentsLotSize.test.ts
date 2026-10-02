@@ -170,6 +170,19 @@ describe("all instrument lot-size calculations", () => {
   });
 });
 
+describe("contract size matches displayed pip value", () => {
+  it("keeps metal and commodity units on the same pip-value model", () => {
+    for (const spec of Object.values(INSTRUMENT_SPECS)) {
+      if (spec.assetClass !== "metal" && spec.assetClass !== "commodity") continue;
+      if (spec.pipValuePerStandardLot <= 0) continue;
+      expect(spec.contractSize * spec.pipSize, spec.symbol).toBeCloseTo(
+        spec.pipValuePerStandardLot,
+        8,
+      );
+    }
+  });
+});
+
 describe("known reference lot sizes for new instruments", () => {
   it.each([
     // Crypto: $1/pt → lots = 100 / (100 * 1) = 1

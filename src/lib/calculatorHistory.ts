@@ -34,6 +34,8 @@ export interface SavedCalculationRecord {
   id: string;
   userId?: string | null;
   journalId?: string | null;
+  /** ISO code for the money fields on this row (balance, risk, profit). */
+  accountCurrency?: string | null;
   symbol: string;
   orderType?: SavedCalculationOrderType | null;
   entryPrice: number | null;
@@ -66,6 +68,7 @@ export type JournalEntry = SavedCalculationRecord;
 export interface SaveCalculatorHistoryInput extends CalculatorHistoryItem {
   riskAmount: number;
   journalId?: string | null;
+  accountCurrency?: string | null;
   units?: number;
   pipValue?: number;
   spreadPips?: number | null;
@@ -135,6 +138,8 @@ const toSavedCalculationFromLegacyItem = (
   return {
     id: String(item.id ?? Date.now()),
     userId: null,
+    journalId: null,
+    accountCurrency: null,
     symbol: String(item.pair ?? "EUR/USD"),
     orderType: getOrderTypeFromDirection(item.direction),
     entryPrice: null,
@@ -173,6 +178,8 @@ const toSavedCalculationFromStoredItem = (item: Record<string, unknown>): SavedC
     return {
       id: String(item.id ?? Date.now()),
       userId: typeof item.userId === "string" ? item.userId : null,
+      journalId: typeof item.journalId === "string" ? item.journalId : null,
+      accountCurrency: typeof item.accountCurrency === "string" ? item.accountCurrency : null,
       symbol: String(item.symbol ?? item.pair ?? "EUR/USD"),
       orderType: (item.orderType as SavedCalculationOrderType | null | undefined)
         ?? getOrderTypeFromDirection(item.direction as "buy" | "sell" | undefined),
@@ -300,6 +307,7 @@ const toSavedCalculationRecord = (
     id: item.id,
     userId: userId ?? null,
     journalId: item.journalId ?? null,
+    accountCurrency: item.accountCurrency ?? null,
     symbol: item.symbol ?? item.pair,
     orderType: item.orderType ?? getOrderTypeFromDirection(item.direction),
     entryPrice: item.entryPrice ?? null,
@@ -333,6 +341,7 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
 
   return {
     journalId: (item.journalId as any) ?? null,
+    accountCurrency: item.accountCurrency ?? null,
     clientId: item.id,
     symbol: record.symbol,
     orderType: record.orderType ?? null,
@@ -365,6 +374,7 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
 const toConvexInputFromSavedRecord = (_userId: string, record: SavedCalculationRecord) => {
   return {
     journalId: (record.journalId as any) ?? null,
+    accountCurrency: record.accountCurrency ?? null,
     clientId: record.id,
     symbol: record.symbol,
     orderType: record.orderType ?? null,
@@ -398,6 +408,7 @@ const fromConvexSavedRecord = (row: {
   _id: string;
   userId?: string | null;
   journalId?: string | null;
+  accountCurrency?: string | null;
   clientId?: string | null;
   symbol?: string | null;
   pair?: string | null;
@@ -431,6 +442,7 @@ const fromConvexSavedRecord = (row: {
   id: row.clientId ?? row._id,
   userId: row.userId ?? null,
   journalId: row.journalId ?? null,
+  accountCurrency: row.accountCurrency ?? null,
   symbol: row.symbol ?? row.pair ?? "EUR/USD",
   orderType: row.orderType ?? getOrderTypeFromDirection(row.direction),
   entryPrice: row.entryPrice ?? null,
