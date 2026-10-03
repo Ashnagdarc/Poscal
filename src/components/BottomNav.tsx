@@ -49,7 +49,7 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
 
   return (
     <nav
-      className="z-40 shrink-0 border-t border-border/60 bg-background/95 px-3 pt-2 backdrop-blur-xl supports-[backdrop-filter]:bg-background/85 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+      className="z-40 shrink-0 border-t border-border/60 bg-background/95 px-3 pt-2 backdrop-blur-xl supports-[backdrop-filter]:bg-background/85 pb-[calc(env(safe-area-inset-bottom,0px)+0.75rem)]"
       role="navigation"
       aria-label="Main navigation"
     >
