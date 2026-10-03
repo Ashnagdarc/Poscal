@@ -2,7 +2,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef } from "react";
 import { ActionErrorProvider } from "@/contexts/ActionErrorContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -17,6 +17,7 @@ import { Analytics } from "@vercel/analytics/react";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAUpdateBanner } from "@/components/PWAUpdateBanner";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
+import { PushNotificationsProvider } from "@/hooks/use-push-notifications";
 
 const Welcome = lazyWithRetry(() => import("./pages/Welcome"));
 const SignIn = lazyWithRetry(() => import("./pages/SignIn"));
@@ -43,11 +44,15 @@ const AppUpdateModal = lazyWithRetry(() =>
 const PWAInstallPrompt = lazyWithRetry(() =>
   import("./components/PWAInstallPrompt").then((m) => ({ default: m.PWAInstallPrompt })),
 );
+const PushEnablePrompt = lazyWithRetry(() =>
+  import("./components/PushEnablePrompt").then((m) => ({ default: m.PushEnablePrompt })),
+);
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
   const location = useLocation();
+  const scrollRef = useRef<HTMLDivElement>(null);
   const hideBottomNavOn = [
     "/signin",
     "/signup",
@@ -59,22 +64,31 @@ const AppContent = () => {
   ];
   const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
 
+  useEffect(() => {
+    scrollRef.current?.scrollTo(0, 0);
+  }, [location.pathname]);
+
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <SkipLink />
       <PWAUpdateBanner />
       <Suspense fallback={null}>
         <AppUpdateModal />
         <PWAInstallPrompt />
+        <PushEnablePrompt />
       </Suspense>
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
-            <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>
-          </div>
-        }
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain [scrollbar-gutter:stable]"
       >
+        <Suspense
+          fallback={
+            <div className="flex min-h-full flex-col items-center justify-center gap-3 bg-background">
+              <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
+              <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>
+            </div>
+          }
+        >
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/calculator" element={<Index />} />
@@ -137,16 +151,10 @@ const AppContent = () => {
           <Route path="/privacy" element={<Privacy />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
-      </Suspense>
-      {shouldShowBottomNav && <BottomNav persistent />}
-      {/* Spacer so last CTAs clear the floating island + iOS safe area (MC-002 / EB-002). */}
-      {shouldShowBottomNav ? (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none h-[calc(6rem+env(safe-area-inset-bottom))] shrink-0"
-        />
-      ) : null}
-    </>
+        </Suspense>
+      </div>
+      {shouldShowBottomNav ? <BottomNav persistent /> : null}
+    </div>
   );
 };
 
@@ -158,15 +166,17 @@ const App = () => (
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <AuthProvider>
-              <SubscriptionProvider>
-                <FontProvider>
-                  <CurrencyProvider>
-                    <JournalProvider>
-                      <AppContent />
-                    </JournalProvider>
-                  </CurrencyProvider>
-                </FontProvider>
-              </SubscriptionProvider>
+              <PushNotificationsProvider>
+                <SubscriptionProvider>
+                  <FontProvider>
+                    <CurrencyProvider>
+                      <JournalProvider>
+                        <AppContent />
+                      </JournalProvider>
+                    </CurrencyProvider>
+                  </FontProvider>
+                </SubscriptionProvider>
+              </PushNotificationsProvider>
             </AuthProvider>
           </BrowserRouter>
           <Analytics />

@@ -296,7 +296,7 @@ const Profile = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col pb-24">
+      <div className="flex min-h-full flex-col bg-background pb-6">
         <header className="pt-12 pb-6 px-6 flex items-center justify-between">
           <Skeleton className="w-10 h-10 rounded-xl" />
           <Skeleton className="w-20 h-6" />
@@ -319,7 +319,7 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col pb-24">
+    <div className="flex min-h-full flex-col bg-background pb-6">
       {/* Header */}
       <header className="pt-12 pb-6 px-6 flex items-center justify-between animate-fade-in">
         <button
@@ -338,7 +338,7 @@ const Profile = () => {
       </header>
 
       {/* Profile Content */}
-      <main className="flex-1 px-6 space-y-6 overflow-y-auto animate-slide-up">
+      <main className="flex-1 animate-slide-up space-y-6 px-6 pb-6">
         {/* Avatar Section */}
         <div className="flex flex-col items-center">
           <div className="relative">

@@ -4,13 +4,20 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import {
+  detailLinkKey,
+  easternDateKey,
+  indexFfDetailLinks,
+  parseFfDetailLinks,
+} from "./lib/ffCalendarFeed";
 
-const MIN_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const MIN_INTERVAL_MS = 2 * 60 * 1000; // collapse bursts; the calendar still pulls on its own
 // Fair Economy only publishes this week. lastweek/nextweek return 404.
 // Each run upserts by externalId, so earlier weeks already stored are kept.
 const FEEDS = [
   "https://nfs.faireconomy.media/ff_calendar_thisweek.json",
 ] as const;
+const DETAIL_FEED = "https://nfs.faireconomy.media/ff_calendar_thisweek.xml";
 
 type FfEconomicEvent = {
   title?: string;
@@ -66,11 +73,35 @@ async function fetchFeed(url: string): Promise<FfEconomicEvent[]> {
   return Array.isArray(json) ? (json as FfEconomicEvent[]) : [];
 }
 
+async function fetchDetailLinks() {
+  const response = await fetch(DETAIL_FEED, {
+    headers: {
+      accept: "application/xml,text/xml",
+      "user-agent": "PoscalCalendarBot/1.0",
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`Calendar detail feed HTTP ${response.status}`);
+  }
+  const bytes = await response.arrayBuffer();
+  const xml = new TextDecoder("windows-1252").decode(bytes);
+  return indexFfDetailLinks(parseFfDetailLinks(xml));
+}
+
 export const runIngest = internalAction({
   args: {
     force: v.optional(v.boolean()),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    ok: true;
+    skipped: boolean;
+    reason?: string;
+    lastIngestAtMs?: number | null;
+    eventCount?: number;
+    insertedCount?: number;
+    highImpactCount?: number;
+    alertsQueued?: number;
+  }> => {
     if (!args.force) {
       const gate = await ctx.runQuery(internal.news.shouldSkipIngest, {
         minIntervalMs: MIN_INTERVAL_MS,
@@ -88,7 +119,10 @@ export const runIngest = internalAction({
     try {
       await ctx.runMutation(internal.news.syncFxFromPriceSnapshots, {});
 
-      const feeds = await Promise.all(FEEDS.map((url) => fetchFeed(url)));
+      const [feeds, detailLinks] = await Promise.all([
+        Promise.all(FEEDS.map((url) => fetchFeed(url))),
+        fetchDetailLinks().catch(() => new Map<string, string>()),
+      ]);
       const feed = feeds.flat();
 
       const events = feed
@@ -97,16 +131,20 @@ export const runIngest = internalAction({
           const country = (item.country ?? "XX").toUpperCase();
           const event = item.title!;
           const date = item.date!;
+          const scheduledAtMs = parseScheduledAtMs(date);
+          const detailUrl =
+            detailLinks.get(detailLinkKey(country, event, easternDateKey(scheduledAtMs))) ?? null;
           return {
             externalId: hashExternalId(country, event, date),
             country,
             event,
             impact: normalizeImpact(item.impact),
-            scheduledAtMs: parseScheduledAtMs(date),
+            scheduledAtMs,
             actual: toDisplay(item.actual),
             estimate: toDisplay(item.forecast),
             previous: toDisplay(item.previous),
             unit: null as string | null,
+            detailUrl,
           };
         });
 
@@ -137,6 +175,7 @@ export const runIngest = internalAction({
             scheduledAtMs: item.scheduledAtMs,
           })),
         });
+        // The mutation pages through subscribers and schedules the rest itself.
         alertsQueued = queued.queued;
       }
 

@@ -38,7 +38,7 @@ export const ingestNews = httpAction(async (ctx, request) => {
 
   try {
     const result = await ctx.runAction(internal.newsIngest.runIngest, { force });
-    return json({ ok: true, ...result });
+    return json({ ...result, ok: true });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ingest failed";
     return json({ ok: false, error: message }, 500);

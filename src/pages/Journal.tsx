@@ -488,7 +488,7 @@ const Journal = () => {
   };
 
   return (
-    <div className="flex min-h-screen flex-col bg-background pb-32">
+    <div className="flex min-h-full flex-col bg-background pb-6">
       <PageHeader
         title="Journal"
         subtitle={

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { logger } from '@/lib/logger';
 import { notificationsApi } from '@/lib/api';
@@ -12,6 +12,8 @@ interface UsePushNotificationsResult {
   isSupported: boolean;
   isConfigured: boolean;
   isSubscribed: boolean;
+  /** True after the first support and subscription check finishes. */
+  checked: boolean;
   permission: NotificationPermission;
   loading: boolean;
   lastError: string | null;
@@ -34,21 +36,27 @@ function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return outputArray;
 }
 
-export const usePushNotifications = (): UsePushNotificationsResult => {
+const PushNotificationsContext = createContext<UsePushNotificationsResult | null>(null);
+
+function usePushNotificationsState(): UsePushNotificationsResult {
   const { user } = useAuth();
   const [isSupported, setIsSupported] = useState(false);
   const [isSubscribed, setIsSubscribed] = useState(false);
+  const [checked, setChecked] = useState(false);
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [loading, setLoading] = useState(false);
   const [swRegistration, setSwRegistration] = useState<ServiceWorkerRegistration | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    setChecked(false);
     const checkSupport = async () => {
       try {
         const supported = 'serviceWorker' in navigator &&
           'PushManager' in window &&
           'Notification' in window;
+        if (cancelled) return;
         setIsSupported(supported);
 
         if (supported) {
@@ -69,6 +77,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
           ]) as Promise<ServiceWorkerRegistration>;
 
           const registration = await registrationPromise;
+          if (cancelled) return;
           logger.log('[push] Service Worker ready:', registration);
           setSwRegistration(registration);
 
@@ -80,6 +89,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
               const subscriptions = await notificationsApi.getSubscriptions();
               const found = subscriptions.some(sub => sub.endpoint === subscription.endpoint);
               
+              if (cancelled) return;
               if (found) {
                 logger.log('[push] Subscription verified in database');
                 setIsSubscribed(true);
@@ -89,7 +99,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
               }
             } catch (error) {
               logger.error('[push] Error checking subscription in database:', error);
-              setIsSubscribed(false);
+              if (!cancelled) setIsSubscribed(false);
             }
           } else {
             logger.log('[push] No browser subscription found');
@@ -98,12 +108,17 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
         }
       } catch (error) {
         logger.error('[push] Setup failed; continuing without push:', error);
-        setIsSupported(false);
+        if (!cancelled) setIsSupported(false);
+      } finally {
+        if (!cancelled) setChecked(true);
       }
     };
 
-    checkSupport();
-  }, []);
+    void checkSupport();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
 
   const subscribe = useCallback(async (): Promise<boolean> => {
     if (!pushConfigured) {
@@ -246,7 +261,7 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
       setLoading(false);
       return false;
     }
-  }, [isSupported, swRegistration, user?.id]);
+  }, [isSupported, swRegistration]);
 
   const unsubscribe = useCallback(async (): Promise<boolean> => {
     if (!swRegistration) return false;
@@ -276,10 +291,24 @@ export const usePushNotifications = (): UsePushNotificationsResult => {
     isSupported,
     isConfigured: pushConfigured,
     isSubscribed,
+    checked,
     permission,
     loading,
     lastError,
     subscribe,
     unsubscribe,
   };
-};
+}
+
+export function PushNotificationsProvider({ children }: { children: ReactNode }) {
+  const value = usePushNotificationsState();
+  return createElement(PushNotificationsContext.Provider, { value }, children);
+}
+
+export function usePushNotifications(): UsePushNotificationsResult {
+  const value = useContext(PushNotificationsContext);
+  if (!value) {
+    throw new Error("usePushNotifications must be used within PushNotificationsProvider");
+  }
+  return value;
+}

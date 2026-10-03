@@ -1,6 +1,7 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
+import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import {
   internalMutation,
@@ -468,24 +469,18 @@ export const queueNotification = mutation({
       throw new Error("Admin access required");
     }
 
-    const id = await ctx.db.insert("notificationQueue", {
+    const tag = args.tag ?? "general";
+    await ctx.scheduler.runAfter(0, internal.notifications.enqueueDevicePushes, {
       userId: args.userId ?? null,
-      channel: "push",
       title: args.title,
       body: args.body,
-      status: "pending",
-      recipientEmail: null,
-      tag: args.tag ?? null,
+      tag,
+      deliveryKey: `${Date.now()}`,
       data: args.data ?? null,
-      scheduledForMs: null,
-      processingStartedAtMs: null,
-      attempts: 0,
-      errorMessage: null,
-      createdAtMs: Date.now(),
-      updatedAtMs: Date.now(),
+      cursor: null,
     });
 
-    return { id, success: true, tag: args.tag ?? null, data: args.data ?? null };
+    return { success: true, tag, data: args.data ?? null };
   },
 });
 

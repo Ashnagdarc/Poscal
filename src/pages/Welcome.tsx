@@ -136,7 +136,7 @@ const Welcome = () => {
 
   if (showSplash) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-full items-center justify-center bg-background">
         <motion.div
           className="text-center"
           initial={{ opacity: 0, scale: 0.96 }}
@@ -154,7 +154,7 @@ const Welcome = () => {
   const isFirstStep = currentStep === 0;
 
   return (
-    <div className="flex min-h-screen flex-col overflow-hidden bg-background">
+    <div className="flex h-full min-h-full flex-col overflow-hidden bg-background">
       <div className="px-6 pt-12">
         <div className="h-1 overflow-hidden rounded-full bg-muted">
           <div

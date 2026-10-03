@@ -1,5 +1,6 @@
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { selectClaimBatch, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -16,28 +17,25 @@ export const claimPendingBatch = internalMutation({
   handler: async (ctx, args) => {
     const now = Date.now();
     // Cap scans so a large backlog cannot blow read limits; claim only needs a batch.
-    const scanCap = Math.max(args.limit * 10, 50);
-    const duePending = await ctx.db
-      .query("notificationQueue")
-      .withIndex("by_status_scheduled", (q) => q.eq("status", "pending"))
-      .take(scanCap);
+    const scanCap = Math.max(args.limit * 4, 40);
+    const [pending, processing] = await Promise.all([
+      ctx.db
+        .query("notificationQueue")
+        .withIndex("by_status_scheduled", (q) => q.eq("status", "pending"))
+        .take(scanCap),
+      ctx.db
+        .query("notificationQueue")
+        .withIndex("by_status_scheduled", (q) => q.eq("status", "processing"))
+        .take(scanCap),
+    ]);
 
-    const staleProcessing = await ctx.db
-      .query("notificationQueue")
-      .withIndex("by_status_scheduled", (q) => q.eq("status", "processing"))
-      .take(scanCap);
-
-    const candidates = [
-      ...duePending.filter((row) => row.scheduledForMs === null || row.scheduledForMs === undefined || row.scheduledForMs <= now),
-      ...staleProcessing.filter(
-        (row) =>
-          row.processingStartedAtMs !== null &&
-          row.processingStartedAtMs !== undefined &&
-          row.processingStartedAtMs <= now - args.staleAfterMs,
-      ),
-    ]
-      .sort((left, right) => left.createdAtMs - right.createdAtMs)
-      .slice(0, args.limit);
+    const { claim: candidates } = selectClaimBatch({
+      pending,
+      processing,
+      now,
+      limit: args.limit,
+      staleAfterMs: args.staleAfterMs,
+    });
 
     for (const row of candidates) {
       await ctx.db.patch(row._id, {
@@ -58,23 +56,117 @@ export const claimPendingBatch = internalMutation({
   },
 });
 
-export const listActivePushSubscriptions = internalQuery({
+export const getPushSubscription = internalQuery({
   args: {
-    userId: nullableStringArg,
+    id: v.id("pushSubscriptions"),
   },
   handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.id);
+    if (!row?.isActive) return null;
+    return {
+      _id: row._id,
+      endpoint: row.endpoint,
+      p256dhKey: row.p256dhKey,
+      authKey: row.authKey,
+    };
+  },
+});
+
+/** One queue row per device. A later page continues until every active device has a row. */
+export const enqueueDevicePushes = internalMutation({
+  args: {
+    userId: nullableStringArg,
+    title: v.string(),
+    body: v.string(),
+    tag: v.string(),
+    deliveryKey: v.string(),
+    data: nullableAnyArg,
+    cursor: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args): Promise<{ queued: number; scheduledFollowUp: boolean }> => {
+    const now = Date.now();
+    const baseData = args.data && typeof args.data === "object" ? args.data : {};
+
     if (args.userId) {
       const rows = await ctx.db
         .query("pushSubscriptions")
-        .withIndex("by_user", (q) => q.eq("userId", args.userId!))
-        .take(100);
-      return rows.filter((row) => row.isActive);
+        .withIndex("by_user_active", (q) => q.eq("userId", args.userId!).eq("isActive", true))
+        .take(20);
+      let queued = 0;
+      for (const sub of rows) {
+        const tag = `${args.tag}-${args.deliveryKey}-${sub._id}`;
+        const existing = await ctx.db
+          .query("notificationQueue")
+          .withIndex("by_tag", (q) => q.eq("tag", tag))
+          .first();
+        if (existing) continue;
+        await ctx.db.insert("notificationQueue", {
+          userId: sub.userId,
+          channel: "push",
+          title: args.title,
+          body: args.body,
+          status: "pending",
+          recipientEmail: null,
+          tag,
+          data: { ...baseData, subscriptionId: sub._id, displayTag: args.tag },
+          scheduledForMs: null,
+          processingStartedAtMs: null,
+          attempts: 0,
+          errorMessage: null,
+          createdAtMs: now,
+          updatedAtMs: now,
+        });
+        queued += 1;
+      }
+      return { queued, scheduledFollowUp: false };
     }
 
-    return await ctx.db
+    const page = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(1000);
+      .paginate({ numItems: SUBSCRIBER_ALERT_PAGE_SIZE, cursor: args.cursor ?? null });
+
+    let queued = 0;
+    for (const sub of page.page) {
+      if (!sub.isActive) continue;
+      const tag = `${args.tag}-${args.deliveryKey}-${sub._id}`;
+      const existing = await ctx.db
+        .query("notificationQueue")
+        .withIndex("by_tag", (q) => q.eq("tag", tag))
+        .first();
+      if (existing) continue;
+      await ctx.db.insert("notificationQueue", {
+        userId: sub.userId,
+        channel: "push",
+        title: args.title,
+        body: args.body,
+        status: "pending",
+        recipientEmail: null,
+        tag,
+        data: { ...baseData, subscriptionId: sub._id, displayTag: args.tag },
+        scheduledForMs: null,
+        processingStartedAtMs: null,
+        attempts: 0,
+        errorMessage: null,
+        createdAtMs: now,
+        updatedAtMs: now,
+      });
+      queued += 1;
+    }
+
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.notifications.enqueueDevicePushes, {
+        userId: null,
+        title: args.title,
+        body: args.body,
+        tag: args.tag,
+        deliveryKey: args.deliveryKey,
+        data: args.data ?? null,
+        cursor: page.continueCursor,
+      });
+    }
+
+    return { queued, scheduledFollowUp: !page.isDone };
   },
 });
 

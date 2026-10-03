@@ -17,7 +17,7 @@ const Index = () => {
 
   if (!isReady) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+      <div className="flex min-h-full items-center justify-center bg-background">
         <div className="w-8 h-8 border-2 border-foreground border-t-transparent rounded-full animate-spin" />
       </div>
     );

@@ -8,16 +8,17 @@ crons.interval(
   "process notification queue",
   { minutes: 1 },
   internal.notificationsNode.processPendingBatch,
+  // Each pass claims a bounded batch. A full batch schedules the next pass immediately.
   { limit: 50 },
 );
 
-// Capture ff_calendar_thisweek.json several times a day, before the feed rolls
-// to the next week. The action is one JSON fetch plus an upsert.
+// Keep pulling the free Forex Factory week feed. force skips the short burst gate
+// so a quiet app still receives new prints. JSON is the schedule; XML adds the link.
 crons.interval(
   "ingest economic calendar",
-  { hours: 6 },
+  { minutes: 10 },
   internal.newsIngest.runIngest,
-  {},
+  { force: true },
 );
 
 export default crons;

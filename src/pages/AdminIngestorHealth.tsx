@@ -40,7 +40,7 @@ export default function AdminIngestorHealth() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background pb-28 text-foreground">
+    <div className="min-h-full bg-background pb-6 text-foreground">
       <PageHeader
         title="Ingestor Health"
         subtitle="Batch flushes and recent auth errors"

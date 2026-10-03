@@ -24,7 +24,9 @@ type PriceSnapshotArgs = {
 async function upsertPriceSnapshot(ctx: { db: any }, args: PriceSnapshotArgs) {
   const existing = await ctx.db
     .query("priceSnapshots")
-    .withIndex("by_symbol", (q) => q.eq("symbol", args.symbol))
+    .withIndex("by_symbol", (q: { eq: (field: "symbol", value: string) => unknown }) =>
+      q.eq("symbol", args.symbol),
+    )
     .unique();
 
   const row = {

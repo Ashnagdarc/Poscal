@@ -43,7 +43,7 @@ export const ProtectedRoute = ({
   // Show loading spinner while checking auth or subscription
   if (authLoading || subLoading || adminLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-foreground border-t-transparent" />
           <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>

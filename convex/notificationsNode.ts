@@ -4,10 +4,22 @@ import webpush from "web-push";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { classifyPushFailure, NOTIFICATION_BATCH_LIMIT, shouldDrainAnotherBatch } from "./lib/notificationStaging";
 import { internalAction } from "./_generated/server";
 
-const DEFAULT_BATCH_LIMIT = 50;
+const DEFAULT_BATCH_LIMIT = NOTIFICATION_BATCH_LIMIT;
 const DEFAULT_STALE_AFTER_MS = 5 * 60 * 1000;
+
+type BatchSummary = {
+  claimed: number;
+  sent: number;
+  failed: number;
+  pushSent: number;
+  emailSent: number;
+  deactivatedSubscriptions: number;
+  errors: Array<{ id: string; message: string }>;
+};
 
 type QueuedNotification = {
   _id: any;
@@ -91,8 +103,26 @@ function configureWebPush() {
   );
 }
 
+function pushStatusCode(error: unknown): number | null {
+  if (typeof error === "object" && error && "statusCode" in error) {
+    const statusCode = Number((error as { statusCode?: unknown }).statusCode);
+    return Number.isFinite(statusCode) ? statusCode : null;
+  }
+  return null;
+}
+
+function clientPushData(data: Record<string, unknown> | null): Record<string, unknown> {
+  if (!data) return {};
+  const clientData = { ...data };
+  delete clientData.subscriptionId;
+  delete clientData.displayTag;
+  delete clientData.html;
+  delete clientData.fromEmail;
+  return clientData;
+}
+
 function isRetryableNotificationError(message: string): boolean {
-  if (/No active push subscriptions|No recipient email|Unsupported notification channel/i.test(message)) {
+  if (/No active push subscription|missing a device|No recipient email|Unsupported notification channel/i.test(message)) {
     return false;
   }
   if (/\b404\b|\b410\b/i.test(message)) {
@@ -105,7 +135,7 @@ export const processPendingBatch = internalAction({
   args: {
     limit: v.optional(v.number()),
   },
-  handler: async (ctx, args: { limit?: number }) => {
+  handler: async (ctx, args: { limit?: number }): Promise<BatchSummary> => {
     let webPushReady = true;
     try {
       configureWebPush();
@@ -117,8 +147,9 @@ export const processPendingBatch = internalAction({
       );
     }
 
+    const limit = Math.max(1, Math.min(args.limit ?? DEFAULT_BATCH_LIMIT, 100));
     const claimed = await ctx.runMutation(internal.notifications.claimPendingBatch, {
-      limit: Math.max(1, Math.min(args.limit ?? DEFAULT_BATCH_LIMIT, 100)),
+      limit,
       staleAfterMs: DEFAULT_STALE_AFTER_MS,
     });
 
@@ -132,7 +163,6 @@ export const processPendingBatch = internalAction({
       errors: [] as Array<{ id: string; message: string }>,
     };
 
-    const subscriptionCache = new Map<string, Awaited<ReturnType<typeof ctx.runQuery>>>();
     const emailCache = new Map<string, string | null>();
 
     for (const notification of claimed as QueuedNotification[]) {
@@ -142,63 +172,55 @@ export const processPendingBatch = internalAction({
             throw new Error("VAPID keys are not configured");
           }
 
-          const cacheKey = notification.userId ?? "__broadcast__";
-          let subscriptions = subscriptionCache.get(cacheKey);
-          if (!subscriptions) {
-            subscriptions = await ctx.runQuery(internal.notifications.listActivePushSubscriptions, {
-              userId: notification.userId ?? null,
-            });
-            subscriptionCache.set(cacheKey, subscriptions);
+          const subscriptionId =
+            typeof notification.data?.subscriptionId === "string" ? notification.data.subscriptionId : null;
+          if (!subscriptionId) {
+            throw new Error("Push delivery is missing a device");
           }
 
-          if (!subscriptions.length) {
-            throw new Error("No active push subscriptions");
+          const subscription = await ctx.runQuery(internal.notifications.getPushSubscription, {
+            id: subscriptionId as Id<"pushSubscriptions">,
+          });
+          if (!subscription) {
+            throw new Error("No active push subscription");
           }
 
+          const displayTag =
+            typeof notification.data?.displayTag === "string"
+              ? notification.data.displayTag
+              : (notification.tag ?? "general");
           const payload = JSON.stringify({
             title: notification.title,
             body: notification.body,
-            tag: notification.tag ?? "general",
-            data: notification.data ?? {},
+            tag: displayTag,
+            data: clientPushData(notification.data ?? null),
             icon: "/pwa-192x192.png",
             badge: "/favicon.png",
           });
 
-          let successCount = 0;
-          const errors: string[] = [];
-
-          for (const subscription of subscriptions) {
-            try {
-              await webpush.sendNotification(
-                {
-                  endpoint: subscription.endpoint,
-                  keys: {
-                    p256dh: subscription.p256dhKey,
-                    auth: subscription.authKey,
-                  },
+          try {
+            await webpush.sendNotification(
+              {
+                endpoint: subscription.endpoint,
+                keys: {
+                  p256dh: subscription.p256dhKey,
+                  auth: subscription.authKey,
                 },
-                payload,
-              );
-              successCount += 1;
-            } catch (error) {
-              const message = error instanceof Error ? error.message : "Unknown push send error";
-              errors.push(message);
-              const statusCode = typeof error === "object" && error && "statusCode" in error
-                ? Number((error as { statusCode?: unknown }).statusCode)
-                : undefined;
-              if (statusCode === 404 || statusCode === 410) {
-                const deactivated = await ctx.runMutation(internal.notifications.markSubscriptionInactive, {
-                  id: subscription._id,
-                });
-                if (deactivated.success) {
-                  summary.deactivatedSubscriptions += 1;
-                }
+              },
+              payload,
+            );
+          } catch (error) {
+            const statusCode = pushStatusCode(error);
+            if (classifyPushFailure(statusCode) === "gone") {
+              const deactivated = await ctx.runMutation(internal.notifications.markSubscriptionInactive, {
+                id: subscription._id,
+              });
+              if (deactivated.success) {
+                summary.deactivatedSubscriptions += 1;
               }
+              throw new Error(`Push subscription gone (${statusCode ?? "unknown"})`);
             }
-          }
-
-          if (successCount === 0) {
-            throw new Error(errors[0] ?? "All push deliveries failed");
+            throw error;
           }
 
           await ctx.runMutation(internal.notifications.finalizeNotification, {
@@ -253,6 +275,10 @@ export const processPendingBatch = internalAction({
         summary.failed += 1;
         summary.errors.push({ id: String(notification._id), message });
       }
+    }
+
+    if (shouldDrainAnotherBatch(claimed.length, limit)) {
+      await ctx.scheduler.runAfter(0, internal.notificationsNode.processPendingBatch, { limit });
     }
 
     return summary;

@@ -354,15 +354,14 @@ const Settings = () => {
   };
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-background">
+    <div className="flex min-h-full flex-col bg-background">
       <PageHeader
-        sticky={false}
         title="Settings"
         subtitle="Preferences and account"
         icon={<SettingsIcon className="h-5 w-5" />}
       />
 
-      <main id="main-content" className="mx-auto min-h-0 w-full max-w-2xl flex-1 animate-slide-up space-y-6 overflow-y-auto overscroll-contain px-6 py-2 pb-40 md:max-w-3xl">
+      <main id="main-content" className="mx-auto w-full max-w-2xl flex-1 animate-slide-up space-y-6 px-6 py-2 pb-8 md:max-w-3xl">
         {/* Account hero */}
         <section>
           {user ? (

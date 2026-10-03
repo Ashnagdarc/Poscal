@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
-import { Link } from "react-router-dom";
 import { useJournal } from "@/contexts/JournalContext";
 import { JournalOnboarding } from "@/components/journal/JournalOnboarding";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -27,6 +27,7 @@ export const JournalSwitcher = () => {
   const { showErrorFromUnknown } = useActionError();
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [limitOpen, setLimitOpen] = useState(false);
   const [journalToDelete, setJournalToDelete] = useState<TradingJournal | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
@@ -128,16 +129,19 @@ export const JournalSwitcher = () => {
                   New journal
                 </button>
               ) : (
-                <Link
-                  to="/upgrade"
-                  onClick={() => setOpen(false)}
-                  className="block rounded-xl px-3 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+                <button
+                  type="button"
+                  onClick={() => {
+                    setOpen(false);
+                    setLimitOpen(true);
+                  }}
+                  className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
                 >
-                  Upgrade for more journals
+                  New journal
                   <span className="mt-0.5 block text-[11px] font-normal text-muted-foreground">
-                    Free plans include {journalLimit} journals (premium up to 5). Each journal is one account book.
+                    {journals.length}/{journalLimit} journals used
                   </span>
-                </Link>
+                </button>
               )}
             </div>
           </div>
@@ -154,6 +158,24 @@ export const JournalSwitcher = () => {
             onCancel={() => setCreateOpen(false)}
             onComplete={() => setCreateOpen(false)}
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
+        <DialogContent className="max-w-sm border-border bg-background sm:rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>Two journals for now</DialogTitle>
+            <DialogDescription>
+              Each account can keep {journalLimit} journals. A paid version is coming soon, with room for up to 5 or 10 accounts.
+            </DialogDescription>
+          </DialogHeader>
+          <button
+            type="button"
+            onClick={() => setLimitOpen(false)}
+            className="h-11 rounded-xl bg-foreground text-sm font-semibold text-background"
+          >
+            Got it
+          </button>
         </DialogContent>
       </Dialog>
 

@@ -78,7 +78,7 @@ export const PWAInstallPrompt = () => {
   return (
     <>
       {visible && (
-        <div className="fixed inset-x-0 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-40 px-4 sm:bottom-[calc(6.75rem+env(safe-area-inset-bottom))]">
+        <div className="fixed inset-x-0 bottom-[calc(5.25rem+env(safe-area-inset-bottom))] z-40 px-4">
           <div className="mx-auto flex w-full max-w-md items-center gap-3 rounded-2xl border border-border bg-background/95 p-3 shadow-soft backdrop-blur supports-[backdrop-filter]:bg-background/85">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand text-brand-foreground">
               <Download className="h-4 w-4" />

@@ -554,7 +554,7 @@ export const Calculator = () => {
     }`;
 
   return (
-    <div className="min-h-dvh bg-background">
+    <div className="min-h-full bg-background">
       <PageHeader
         title="Poscal"
         subtitle="Position size"
@@ -575,7 +575,7 @@ export const Calculator = () => {
         }
       />
 
-      <main id="main-content" className="mx-auto w-full max-w-2xl px-6 pb-32 md:max-w-3xl">
+      <main id="main-content" className="mx-auto w-full max-w-2xl px-6 pb-8 md:max-w-3xl">
         {/* Result first — hero outcome */}
         <section className="animate-scale-in mb-6">
           <div className="rounded-3xl bg-foreground px-6 py-7 text-background">

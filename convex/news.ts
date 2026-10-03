@@ -1,9 +1,11 @@
 import { getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
-import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireVerifiedAuthUserId } from "./lib/auth";
 import { economicEventWrite } from "./lib/economicEventMerge";
+import { planCalendarAlert, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
 import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
@@ -21,6 +23,7 @@ const toClientEvent = (row: any) => ({
   estimate: row.estimate ?? null,
   previous: row.previous ?? null,
   unit: row.unit ?? null,
+  detailUrl: row.detailUrl ?? null,
 });
 
 const toClientSnapshot = (row: any) => ({
@@ -209,6 +212,7 @@ export const upsertEventsBatch = internalMutation({
         estimate: nullableStringArg,
         previous: nullableStringArg,
         unit: nullableStringArg,
+        detailUrl: nullableStringArg,
       }),
     ),
   },
@@ -237,6 +241,7 @@ export const upsertEventsBatch = internalMutation({
         estimate: item.estimate ?? null,
         previous: item.previous ?? null,
         unit: item.unit ?? null,
+        detailUrl: item.detailUrl ?? null,
         ingestedAtMs: now,
       };
 
@@ -410,32 +415,68 @@ export const queueHighImpactAlerts = internalMutation({
         scheduledAtMs: v.number(),
       }),
     ),
+    eventIndex: v.optional(v.number()),
+    cursor: v.optional(v.union(v.string(), v.null())),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{ queued: number; recipients: number; scheduledFollowUp: boolean }> => {
     const now = Date.now();
-    const activeSubs = await ctx.db
+    const eventIndex = args.eventIndex ?? 0;
+    const item = args.events[eventIndex];
+    if (!item) {
+      return { queued: 0, recipients: 0, scheduledFollowUp: false };
+    }
+
+    const plan = planCalendarAlert(item.scheduledAtMs, now);
+    switch (plan.action) {
+      case "skip": {
+        const hasAnotherEvent = eventIndex + 1 < args.events.length;
+        if (hasAnotherEvent) {
+          await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+            events: args.events,
+            eventIndex: eventIndex + 1,
+            cursor: null,
+          });
+        }
+        return { queued: 0, recipients: 0, scheduledFollowUp: hasAnotherEvent };
+      }
+      case "send":
+        break;
+      default: {
+        const _exhaustive: never = plan;
+        throw new Error(`Unhandled calendar alert plan: ${JSON.stringify(_exhaustive)}`);
+      }
+    }
+
+    const page = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_active", (q) => q.eq("isActive", true))
-      .take(1000);
+      .paginate({
+        numItems: SUBSCRIBER_ALERT_PAGE_SIZE,
+        cursor: args.cursor ?? null,
+      });
 
-    const optedInUsers = new Map<string, string | null>();
-    for (const sub of activeSubs) {
-      if (!sub.isActive || !sub.userId) continue;
-      if (optedInUsers.has(sub.userId)) continue;
+    const emailed = new Set<string>();
+    let queued = 0;
+    let recipients = 0;
+    const body = `${item.country} · ${item.event}`.slice(0, 160);
+
+    for (const sub of page.page) {
+      const userId = sub.userId;
+      if (!sub.isActive || !userId) continue;
 
       const profile = await ctx.db
         .query("profiles")
-        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", sub.userId))
+        .withIndex("by_external_user_id", (q) => q.eq("externalUserId", userId))
         .first();
 
       if (profile?.newsAlertsEnabled === false) continue;
-      optedInUsers.set(sub.userId, profile?.email ?? null);
-    }
 
-    let queued = 0;
-    for (const item of args.events.slice(0, 3)) {
-      for (const [userId, recipientEmail] of optedInUsers) {
-        const body = `${item.country} · ${item.event}`.slice(0, 160);
+      const pushTag = `calendar-${item.id}-${sub._id}`;
+      const existingPush = await ctx.db
+        .query("notificationQueue")
+        .withIndex("by_tag", (q) => q.eq("tag", pushTag))
+        .first();
+      if (!existingPush) {
         await ctx.db.insert("notificationQueue", {
           userId,
           channel: "push",
@@ -443,14 +484,15 @@ export const queueHighImpactAlerts = internalMutation({
           body,
           status: "pending",
           recipientEmail: null,
-          tag: `calendar-${item.id}-${userId}`,
+          tag: pushTag,
           data: {
             type: "news",
             path: "/calendar",
             eventId: item.id,
             url: "/calendar",
+            subscriptionId: sub._id,
           },
-          scheduledForMs: null,
+          scheduledForMs: plan.scheduledForMs,
           processingStartedAtMs: null,
           attempts: 0,
           errorMessage: null,
@@ -458,35 +500,86 @@ export const queueHighImpactAlerts = internalMutation({
           updatedAtMs: now,
         });
         queued += 1;
-
-        if (recipientEmail) {
-          await ctx.db.insert("notificationQueue", {
-            userId,
-            channel: "email",
-            title: `High-impact: ${item.event.slice(0, 80)}`,
-            body,
-            status: "pending",
-            recipientEmail,
-            tag: `calendar-email-${item.id}-${userId}`,
-            data: {
-              type: "news",
-              path: "/calendar",
-              eventId: item.id,
-              url: "/calendar",
-            },
-            scheduledForMs: null,
-            processingStartedAtMs: null,
-            attempts: 0,
-            errorMessage: null,
-            createdAtMs: now,
-            updatedAtMs: now,
-          });
-          queued += 1;
-        }
+        recipients += 1;
       }
+
+      const recipientEmail = profile?.email ?? null;
+      if (!recipientEmail || emailed.has(userId)) continue;
+      emailed.add(userId);
+
+      const emailTag = `calendar-email-${item.id}-${userId}`;
+      const existingEmail = await ctx.db
+        .query("notificationQueue")
+        .withIndex("by_tag", (q) => q.eq("tag", emailTag))
+        .first();
+      if (existingEmail) continue;
+
+      await ctx.db.insert("notificationQueue", {
+        userId,
+        channel: "email",
+        title: `High-impact: ${item.event.slice(0, 80)}`,
+        body,
+        status: "pending",
+        recipientEmail,
+        tag: emailTag,
+        data: {
+          type: "news",
+          path: "/calendar",
+          eventId: item.id,
+          url: "/calendar",
+        },
+        scheduledForMs: plan.scheduledForMs,
+        processingStartedAtMs: null,
+        attempts: 0,
+        errorMessage: null,
+        createdAtMs: now,
+        updatedAtMs: now,
+      });
+      queued += 1;
     }
 
-    return { queued, recipients: optedInUsers.size };
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+        events: args.events,
+        eventIndex,
+        cursor: page.continueCursor,
+      });
+      return { queued, recipients, scheduledFollowUp: true };
+    }
+
+    const hasAnotherEvent = eventIndex + 1 < args.events.length;
+    if (hasAnotherEvent) {
+      await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+        events: args.events,
+        eventIndex: eventIndex + 1,
+        cursor: null,
+      });
+    }
+
+    return { queued, recipients, scheduledFollowUp: hasAnotherEvent };
+  },
+});
+
+/** Signed-in calendar visits pull the free Forex Factory feed. The ingest gate still collapses bursts. */
+export const refreshCalendar = action({
+  args: {
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args): Promise<{
+    ok: true;
+    skipped: boolean;
+    reason?: string;
+    lastIngestAtMs?: number | null;
+    eventCount?: number;
+    insertedCount?: number;
+    highImpactCount?: number;
+    alertsQueued?: number;
+  }> => {
+    const userId = await getAuthUserId(ctx);
+    if (!userId) throw new Error("Not authenticated");
+    return await ctx.runAction(internal.newsIngest.runIngest, {
+      force: args.force ?? false,
+    });
   },
 });
 

@@ -215,6 +215,8 @@ export default defineSchema({
     estimate: nullableString,
     previous: nullableString,
     unit: nullableString,
+    /** Official Forex Factory event page. Only linked for current releases. */
+    detailUrl: nullableString,
     ingestedAtMs: v.number(),
   })
     .index("by_external_id", ["externalId"])
@@ -259,6 +261,7 @@ export default defineSchema({
     lastVerifiedAtMs: nullableNumber,
   })
     .index("by_user", ["userId"])
+    .index("by_user_active", ["userId", "isActive"])
     .index("by_endpoint", ["endpoint"])
     .index("by_active", ["isActive"]),
 
@@ -304,7 +307,8 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_status_scheduled", ["status", "scheduledForMs"])
-    .index("by_user_created", ["userId", "createdAtMs"]),
+    .index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_tag", ["tag"]),
 
   migrationCheckpoints: defineTable({
     source: v.string(),

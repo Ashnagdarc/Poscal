@@ -34,8 +34,7 @@ function toJournalCreateToastMessage(error: unknown): string {
     return "Please sign in again to create a journal";
   }
   if (/journal limit reached/i.test(candidate)) {
-    const match = candidate.match(/Journal limit reached[^.!\n]*/i);
-    return match?.[0]?.trim() ?? "Journal limit reached for your plan";
+    return "You've reached the journal limit for this account. A paid version is coming soon, with room for up to 5 or 10 accounts.";
   }
   if (/journal name is required|account size must be/i.test(candidate)) {
     return candidate;
@@ -116,7 +115,7 @@ export const JournalOnboarding = ({
   };
 
   return (
-    <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center px-1 pb-28">
+    <div className="mx-auto flex min-h-[70vh] w-full max-w-md flex-col justify-center px-1 pb-8">
       <AnimatePresence mode="wait">
         {step === "welcome" ? (
           <motion.div

@@ -2,6 +2,7 @@ import { Password } from "@convex-dev/auth/providers/Password";
 import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 
+import { internal } from "./_generated/api";
 import { ResendOTP } from "./ResendOTP";
 import { ResendOTPPasswordReset } from "./ResendOTPPasswordReset";
 import { isEmailVerificationRequired } from "./lib/emailVerificationPolicy";
@@ -58,6 +59,16 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       }
 
       const email = user.email.trim().toLowerCase();
+
+      // Credentials sign-up only. Sign-in and a later verification pass set existingUserId.
+      if (args.existingUserId === null && args.type === "credentials") {
+        const rawName = (user.fullName ?? user.name ?? "").trim();
+        await ctx.scheduler.runAfter(0, internal.welcomeEmail.sendWelcome, {
+          email,
+          name: rawName,
+        });
+      }
+
       // Auth callback ctx is loosely typed relative to the app schema; cast for profile indexes.
       const db = ctx.db as any;
       const byUserId = await db

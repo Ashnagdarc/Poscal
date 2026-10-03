@@ -41,7 +41,7 @@ const UpgradePage: React.FC = () => {
         tier={tierParam}
         redirectPath={redirectPath}
       />
-      <div className="flex min-h-screen items-center justify-center px-6">
+      <div className="flex min-h-full items-center justify-center px-6">
         <div className="max-w-sm text-center">
           <h2 className="font-display text-lg font-semibold">
             {paymentsEnabled ? "Upgrade" : "Checkout paused"}

@@ -5,7 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const navItems = [
   { path: '/', icon: Calculator, label: 'Calculate' },
-  { path: '/calendar', icon: CalendarDays, label: 'News calendar' },
+  { path: '/calendar', icon: CalendarDays, label: 'Calendar' },
   { path: '/journal', icon: BookOpen, label: 'Journal' },
   { path: '/settings', icon: Settings, label: 'Settings' },
 ];
@@ -49,20 +49,20 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
 
   return (
     <nav
-      className="pointer-events-none fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-1/2 z-40 w-[calc(100%-2.5rem)] max-w-md -translate-x-1/2 sm:bottom-[calc(1.25rem+env(safe-area-inset-bottom))]"
+      className="z-40 shrink-0 border-t border-border/60 bg-background/95 px-3 pt-2 backdrop-blur-xl supports-[backdrop-filter]:bg-background/85 pb-[max(0.5rem,env(safe-area-inset-bottom))]"
       role="navigation"
       aria-label="Main navigation"
     >
-      <div className="pointer-events-auto relative flex items-center justify-around overflow-hidden rounded-2xl border border-border/60 bg-background/80 px-1.5 py-1.5 shadow-soft backdrop-blur-xl supports-[backdrop-filter]:bg-background/65 sm:px-2">
+      <div className="relative mx-auto flex h-14 w-full max-w-md items-center justify-around overflow-hidden rounded-2xl border border-border/60 bg-secondary/50 px-1.5">
         {activeIndex >= 0 && (
           <motion.div
-            layoutId="bottom-nav-active-pill"
-            className="pointer-events-none absolute inset-y-1.5 rounded-xl bg-brand/15"
+            className="pointer-events-none absolute inset-y-1.5 rounded-xl bg-background shadow-sm"
+            initial={false}
             animate={{
               left: `calc(${activeIndex * (100 / navItems.length)}% + 0.25rem)`,
               width: `calc(${100 / navItems.length}% - 0.5rem)`,
             }}
-            transition={{ type: 'spring', stiffness: 420, damping: 34 }}
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
             aria-hidden="true"
           />
         )}
@@ -79,7 +79,7 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
                 whileTap={{ scale: 0.96 }}
                 aria-label={locked ? `${label} (sign in required)` : label}
                 aria-current={isActive ? 'page' : undefined}
-                className={`relative z-10 flex w-full flex-col items-center gap-0.5 rounded-xl px-1 py-1.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+                className={`relative z-10 flex h-11 w-full flex-col items-center justify-center gap-0.5 rounded-xl px-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
                   isActive
                     ? 'text-brand'
                     : locked
@@ -88,7 +88,7 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
                 }`}
               >
                 <Icon className="h-[1.125rem] w-[1.125rem] sm:h-5 sm:w-5" aria-hidden="true" />
-                <span className="text-[10px] font-medium leading-none sm:text-[11px]">
+                <span className="max-w-full truncate whitespace-nowrap text-[10px] font-medium leading-none sm:text-[11px]">
                   {locked ? `${label}` : label}
                 </span>
               </motion.button>

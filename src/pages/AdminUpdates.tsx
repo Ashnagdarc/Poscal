@@ -167,7 +167,7 @@ const AdminUpdates = () => {
 
   if (adminLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex min-h-full items-center justify-center bg-background">
         <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-brand" />
       </div>
     );
@@ -178,7 +178,7 @@ const AdminUpdates = () => {
   }
 
   return (
-    <div className="min-h-screen bg-background pb-28">
+    <div className="min-h-full bg-background pb-6">
       <PageHeader
         title="App Updates"
         subtitle="Broadcast changes to all users"

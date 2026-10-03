@@ -92,23 +92,35 @@ const queueUserAlert = async (
     return;
   }
 
+  const existingTags = new Set(
+    existing.map((row: { tag?: string | null }) => row.tag).filter((tag: string | null | undefined) => Boolean(tag)),
+  );
+
   if (args.preferPush) {
-    await ctx.db.insert("notificationQueue", {
-      userId: args.userId,
-      channel: "push",
-      title: args.title,
-      body: args.body,
-      status: "pending",
-      recipientEmail: null,
-      tag: args.tag,
-      data: args.data,
-      scheduledForMs: null,
-      processingStartedAtMs: null,
-      attempts: 0,
-      errorMessage: null,
-      createdAtMs: now,
-      updatedAtMs: now,
-    });
+    const subs = await ctx.db
+      .query("pushSubscriptions")
+      .withIndex("by_user_active", (q: any) => q.eq("userId", args.userId).eq("isActive", true))
+      .take(20);
+    for (const sub of subs) {
+      const tag = `${args.tag}-push-${sub._id}`;
+      if (existingTags.has(tag)) continue;
+      await ctx.db.insert("notificationQueue", {
+        userId: args.userId,
+        channel: "push",
+        title: args.title,
+        body: args.body,
+        status: "pending",
+        recipientEmail: null,
+        tag,
+        data: { ...args.data, subscriptionId: sub._id, displayTag: args.tag },
+        scheduledForMs: null,
+        processingStartedAtMs: null,
+        attempts: 0,
+        errorMessage: null,
+        createdAtMs: now,
+        updatedAtMs: now,
+      });
+    }
   }
 
   if (args.recipientEmail) {

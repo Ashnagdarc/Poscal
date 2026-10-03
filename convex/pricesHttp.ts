@@ -6,8 +6,8 @@ type IncomingQuote = {
   bidPrice?: number | null;
   askPrice?: number | null;
   midPrice: number;
-  source?: string;
-  isEstimatedBidAsk?: boolean;
+  source: string;
+  isEstimatedBidAsk: boolean;
   providerTimestampMs?: number | null;
 };
 

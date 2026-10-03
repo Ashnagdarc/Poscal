@@ -20,10 +20,13 @@ import type * as http from "../http.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_economicEventMerge from "../lib/economicEventMerge.js";
 import type * as lib_emailVerificationPolicy from "../lib/emailVerificationPolicy.js";
+import type * as lib_ffCalendarFeed from "../lib/ffCalendarFeed.js";
+import type * as lib_notificationStaging from "../lib/notificationStaging.js";
 import type * as lib_profileOwnership from "../lib/profileOwnership.js";
 import type * as lib_sessionInvalidation from "../lib/sessionInvalidation.js";
 import type * as lib_tradeValidation from "../lib/tradeValidation.js";
 import type * as lib_tradingAlerts from "../lib/tradingAlerts.js";
+import type * as lib_welcomeEmailCopy from "../lib/welcomeEmailCopy.js";
 import type * as news from "../news.js";
 import type * as newsHttp from "../newsHttp.js";
 import type * as newsIngest from "../newsIngest.js";
@@ -39,6 +42,7 @@ import type * as status from "../status.js";
 import type * as tradingJournal from "../tradingJournal.js";
 import type * as tradingJournals from "../tradingJournals.js";
 import type * as users from "../users.js";
+import type * as welcomeEmail from "../welcomeEmail.js";
 
 import type {
   ApiFromModules,
@@ -59,10 +63,13 @@ declare const fullApi: ApiFromModules<{
   "lib/auth": typeof lib_auth;
   "lib/economicEventMerge": typeof lib_economicEventMerge;
   "lib/emailVerificationPolicy": typeof lib_emailVerificationPolicy;
+  "lib/ffCalendarFeed": typeof lib_ffCalendarFeed;
+  "lib/notificationStaging": typeof lib_notificationStaging;
   "lib/profileOwnership": typeof lib_profileOwnership;
   "lib/sessionInvalidation": typeof lib_sessionInvalidation;
   "lib/tradeValidation": typeof lib_tradeValidation;
   "lib/tradingAlerts": typeof lib_tradingAlerts;
+  "lib/welcomeEmailCopy": typeof lib_welcomeEmailCopy;
   news: typeof news;
   newsHttp: typeof newsHttp;
   newsIngest: typeof newsIngest;
@@ -78,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   tradingJournal: typeof tradingJournal;
   tradingJournals: typeof tradingJournals;
   users: typeof users;
+  welcomeEmail: typeof welcomeEmail;
 }>;
 
 /**
