@@ -82,3 +82,21 @@ Rebuild only:
 - worker secrets
 - price ingestion
 - notification processing
+
+
+## Production deployment coupling
+
+Vercel production builds deploy the Convex backend and frontend from the same Git revision. Preview builds do not touch production Convex.
+
+Production command:
+
+```sh
+npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run gate:fx && npm run build'
+```
+
+Safety rules:
+
+- `CONVEX_DEPLOY_KEY` is configured for Vercel Production only.
+- Preview deployments run the quality gate and frontend build without deploying Convex.
+- Convex schema validation must pass before backend changes are pushed.
+- Instrument additions do not require a data migration because trade symbols are stored as strings.
