@@ -53,20 +53,20 @@ describe("calculatorModeSync", () => {
     expect(fromPips.stopLossPips).toBe(fromPrices.stopLossPips);
   });
 
-  it("converts gold points to prices with two decimal places", () => {
+  it("converts gold pips using the $0.10 price convention", () => {
     const prices = pipsToPrices({
       spec: xauUsd,
       direction: "buy",
       entryPrice: 4036.07,
-      stopLossPips: 36,
-      takeProfitPips: 32.5,
+      stopLossPips: 112.2,
+      takeProfitPips: 325.2,
     });
 
-    expect(prices.stopLossPrice).toBe("4000.07");
-    expect(prices.takeProfitPrice).toBe("4068.57");
+    expect(prices.stopLossPrice).toBe("4024.85");
+    expect(prices.takeProfitPrice).toBe("4068.59");
   });
 
-  it("converts gold prices back to points", () => {
+  it("converts gold prices back to equivalent $0.10 pips", () => {
     const pips = pricesToPips({
       spec: xauUsd,
       entryPrice: 4036.07,
@@ -74,7 +74,7 @@ describe("calculatorModeSync", () => {
       takeProfitPrice: 4068.59,
     });
 
-    expect(pips.stopLossPips).toBeCloseTo(36.1, 1);
-    expect(pips.takeProfitPips).toBeCloseTo(32.5, 1);
+    expect(pips.stopLossPips).toBeCloseTo(361.3, 1);
+    expect(pips.takeProfitPips).toBeCloseTo(325.2, 1);
   });
 });

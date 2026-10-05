@@ -1,3 +1,5 @@
+import { getInstrumentSpecBySymbol } from "./instrumentSpecs";
+
 /**
  * Forex calculation utilities for accurate position sizing and P&L
  * Supports ALL currency pairs dynamically by detecting pair type
@@ -86,10 +88,25 @@ export interface MarketPriceSnapshot {
  * Works for all XXX/YYY format pairs without hardcoding
  */
 function getPairConfig(pair: string): PairConfig {
-  const [base, quote] = pair.split('/');
-  
+  const canonicalSpec = getInstrumentSpecBySymbol(pair);
+  const canonicalPair = canonicalSpec?.symbol ?? pair;
+  const [base, quote] = canonicalPair.split('/');
+
   // Get typical spread for this pair (default 2.0 pips if unknown)
-  const typicalSpread = TYPICAL_SPREADS[pair] || 2.0;
+  const typicalSpread = TYPICAL_SPREADS[canonicalPair] || 2.0;
+
+  // Known instruments use the same canonical contract as the primary calculator.
+  // This prevents the legacy helpers from silently drifting on pip/point semantics.
+  if (canonicalSpec) {
+    return {
+      baseCurrency: base,
+      quoteCurrency: quote || 'USD',
+      pipMultiplier: 1 / canonicalSpec.pipSize,
+      pipValueBase: canonicalSpec.pipValuePerStandardLot,
+      isMetalOrCrypto: canonicalSpec.assetClass !== 'forex',
+      typicalSpread,
+    };
+  }
   
   // Handle indices (US30, US100, SPX, NAS100, etc.)
   if (base === 'US30' || base === 'US100' || base === 'SPX' || base === 'NAS100' || base === 'GER30' || base === 'UK100') {
@@ -272,8 +289,19 @@ export function getPipValueInUSD(
 ): number {
   const config = getPairConfig(pair);
   const pipSize = 1 / config.pipMultiplier;
+  const canonicalSpec = getInstrumentSpecBySymbol(pair);
 
-  // Special handling for metals, crypto, and indices
+  // For supported non-FX instruments, use the canonical contract registry.
+  // Broker-specific overrides can replace this local fallback at the product boundary.
+  if (
+    canonicalSpec &&
+    canonicalSpec.assetClass !== 'forex' &&
+    canonicalSpec.pipValuePerStandardLot > 0
+  ) {
+    return canonicalSpec.pipValuePerStandardLot;
+  }
+
+  // Legacy fallback handling for symbols outside the canonical registry.
   if (config.isMetalOrCrypto) {
     // Indices (US30 = Dow Jones, US100 = Nasdaq, etc.)
     // Align with primary INSTRUMENT_SPECS: $1 per point per lot (MC-029 / DR-004).
@@ -285,16 +313,6 @@ export function getPipValueInUSD(
     }
     if (config.baseCurrency === 'SPX' || config.baseCurrency === 'GER30' || config.baseCurrency === 'UK100') {
       return 1;
-    }
-    
-    // Metals
-    if (config.baseCurrency === 'XAU') {
-      // Gold (XAU/USD): 1 lot = 100 oz, 1 pip = $0.10 move = $10 per lot
-      return 10;
-    }
-    if (config.baseCurrency === 'XAG') {
-      // Silver (XAG/USD): 1 lot = 5,000 oz, 1 pip = $0.01 move = $50 per lot
-      return 50;
     }
     
     // Crypto

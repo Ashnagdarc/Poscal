@@ -36,7 +36,7 @@ describe("positionSizeCalculator", () => {
     expect(getInstrumentSpec("USD/JPY")?.pipSize).toBe(0.01);
   });
 
-  it("calculates XAU/USD with a broker-specific local spec warning", () => {
+  it("calculates XAU/USD with the canonical $0.10 pip convention", () => {
     const result = calculatePositionSize({
       symbol: "XAU/USD",
       accountBalance: 10000,
@@ -45,16 +45,17 @@ describe("positionSizeCalculator", () => {
     });
 
     expect(result.isValid).toBe(true);
-    expect(result.positionSize).toBe(0.1);
-    expect(result.warning).toMatch(/Gold|point|\$1/i);
+    expect(result.pipValue).toBe(10);
+    expect(result.positionSize).toBe(1);
+    expect(result.warning).toMatch(/Gold|pip|\$0\.10/i);
   });
 
-  it("matches XAU/USD pips and price inputs for a ~36 point stop", () => {
+  it("matches XAU/USD pips and price inputs for a ~361.3 pip stop", () => {
     const fromPips = calculatePositionSize({
       symbol: "XAU/USD",
       accountBalance: 9651.28,
       riskPercent: 0.5,
-      stopLossPips: 36,
+      stopLossPips: 361.3,
     });
 
     const fromPrices = calculatePositionSize({

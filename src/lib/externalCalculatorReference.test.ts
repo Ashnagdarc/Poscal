@@ -46,8 +46,8 @@ describe("external calculator reference checks", () => {
       symbol: "XAU/USD",
       accountBalance: balance,
       riskPercent,
-      stopLossPips: 36,
-      takeProfitPips: 32.5,
+      stopLossPips: 361.3,
+      takeProfitPips: 325.2,
     });
 
     const fromPrices = calculatePositionSize({
@@ -67,12 +67,28 @@ describe("external calculator reference checks", () => {
       spec,
       direction: "buy",
       entryPrice: entry,
-      stopLossPips: 36,
-      takeProfitPips: 32.5,
+      stopLossPips: 361.3,
+      takeProfitPips: 325.2,
     });
 
-    expect(synced.stopLossPips).toBeCloseTo(36, 0);
-    expect(parseFloat(prices.stopLossPrice)).toBeCloseTo(stop, 0);
+    expect(synced.stopLossPips).toBeCloseTo(361.3, 1);
+    expect(synced.takeProfitPips).toBeCloseTo(325.2, 1);
+    expect(parseFloat(prices.stopLossPrice)).toBeCloseTo(stop, 2);
+  });
+
+  it("matches the reported XAU/USD reference: $900 risk, 112.2 pips -> 0.80 lots", () => {
+    const result = calculatePositionSize({
+      symbol: "XAU/USD",
+      accountBalance: 900,
+      riskPercent: 100,
+      stopLossPips: 112.2,
+    });
+
+    expect(result.isValid).toBe(true);
+    expect(result.pipValue).toBe(10);
+    expect(result.rawLotSize).toBeCloseTo(900 / (112.2 * 10), 8);
+    expect(result.positionSize).toBe(0.8);
+    expect(result.actualRisk).toBeCloseTo(897.6, 2);
   });
 
   it("USD/CHF uses entry price for pip value when available", () => {

@@ -21,7 +21,7 @@ const INDEX_CFD_WARNING =
   "Index sizing uses $1 per point per lot (broker CFDs often use $5+/point). Verify against your broker contract.";
 
 const GOLD_POINT_WARNING =
-  "Gold uses points where 1 pt = $1 price move ≈ $100 / standard lot. This is not the $0.01-pip convention some platforms use.";
+  "Gold uses the common retail convention where 1 pip = $0.10 price move = $10 per standard lot for a 100 oz contract. Broker tick size, contract size, and minimum lot may differ.";
 
 const COMMODITY_CFD_WARNING =
   "Commodity sizing uses a local CFD tick model. Broker contract size and tick value may differ — verify before trading.";
@@ -154,8 +154,8 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XAU/USD",
     displayName: "Gold / US Dollar",
     assetClass: "metal",
-    pipSize: 1,
-    pipValuePerStandardLot: 100,
+    pipSize: 0.1,
+    pipValuePerStandardLot: 10,
     contractSize: 100,
     minLot: 0.01,
     maxLot: 100,
@@ -275,7 +275,7 @@ export function getInstrumentSpecBySymbol(symbol: string): InstrumentSpec | unde
 export function getStopLossUnitLabel(symbol: string): string {
   const spec = getInstrumentSpecBySymbol(symbol);
   if (!spec) return "pips";
-  if (spec.symbol === "XAU/USD") return "pts ($1)";
+  if (spec.symbol === "XAU/USD") return "pips ($0.10)";
   if (
     spec.assetClass === "metal" ||
     spec.assetClass === "index" ||

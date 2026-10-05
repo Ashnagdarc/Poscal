@@ -32,6 +32,18 @@ describe('forexCalculations', () => {
       expect(pipValue).toBeCloseTo(1000 / 150.005, 6);
     });
 
+    it('uses the canonical XAU/USD pip value', () => {
+      expect(getPipValueInUSD('XAU/USD')).toBe(10);
+    });
+
+    it('uses the canonical BTC/USD point value', () => {
+      expect(getPipValueInUSD('BTC/USD')).toBe(1);
+    });
+
+    it('uses the canonical WTI/USD tick value', () => {
+      expect(getPipValueInUSD('WTI/USD')).toBe(1);
+    });
+
     it('uses the bid side of quote/USD for cross-pair conversion', () => {
       const pipValue = getPipValueInUSD(
         'EUR/GBP',
