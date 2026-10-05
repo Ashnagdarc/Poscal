@@ -35,10 +35,17 @@ This keeps the calculator consistent across users and avoids per-user vendor cal
 
 ## Push And Email Flow
 
-1. The app stores push subscriptions in Convex.
-2. Admin/app events queue notifications in Convex.
-3. A worker pulls queued jobs from Convex HTTP actions.
-4. The worker sends push/email and marks the job status back in Convex.
+Push registration treats the browser Web Push subscription as a device identity.
+
+1. The browser creates or reuses one Web Push subscription for the active service worker.
+2. The authenticated Poscal session reconciles that browser endpoint with Convex.
+3. Registration is idempotent. Repeated enable attempts return "already registered" instead of creating duplicates.
+4. If the same browser endpoint was previously bound to another Poscal account, the server may rebind it only when the subscription key material matches. Older backend deployments are handled by rotating the browser subscription to a new endpoint.
+5. Admin/app events queue notifications in Convex.
+6. A worker pulls queued jobs from Convex HTTP actions.
+7. The worker sends push/email and marks the job status back in Convex.
+
+Operational rule: browser permission, browser subscription state, authenticated user binding, and notification delivery are separate states. The UI must reconcile them instead of assuming that one implies the others.
 
 ## Deployment Shape
 

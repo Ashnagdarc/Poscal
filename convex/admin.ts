@@ -362,36 +362,57 @@ export const subscribePush = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
+    const now = Date.now();
 
     const existing = await ctx.db
       .query("pushSubscriptions")
       .withIndex("by_endpoint", (q) => q.eq("endpoint", args.endpoint))
       .unique();
 
-    // Do not allow unauthenticated or cross-user endpoint rebinding (AP-004 / MC-015).
-    if (existing && existing.userId && existing.userId !== userId) {
-      throw new Error("Push subscription endpoint is already registered");
+    if (existing) {
+      const sameCredentials =
+        existing.p256dhKey === args.p256dhKey &&
+        existing.authKey === args.authKey;
+
+      // A Web Push endpoint belongs to the browser/service-worker subscription.
+      // Rebinding the same endpoint to the currently authenticated account is safe
+      // only when the browser proves possession of the same subscription keys.
+      if (existing.userId && existing.userId !== userId && !sameCredentials) {
+        throw new Error("Push subscription credentials do not match this device");
+      }
+
+      const status =
+        existing.userId !== userId
+          ? "rebound"
+          : existing.isActive && sameCredentials
+            ? "already_registered"
+            : "refreshed";
+
+      await ctx.db.patch(existing._id, {
+        userId,
+        endpoint: args.endpoint,
+        p256dhKey: args.p256dhKey,
+        authKey: args.authKey,
+        isActive: true,
+        updatedAtMs: now,
+        lastVerifiedAtMs: now,
+      });
+
+      return { id: existing._id, status };
     }
 
-    const payload = {
+    const id = await ctx.db.insert("pushSubscriptions", {
       userId,
       endpoint: args.endpoint,
       p256dhKey: args.p256dhKey,
       authKey: args.authKey,
       isActive: true,
-      updatedAtMs: Date.now(),
-      lastVerifiedAtMs: Date.now(),
-    };
-
-    if (existing) {
-      await ctx.db.patch(existing._id, payload);
-      return existing._id;
-    }
-
-    return await ctx.db.insert("pushSubscriptions", {
-      ...payload,
-      createdAtMs: Date.now(),
+      createdAtMs: now,
+      updatedAtMs: now,
+      lastVerifiedAtMs: now,
     });
+
+    return { id, status: "created" as const };
   },
 });
 

@@ -55,9 +55,15 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
   }, [user?.id]);
 
   const handleEnableNotifications = async () => {
-    const success = await subscribe();
-    if (success) {
-      toast.success('Push notifications enabled! You will receive alerts even when the app is closed.');
+    const result = await subscribe();
+    if (result) {
+      toast.success(
+        result === 'already_subscribed'
+          ? 'This device is already subscribed to Poscal notifications.'
+          : result === 'rebound'
+            ? 'Push notifications are now linked to this Poscal account.'
+            : 'Push notifications enabled! You will receive alerts even when the app is closed.',
+      );
     } else if (permission === 'denied') {
       toast.error('Notification permission denied. Please enable in browser settings.');
     } else {
