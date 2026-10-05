@@ -90,9 +90,15 @@ export const PushEnablePrompt = () => {
 
   const enable = async () => {
     setAttempted(true);
-    const success = await subscribe();
-    if (success) {
-      toast.success("Push notifications are on. Alerts can reach you when Poscal is closed.");
+    const result = await subscribe();
+    if (result) {
+      toast.success(
+        result === "already_subscribed"
+          ? "This device is already subscribed to Poscal notifications."
+          : result === "rebound"
+            ? "Push notifications are now linked to this Poscal account."
+            : "Push notifications are on. Alerts can reach you when Poscal is closed.",
+      );
       setOpen(false);
       return;
     }
