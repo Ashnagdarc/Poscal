@@ -1,4 +1,10 @@
 import { getInstrumentSpecBySymbol } from "./instrumentSpecs";
+import {
+  calculatePnlUsd,
+  pipsFromPriceDistance,
+  priceDistanceFromPips,
+  resolvePipValueUsd,
+} from "./trading/engine";
 
 /**
  * Forex calculation utilities for accurate position sizing and P&L
@@ -199,6 +205,33 @@ function getMarketPrice(
   return priceData.midPrices?.[pair] ?? priceData.askPrices?.[pair] ?? priceData.bidPrices?.[pair];
 }
 
+function toEngineMarketPrices(
+  priceData?: Record<string, number> | MarketPriceSnapshot
+): Record<string, number> | undefined {
+  if (!priceData) return undefined;
+  if (!isMarketPriceSnapshot(priceData)) return priceData;
+
+  const result: Record<string, number> = { ...(priceData.midPrices ?? {}) };
+
+  for (const [pair, value] of Object.entries(priceData.askPrices ?? {})) {
+    if (pair.startsWith("USD/") && Number.isFinite(value) && value > 0) {
+      result[pair] = value;
+    } else if (result[pair] == null && Number.isFinite(value) && value > 0) {
+      result[pair] = value;
+    }
+  }
+
+  for (const [pair, value] of Object.entries(priceData.bidPrices ?? {})) {
+    if (pair.endsWith("/USD") && Number.isFinite(value) && value > 0) {
+      result[pair] = value;
+    } else if (result[pair] == null && Number.isFinite(value) && value > 0) {
+      result[pair] = value;
+    }
+  }
+
+  return result;
+}
+
 function getUsdConversionDetails(
   quoteCurrency: string,
   priceData?: Record<string, number> | MarketPriceSnapshot
@@ -225,6 +258,12 @@ function getUsdConversionDetails(
  * Works for ALL currency pairs dynamically
  */
 export function calculatePips(price1: number, price2: number, pair: string): number {
+  const spec = getInstrumentSpecBySymbol(pair);
+  if (spec) {
+    return Math.round(
+      pipsFromPriceDistance(Math.abs(price1 - price2), spec) * 100,
+    ) / 100;
+  }
   const config = getPairConfig(pair);
   return Math.abs(Math.round((price1 - price2) * config.pipMultiplier * 100) / 100);
 }
@@ -236,6 +275,8 @@ export function calculatePips(price1: number, price2: number, pair: string): num
  * @returns Spread in price units
  */
 export function spreadPipsToPrice(pair: string, spreadPips: number): number {
+  const spec = getInstrumentSpecBySymbol(pair);
+  if (spec) return priceDistanceFromPips(spreadPips, spec);
   const config = getPairConfig(pair);
   return spreadPips / config.pipMultiplier;
 }
@@ -291,14 +332,15 @@ export function getPipValueInUSD(
   const pipSize = 1 / config.pipMultiplier;
   const canonicalSpec = getInstrumentSpecBySymbol(pair);
 
-  // For supported non-FX instruments, use the canonical contract registry.
-  // Broker-specific overrides can replace this local fallback at the product boundary.
-  if (
-    canonicalSpec &&
-    canonicalSpec.assetClass !== 'forex' &&
-    canonicalSpec.pipValuePerStandardLot > 0
-  ) {
-    return canonicalSpec.pipValuePerStandardLot;
+  if (canonicalSpec) {
+    const canonicalPipValue = resolvePipValueUsd(
+      canonicalSpec,
+      currentPrice,
+      toEngineMarketPrices(marketPrices),
+    );
+    if (canonicalPipValue != null && canonicalPipValue > 0) {
+      return canonicalPipValue;
+    }
   }
 
   // Legacy fallback handling for symbols outside the canonical registry.
@@ -412,23 +454,26 @@ export function calculatePnL(
   pair: string,
   direction: 'long' | 'short'
 ): number {
+  const spec = getInstrumentSpecBySymbol(pair);
+  if (spec) {
+    const pnl = calculatePnlUsd({
+      spec,
+      entryPrice,
+      exitPrice,
+      lots: positionSize,
+      direction: direction === 'short' ? 'short' : 'long',
+    });
+    if (pnl != null) return Math.round(pnl * 100) / 100;
+  }
+
   const pips = calculatePips(entryPrice, exitPrice, pair);
   const pipValueUSD = getPipValueInUSD(pair, 'USD', entryPrice);
-  
   let pnl = positionSize * pips * pipValueUSD;
-  
-  // For short positions, reverse the P&L if price moved up
   if (direction === 'short') {
-    if (exitPrice > entryPrice) {
-      pnl = -pnl;
-    }
-  } else {
-    // For long positions, reverse if price moved down
-    if (exitPrice < entryPrice) {
-      pnl = -pnl;
-    }
+    if (exitPrice > entryPrice) pnl = -pnl;
+  } else if (exitPrice < entryPrice) {
+    pnl = -pnl;
   }
-  
   return Math.round(pnl * 100) / 100;
 }
 

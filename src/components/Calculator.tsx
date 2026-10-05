@@ -634,6 +634,56 @@ export const Calculator = () => {
             </p>
           )}
 
+          {calculation.isValid && calculation.positionSize > 0 && calculation.spec && (
+            <details className="mt-3 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">
+              <summary className="cursor-pointer font-semibold text-foreground">
+                How this was calculated
+              </summary>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                <span>Price distance</span>
+                <span className="text-right font-medium text-foreground">
+                  {formatNumber(calculation.priceDistance, 4)}
+                </span>
+                <span>Ticks to stop</span>
+                <span className="text-right font-medium text-foreground">
+                  {formatNumber(calculation.ticksToStop, 2)}
+                </span>
+                <span>Tick size</span>
+                <span className="text-right font-medium text-foreground">
+                  {calculation.spec.tickSize}
+                </span>
+                <span>Tick value / lot</span>
+                <span className="text-right font-medium text-foreground">
+                  {`$${formatNumber(calculation.tickValue, 2)}`}
+                </span>
+                <span>Risk / 1 lot</span>
+                <span className="text-right font-medium text-foreground">
+                  {`$${formatNumber(calculation.lossPerLotUsd, 2)}`}
+                </span>
+                <span>Contract size</span>
+                <span className="text-right font-medium text-foreground">
+                  {formatNumber(calculation.spec.contractSize, 0)}
+                </span>
+                <span>Volume step</span>
+                <span className="text-right font-medium text-foreground">
+                  {calculation.spec.lotStep}
+                </span>
+                <span>Specification</span>
+                <span className="text-right font-medium text-foreground">
+                  {calculation.specSource === "poscal-fallback"
+                    ? "Poscal fallback"
+                    : calculation.specSource}
+                </span>
+              </div>
+              {calculation.spec.brokerSpecific && calculation.specSource === "poscal-fallback" && (
+                <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
+                  This CFD uses Poscal's fallback contract. Verify contract size, tick value,
+                  and volume step against your broker before placing a trade.
+                </p>
+              )}
+            </details>
+          )}
+
           <button
             onClick={saveToHistory}
             disabled={!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal}

@@ -1,15 +1,29 @@
 export type AssetClass = "forex" | "metal" | "crypto" | "index" | "commodity";
+export type InstrumentSpecSource = "poscal-fallback" | "broker" | "mt5" | "ctrader" | "custom";
 
 export interface InstrumentSpec {
   symbol: string;
   displayName: string;
   assetClass: AssetClass;
+  /** Smallest price increment used by the risk engine. */
+  tickSize: number;
+  /** Monetary value of one tick per standard lot in the instrument profit currency. */
+  tickValueInProfitCurrency: number;
+  /** User-facing pip/point unit. This is a presentation unit, not the engine primitive. */
   pipSize: number;
+  /**
+   * USD pip value only when it is static. Dynamic FX crosses/base-USD pairs use 0
+   * and resolve through tick value plus currency conversion at runtime.
+   */
   pipValuePerStandardLot: number;
   contractSize: number;
   minLot: number;
   maxLot: number;
   lotStep: number;
+  baseCurrency: string;
+  quoteCurrency: string;
+  profitCurrency: string;
+  source: InstrumentSpecSource;
   brokerSpecific: boolean;
   warning?: string;
 }
@@ -34,9 +48,15 @@ const forexMajor = (
   symbol,
   displayName,
   assetClass: "forex",
+  tickSize: 0.0001,
+  tickValueInProfitCurrency: 10,
   pipSize: 0.0001,
-  pipValuePerStandardLot: 10,
+  pipValuePerStandardLot: symbol.endsWith("/USD") ? 10 : 0,
   contractSize: 100000,
+  baseCurrency: symbol.split("/")[0],
+  quoteCurrency: symbol.split("/")[1],
+  profitCurrency: symbol.split("/")[1],
+  source: "poscal-fallback",
   minLot: 0.01,
   maxLot: 100,
   lotStep: 0.01,
@@ -52,9 +72,15 @@ const forexJpy = (
   symbol,
   displayName,
   assetClass: "forex",
+  tickSize: 0.01,
+  tickValueInProfitCurrency: 1000,
   pipSize: 0.01,
   pipValuePerStandardLot: 0,
   contractSize: 100000,
+  baseCurrency: symbol.split("/")[0],
+  quoteCurrency: symbol.split("/")[1],
+  profitCurrency: symbol.split("/")[1],
+  source: "poscal-fallback",
   minLot: 0.01,
   maxLot: 100,
   lotStep: 0.01,
@@ -66,9 +92,15 @@ const cryptoCfd = (symbol: string, displayName: string): InstrumentSpec => ({
   symbol,
   displayName,
   assetClass: "crypto",
+  tickSize: 1,
+  tickValueInProfitCurrency: 1,
   pipSize: 1,
   pipValuePerStandardLot: 1,
   contractSize: 1,
+  baseCurrency: symbol.split("/")[0],
+  quoteCurrency: symbol.split("/")[1] ?? "USD",
+  profitCurrency: symbol.split("/")[1] ?? "USD",
+  source: "poscal-fallback",
   minLot: 0.01,
   maxLot: 100,
   lotStep: 0.01,
@@ -80,9 +112,15 @@ const indexCfd = (symbol: string, displayName: string): InstrumentSpec => ({
   symbol,
   displayName,
   assetClass: "index",
+  tickSize: 1,
+  tickValueInProfitCurrency: 1,
   pipSize: 1,
   pipValuePerStandardLot: 1,
   contractSize: 1,
+  baseCurrency: symbol,
+  quoteCurrency: "USD",
+  profitCurrency: "USD",
+  source: "poscal-fallback",
   minLot: 0.01,
   maxLot: 100,
   lotStep: 0.01,
@@ -98,9 +136,15 @@ const commodityCfd = (
   symbol,
   displayName,
   assetClass: "commodity",
+  tickSize: 0.01,
+  tickValueInProfitCurrency: 1,
   pipSize: 0.01,
   pipValuePerStandardLot: 1,
   contractSize: 100,
+  baseCurrency: symbol.split("/")[0],
+  quoteCurrency: symbol.split("/")[1] ?? "USD",
+  profitCurrency: symbol.split("/")[1] ?? "USD",
+  source: "poscal-fallback",
   minLot: 0.01,
   maxLot: 100,
   lotStep: 0.01,
@@ -154,9 +198,15 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XAU/USD",
     displayName: "Gold / US Dollar",
     assetClass: "metal",
+    tickSize: 0.01,
+    tickValueInProfitCurrency: 1,
     pipSize: 0.1,
     pipValuePerStandardLot: 10,
     contractSize: 100,
+    baseCurrency: "XAU",
+    quoteCurrency: "USD",
+    profitCurrency: "USD",
+    source: "poscal-fallback",
     minLot: 0.01,
     maxLot: 100,
     lotStep: 0.01,
@@ -167,9 +217,15 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XAG/USD",
     displayName: "Silver / US Dollar",
     assetClass: "metal",
+    tickSize: 0.01,
+    tickValueInProfitCurrency: 50,
     pipSize: 0.01,
     pipValuePerStandardLot: 50,
     contractSize: 5000,
+    baseCurrency: "XAG",
+    quoteCurrency: "USD",
+    profitCurrency: "USD",
+    source: "poscal-fallback",
     minLot: 0.01,
     maxLot: 100,
     lotStep: 0.01,
@@ -180,9 +236,15 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XPT/USD",
     displayName: "Platinum / US Dollar",
     assetClass: "metal",
+    tickSize: 1,
+    tickValueInProfitCurrency: 50,
     pipSize: 1,
     pipValuePerStandardLot: 50,
     contractSize: 50,
+    baseCurrency: "XPT",
+    quoteCurrency: "USD",
+    profitCurrency: "USD",
+    source: "poscal-fallback",
     minLot: 0.01,
     maxLot: 100,
     lotStep: 0.01,
@@ -193,10 +255,16 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
     symbol: "XCU/USD",
     displayName: "Copper / US Dollar",
     assetClass: "metal",
+    tickSize: 0.01,
+    tickValueInProfitCurrency: 25,
     pipSize: 0.01,
     // $25 per 0.01 price move. contractSize × pipSize must equal that pip value.
     pipValuePerStandardLot: 25,
     contractSize: 2500,
+    baseCurrency: "XCU",
+    quoteCurrency: "USD",
+    profitCurrency: "USD",
+    source: "poscal-fallback",
     minLot: 0.01,
     maxLot: 100,
     lotStep: 0.01,
@@ -216,16 +284,22 @@ export const INSTRUMENT_SPECS: Record<string, InstrumentSpec> = {
   "WTI/USD": commodityCfd("WTI/USD", "WTI Crude Oil / US Dollar"),
   "BRENT/USD": commodityCfd("BRENT/USD", "Brent Crude Oil / US Dollar"),
   "NATGAS/USD": commodityCfd("NATGAS/USD", "Natural Gas / US Dollar", {
+    tickSize: 0.001,
+    tickValueInProfitCurrency: 10,
     pipSize: 0.001,
     pipValuePerStandardLot: 10,
     contractSize: 10000,
   }),
   "SOYBEAN/USD": commodityCfd("SOYBEAN/USD", "Soybeans / US Dollar", {
+    tickSize: 0.25,
+    tickValueInProfitCurrency: 12.5,
     pipSize: 0.25,
     pipValuePerStandardLot: 12.5,
     contractSize: 50,
   }),
   "IRON/USD": commodityCfd("IRON/USD", "Iron Ore / US Dollar", {
+    tickSize: 0.01,
+    tickValueInProfitCurrency: 1,
     pipSize: 0.01,
     pipValuePerStandardLot: 1,
     contractSize: 100,
