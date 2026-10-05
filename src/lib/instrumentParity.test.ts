@@ -13,6 +13,27 @@ const SAMPLES: Record<string, Sample> = {
   "AUD/USD": { entry: 0.655, slPips: 20, tpPips: 40 },
   "USD/CAD": { entry: 1.355, slPips: 25, tpPips: 50 },
   "NZD/USD": { entry: 0.605, slPips: 22, tpPips: 44 },
+  "EUR/GBP": { entry: 0.86, slPips: 25, tpPips: 50 },
+  "EUR/JPY": { entry: 162.5, slPips: 20, tpPips: 40 },
+  "GBP/JPY": { entry: 190, slPips: 20, tpPips: 40 },
+  "AUD/CAD": { entry: 0.9, slPips: 25, tpPips: 50 },
+  "AUD/CHF": { entry: 0.58, slPips: 25, tpPips: 50 },
+  "AUD/JPY": { entry: 97.5, slPips: 20, tpPips: 40 },
+  "AUD/NZD": { entry: 1.08, slPips: 25, tpPips: 50 },
+  "CAD/CHF": { entry: 0.66, slPips: 25, tpPips: 50 },
+  "CAD/JPY": { entry: 108.5, slPips: 20, tpPips: 40 },
+  "CHF/JPY": { entry: 164, slPips: 20, tpPips: 40 },
+  "EUR/AUD": { entry: 1.67, slPips: 25, tpPips: 50 },
+  "EUR/CAD": { entry: 1.48, slPips: 25, tpPips: 50 },
+  "EUR/CHF": { entry: 0.96, slPips: 25, tpPips: 50 },
+  "EUR/NZD": { entry: 1.8, slPips: 25, tpPips: 50 },
+  "GBP/AUD": { entry: 1.92, slPips: 25, tpPips: 50 },
+  "GBP/CAD": { entry: 1.72, slPips: 25, tpPips: 50 },
+  "GBP/CHF": { entry: 1.11, slPips: 25, tpPips: 50 },
+  "GBP/NZD": { entry: 2.07, slPips: 25, tpPips: 50 },
+  "NZD/CAD": { entry: 0.83, slPips: 25, tpPips: 50 },
+  "NZD/CHF": { entry: 0.54, slPips: 25, tpPips: 50 },
+  "NZD/JPY": { entry: 90, slPips: 20, tpPips: 40 },
   "XAU/USD": { entry: 2650.5, slPips: 15, tpPips: 30 },
   "XAG/USD": { entry: 30.125, slPips: 50, tpPips: 100 },
   "XPT/USD": { entry: 980, slPips: 10, tpPips: 20 },
@@ -33,6 +54,16 @@ const SAMPLES: Record<string, Sample> = {
   "NATGAS/USD": { entry: 2.85, slPips: 100, tpPips: 200 },
   "SOYBEAN/USD": { entry: 1100, slPips: 20, tpPips: 40 },
   "IRON/USD": { entry: 105.5, slPips: 50, tpPips: 100 },
+};
+
+const MARKET_PRICES = {
+  "EUR/USD": 1.1,
+  "GBP/USD": 1.27,
+  "AUD/USD": 0.65,
+  "NZD/USD": 0.6,
+  "USD/JPY": 150,
+  "USD/CHF": 0.9,
+  "USD/CAD": 1.35,
 };
 
 const BALANCES = [500, 9651.28, 50000];
@@ -65,6 +96,7 @@ describe("instrument pips vs price parity", () => {
             stopLossPips: sample.slPips,
             takeProfitPips: sample.tpPips,
             entryPrice: sample.entry,
+            marketPrices: MARKET_PRICES,
           });
           const fromPrices = calculatePositionSize({
             symbol,
@@ -73,6 +105,7 @@ describe("instrument pips vs price parity", () => {
             entryPrice: sample.entry,
             stopLossPrice,
             takeProfitPrice,
+            marketPrices: MARKET_PRICES,
           });
 
           expect(fromPrices.isValid).toBe(fromPips.isValid);

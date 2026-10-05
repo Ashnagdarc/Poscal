@@ -2,8 +2,14 @@
  * Server-side trade field validation (DAN-004).
  * Rejects invalid symbols, absurd P&L, and impossible sizes before persist.
  *
- * Instrument tokens stay aligned with client `INSTRUMENT_SPECS` + aliases (MC-013 / DR-003).
+ * Instrument tokens are imported from the same catalogue used by the calculator
+ * and Add Trade selector, so server/client support cannot drift.
  */
+
+import {
+  SUPPORTED_INSTRUMENT_TOKENS,
+  normalizeInstrumentToken,
+} from "../../shared/instrumentCatalog";
 
 const MAX_ABS_PNL = 1_000_000;
 const MAX_ABS_PNL_PERCENT = 10_000;
@@ -12,66 +18,10 @@ const MAX_RISK_PERCENT = 100;
 const MAX_NOTES_LENGTH = 5_000;
 const MAX_PAIR_LENGTH = 32;
 
-/** Normalize "EUR/USD" → "EURUSD", "US30" stays "US30". */
-const normalizePairToken = (pair: string) =>
-  pair.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+const normalizePairToken = normalizeInstrumentToken;
 
-/**
- * Tokens matching client instrumentSpecs.ts (canonical + common aliases).
- * Keep in sync when adding calculator instruments.
- */
 const KNOWN_INSTRUMENT_TOKENS = new Set([
-  // Forex majors
-  "EURUSD",
-  "GBPUSD",
-  "AUDUSD",
-  "NZDUSD",
-  "USDCAD",
-  "USDCHF",
-  "USDJPY",
-  // Crosses
-  "EURGBP",
-  "EURJPY",
-  "GBPJPY",
-  // Crypto
-  "BTCUSD",
-  "ETHUSD",
-  "SOLUSD",
-  "XRPUSD",
-  "ADAUSD",
-  // Metals
-  "XAUUSD",
-  "XAGUSD",
-  "XPTUSD",
-  "XCUUSD",
-  "COPPERUSD",
-  // Indices
-  "US30",
-  "US100",
-  "US500",
-  "NAS100",
-  "NDX100",
-  "SPX500",
-  "DE40",
-  "GER40",
-  "GER30",
-  "UK100",
-  "JP225",
-  "JPN225",
-  "NIKKEI",
-  "DAX",
-  "DJI",
-  // Energy / softs
-  "WTIUSD",
-  "BRENTUSD",
-  "BCOUSD",
-  "CLUSD",
-  "NATGASUSD",
-  "NGUSD",
-  "SOYBEANUSD",
-  "ZSUSD",
-  "IRONUSD",
-  // Free-form journal notes entries may use a sentinel.
+  ...SUPPORTED_INSTRUMENT_TOKENS,
   "JOURNAL",
 ]);
 

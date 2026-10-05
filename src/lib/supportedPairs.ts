@@ -1,73 +1,25 @@
 /**
  * Client-side supported instrument tokens for journal/manual entry.
- * Keep in sync with `convex/lib/tradeValidation.ts` (server source of truth).
+ * Canonical instruments and aliases come from the shared product catalogue.
  */
 
-export const SUPPORTED_PAIR_TOKENS = [
-  // Forex majors
-  "EURUSD",
-  "GBPUSD",
-  "AUDUSD",
-  "NZDUSD",
-  "USDCAD",
-  "USDCHF",
-  "USDJPY",
-  // Crosses
-  "EURGBP",
-  "EURJPY",
-  "GBPJPY",
-  // Crypto
-  "BTCUSD",
-  "ETHUSD",
-  "SOLUSD",
-  "XRPUSD",
-  "ADAUSD",
-  // Metals
-  "XAUUSD",
-  "XAGUSD",
-  "XPTUSD",
-  "XCUUSD",
-  "COPPERUSD",
-  // Indices
-  "US30",
-  "US100",
-  "US500",
-  "NAS100",
-  "NDX100",
-  "SPX500",
-  "DE40",
-  "GER40",
-  "GER30",
-  "UK100",
-  "JP225",
-  "JPN225",
-  "NIKKEI",
-  "DAX",
-  "DJI",
-  // Energy / commodities
-  "WTIUSD",
-  "BRENTUSD",
-  "BCOUSD",
-  "CLUSD",
-  "NATGASUSD",
-  "NGUSD",
-  "SOYBEANUSD",
-  "ZSUSD",
-  "IRONUSD",
-] as const;
+import {
+  CANONICAL_INSTRUMENT_SYMBOLS,
+  SUPPORTED_INSTRUMENT_TOKENS,
+  normalizeInstrumentToken,
+} from "../../shared/instrumentCatalog";
+
+export const SUPPORTED_PAIR_TOKENS = [...SUPPORTED_INSTRUMENT_TOKENS] as const;
 
 const SUPPORTED_SET = new Set<string>(SUPPORTED_PAIR_TOKENS);
 
-/** Display labels for autocomplete (compact + slash when 6-letter forex/metal/crypto). */
-export const SUPPORTED_PAIR_SUGGESTIONS: string[] = SUPPORTED_PAIR_TOKENS.map((token) => {
-  if (/^[A-Z]{6}$/.test(token)) {
-    return `${token.slice(0, 3)}/${token.slice(3)}`;
-  }
-  return token;
-});
+/** Add Trade autocomplete shows canonical product symbols, aliases still validate. */
+export const SUPPORTED_PAIR_SUGGESTIONS: string[] = [
+  ...CANONICAL_INSTRUMENT_SYMBOLS,
+];
 
 export function normalizePairToken(pair: string): string {
-  return pair.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return normalizeInstrumentToken(pair);
 }
 
 export function isSupportedPairToken(token: string): boolean {
