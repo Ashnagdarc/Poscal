@@ -1,3 +1,5 @@
+import { CANONICAL_INSTRUMENT_SYMBOLS } from "../../shared/instrumentCatalog";
+
 /**
  * Application-wide constants
  * Centralized location for magic numbers and configuration values
@@ -62,45 +64,8 @@ export const DATE_FORMATS = {
   TIME_ONLY: 'HH:mm',
 } as const;
 
-// Currency Pairs — calculator instruments (must exist in INSTRUMENT_SPECS; drives CurrencyGrid)
-export const COMMON_PAIRS = [
-  // Forex majors
-  'EUR/USD',
-  'GBP/USD',
-  'USD/JPY',
-  'USD/CHF',
-  'AUD/USD',
-  'USD/CAD',
-  'NZD/USD',
-  // Forex crosses
-  'EUR/GBP',
-  'EUR/JPY',
-  'GBP/JPY',
-  // Crypto
-  'BTC/USD',
-  'ETH/USD',
-  'SOL/USD',
-  'XRP/USD',
-  'ADA/USD',
-  // Metals
-  'XAU/USD',
-  'XAG/USD',
-  'XPT/USD',
-  'XCU/USD',
-  // Indices
-  'US500',
-  'US100',
-  'US30',
-  'DE40',
-  'UK100',
-  'JP225',
-  // Energy & softs
-  'WTI/USD',
-  'BRENT/USD',
-  'NATGAS/USD',
-  'SOYBEAN/USD',
-  'IRON/USD',
-] as const;
+// Currency pairs — derived from the single shared instrument catalogue.
+export const COMMON_PAIRS = CANONICAL_INSTRUMENT_SYMBOLS;
 
 // Platforms
 export const PLATFORMS = [

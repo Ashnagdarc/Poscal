@@ -9,7 +9,7 @@
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
-    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.node.json --noEmit && tsc -p convex/tsconfig.json --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,7 +21,8 @@
     "convex:deploy": "convex deploy",
     "convex:codegen": "convex codegen",
     "convex:data": "convex data",
-    "convex:export": "convex export"
+    "convex:export": "convex export",
+    "gate:fx": "npx eslint shared/instrumentCatalog.ts src/lib/instrumentSpecs.ts src/lib/constants.ts src/lib/supportedPairs.ts convex/lib/tradeValidation.ts src/components/CurrencyGrid.tsx src/lib/expandedForexPairs.test.ts src/lib/allInstrumentsLotSize.test.ts src/lib/instrumentParity.test.ts src/lib/trading/volume.ts src/lib/trading/volume.test.ts src/lib/positionSizeCalculator.ts && npm run typecheck && npm run test"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.94",

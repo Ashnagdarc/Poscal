@@ -3,6 +3,7 @@ import { Check, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { COMMON_PAIRS } from "@/lib/constants";
 import { getInstrumentSpecBySymbol } from "@/lib/instrumentSpecs";
+import { FOREX_SYMBOLS } from "../../shared/instrumentCatalog";
 
 export interface CurrencyPair {
   symbol: string;
@@ -193,8 +194,8 @@ export const CurrencyGrid = ({ selectedPair, onSelect, onBack }: CurrencyGridPro
           })}
         </div>
         <p className="mt-4 text-center text-xs text-muted-foreground">
-          Showing {FEATURED_CURRENCY_PAIRS.length} supported symbols with live lot sizing. Crosses
-          (EUR/GBP, EUR/JPY, GBP/JPY) auto-convert quote→USD from mid rates.
+          Showing {FEATURED_CURRENCY_PAIRS.length} supported symbols, including {FOREX_SYMBOLS.length}
+          standard FX pairs. Crosses auto-convert their quote currency to USD from the rate feed.
         </p>
       </div>
     </div>

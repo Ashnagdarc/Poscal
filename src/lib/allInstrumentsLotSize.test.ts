@@ -40,8 +40,13 @@ const ENTRY_BY_SYMBOL: Record<string, number> = {
 };
 
 const MARKET_PRICES = {
+  "EUR/USD": 1.1,
   "GBP/USD": 1.27,
+  "AUD/USD": 0.65,
+  "NZD/USD": 0.6,
   "USD/JPY": 150,
+  "USD/CHF": 0.9,
+  "USD/CAD": 1.35,
 };
 
 const STOP_BY_ASSET: Record<string, number> = {
@@ -67,6 +72,24 @@ describe("all instrument lot-size calculations", () => {
       "EUR/GBP",
       "EUR/JPY",
       "GBP/JPY",
+      "AUD/CAD",
+      "AUD/CHF",
+      "AUD/JPY",
+      "AUD/NZD",
+      "CAD/CHF",
+      "CAD/JPY",
+      "CHF/JPY",
+      "EUR/AUD",
+      "EUR/CAD",
+      "EUR/CHF",
+      "EUR/NZD",
+      "GBP/AUD",
+      "GBP/CAD",
+      "GBP/CHF",
+      "GBP/NZD",
+      "NZD/CAD",
+      "NZD/CHF",
+      "NZD/JPY",
       "BTC/USD",
       "ETH/USD",
       "SOL/USD",
