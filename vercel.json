@@ -1,5 +1,5 @@
 {
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run gate:fx && npm run build'; else npm run gate:fx && npm run build; fi",
+  "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist",
   "crons": [
     {
