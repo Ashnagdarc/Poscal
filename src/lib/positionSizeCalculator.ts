@@ -212,7 +212,7 @@ export function calculatePositionSize(
     marketPrices: input.marketPrices,
   });
 
-  if (accountFx.rate <= 0) {
+  if (accountFx.source === "missing") {
     return invalidResult(
       symbol,
       stop.mode,
@@ -233,7 +233,7 @@ export function calculatePositionSize(
     marketPrices: input.marketPrices,
   });
 
-  if (!engine.isValid) {
+  if (engine.isValid === false) {
     if (engine.code === "BELOW_MIN_VOLUME") {
       const minLotRisk =
         accountToUsd > 0 ? engine.minLotRiskUsd / accountToUsd : engine.minLotRiskUsd;
@@ -483,7 +483,7 @@ export function resolveAccountCurrencyToUsdRate(
     marketPrices,
   });
 
-  if (resolved.rate <= 0) {
+  if (resolved.source === "missing") {
     return { rate: 0, error: resolved.error };
   }
   return { rate: resolved.rate };
