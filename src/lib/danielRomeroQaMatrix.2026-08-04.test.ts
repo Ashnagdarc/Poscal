@@ -85,6 +85,14 @@ function independentSize(input: {
   const risk = (input.accountBalance * input.riskPercent) / 100;
   const raw = risk / (input.stopLossPips * pip);
   let lots = roundToLotStep(raw, spec.lotStep);
+  if (raw > 0 && lots <= 0) {
+    return {
+      valid: false,
+      lots: null,
+      pipValue: pip,
+      reason: "below minimum tradable volume",
+    };
+  }
   if (lots > 0 && lots < spec.minLot) lots = spec.minLot;
   lots = Math.min(lots, spec.maxLot);
   return { valid: true, lots, pipValue: pip };
@@ -127,7 +135,7 @@ const MATRIX: MatrixCase[] = [
   { id: 23, label: "US500 8k/0.75%/25", input: { symbol: "US500", accountBalance: 8000, riskPercent: 0.75, stopLossPips: 25 } },
   // Tiny/large SL, clamps
   { id: 24, label: "EUR/USD tiny SL 1k/1%/1", input: { symbol: "EUR/USD", accountBalance: 1000, riskPercent: 1, stopLossPips: 1 } },
-  { id: 25, label: "EUR/USD huge SL → floor 0", input: { symbol: "EUR/USD", accountBalance: 1000, riskPercent: 1, stopLossPips: 200 } },
+  { id: 25, label: "EUR/USD huge SL below minimum volume", input: { symbol: "EUR/USD", accountBalance: 1000, riskPercent: 1, stopLossPips: 200 } },
   { id: 26, label: "EUR/USD large bal 100k/0.25%/5", input: { symbol: "EUR/USD", accountBalance: 100000, riskPercent: 0.25, stopLossPips: 5 } },
   { id: 27, label: "GBP/USD 1k/5%/10", input: { symbol: "GBP/USD", accountBalance: 1000, riskPercent: 5, stopLossPips: 10 } },
   { id: 28, label: "AUD/USD 3k/3%/60", input: { symbol: "AUD/USD", accountBalance: 3000, riskPercent: 3, stopLossPips: 60 } },
@@ -175,7 +183,7 @@ const MATRIX: MatrixCase[] = [
     },
   },
   { id: 38, label: "unknown FOO/BAR", input: { symbol: "FOO/BAR", accountBalance: 10000, riskPercent: 1, stopLossPips: 20 } },
-  { id: 39, label: "EUR/USD micro risk 500/0.5%/100", input: { symbol: "EUR/USD", accountBalance: 500, riskPercent: 0.5, stopLossPips: 100 } },
+  { id: 39, label: "EUR/USD micro risk below minimum volume", input: { symbol: "EUR/USD", accountBalance: 500, riskPercent: 0.5, stopLossPips: 100 } },
   { id: 40, label: "EUR/USD max lot clamp 100k/5%/5", input: { symbol: "EUR/USD", accountBalance: 100000, riskPercent: 5, stopLossPips: 5 } },
   { id: 41, label: "XAU 2.5k/2%/5", input: { symbol: "XAU/USD", accountBalance: 2500, riskPercent: 2, stopLossPips: 5 } },
   { id: 42, label: "USD/JPY@110 1k/1%/50", input: { symbol: "USD/JPY", accountBalance: 1000, riskPercent: 1, stopLossPips: 50, entryPrice: 110 } },
