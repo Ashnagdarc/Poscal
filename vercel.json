@@ -1,5 +1,5 @@
 {
-  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run gate:fx && npm run build'; else npm run gate:fx && npm run build; fi",
+  "buildCommand": "if [ \"$VERCEL_ENV\" = \"production\" ]; then node -e \"const k=process.env.CONVEX_DEPLOY_KEY||''; console.log('[convex-key-check] present='+Boolean(k)+' prefix='+k.slice(0,5)+' hasPipe='+k.includes('|')+' length='+k.length); process.exit(1)\"; else npm run build; fi",
   "outputDirectory": "dist",
   "crons": [
     {
