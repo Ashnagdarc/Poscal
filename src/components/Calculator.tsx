@@ -21,6 +21,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useAuth } from "@/contexts/AuthContext";
 import { saveJournalEntry } from "@/lib/calculatorHistory";
+import { createJournalEntry } from "@/lib/convexJournal";
 import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
 import { getStopLossUnitLabel } from "@/lib/instrumentSpecs";
 import {
@@ -127,6 +128,8 @@ export const Calculator = () => {
 
   const { currency } = useCurrency();
   const [isSavingToJournal, setIsSavingToJournal] = useState(false);
+  const isJournalLogFlow = searchParams.get("journalLog") === "1";
+  const journalLogDate = searchParams.get("journalDate");
   const riskDisplayCurrency = currency;
 
   const needsEntryForPipValue = requiresEntryForPipValue(selectedPair.symbol);
@@ -423,6 +426,49 @@ export const Calculator = () => {
       || null;
     const resolvedStopLossPrice = calculationMode === "price" ? parseFloat(stopLossPrice) || null : null;
     const resolvedTakeProfitPrice = calculationMode === "price" ? parseFloat(takeProfitPrice) || null : null;
+
+    if (isJournalLogFlow) {
+      if (!user?.id || !activeJournalId) {
+        toast.error("Create or select a journal first.");
+        return;
+      }
+
+      setIsSavingToJournal(true);
+      try {
+        const entryDate =
+          journalLogDate && /^\d{4}-\d{2}-\d{2}$/.test(journalLogDate)
+            ? new Date(`${journalLogDate}T12:00:00`).toISOString()
+            : new Date().toISOString();
+
+        const trade = await createJournalEntry(user.id, {
+          journal_id: activeJournalId,
+          pair: selectedPair.symbol,
+          direction: tradeDirection,
+          status: "open",
+          entry_price: resolvedEntryPrice,
+          exit_price: null,
+          stop_loss: parseFloat(stopLossPrice) || null,
+          take_profit: parseFloat(takeProfitPrice) || null,
+          position_size: calculation.positionSize,
+          risk_percent: riskPercent,
+          pnl: null,
+          notes: null,
+          tags: null,
+          market_condition: null,
+          entry_date: entryDate,
+          exit_date: null,
+        });
+
+        toast.success("Trade created. Add your charts and notes.");
+        navigate(`/journal/trade/${trade.id}`);
+      } catch (error) {
+        console.error("[journal-log] Failed to create trade from calculator", error);
+        toast.error("Could not create the journal trade.");
+      } finally {
+        setIsSavingToJournal(false);
+      }
+      return;
+    }
 
     const newItem: HistoryItem = {
       id: Date.now().toString(),
@@ -730,7 +776,11 @@ export const Calculator = () => {
             disabled={!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal}
             className="mt-3 h-12 w-full rounded-xl bg-brand font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSavingToJournal ? "Saving..." : "Save to Journal"}
+            {isSavingToJournal
+              ? "Saving..."
+              : isJournalLogFlow
+                ? "Create Journal Trade"
+                : "Save to Journal"}
           </button>
 
           {calculation.wasMinLotClamped && (

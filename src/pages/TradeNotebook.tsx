@@ -339,7 +339,7 @@ const TradeNotebook = () => {
     }
 
     return (
-      <label className="mt-4 flex min-h-40 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/40 px-4 text-center transition hover:bg-secondary/60">
+      <label className="mt-3 flex min-h-32 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/40 px-4 text-center transition hover:bg-secondary/60">
         <div>
           {uploading ? (
             <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
@@ -439,11 +439,11 @@ const TradeNotebook = () => {
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-3xl px-4 py-6 sm:px-6">
-        <section className="border-b border-border/60 pb-6">
+      <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
+        <section className="border-b border-border/60 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight text-foreground">{trade.pair}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{trade.pair}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 <span>{direction}</span>
                 <span>•</span>
@@ -468,10 +468,13 @@ const TradeNotebook = () => {
               </p>
             </div>
           </div>
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            Use only what helps you. Notes and charts are optional, and you can come back to this trade anytime.
+          </p>
         </section>
 
-        <section className="border-b border-border/60 py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Before the trade</p>
+        <section className="border-b border-border/60 py-5">
+          <p className="text-sm font-bold text-foreground">Before the trade</p>
           {renderChartUploader("before", "Before-trade chart")}
 
           <label className="mt-6 block">
@@ -481,13 +484,13 @@ const TradeNotebook = () => {
               onChange={(event) => updateSection("entry_reason", event.target.value)}
               maxLength={MAX_SECTION_CHARS}
               placeholder="What did you see? What was the setup, context, confirmation or idea behind the entry?"
-              className="mt-2 min-h-52 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-4 text-base leading-7 text-foreground outline-none transition focus:border-foreground/30"
+              className="mt-2 min-h-36 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-foreground/30"
             />
           </label>
         </section>
 
-        <section className="border-b border-border/60 py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Trade details</p>
+        <section className="border-b border-border/60 py-5">
+          <p className="text-sm font-bold text-foreground">Trade details</p>
           <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
             <div>
               <p className="text-xs text-muted-foreground">Entry</p>
@@ -520,19 +523,19 @@ const TradeNotebook = () => {
           </div>
         </section>
 
-        <section className="border-b border-border/60 py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">During the trade</p>
+        <section className="border-b border-border/60 py-5">
+          <p className="text-sm font-bold text-foreground">During the trade</p>
           <textarea
             value={draft.during_trade_notes}
             onChange={(event) => updateSection("during_trade_notes", event.target.value)}
             maxLength={MAX_SECTION_CHARS}
             placeholder="What happened while the position was open? Record management decisions, emotions, changes in structure or anything worth remembering."
-            className="mt-4 min-h-60 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-4 text-base leading-7 text-foreground outline-none transition focus:border-foreground/30"
+            className="mt-3 min-h-36 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-foreground/30"
           />
         </section>
 
-        <section className="border-b border-border/60 py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">After the trade</p>
+        <section className="border-b border-border/60 py-5">
+          <p className="text-sm font-bold text-foreground">After the trade</p>
           {renderChartUploader("after", "After-trade chart")}
 
           <textarea
@@ -540,18 +543,18 @@ const TradeNotebook = () => {
             onChange={(event) => updateSection("post_trade_review", event.target.value)}
             maxLength={MAX_SECTION_CHARS}
             placeholder="How did the trade actually play out? Was the thesis right even if the result was wrong?"
-            className="mt-6 min-h-52 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-4 text-base leading-7 text-foreground outline-none transition focus:border-foreground/30"
+            className="mt-4 min-h-36 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-foreground/30"
           />
         </section>
 
-        <section className="py-7">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">What I learned</p>
+        <section className="py-5">
+          <p className="text-sm font-bold text-foreground">What I learned</p>
           <textarea
             value={draft.lessons_learned}
             onChange={(event) => updateSection("lessons_learned", event.target.value)}
             maxLength={MAX_SECTION_CHARS}
             placeholder="What would you repeat, avoid or change if this setup appeared again?"
-            className="mt-4 min-h-60 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-4 text-base leading-7 text-foreground outline-none transition focus:border-foreground/30"
+            className="mt-3 min-h-36 w-full resize-y rounded-2xl border border-border bg-secondary/50 px-4 py-3 text-sm leading-6 text-foreground outline-none transition focus:border-foreground/30"
           />
 
           <div className="mt-5 flex items-center gap-2 text-xs text-muted-foreground">
@@ -563,9 +566,9 @@ const TradeNotebook = () => {
             </span>
           </div>
 
-          {imageQuota ? (
+          {imageQuota && imageQuota.usedBytes > 0 ? (
             <p className="mt-3 text-[11px] text-muted-foreground">
-              Journal image storage: {(imageQuota.usedBytes / (1024 * 1024)).toFixed(1)} MB of {(imageQuota.limitBytes / (1024 * 1024)).toFixed(0)} MB · {imageQuota.attachmentCount} of {imageQuota.limitCount} images
+              Image storage {(imageQuota.usedBytes / (1024 * 1024)).toFixed(1)} / {(imageQuota.limitBytes / (1024 * 1024)).toFixed(0)} MB
             </p>
           ) : null}
 

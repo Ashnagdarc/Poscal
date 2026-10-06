@@ -1,15 +1,11 @@
 /**
  * Server-side trade field validation (DAN-004).
- * Rejects invalid symbols, absurd P&L, and impossible sizes before persist.
- *
- * Instrument tokens are imported from the same catalogue used by the calculator
- * and Add Trade selector, so server/client support cannot drift.
+ * Journal entries intentionally accept broker/custom instrument symbols. The
+ * calculator remains stricter, but a trader should be able to journal any
+ * instrument they actually traded.
  */
 
-import {
-  SUPPORTED_INSTRUMENT_TOKENS,
-  normalizeInstrumentToken,
-} from "../../shared/instrumentCatalog";
+import { normalizeInstrumentToken } from "../../shared/instrumentCatalog";
 
 const MAX_ABS_PNL = 1_000_000;
 const MAX_ABS_PNL_PERCENT = 10_000;
@@ -19,69 +15,6 @@ const MAX_NOTES_LENGTH = 5_000;
 const MAX_PAIR_LENGTH = 32;
 
 const normalizePairToken = normalizeInstrumentToken;
-
-const KNOWN_INSTRUMENT_TOKENS = new Set([
-  ...SUPPORTED_INSTRUMENT_TOKENS,
-  "JOURNAL",
-]);
-
-const formatPairTokenForDisplay = (token: string) => {
-  if (/^[A-Z]{6}$/.test(token)) {
-    return `${token.slice(0, 3)}/${token.slice(3)}`;
-  }
-  return token;
-};
-
-/** Suggest a known token for near-miss / partial input (e.g. XAUUS → XAUUSD). */
-const suggestPairToken = (token: string): string | null => {
-  if (!token || token === "JOURNAL" || KNOWN_INSTRUMENT_TOKENS.has(token)) {
-    return null;
-  }
-
-  if (token.length >= 3) {
-    const prefixMatches = [...KNOWN_INSTRUMENT_TOKENS].filter(
-      (known) => known !== "JOURNAL" && known.startsWith(token),
-    );
-    if (prefixMatches.length === 1) {
-      return prefixMatches[0] ?? null;
-    }
-  }
-
-  const maxDistance = token.length <= 4 ? 1 : 2;
-  let best: string | null = null;
-  let bestDistance = maxDistance + 1;
-
-  for (const known of KNOWN_INSTRUMENT_TOKENS) {
-    if (known === "JOURNAL") continue;
-    if (Math.abs(known.length - token.length) > maxDistance) continue;
-
-    // Lightweight Levenshtein for short tickers
-    const a = token;
-    const b = known;
-    const rows = a.length + 1;
-    const cols = b.length + 1;
-    const matrix: number[][] = Array.from({ length: rows }, () => Array(cols).fill(0));
-    for (let i = 0; i < rows; i += 1) matrix[i]![0] = i;
-    for (let j = 0; j < cols; j += 1) matrix[0]![j] = j;
-    for (let i = 1; i < rows; i += 1) {
-      for (let j = 1; j < cols; j += 1) {
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        matrix[i]![j] = Math.min(
-          (matrix[i - 1]![j] ?? 0) + 1,
-          (matrix[i]![j - 1] ?? 0) + 1,
-          (matrix[i - 1]![j - 1] ?? 0) + cost,
-        );
-      }
-    }
-    const distance = matrix[a.length]![b.length] ?? maxDistance + 1;
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      best = known;
-    }
-  }
-
-  return bestDistance <= maxDistance ? best : null;
-};
 
 const isFiniteNumber = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value);
@@ -112,19 +45,8 @@ export function assertValidTradeFields(input: TradeValidationInput): void {
   }
 
   const token = normalizePairToken(pair);
-  // Allow JOURNAL sentinel and known instruments; reject obvious garbage like INVALID.
-  if (token !== "JOURNAL" && !KNOWN_INSTRUMENT_TOKENS.has(token)) {
-    const suggestion = suggestPairToken(token);
-    const hint = suggestion
-      ? ` Did you mean ${formatPairTokenForDisplay(suggestion)}?`
-      : " Use a full supported symbol such as XAUUSD, EURUSD, or BTCUSD.";
-
-    // Allow slash forms that normalize to known tokens; otherwise reject.
-    if (!/^[A-Z0-9]{2,12}$/.test(token) || token === "INVALID" || token.includes("INVALID")) {
-      throw new Error(`Unsupported or invalid trade pair: ${pair}.${hint}`);
-    }
-    // Unknown but well-formed symbols still blocked until registered.
-    throw new Error(`Unsupported trade pair: ${pair}.${hint}`);
+  if (!/^[A-Z0-9]{2,32}$/.test(token) || token === "INVALID" || token.includes("INVALID")) {
+    throw new Error("Trade instrument must contain letters or numbers");
   }
 
   if (input.notes != null && input.notes.length > MAX_NOTES_LENGTH) {

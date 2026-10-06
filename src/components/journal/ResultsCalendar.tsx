@@ -28,11 +28,6 @@ export const ResultsCalendar = ({
     positive: (date: Date) => summaries.get(toDateKey(date))?.tone === "positive",
     negative: (date: Date) => summaries.get(toDateKey(date))?.tone === "negative",
     neutral: (date: Date) => summaries.get(toDateKey(date))?.tone === "neutral",
-    missed: (date: Date) => {
-      const day = startOfDay(date);
-      if (day >= today) return false;
-      return !summaries.has(toDateKey(day));
-    },
   };
 
   return (
@@ -77,14 +72,12 @@ export const ResultsCalendar = ({
         positive: "!bg-emerald-500/20 !text-foreground",
         negative: "!bg-red-500/20 !text-foreground",
         neutral: "!bg-slate-500/20 !text-foreground",
-        missed: "!bg-background/60",
       }}
       components={{
-        DayContent: ({ date, activeModifiers }: { date: Date; activeModifiers: Record<string, boolean> }) => {
+        DayContent: ({ date }: { date: Date }) => {
           const dateKey = toDateKey(date);
           const summary = summaries.get(dateKey);
           const isFuture = startOfDay(date) > today;
-          const isMissed = Boolean(activeModifiers.missed) && !summary;
           const isCurrentMonth = date.getMonth() === month.getMonth();
           const toneClass = summary?.tone === "positive"
             ? "border border-emerald-500/50 bg-emerald-500/20"
@@ -92,9 +85,7 @@ export const ResultsCalendar = ({
               ? "border border-red-500/50 bg-red-500/20"
               : summary?.tone === "neutral"
                 ? "border border-slate-400/50 bg-slate-500/20"
-                : isMissed
-                  ? "border border-border/50 bg-background/40"
-                  : isSameDay(date, today)
+                : isSameDay(date, today)
                     ? "border border-border bg-secondary/70"
                     : "";
 
@@ -130,12 +121,7 @@ export const ResultsCalendar = ({
                   </span>
                 </>
               )}
-              {isCurrentMonth && !summary && isMissed && (
-                <span className="text-[9px] font-semibold leading-none text-muted-foreground/80 sm:text-[10px]">
-                  x
-                </span>
-              )}
-              {isCurrentMonth && !summary && !isMissed && !isFuture && isSameDay(date, today) && (
+              {isCurrentMonth && !summary && !isFuture && isSameDay(date, today) && (
                 <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
                   Today
                 </span>
@@ -163,8 +149,8 @@ export const ResultsLegend = () => (
       <span>Breakeven</span>
     </div>
     <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-      <span className="text-[11px] font-semibold leading-none">x</span>
-      <span>No results</span>
+      <span className="h-2 w-2 shrink-0 rounded-full border border-border" />
+      <span>No trade</span>
     </div>
   </div>
 );

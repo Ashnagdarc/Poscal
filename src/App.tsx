@@ -27,6 +27,7 @@ const VerifyEmail = lazyWithRetry(() => import("./pages/VerifyEmail"));
 const Profile = lazyWithRetry(() => import("./pages/Profile"));
 const Journal = lazyWithRetry(() => import("./pages/Journal"));
 const TradeNotebook = lazyWithRetry(() => import("./pages/TradeNotebook"));
+const DayJournal = lazyWithRetry(() => import("./pages/DayJournal"));
 const Settings = lazyWithRetry(() => import("./pages/Settings"));
 const News = lazyWithRetry(() => import("./pages/News"));
 const Upgrade = lazyWithRetry(() => import("./pages/Upgrade"));
@@ -65,7 +66,8 @@ const AppContent = () => {
   ];
   const shouldShowBottomNav =
     !hideBottomNavOn.includes(location.pathname)
-    && !location.pathname.startsWith("/journal/trade/");
+    && !location.pathname.startsWith("/journal/trade/")
+    && !location.pathname.startsWith("/journal/day/");
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
@@ -104,6 +106,10 @@ const AppContent = () => {
           <Route
             path="/journal/trade/:tradeId"
             element={<ProtectedRoute requiresPremium>{<TradeNotebook />}</ProtectedRoute>}
+          />
+          <Route
+            path="/journal/day/:dateKey"
+            element={<ProtectedRoute requiresPremium>{<DayJournal />}</ProtectedRoute>}
           />
           <Route
             path="/history"

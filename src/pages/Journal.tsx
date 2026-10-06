@@ -1,32 +1,23 @@
-import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BookOpen, Clock3, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Camera, Clock3, Copy, X } from "lucide-react";
-import { useAuth } from "@/contexts/AuthContext";
-import { ACCOUNT_CURRENCIES, useCurrency } from "@/contexts/CurrencyContext";
-import { useJournal } from "@/contexts/JournalContext";
-import { PageHeader } from "@/components/PageHeader";
+import { toast } from "sonner";
+
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { Skeleton } from "@/components/ui/skeleton";
 import { JournalAnalyticsTabs, type JournalTab } from "@/components/journal/JournalAnalyticsTabs";
 import { JournalOnboarding } from "@/components/journal/JournalOnboarding";
 import { JournalSwitcher } from "@/components/journal/JournalSwitcher";
 import { JournalTour } from "@/components/journal/JournalTour";
+import { LogTradeChoiceSheet } from "@/components/journal/LogTradeChoiceSheet";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
-import { ProgressTracker } from "@/components/journal/ProgressTracker";
 import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCalendar";
-import { TradingGrowthChart } from "@/components/journal/TradingGrowthChart";
-import { ReturnsCalendar } from "@/components/ui/returns-calendar";
-import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Skeleton } from "@/components/ui/skeleton";
-import {
-  deleteJournalEntry,
-  loadJournalEntries,
-  type SavedCalculationOrderType,
-  type JournalEntry,
-  type SavedCalculationStatus,
-  updateJournalEntry,
-  uploadCalculatorScreenshot,
-  resolveCalculatorScreenshotUrls,
-} from "@/lib/calculatorHistory";
-import type { JournalTrade } from "@/lib/convexJournal";
+import { PageHeader } from "@/components/PageHeader";
+import { useAuth } from "@/contexts/AuthContext";
+import { useJournal } from "@/contexts/JournalContext";
+import { useActionError } from "@/contexts/ActionErrorContext";
+import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
+import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
 import {
   useAddTradeMutation,
   useDeleteTradeMutation,
@@ -35,19 +26,13 @@ import {
   useUpdateTradeMutation,
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
-import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
-import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
-import { toast } from "sonner";
-import { useActionError } from "@/contexts/ActionErrorContext";
-import { preferencesApi } from "@/lib/api";
 import {
-  buildMonthlyReturnsGrid,
   buildResultDaySummaries,
   startOfDay,
   toDateKey,
 } from "@/lib/historyResults";
-import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
-import { formatProgressDateKey } from "@/lib/progressSessions";
+import type { JournalTrade } from "@/lib/convexJournal";
+import { preferencesApi } from "@/lib/api";
 import {
   evaluateEquityMilestone,
   evaluateRiskAlert,
@@ -56,117 +41,44 @@ import {
 } from "@/lib/tradingAlerts";
 import { detectBrowserTimeZone } from "@/lib/timezones";
 
-const ORDER_TYPE_LABELS: Record<SavedCalculationOrderType, string> = {
-  buy: "Buy",
-  sell: "Sell",
-  buy_limit: "Buy Limit",
-  sell_limit: "Sell Limit",
-  buy_stop: "Buy Stop",
-  sell_stop: "Sell Stop",
-};
-
-const formatOrderType = (orderType?: SavedCalculationOrderType | null) => {
-  if (!orderType) return "Manual";
-  return ORDER_TYPE_LABELS[orderType] ?? orderType;
-};
-
-const RESULT_OPTIONS: Array<{ value: SavedCalculationStatus; label: string }> = [
-  { value: "win", label: "Win" },
-  { value: "loss", label: "Loss" },
-  { value: "breakeven", label: "Breakeven" },
-  { value: "cancelled", label: "Cancelled" },
-];
-
-const STATUS_META: Record<SavedCalculationStatus, { label: string; className: string }> = {
-  open: {
-    label: "Open",
-    className: "bg-background text-foreground",
-  },
-  win: {
-    label: "Win",
-    className: "bg-emerald-500/15 text-emerald-400",
-  },
-  loss: {
-    label: "Loss",
-    className: "bg-red-500/15 text-red-400",
-  },
-  breakeven: {
-    label: "BE",
-    className: "bg-slate-500/15 text-slate-300",
-  },
-  cancelled: {
-    label: "Cancelled",
-    className: "bg-muted text-muted-foreground",
-  },
-};
-
-const formatPrice = (value: number | null | undefined) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: value >= 100 ? 2 : 4,
-    maximumFractionDigits: value >= 100 ? 2 : 5,
-  });
-};
-
-const symbolForCurrency = (code: string | null | undefined, fallback: string) => {
-  if (!code) return fallback;
-  return ACCOUNT_CURRENCIES.find((item) => item.code === code)?.symbol ?? fallback;
-};
-
-const formatMoney = (value: number | null | undefined, decimals = 2) => {
-  if (value === null || value === undefined || !Number.isFinite(value)) {
-    return "—";
-  }
-
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
-};
-
-const formatDate = (date: Date) =>
+const formatDate = (value: string) =>
   new Intl.DateTimeFormat("en-US", {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(date);
+    year: "numeric",
+  }).format(new Date(value));
 
-const parseNumericInput = (value: string) => {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
+const formatPnl = (value: number | null | undefined) => {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${value > 0 ? "+" : ""}${value.toLocaleString("en-US", {
+    maximumFractionDigits: 2,
+  })}`;
 };
 
 const Journal = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { currency } = useCurrency();
-  const formatAccountMoney = (
-    value: number | null | undefined,
-    code?: string | null,
-    decimals = 2,
-  ) => {
-    const text = formatMoney(value, decimals);
-    if (text === "—") return text;
-    return `${symbolForCurrency(code, currency.symbol)}${text}`;
-  };
   const { showErrorFromUnknown } = useActionError();
   const {
     activeJournal,
-    activeJournalId,
     needsOnboarding,
     isLoading: isJournalsLoading,
   } = useJournal();
-  const screenshotInputRef = useRef<HTMLInputElement | null>(null);
-  const [journalTab, setJournalTab] = useState<JournalTab>("overview");
+
   const [pageSection, setPageSection] = useState<"today" | "trades" | "notebook">("today");
+  const [journalTab, setJournalTab] = useState<JournalTab>("overview");
+  const [calendarMonth, setCalendarMonth] = useState(() => startOfDay(new Date()));
+  const [isLogTradeChooserOpen, setIsLogTradeChooserOpen] = useState(false);
   const [isTradeSheetOpen, setIsTradeSheetOpen] = useState(false);
+  const [openNotebookAfterManualSave, setOpenNotebookAfterManualSave] = useState(false);
   const [tradeToEdit, setTradeToEdit] = useState<JournalTrade | null>(null);
   const [tradeToDelete, setTradeToDelete] = useState<JournalTrade | null>(null);
+  const [preferredTimeZone, setPreferredTimeZone] = useState(
+    () => localStorage.getItem("preferredTimezone") || detectBrowserTimeZone(),
+  );
+  const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
+  const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
+
   const { data: manualTrades = [], isLoading: isManualTradesLoading } = useTradesQuery();
   const {
     data: paginatedManualTrades,
@@ -174,57 +86,39 @@ const Journal = () => {
     isLoadingMore: isLoadingMoreTrades,
     loadMore: loadMoreTrades,
   } = usePaginatedTradesQuery();
+
   const addTradeMutation = useAddTradeMutation();
   const updateTradeMutation = useUpdateTradeMutation();
   const deleteTradeMutation = useDeleteTradeMutation();
   const { stats: serverTradeStats, isBackfilling: isTradeStatsBackfilling } = useJournalTradeStats();
-  const [activeView, setActiveView] = useState<"heatmap" | "calendar">("calendar");
-  const [items, setItems] = useState<JournalEntry[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [selectedItem, setSelectedItem] = useState<JournalEntry | null>(null);
-  const [itemToDelete, setItemToDelete] = useState<JournalEntry | null>(null);
-  const [itemForResult, setItemForResult] = useState<JournalEntry | null>(null);
-  const [resultStatus, setResultStatus] = useState<SavedCalculationStatus>("win");
-  const [pnlAmountInput, setPnlAmountInput] = useState("");
-  const [resultRInput, setResultRInput] = useState("");
-  const [noteInput, setNoteInput] = useState("");
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
-  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [resolvedStorageScreenshotUrl, setResolvedStorageScreenshotUrl] = useState<string | null>(null);
-  const [selectedStorageScreenshotUrl, setSelectedStorageScreenshotUrl] = useState<string | null>(null);
-  const [screenshotRemoved, setScreenshotRemoved] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState(() => startOfDay(new Date()));
-  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined);
-  const [selectedMonthKey, setSelectedMonthKey] = useState<string | undefined>(undefined);
-  const [sessionDateKey, setSessionDateKey] = useState(() => formatProgressDateKey(new Date()));
-  const [preferredTimeZone, setPreferredTimeZone] = useState(
-    () => localStorage.getItem("preferredTimezone") || detectBrowserTimeZone(),
-  );
-  const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
-  const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
 
-  const selectedDateKey = selectedCalendarDate ? toDateKey(selectedCalendarDate) : undefined;
   const {
     ready: areTradeFactsReady,
     daySummaries: factDaySummaries,
-    monthlyReturns: factMonthlyReturns,
-    selectedTrades: factSelectedTrades,
     performanceSummary: tradePerformanceSummary,
   } = useJournalTradeFacts({
     calendarMonth,
-    selectedMonthKey,
-    selectedDateKey,
+    selectedMonthKey: undefined,
+    selectedDateKey: undefined,
     timeZone: preferredTimeZone,
   });
 
   const startingBalance = activeJournal?.startingBalance ?? 0;
+  const today = useMemo(() => startOfDay(new Date()), []);
+
+  const fallbackDaySummaries = useMemo(
+    () => buildResultDaySummaries([], manualTrades, preferredTimeZone),
+    [manualTrades, preferredTimeZone],
+  );
+  const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
+  const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
 
   useEffect(() => {
     if (!user) return;
     let mounted = true;
-    (async () => {
-      try {
-        const prefs = await preferencesApi.get();
+
+    void preferencesApi.get()
+      .then((prefs) => {
         if (!mounted || !prefs) return;
         if (prefs.timezone) {
           setPreferredTimeZone(prefs.timezone);
@@ -235,244 +129,17 @@ const Journal = () => {
         if (prefs.default_risk_percent != null) {
           localStorage.setItem("defaultRisk", String(prefs.default_risk_percent));
         }
-      } catch {
-        // Keep local defaults
-      }
-    })();
+      })
+      .catch(() => undefined);
+
     return () => {
       mounted = false;
     };
   }, [user?.id]);
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadItems = async () => {
-      if (!user?.id || !activeJournalId) {
-        if (isMounted) {
-          setItems([]);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      setIsLoading(true);
-      try {
-        const nextItems = await loadJournalEntries(user.id, activeJournalId);
-        if (isMounted) {
-          setItems(nextItems);
-        }
-      } catch (error) {
-        console.error("[journal] Failed to load saved calculations", error);
-        if (isMounted) {
-          setItems([]);
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadItems();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [user?.id, activeJournalId]);
-
-  const today = useMemo(() => startOfDay(new Date()), []);
-
-  const fallbackDaySummaries = useMemo(
-    () => buildResultDaySummaries([], manualTrades, preferredTimeZone),
-    [manualTrades, preferredTimeZone],
-  );
-
-  const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
-
-  const fallbackMonthlyReturns = useMemo(
-    () => buildMonthlyReturnsGrid([], manualTrades, today, startingBalance, preferredTimeZone),
-    [manualTrades, today, startingBalance, preferredTimeZone],
-  );
-
-  const monthlyReturns = areTradeFactsReady ? factMonthlyReturns : fallbackMonthlyReturns;
-
-  const filteredManualTrades = useMemo(() => {
-    if (areTradeFactsReady) {
-      return factSelectedTrades;
-    }
-
-    if (selectedMonthKey) {
-      return manualTrades.filter((trade) => {
-        if (trade.status !== "closed") return false;
-        const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
-        return toDateKeyInTimeZone(new Date(raw), preferredTimeZone).startsWith(selectedMonthKey);
-      });
-    }
-
-    if (!selectedCalendarDate) {
-      return [];
-    }
-
-    const targetKey = toDateKey(selectedCalendarDate);
-    return manualTrades.filter((trade) => {
-      if (trade.status !== "closed") return false;
-      const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
-      return toDateKeyInTimeZone(new Date(raw), preferredTimeZone) === targetKey;
-    });
-  }, [
-    areTradeFactsReady,
-    factSelectedTrades,
-    manualTrades,
-    preferredTimeZone,
-    selectedCalendarDate,
-    selectedMonthKey,
-  ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setSelectedStorageScreenshotUrl(null);
-
-    if (!selectedItem?.screenshotStorageIds?.length) return () => { cancelled = true; };
-
-    void resolveCalculatorScreenshotUrls(selectedItem.id)
-      .then((urls) => {
-        if (!cancelled) setSelectedStorageScreenshotUrl(urls[0] ?? null);
-      })
-      .catch(() => undefined);
-
-    return () => { cancelled = true; };
-  }, [selectedItem?.id, selectedItem?.screenshotStorageIds?.join("|")]);
-
-  useEffect(() => {
-    let cancelled = false;
-    setResolvedStorageScreenshotUrl(null);
-
-    if (!itemForResult?.screenshotStorageIds?.length) return () => { cancelled = true; };
-
-    void resolveCalculatorScreenshotUrls(itemForResult.id)
-      .then((urls) => {
-        if (!cancelled) setResolvedStorageScreenshotUrl(urls[0] ?? null);
-      })
-      .catch(() => undefined);
-
-    return () => { cancelled = true; };
-  }, [itemForResult?.id, itemForResult?.screenshotStorageIds?.join("|")]);
-
-  const openResultEditor = (item: JournalEntry) => {
-    setItemForResult(item);
-    setResultStatus(item.status === "open" ? "win" : item.status);
-    setPnlAmountInput(item.pnlAmount !== null && item.pnlAmount !== undefined ? String(item.pnlAmount) : "");
-    setResultRInput(item.resultR !== null && item.resultR !== undefined ? String(item.resultR) : "");
-    setNoteInput(item.note ?? "");
-    setScreenshotFile(null);
-    setScreenshotRemoved(false);
-    setResolvedStorageScreenshotUrl(null);
-    setScreenshotPreview(item.screenshotUrls?.[0] ?? null);
-  };
-
-  const resetResultEditor = () => {
-    setItemForResult(null);
-    setPnlAmountInput("");
-    setResultRInput("");
-    setNoteInput("");
-    if (screenshotPreview?.startsWith("blob:")) {
-      URL.revokeObjectURL(screenshotPreview);
-    }
-    setScreenshotPreview(null);
-    setScreenshotFile(null);
-    setResolvedStorageScreenshotUrl(null);
-    setScreenshotRemoved(false);
-    if (screenshotInputRef.current) {
-      screenshotInputRef.current.value = "";
-    }
-  };
-
-  const handleScreenshotSelected = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith("image/")) {
-      toast.error("Please choose an image file");
-      return;
-    }
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("Screenshot must be 5MB or smaller");
-      return;
-    }
-
-    if (screenshotPreview?.startsWith("blob:")) {
-      URL.revokeObjectURL(screenshotPreview);
-    }
-    setScreenshotFile(file);
-    setScreenshotRemoved(false);
-    setScreenshotPreview(URL.createObjectURL(file));
-  };
-
-  const handleDelete = async () => {
-    if (!itemToDelete) return;
-
-    try {
-      const nextItems = await deleteJournalEntry(itemToDelete.id, user?.id, activeJournalId);
-      setItems(nextItems);
-      if (selectedItem?.id === itemToDelete.id) {
-        setSelectedItem(null);
-      }
-      toast.success("Calculation deleted");
-    } catch (error) {
-      console.error("[journal] Failed to delete calculation", error);
-      showErrorFromUnknown(error, {
-        title: "Couldn't delete calculation",
-        fallbackMessage: "We couldn’t delete that calculation.",
-        code: "JNL-DEL-CALC",
-      });
-    } finally {
-      setItemToDelete(null);
-    }
-  };
-
-  const handleSaveResult = async () => {
-    if (!itemForResult) return;
-
-    try {
-      let screenshotStorageIds = itemForResult.screenshotStorageIds ?? null;
-      let screenshotUrls = itemForResult.screenshotUrls ?? null;
-
-      if (screenshotRemoved) {
-        screenshotStorageIds = null;
-        screenshotUrls = null;
-      } else if (screenshotFile && user?.id) {
-        const storageId = await uploadCalculatorScreenshot(screenshotFile);
-        screenshotStorageIds = [storageId];
-        screenshotUrls = null;
-      }
-
-      const nextItems = await updateJournalEntry(
-        itemForResult.id,
-        {
-          status: resultStatus,
-          pnlAmount: parseNumericInput(pnlAmountInput),
-          resultR: parseNumericInput(resultRInput),
-          note: noteInput.trim() || null,
-          screenshotUrls,
-          screenshotStorageIds,
-          closedAt: resultStatus === "open" ? null : new Date(),
-        },
-        user?.id,
-        activeJournalId,
-      );
-      setItems(nextItems);
-      setSelectedItem(nextItems.find((item) => item.id === itemForResult.id) ?? null);
-      resetResultEditor();
-      toast.success("Trade result saved");
-    } catch (error) {
-      console.error("[journal] Failed to save trade result", error);
-      showErrorFromUnknown(error, {
-        title: "Couldn't save trade result",
-        fallbackMessage: "We couldn’t save that trade result.",
-        code: "JNL-RESULT",
-      });
-    }
+  const openLogChooser = () => {
+    setTradeToEdit(null);
+    setIsLogTradeChooserOpen(true);
   };
 
   const handleSaveManualTrade = async (tradeInput: ManualTradeInput) => {
@@ -480,8 +147,7 @@ const Journal = () => {
       const previousClosed = manualTrades.filter(
         (trade) =>
           trade.status === "closed"
-          && trade.pnl !== null
-          && trade.pnl !== undefined
+          && trade.pnl != null
           && Number.isFinite(trade.pnl),
       );
       const previousTotalPnl = previousClosed.reduce((sum, trade) => sum + (trade.pnl as number), 0);
@@ -493,20 +159,20 @@ const Journal = () => {
           ? tradeToEdit.pnl
           : 0;
 
+      let createdTrade: JournalTrade | null = null;
+
       if (tradeToEdit) {
         await updateTradeMutation.mutateAsync({ id: tradeToEdit.id, ...tradeInput });
         toast.success("Trade updated");
       } else {
-        await addTradeMutation.mutateAsync(tradeInput);
-        toast.success("Trade saved");
+        createdTrade = await addTradeMutation.mutateAsync(tradeInput);
+        toast.success(openNotebookAfterManualSave ? "Trade saved. Add your charts and notes." : "Trade saved");
       }
 
       const defaultRisk = parseDefaultRiskPercent(localStorage.getItem("defaultRisk"));
       if (riskAlertsEnabled) {
         const riskAlert = evaluateRiskAlert(tradeInput.risk_percent, defaultRisk);
-        if (riskAlert) {
-          toast.warning(riskAlert.body);
-        }
+        if (riskAlert) toast.warning(riskAlert.body);
       }
 
       if (milestoneAlertsEnabled) {
@@ -528,11 +194,17 @@ const Journal = () => {
 
       setIsTradeSheetOpen(false);
       setTradeToEdit(null);
+
+      const shouldOpenNotebook = openNotebookAfterManualSave && createdTrade;
+      setOpenNotebookAfterManualSave(false);
+      if (shouldOpenNotebook) {
+        navigate(`/journal/trade/${createdTrade.id}`);
+      }
     } catch (error) {
       console.error("[journal] Failed to save manual trade", error);
       showErrorFromUnknown(error, {
         title: "Couldn't save trade",
-        fallbackMessage: "We couldn’t save that trade. Check the symbol and details, then try again.",
+        fallbackMessage: "We couldn’t save that trade. Check the details and try again.",
         code: "JNL-SAVE",
       });
     }
@@ -564,9 +236,9 @@ const Journal = () => {
           needsOnboarding
             ? "Set up your first journal"
             : pageSection === "today"
-              ? "Growth, results, and session notes"
+              ? "Log, review, and learn"
               : pageSection === "trades"
-                ? `${serverTradeStats?.totalTrades ?? manualTrades.length} manual trade${(serverTradeStats?.totalTrades ?? manualTrades.length) === 1 ? "" : "s"}`
+                ? `${serverTradeStats?.totalTrades ?? manualTrades.length} trade${(serverTradeStats?.totalTrades ?? manualTrades.length) === 1 ? "" : "s"}`
                 : "Charts, reasoning, and trade reviews"
         }
         icon={<BookOpen className="h-5 w-5" />}
@@ -582,740 +254,258 @@ const Journal = () => {
           <JournalOnboarding mode="first" />
         ) : (
           <>
-        <div className="mb-4" data-tour-id="journal-switcher">
-          <JournalSwitcher />
-        </div>
-
-        <section className="mb-4 rounded-2xl bg-secondary p-2" data-tour-id="journal-tabs">
-          <div className="grid grid-cols-3 gap-2">
-            {(
-              [
-                { id: "today", label: "Today" },
-                { id: "trades", label: "Trades" },
-                { id: "notebook", label: "Notebook" },
-              ] as const
-            ).map((section) => (
-              <button
-                key={section.id}
-                type="button"
-                onClick={() => setPageSection(section.id)}
-                className={`h-11 rounded-xl text-sm font-semibold transition-all active:scale-[0.98] ${
-                  pageSection === section.id
-                    ? "bg-background text-foreground"
-                    : "text-muted-foreground"
-                }`}
-              >
-                {section.label}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        {pageSection === "today" ? (
-          <div className="space-y-4 animate-slide-up">
-            {manualTrades.length === 0 && items.length === 0 ? (
-              <section className="rounded-2xl border border-dashed border-border bg-secondary/50 px-4 py-6 text-center">
-                <p className="text-sm font-semibold text-foreground">No trades yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Log your first closed trade to update growth and results.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTradeToEdit(null);
-                    setIsTradeSheetOpen(true);
-                  }}
-                  className="mt-4 h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-brand-foreground transition-all active:scale-[0.98]"
-                >
-                  Log a trade
-                </button>
-              </section>
-            ) : null}
-
-            <div data-tour-id="journal-growth">
-              <TradingGrowthChart
-                trades={manualTrades}
-                calculatorResults={[]}
-                startingBalance={startingBalance}
-              />
+            <div className="mb-4" data-tour-id="journal-switcher">
+              <JournalSwitcher />
             </div>
 
-            <section
-              className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4"
-              data-tour-id="journal-results"
-            >
-              <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-background/60 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView("heatmap");
-                    setSelectedCalendarDate(undefined);
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
-                    activeView === "heatmap"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Returns
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView("calendar");
-                    setSelectedMonthKey(undefined);
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
-                    activeView === "calendar"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Calendar
-                </button>
+            <section className="mb-4 rounded-2xl bg-secondary p-2" data-tour-id="journal-tabs">
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { id: "today", label: "Today" },
+                    { id: "trades", label: "Trades" },
+                    { id: "notebook", label: "Notebook" },
+                  ] as const
+                ).map((section) => (
+                  <button
+                    key={section.id}
+                    type="button"
+                    onClick={() => setPageSection(section.id)}
+                    className={`h-11 rounded-xl text-sm font-semibold transition active:scale-[0.98] ${
+                      pageSection === section.id
+                        ? "bg-background text-foreground"
+                        : "text-muted-foreground"
+                    }`}
+                  >
+                    {section.label}
+                  </button>
+                ))}
               </div>
+            </section>
 
-              {activeView === "heatmap" ? (
-                <ReturnsCalendar
-                  title="Monthly returns"
-                  hint="tap a month to filter · year = compounded"
-                  years={monthlyReturns.years}
-                  returns={monthlyReturns.returns}
-                  selectedMonthKey={selectedMonthKey}
-                  onSelectMonth={(year, monthIndex) => {
-                    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-                    setSelectedMonthKey((current) => (current === monthKey ? undefined : monthKey));
-                    setSelectedCalendarDate(undefined);
-                    setCalendarMonth(new Date(year, monthIndex, 1));
-                  }}
-                />
-              ) : (
-                <div className="space-y-3">
+            {pageSection === "today" ? (
+              <div className="space-y-4 animate-slide-up">
+                <button
+                  type="button"
+                  onClick={openLogChooser}
+                  className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-brand-foreground shadow-sm transition active:scale-[0.99]"
+                >
+                  <Plus className="h-4 w-4" />
+                  Log Trade
+                </button>
+
+                <section className="grid grid-cols-2 gap-3 rounded-2xl bg-secondary p-4">
                   <div>
-                    <h2 className="text-base font-bold text-foreground">Results Calendar</h2>
+                    <p className="text-xs text-muted-foreground">Today</p>
+                    <p className="mt-1 text-xl font-bold text-foreground">
+                      {todaySummary?.label ?? "No result"}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Trades</p>
+                    <p className="mt-1 text-xl font-bold text-foreground">
+                      {todaySummary?.tradeCount ?? 0}
+                    </p>
+                  </div>
+                </section>
+
+                <section
+                  className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4"
+                  data-tour-id="journal-results"
+                >
+                  <div className="mb-3">
+                    <h2 className="text-base font-bold text-foreground">Calendar</h2>
                     <p className="text-xs text-muted-foreground">
-                      Tap a day to filter results and open that session
+                      Tap a day to open its journal.
                     </p>
                   </div>
                   <ResultsCalendar
                     month={calendarMonth}
                     onMonthChange={setCalendarMonth}
-                    selectedDate={selectedCalendarDate}
+                    selectedDate={undefined}
                     onSelectDate={(date) => {
-                      setSelectedCalendarDate(date);
-                      setSelectedMonthKey(undefined);
-                      if (date) {
-                        setSessionDateKey(toDateKey(date));
-                      }
+                      if (date) navigate(`/journal/day/${toDateKey(date)}`);
                     }}
                     summaries={resultDaySummaries}
                     today={today}
                   />
                   <ResultsLegend />
-                </div>
-              )}
-            </section>
+                </section>
 
-            {selectedMonthKey || selectedCalendarDate ? (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between gap-3 rounded-2xl bg-secondary px-4 py-3">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">
-                      {selectedMonthKey
-                        ? new Date(`${selectedMonthKey}-01T12:00:00`).toLocaleDateString("en-US", {
-                            month: "long",
-                            year: "numeric",
-                          })
-                        : selectedCalendarDate?.toLocaleDateString("en-US", {
-                            month: "long",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {filteredManualTrades.length} result
-                      {filteredManualTrades.length === 1 ? "" : "s"}
-                      {selectedMonthKey ? " this month" : " on this day"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCalendarDate(undefined);
-                      setSelectedMonthKey(undefined);
-                    }}
-                    className="rounded-xl bg-background px-3 py-2 text-xs font-semibold text-foreground transition-all active:scale-[0.98]"
-                  >
-                    Clear
-                  </button>
-                </div>
-
-                {filteredManualTrades.length === 0 ? (
-                  <div className="rounded-2xl bg-secondary p-5 text-center text-muted-foreground">
-                    <p className="font-medium text-foreground">No results for this selection</p>
-                    <p className="mt-1 text-sm">Pick another month or day.</p>
-                  </div>
-                ) : null}
-
-                {filteredManualTrades.map((trade) => {
-                  const pnl = trade.pnl;
-                  const resultStatus =
-                    pnl === null || pnl === undefined
-                      ? "breakeven"
-                      : pnl > 0
-                        ? "win"
-                        : pnl < 0
-                          ? "loss"
-                          : "breakeven";
-
-                  return (
-                    <button
-                      key={`trade-${trade.id}`}
-                      type="button"
-                      onClick={() => navigate(`/journal/trade/${trade.id}`)}
-                      className="w-full rounded-2xl bg-secondary p-4 text-left transition-all active:scale-[0.99]"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-lg font-bold text-foreground">{trade.pair}</h2>
-                            <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                              Trade
-                            </span>
-                            <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_META[resultStatus].className}`}>
-                              {STATUS_META[resultStatus].label}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                            <Clock3 className="h-3.5 w-3.5" />
-                            <span>{formatDate(new Date(trade.exit_date ?? trade.entry_date ?? trade.created_at))}</span>
-                          </div>
-                        </div>
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">P&L</p>
-                          <p className={`text-lg font-bold ${
-                            (pnl ?? 0) > 0
-                              ? "text-emerald-400"
-                              : (pnl ?? 0) < 0
-                                ? "text-red-400"
-                                : "text-foreground"
-                          }`}>
-                            {pnl === null || pnl === undefined ? "—" : `${pnl > 0 ? "+" : ""}${formatMoney(pnl, 2)}`}
-                          </p>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-
-
-              </section>
-            ) : null}
-
-            <div data-tour-id="journal-session">
-              <ProgressTracker
-                trades={manualTrades}
-                calculatorResults={items}
-                dateKey={sessionDateKey}
-                onDateKeyChange={(nextDateKey) => {
-                  setSessionDateKey(nextDateKey);
-                  const [year, month, day] = nextDateKey.split("-").map(Number);
-                  const nextDate = new Date(year, month - 1, day);
-                  setSelectedCalendarDate(startOfDay(nextDate));
-                  setSelectedMonthKey(undefined);
-                  setCalendarMonth(startOfDay(nextDate));
-                  setActiveView("calendar");
-                }}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {pageSection === "trades" ? (
-          <div className="space-y-4">
-            <div
-              data-tour-id="journal-trades"
-              className="rounded-2xl bg-secondary px-4 py-3"
-            >
-              <h2 className="text-base font-bold text-foreground">Trades & analytics</h2>
-              <p className="text-xs text-muted-foreground">
-                Overview, stats, and charts for this journal
-              </p>
-            </div>
-            <JournalAnalyticsTabs
-              trades={manualTrades}
-              calculatorResults={items}
-              isLoading={isManualTradesLoading}
-              activeTab={journalTab}
-              onTabChange={setJournalTab}
-              startingBalance={startingBalance}
-              timeZone={preferredTimeZone}
-              serverStats={serverTradeStats}
-              isStatsBackfilling={isTradeStatsBackfilling}
-              serverPerformance={tradePerformanceSummary}
-              feedTrades={paginatedManualTrades}
-              canLoadMoreTrades={canLoadMoreTrades}
-              isLoadingMoreTrades={isLoadingMoreTrades}
-              onLoadMoreTrades={loadMoreTrades}
-              onAddTrade={() => {
-                setTradeToEdit(null);
-                setIsTradeSheetOpen(true);
-              }}
-              onEditTrade={(trade) => {
-                setTradeToEdit(trade);
-                setIsTradeSheetOpen(true);
-              }}
-              onDeleteTrade={setTradeToDelete}
-            />
-          </div>
-        ) : null}
-
-        {pageSection === "notebook" ? (
-          <div className="space-y-4 animate-slide-up" data-tour-id="journal-notebook">
-            <section className="rounded-2xl bg-secondary px-4 py-4">
-              <h2 className="text-base font-bold text-foreground">Trading Notebook</h2>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Every recorded trade can hold your reasoning, what happened during the trade,
-                your review, and the lessons you want to remember.
-              </p>
-            </section>
-
-            {paginatedManualTrades.length === 0 ? (
-              <section className="flex min-h-72 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 px-6 text-center">
-                <BookOpen className="mb-3 h-10 w-10 text-muted-foreground opacity-40" />
-                <p className="font-semibold text-foreground">Your trading notebook is empty</p>
-                <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-                  Record a trade first. Each trade then becomes a notebook entry you can revisit and expand over time.
-                </p>
                 <button
                   type="button"
-                  onClick={() => setPageSection("trades")}
-                  className="mt-5 h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-brand-foreground transition-all active:scale-[0.98]"
+                  onClick={() => navigate(`/journal/day/${toDateKey(today)}`)}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl bg-secondary p-4 text-left transition active:scale-[0.99]"
+                  data-tour-id="journal-session"
                 >
-                  Go to Trades
+                  <div>
+                    <p className="text-sm font-bold text-foreground">Today&apos;s journal</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Add a plan, review the day, or open today&apos;s trade notebooks.
+                    </p>
+                  </div>
+                  <BookOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
                 </button>
-              </section>
-            ) : (
-              <div className="space-y-3">
-                {paginatedManualTrades.map((trade) => {
-                  const pnl = trade.pnl;
-                  const direction =
-                    trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long";
-                  const preview = trade.journal_preview || trade.notes || null;
-                  const notebookStatus =
-                    trade.journal_status === "complete"
-                      ? "Complete"
-                      : trade.journal_status === "draft"
-                        ? "In progress"
-                        : "Add journal";
+              </div>
+            ) : null}
 
-                  return (
+            {pageSection === "trades" ? (
+              <div className="space-y-4">
+                <section className="rounded-2xl bg-secondary px-4 py-3" data-tour-id="journal-trades">
+                  <h2 className="text-base font-bold text-foreground">Trades &amp; analytics</h2>
+                  <p className="text-xs text-muted-foreground">
+                    Your logged trades only. Calculator history is not included.
+                  </p>
+                </section>
+
+                <JournalAnalyticsTabs
+                  trades={manualTrades}
+                  isLoading={isManualTradesLoading}
+                  activeTab={journalTab}
+                  onTabChange={setJournalTab}
+                  startingBalance={startingBalance}
+                  timeZone={preferredTimeZone}
+                  serverStats={serverTradeStats}
+                  isStatsBackfilling={isTradeStatsBackfilling}
+                  serverPerformance={tradePerformanceSummary}
+                  feedTrades={paginatedManualTrades}
+                  canLoadMoreTrades={canLoadMoreTrades}
+                  isLoadingMoreTrades={isLoadingMoreTrades}
+                  onLoadMoreTrades={loadMoreTrades}
+                  onAddTrade={openLogChooser}
+                  onEditTrade={(trade) => {
+                    setTradeToEdit(trade);
+                    setOpenNotebookAfterManualSave(false);
+                    setIsTradeSheetOpen(true);
+                  }}
+                  onDeleteTrade={setTradeToDelete}
+                />
+              </div>
+            ) : null}
+
+            {pageSection === "notebook" ? (
+              <div className="space-y-3 animate-slide-up" data-tour-id="journal-notebook">
+                {paginatedManualTrades.length === 0 ? (
+                  <section className="flex min-h-64 flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/30 px-6 text-center">
+                    <BookOpen className="mb-3 h-9 w-9 text-muted-foreground opacity-40" />
+                    <p className="font-semibold text-foreground">No trade notebooks yet</p>
+                    <p className="mt-1 max-w-sm text-sm text-muted-foreground">
+                      Log any trade, then add as much or as little context as you want.
+                    </p>
                     <button
-                      key={trade.id}
                       type="button"
-                      onClick={() => navigate(`/journal/trade/${trade.id}`)}
-                      className="w-full rounded-2xl bg-secondary p-4 text-left transition-all active:scale-[0.99]"
+                      onClick={openLogChooser}
+                      className="mt-5 h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-brand-foreground"
                     >
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="text-lg font-bold text-foreground">{trade.pair}</h3>
-                            <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground">
-                              {direction}
-                            </span>
-                            <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-semibold text-muted-foreground capitalize">
-                              {trade.status}
-                            </span>
-                          </div>
-                          <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Clock3 className="h-3.5 w-3.5" />
-                            <span>{formatDate(new Date(trade.entry_date ?? trade.created_at))}</span>
-                          </div>
-                        </div>
+                      Log Trade
+                    </button>
+                  </section>
+                ) : (
+                  <>
+                    {paginatedManualTrades.map((trade) => {
+                      const direction =
+                        trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long";
+                      const notebookStatus =
+                        trade.journal_status === "complete"
+                          ? "Complete"
+                          : trade.journal_status === "draft"
+                            ? "In progress"
+                            : "Add notes & charts";
 
-                        <div className="shrink-0 text-right">
-                          <p
-                            className={`text-lg font-bold ${
-                              pnl == null
-                                ? "text-foreground"
-                                : pnl > 0
+                      return (
+                        <button
+                          key={trade.id}
+                          type="button"
+                          onClick={() => navigate(`/journal/trade/${trade.id}`)}
+                          className="w-full rounded-2xl bg-secondary p-4 text-left transition active:scale-[0.99]"
+                        >
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <h3 className="truncate text-base font-bold text-foreground">{trade.pair}</h3>
+                                <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                                  {direction}
+                                </span>
+                                <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
+                                  {trade.status}
+                                </span>
+                              </div>
+                              <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                                <Clock3 className="h-3 w-3" />
+                                <span>{formatDate(trade.entry_date ?? trade.created_at)}</span>
+                              </div>
+                            </div>
+
+                            <p
+                              className={`shrink-0 text-sm font-bold ${
+                                (trade.pnl ?? 0) > 0
                                   ? "text-emerald-400"
-                                  : pnl < 0
+                                  : (trade.pnl ?? 0) < 0
                                     ? "text-red-400"
                                     : "text-foreground"
-                            }`}
-                          >
-                            {pnl == null
-                              ? "—"
-                              : `${pnl > 0 ? "+" : ""}${formatMoney(pnl, 2)}`}
-                          </p>
-                          <p className="mt-1 text-[11px] font-semibold text-brand">{notebookStatus}</p>
-                        </div>
-                      </div>
+                              }`}
+                            >
+                              {formatPnl(trade.pnl)}
+                            </p>
+                          </div>
 
-                      <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
-                        <div className="rounded-xl bg-background px-3 py-2.5">
-                          <p className="text-muted-foreground">Entry</p>
-                          <p className="mt-1 truncate font-semibold text-foreground">{formatPrice(trade.entry_price)}</p>
-                        </div>
-                        <div className="rounded-xl bg-background px-3 py-2.5">
-                          <p className="text-muted-foreground">Size</p>
-                          <p className="mt-1 truncate font-semibold text-foreground">
-                            {trade.position_size == null ? "—" : `${trade.position_size} lot${trade.position_size === 1 ? "" : "s"}`}
-                          </p>
-                        </div>
-                        <div className="rounded-xl bg-background px-3 py-2.5">
-                          <p className="text-muted-foreground">Risk</p>
-                          <p className="mt-1 truncate font-semibold text-foreground">
-                            {trade.risk_percent == null ? "—" : `${trade.risk_percent}%`}
-                          </p>
-                        </div>
-                      </div>
+                          <div className="mt-3 rounded-xl bg-background px-3 py-2.5">
+                            <p className="text-[11px] font-semibold text-foreground">{notebookStatus}</p>
+                            <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
+                              {trade.journal_preview || trade.notes || "Open the notebook to add before/after charts, reasoning, and lessons."}
+                            </p>
+                          </div>
+                        </button>
+                      );
+                    })}
 
-                      <div className="mt-4 rounded-xl border border-border/60 bg-background/50 px-3 py-3">
-                        <p className="text-xs font-semibold text-foreground">
-                          {preview ? "Journal preview" : "Start your review"}
-                        </p>
-                        <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                          {preview ?? "Add your before-trade reasoning, what happened, and what you learned."}
-                        </p>
-                      </div>
-                    </button>
-                  );
-                })}
-
-                {canLoadMoreTrades ? (
-                  <button
-                    type="button"
-                    onClick={loadMoreTrades}
-                    disabled={isLoadingMoreTrades}
-                    className="h-11 w-full rounded-xl bg-secondary text-sm font-semibold text-foreground transition-all active:scale-[0.98] disabled:opacity-60"
-                  >
-                    {isLoadingMoreTrades ? "Loading…" : "Load older notebook entries"}
-                  </button>
-                ) : null}
+                    {canLoadMoreTrades ? (
+                      <button
+                        type="button"
+                        onClick={loadMoreTrades}
+                        disabled={isLoadingMoreTrades}
+                        className="h-11 w-full rounded-xl bg-secondary text-sm font-semibold text-foreground disabled:opacity-60"
+                      >
+                        {isLoadingMoreTrades ? "Loading…" : "Load older notebook entries"}
+                      </button>
+                    ) : null}
+                  </>
+                )}
               </div>
-            )}
-          </div>
-        ) : null}
+            ) : null}
 
-        <JournalTour
-          enabled={!isJournalsLoading && !needsOnboarding}
-          pageSection={pageSection}
-          onSectionChange={setPageSection}
-        />
+            <JournalTour
+              enabled={!isJournalsLoading && !needsOnboarding}
+              pageSection={pageSection}
+              onSectionChange={setPageSection}
+            />
           </>
         )}
       </main>
-
-      {selectedItem && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-background/80 backdrop-blur-sm">
-          <div className="flex min-h-full items-start justify-center px-6 py-8 sm:items-center">
-            <div className="my-auto w-full max-w-md rounded-3xl border border-border bg-background p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">{selectedItem.symbol}</h2>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  {formatOrderType(selectedItem.orderType)} • {selectedItem.source === "signal" ? "From signal" : "Manual"}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedItem(null)}
-                className="h-10 w-10 rounded-xl bg-secondary text-foreground transition-all active:scale-95"
-                aria-label="Close details"
-              >
-                <X className="mx-auto h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Account Balance</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.accountBalance, selectedItem.accountCurrency, 2)}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Risk Amount</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.riskAmount, selectedItem.accountCurrency, 2)}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Actual Risk</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.actualRisk, selectedItem.accountCurrency, 2)}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Reward to Risk</p>
-                  <p className="mt-1 font-semibold text-foreground">
-                    {selectedItem.rewardToRisk ? `1:${formatMoney(selectedItem.rewardToRisk, 2)}` : "—"}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Potential Profit</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.potentialProfit, selectedItem.accountCurrency, 2)}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Saved</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatDate(selectedItem.createdAt)}</p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Status</p>
-                  <p className="mt-1 font-semibold text-foreground">{STATUS_META[selectedItem.status].label}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">P/L Amount</p>
-                  <p className="mt-1 font-semibold text-foreground">{formatAccountMoney(selectedItem.pnlAmount, selectedItem.accountCurrency, 2)}</p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Result R</p>
-                  <p className="mt-1 font-semibold text-foreground">
-                    {selectedItem.resultR !== null && selectedItem.resultR !== undefined
-                      ? `${selectedItem.resultR > 0 ? "+" : ""}${formatMoney(selectedItem.resultR, 2)}R`
-                      : "—"}
-                  </p>
-                </div>
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Closed</p>
-                  <p className="mt-1 font-semibold text-foreground">
-                    {selectedItem.closedAt ? formatDate(selectedItem.closedAt) : "—"}
-                  </p>
-                </div>
-              </div>
-
-              {selectedItem.note && (
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Note</p>
-                  <p className="mt-1 whitespace-pre-wrap font-medium text-foreground">{selectedItem.note}</p>
-                </div>
-              )}
-
-              {(selectedItem.screenshotUrls?.[0] || selectedStorageScreenshotUrl) && (
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Screenshot</p>
-                  <img
-                    src={selectedItem.screenshotUrls?.[0] ?? selectedStorageScreenshotUrl ?? ""}
-                    alt={`${selectedItem.symbol} trade screenshot`}
-                    className="mt-2 max-h-64 w-full rounded-xl object-cover"
-                  />
-                </div>
-              )}
-
-              {selectedItem.signalId && (
-                <div className="rounded-xl bg-secondary px-3 py-3">
-                  <p className="text-xs text-muted-foreground">Signal ID</p>
-                  <p className="mt-1 font-semibold text-foreground break-all">{selectedItem.signalId}</p>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => {
-                  const params = new URLSearchParams();
-                  params.set("symbol", selectedItem.symbol);
-                  if (selectedItem.entryPrice != null) {
-                    params.set("entry", String(selectedItem.entryPrice));
-                  }
-                  if (selectedItem.stopLossPrice != null) {
-                    params.set("stopLoss", String(selectedItem.stopLossPrice));
-                  }
-                  if (selectedItem.takeProfitPrice != null) {
-                    params.set("takeProfit", String(selectedItem.takeProfitPrice));
-                  }
-                  if (selectedItem.orderType) {
-                    params.set("orderType", selectedItem.orderType);
-                  }
-                  params.set("reuse", "1");
-                  setSelectedItem(null);
-                  navigate(`/?${params.toString()}`);
-                  toast.message("Prefilled calculator", {
-                    description: "Review balance, risk, and stop loss before sizing.",
-                  });
-                }}
-                className="h-11 rounded-xl bg-secondary text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
-              >
-                <Copy className="mr-2 inline-block w-4 h-4" />
-                Reuse
-              </button>
-              <button
-                onClick={() => openResultEditor(selectedItem)}
-                className="h-11 rounded-xl bg-secondary text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
-              >
-                {selectedItem.status === "open" ? "Mark Result" : "Edit Result"}
-              </button>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {itemForResult && (
-        <div className="fixed inset-0 z-50 overflow-y-auto overscroll-contain bg-background/80 backdrop-blur-sm">
-          <div className="flex min-h-full items-start justify-center px-6 py-8 sm:items-center">
-            <div className="my-auto w-full max-w-md rounded-3xl border border-border bg-background p-5 shadow-2xl">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-foreground">
-                  {itemForResult.status === "open" ? "Mark Result" : "Edit Result"}
-                </h2>
-                <p className="mt-1 text-sm text-muted-foreground">{itemForResult.symbol}</p>
-              </div>
-              <button
-                onClick={resetResultEditor}
-                className="h-10 w-10 rounded-xl bg-secondary text-foreground transition-all active:scale-95"
-                aria-label="Close result form"
-              >
-                <X className="mx-auto h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-5 space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Result</label>
-                <select
-                  value={resultStatus}
-                  onChange={(event) => setResultStatus(event.target.value as SavedCalculationStatus)}
-                  className="h-12 w-full rounded-xl border border-border bg-secondary px-4 text-foreground outline-none"
-                >
-                  {RESULT_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">P/L Amount</label>
-                  <input
-                    type="number"
-                    step="any"
-                    inputMode="decimal"
-                    value={pnlAmountInput}
-                    onChange={(event) => setPnlAmountInput(event.target.value)}
-                    placeholder="Optional"
-                    className="h-12 w-full rounded-xl border border-border bg-secondary px-4 text-foreground outline-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">Result R</label>
-                  <input
-                    type="number"
-                    step="any"
-                    inputMode="decimal"
-                    value={resultRInput}
-                    onChange={(event) => setResultRInput(event.target.value)}
-                    placeholder="Optional"
-                    className="h-12 w-full rounded-xl border border-border bg-secondary px-4 text-foreground outline-none"
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Note</label>
-                <textarea
-                  value={noteInput}
-                  onChange={(event) => setNoteInput(event.target.value)}
-                  placeholder="Optional note"
-                  rows={4}
-                  className="w-full rounded-xl border border-border bg-secondary px-4 py-3 text-foreground outline-none resize-none"
-                />
-              </div>
-
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-3">
-                  <label className="text-sm font-medium text-foreground">Screenshot</label>
-                  {(screenshotPreview || resolvedStorageScreenshotUrl) && (
-                    <button
-                      onClick={() => {
-                        if (screenshotPreview?.startsWith("blob:")) {
-                          URL.revokeObjectURL(screenshotPreview);
-                        }
-                        setScreenshotPreview(null);
-                        setScreenshotFile(null);
-                        setResolvedStorageScreenshotUrl(null);
-                        setScreenshotRemoved(true);
-                        if (screenshotInputRef.current) {
-                          screenshotInputRef.current.value = "";
-                        }
-                      }}
-                      className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-
-                <input
-                  ref={screenshotInputRef}
-                  type="file"
-                  accept="image/*"
-                  capture="environment"
-                  onChange={handleScreenshotSelected}
-                  className="hidden"
-                />
-
-                {screenshotPreview || resolvedStorageScreenshotUrl ? (
-                  <div className="overflow-hidden rounded-2xl border border-border bg-secondary">
-                    <img
-                      src={screenshotPreview ?? resolvedStorageScreenshotUrl ?? ""}
-                      alt="Trade screenshot preview"
-                      className="max-h-72 w-full object-cover"
-                    />
-                  </div>
-                ) : (
-                  <button
-                    onClick={() => screenshotInputRef.current?.click()}
-                    className="flex h-28 w-full flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-secondary text-foreground transition-all active:scale-[0.98]"
-                  >
-                    <Camera className="mb-2 h-5 w-5" />
-                    <span className="text-sm font-semibold">Add Screenshot</span>
-                    <span className="mt-1 text-xs text-muted-foreground">Gallery or camera</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 pt-1">
-                <button
-                  onClick={resetResultEditor}
-                  className="h-12 rounded-xl border border-border bg-background text-sm font-semibold text-foreground transition-all active:scale-[0.98]"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleSaveResult}
-                  className="h-12 rounded-xl bg-foreground text-sm font-semibold text-background transition-all active:scale-[0.98]"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      <ConfirmDialog
-        isOpen={!!itemToDelete}
-        onClose={() => setItemToDelete(null)}
-        onConfirm={handleDelete}
-        title="Delete Calculation"
-        description="Remove this saved calculation from your journal?"
-        confirmText="Delete"
-        variant="destructive"
-      />
 
       <ConfirmDialog
         isOpen={!!tradeToDelete}
         onClose={() => setTradeToDelete(null)}
         onConfirm={() => void handleDeleteManualTrade()}
         title="Delete Trade"
-        description="Remove this manual trade from your journal?"
+        description="Remove this trade from your journal?"
         confirmText="Delete"
         variant="destructive"
+      />
+
+      <LogTradeChoiceSheet
+        open={isLogTradeChooserOpen}
+        onOpenChange={setIsLogTradeChooserOpen}
+        onManual={() => {
+          setIsLogTradeChooserOpen(false);
+          setTradeToEdit(null);
+          setOpenNotebookAfterManualSave(true);
+          setIsTradeSheetOpen(true);
+        }}
+        onAutomatic={() => {
+          setIsLogTradeChooserOpen(false);
+          navigate("/calculator?journalLog=1");
+        }}
       />
 
       <ManualTradeSheet
@@ -1324,13 +514,13 @@ const Journal = () => {
           setIsTradeSheetOpen(open);
           if (!open) {
             setTradeToEdit(null);
+            setOpenNotebookAfterManualSave(false);
           }
         }}
         trade={tradeToEdit}
         isSaving={addTradeMutation.isPending || updateTradeMutation.isPending}
         onSave={handleSaveManualTrade}
       />
-
     </div>
   );
 };
