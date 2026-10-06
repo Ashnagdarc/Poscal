@@ -355,10 +355,20 @@ export const deleteJournalEntry = async (_userId: string, id: string): Promise<v
     if (!response.ok) {
       throw new Error(payload?.message || `Could not delete journal (${response.status})`);
     }
+    try {
+      localStorage.removeItem(`poscal.tradeNotebookDraft.${id}`);
+    } catch {
+      // Local storage can be unavailable. Server deletion has already succeeded.
+    }
     return;
   }
 
   await tradesApi.delete(id);
+  try {
+    localStorage.removeItem(`poscal.tradeNotebookDraft.${id}`);
+  } catch {
+    // ignore
+  }
 };
 
 /** Server `saveMany` rejects batches larger than this. */
