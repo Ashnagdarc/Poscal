@@ -169,7 +169,8 @@ export const ManualTradeSheet = ({
     setPairSuggestion(null);
 
     if (trade) {
-      const pair = canonicalizePairSymbol(trade.pair);
+      const isNotebookDraft = trade.journal_type === "notebook_draft";
+      const pair = isNotebookDraft ? "" : canonicalizePairSymbol(trade.pair);
       setForm({
         pair,
         direction: toDirection(trade.direction),
@@ -339,7 +340,9 @@ export const ManualTradeSheet = ({
       >
         <SheetHeader className="shrink-0 space-y-1 px-4 pb-3 pt-3 text-left sm:px-6 sm:pt-6">
           <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden="true" />
-          <SheetTitle className="pr-8">{trade ? "Edit Trade" : "Add Trade"}</SheetTitle>
+          <SheetTitle className="pr-8">
+            {trade?.journal_type === "notebook_draft" ? "Add Trade Details" : trade ? "Edit Trade" : "Add Trade"}
+          </SheetTitle>
           <SheetDescription>
             Add only what you know. Prices, risk, P&amp;L, notes and tags are optional. After saving, you can add before/after charts in the Notebook.
           </SheetDescription>
