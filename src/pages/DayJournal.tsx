@@ -201,6 +201,7 @@ const DayJournal = () => {
             trades={loadedTrades}
             calculatorResults={[]}
             dateKey={validDateKey}
+            timeZone={timeZone}
             onDateKeyChange={(nextDateKey) => navigate(`/journal/day/${nextDateKey}`, { replace: true })}
           />
         </section>
