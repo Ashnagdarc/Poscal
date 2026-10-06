@@ -70,6 +70,23 @@ const assertJournalOwned = async (
   }
 };
 
+
+const bumpJournalStatsVersion = async (
+  ctx: { db: any },
+  userId: string,
+  journalId: Id<"tradingAccounts"> | null | undefined,
+) => {
+  if (!journalId) return;
+  const journal = await ctx.db.get(journalId);
+  if (!journal || journal.userId !== userId) {
+    throw new Error("Journal not found");
+  }
+  await ctx.db.patch(journalId, {
+    statsVersion: (journal.statsVersion ?? 0) + 1,
+    updatedAtMs: Date.now(),
+  });
+};
+
 const queueUserAlert = async (
   ctx: { db: any },
   args: {
@@ -416,6 +433,8 @@ export const createEntry = mutation({
       updatedAtMs: now,
     });
 
+    await bumpJournalStatsVersion(ctx, userId, args.journalId ?? null);
+
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
       userId,
       tradeId: insertedId,
@@ -489,6 +508,8 @@ export const updateEntry = mutation({
       updatedAtMs: Date.now(),
     });
 
+    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
       userId,
       tradeId: id,
@@ -512,6 +533,7 @@ export const deleteEntry = mutation({
     }
 
     await ctx.db.delete(args.id);
+    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
     return { success: true };
   },
 });
@@ -527,6 +549,7 @@ export const saveMany = mutation({
     }
     const ids = [];
     const now = Date.now();
+    const touchedJournalIds = new Set<Id<"tradingAccounts">>();
 
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
@@ -538,6 +561,11 @@ export const saveMany = mutation({
         createdAtMs: now,
         updatedAtMs: now,
       }));
+      if (item.journalId) touchedJournalIds.add(item.journalId);
+    }
+
+    for (const journalId of touchedJournalIds) {
+      await bumpJournalStatsVersion(ctx, userId, journalId);
     }
 
     return ids;

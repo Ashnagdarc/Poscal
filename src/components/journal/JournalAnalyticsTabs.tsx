@@ -25,6 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import type { JournalEntry } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
+import type { JournalTradeStatsSnapshot } from "@/hooks/queries/use-journal-trade-stats";
 import {
   computeDailyPnl,
   computeDayOfWeekPerformance,
@@ -56,6 +57,9 @@ interface JournalAnalyticsTabsProps {
   startingBalance?: number;
   /** IANA timezone for date labels / day buckets (P-029). */
   timeZone?: string | null;
+  /** Complete lifetime scalar stats from the batched server-side snapshot. */
+  serverStats?: JournalTradeStatsSnapshot | null;
+  isStatsBackfilling?: boolean;
 }
 
 const MetricCard = ({
@@ -356,15 +360,60 @@ export const JournalAnalyticsTabs = ({
   onDeleteTrade,
   startingBalance = 0,
   timeZone = null,
+  serverStats = null,
+  isStatsBackfilling = false,
 }: JournalAnalyticsTabsProps) => {
   void _calculatorResults;
   const { currency } = useCurrency();
 
-  const stats = useMemo(
+  const localStats = useMemo(
     // Manual Trades analytics must not blend calculator history (DAN-011 / P-024).
     () => computeJournalStats(trades, [], startingBalance),
     [trades, startingBalance],
   );
+
+  const stats = useMemo(() => {
+    if (!serverStats) return localStats;
+
+    const avgWin = serverStats.wins > 0 ? serverStats.winPnlSum / serverStats.wins : null;
+    const avgLoss = serverStats.losses > 0 ? serverStats.lossAbsSum / serverStats.losses : null;
+    let profitFactor: number | null = null;
+    if (serverStats.closedWithPnl > 0) {
+      profitFactor = serverStats.grossLoss > 0
+        ? serverStats.grossProfit / serverStats.grossLoss
+        : serverStats.grossProfit > 0
+          ? Number.POSITIVE_INFINITY
+          : null;
+    }
+
+    return {
+      totalTrades: serverStats.totalTrades,
+      closedTrades: serverStats.closedTrades,
+      openTrades: serverStats.openTrades,
+      wins: serverStats.wins,
+      losses: serverStats.losses,
+      breakeven: serverStats.breakeven,
+      winRate: serverStats.closedWithPnl > 0
+        ? (serverStats.wins / serverStats.closedWithPnl) * 100
+        : 0,
+      totalPnl: serverStats.totalPnl,
+      grossProfit: serverStats.grossProfit,
+      grossLoss: serverStats.grossLoss,
+      profitFactor,
+      avgWin,
+      avgLoss,
+      avgWinLossRatio: avgWin !== null && avgLoss !== null && avgLoss > 0 ? avgWin / avgLoss : null,
+      bestTrade: serverStats.bestTrade,
+      worstTrade: serverStats.worstTrade,
+      avgR: serverStats.rCount > 0 ? serverStats.rSum / serverStats.rCount : null,
+      expectancy: serverStats.closedWithPnl > 0
+        ? serverStats.totalPnl / serverStats.closedWithPnl
+        : null,
+      maxDrawdown: serverStats.maxDrawdown,
+      maxConsecutiveWins: serverStats.maxConsecutiveWins,
+      maxConsecutiveLosses: serverStats.maxConsecutiveLosses,
+    };
+  }, [localStats, serverStats]);
   const dailyPnl = useMemo(() => computeDailyPnl(trades, timeZone), [trades, timeZone]);
   const dayPerformance = useMemo(
     () => computeDayOfWeekPerformance(trades, timeZone),
@@ -408,11 +457,12 @@ export const JournalAnalyticsTabs = ({
         <div>
           <h2 className="text-base font-bold text-foreground">Manual Trades</h2>
           <p className="text-sm text-muted-foreground">
-            {closedManualWithPnl} closed with P&amp;L
+            {serverStats ? serverStats.closedWithPnl : closedManualWithPnl} closed with P&amp;L
             {stats.openTrades > 0 ? ` · ${stats.openTrades} open` : ""}
-            {trades.length !== closedManualWithPnl
-              ? ` · ${trades.length} total`
+            {stats.totalTrades !== (serverStats ? serverStats.closedWithPnl : closedManualWithPnl)
+              ? ` · ${stats.totalTrades} total`
               : ""}
+            {isStatsBackfilling ? " · updating lifetime stats" : ""}
           </p>
         </div>
         <Button size="sm" onClick={onAddTrade}>
