@@ -13,7 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePushNotifications } from "@/hooks/use-push-notifications";
-import { shouldShowPushEnablePrompt } from "@/lib/pushPrompt";
+import {
+  clearPushPromptSnooze,
+  isPushPromptSnoozed,
+  shouldShowPushEnablePrompt,
+  snoozePushPrompt,
+} from "@/lib/pushPrompt";
 
 const OPEN_DELAY_MS = 900;
 
@@ -40,7 +45,7 @@ export const PushEnablePrompt = () => {
   const { checked, isSupported, isConfigured, isSubscribed, permission, loading, lastError, subscribe } =
     usePushNotifications();
   const [dismissedThisVisit, setDismissedThisVisit] = useState(false);
-  const [visitId, setVisitId] = useState(0);
+  const [snoozed, setSnoozed] = useState(false);
   const [open, setOpen] = useState(false);
   const [attempted, setAttempted] = useState(false);
   const [iosInstallHint, setIosInstallHint] = useState(false);
@@ -53,7 +58,9 @@ export const PushEnablePrompt = () => {
     isSupported,
     isConfigured,
     isSubscribed,
+    permission,
     dismissedThisVisit,
+    snoozed,
   });
 
   useEffect(() => {
@@ -61,14 +68,11 @@ export const PushEnablePrompt = () => {
   }, []);
 
   useEffect(() => {
-    const onVisibility = () => {
-      if (document.visibilityState !== "visible") return;
-      setDismissedThisVisit(false);
-      setVisitId((current) => current + 1);
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => document.removeEventListener("visibilitychange", onVisibility);
-  }, []);
+    setDismissedThisVisit(false);
+    setSnoozed(isPushPromptSnoozed(user?.id));
+    setAttempted(false);
+    setOpen(false);
+  }, [user?.id]);
 
   useEffect(() => {
     if (!eligible) {
@@ -77,14 +81,12 @@ export const PushEnablePrompt = () => {
     }
     const timer = window.setTimeout(() => setOpen(true), OPEN_DELAY_MS);
     return () => window.clearTimeout(timer);
-  }, [eligible, visitId]);
-
-  useEffect(() => {
-    setAttempted(false);
-  }, [visitId]);
+  }, [eligible]);
 
   const dismiss = () => {
     setDismissedThisVisit(true);
+    snoozePushPrompt(user?.id);
+    setSnoozed(true);
     setOpen(false);
   };
 
@@ -99,6 +101,9 @@ export const PushEnablePrompt = () => {
             ? "Push notifications are now linked to this Poscal account."
             : "Push notifications are on. Alerts can reach you when Poscal is closed.",
       );
+      clearPushPromptSnooze(user?.id);
+      setSnoozed(false);
+      setDismissedThisVisit(true);
       setOpen(false);
       return;
     }

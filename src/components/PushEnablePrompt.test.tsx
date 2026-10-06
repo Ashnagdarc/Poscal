@@ -31,6 +31,7 @@ function renderPrompt(path = "/journal") {
 describe("PushEnablePrompt", () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    localStorage.clear();
     mockSubscribe.mockReset();
     mockSubscribe.mockResolvedValue(true);
     mockAuth.mockReturnValue({ user: { id: "user-1" }, loading: false });
@@ -63,7 +64,7 @@ describe("PushEnablePrompt", () => {
     expect(screen.getByRole("button", { name: "Enable notifications" })).toBeInTheDocument();
   });
 
-  it("stays closed after Not now until the next visit", async () => {
+  it("stays closed after Not now when the app returns to the foreground", async () => {
     renderPrompt();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(900);
@@ -77,7 +78,7 @@ describe("PushEnablePrompt", () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(900);
     });
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("turns push on from the dialog", async () => {
@@ -91,6 +92,27 @@ describe("PushEnablePrompt", () => {
       await Promise.resolve();
     });
     expect(mockSubscribe).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("does not prompt when browser notification permission is already granted", async () => {
+    mockPush.mockReturnValue({
+      checked: true,
+      isSupported: true,
+      isConfigured: true,
+      isSubscribed: false,
+      permission: "granted",
+      loading: false,
+      lastError: null,
+      subscribe: mockSubscribe,
+    });
+
+    renderPrompt();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(900);
+    });
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("does not show on the welcome screen", async () => {

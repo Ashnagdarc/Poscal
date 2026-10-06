@@ -10,7 +10,9 @@ const ready = {
   isSupported: true,
   isConfigured: true,
   isSubscribed: false,
+  permission: "default" as const,
   dismissedThisVisit: false,
+  snoozed: false,
 };
 
 describe("shouldShowPushEnablePrompt", () => {
@@ -23,6 +25,9 @@ describe("shouldShowPushEnablePrompt", () => {
     expect(shouldShowPushEnablePrompt({ ...ready, checked: false })).toBe(false);
     expect(shouldShowPushEnablePrompt({ ...ready, dismissedThisVisit: true })).toBe(false);
     expect(shouldShowPushEnablePrompt({ ...ready, isAuthenticated: false })).toBe(false);
+    expect(shouldShowPushEnablePrompt({ ...ready, snoozed: true })).toBe(false);
+    expect(shouldShowPushEnablePrompt({ ...ready, permission: "granted" })).toBe(false);
+    expect(shouldShowPushEnablePrompt({ ...ready, permission: "denied" })).toBe(false);
   });
 
   it("does not cover sign-in or the welcome screen", () => {

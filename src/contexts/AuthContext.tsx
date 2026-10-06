@@ -1,7 +1,7 @@
 import { useAuthActions } from "@convex-dev/auth/react";
 import { createContext, useContext, ReactNode, useEffect } from 'react';
 import { useAuthToken, useConvexAuth } from '@convex-dev/auth/react';
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
 import { clearLegacyAuthMirrors, setConvexAuthTokenMirror } from '@/lib/authTokenStore';
 import { mapPasswordResetRequestError, toSafeAuthErrorMessage } from '@/lib/authErrorMessages';
@@ -56,6 +56,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const authToken = useAuthToken();
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
+  const unregisterPush = useMutation(api.admin.unsubscribePush);
 
   const user: User | null = viewer
     ? {
@@ -191,6 +192,45 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   const signOut = async () => {
+    // Detach this browser's push endpoint while the session is still valid.
+    // Browser notification permission remains granted, so the next sign-in can
+    // silently create/register a fresh subscription without showing the prompt.
+    if (
+      typeof navigator !== "undefined"
+      && "serviceWorker" in navigator
+      && typeof window !== "undefined"
+      && "PushManager" in window
+    ) {
+      try {
+        const registration = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2_000)),
+        ]);
+
+        if (registration) {
+          const subscription = await registration.pushManager.getSubscription();
+          if (subscription) {
+            try {
+              await unregisterPush({
+                endpoint: subscription.endpoint,
+                id: undefined,
+              });
+            } catch (error) {
+              console.warn("[auth] Could not deactivate push endpoint before sign-out", error);
+            }
+
+            try {
+              await subscription.unsubscribe();
+            } catch (error) {
+              console.warn("[auth] Could not remove local push subscription on sign-out", error);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn("[auth] Push cleanup before sign-out failed", error);
+      }
+    }
+
     try {
       await convexSignOut();
     } finally {
