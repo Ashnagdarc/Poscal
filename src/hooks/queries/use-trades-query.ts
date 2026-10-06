@@ -7,6 +7,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useJournal } from '@/contexts/JournalContext';
 import {
   createJournalEntry,
+  createNotebookDraft,
   deleteJournalEntry,
   JOURNAL_FETCH_LIMIT,
   listJournalEntriesWithMeta,
@@ -108,6 +109,28 @@ export interface ManualTradeInput {
   tags?: string | null;
   market_condition?: string | null;
 }
+
+export const useCreateNotebookDraftMutation = () => {
+  const { user } = useAuth();
+  const { activeJournalId } = useJournal();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (entryDate?: string | null) => {
+      if (!user) {
+        throw new Error('User not authenticated');
+      }
+      if (!activeJournalId) {
+        throw new Error('No active journal');
+      }
+
+      return await createNotebookDraft(user.id, activeJournalId, entryDate ?? null);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
+    },
+  });
+};
 
 export const useAddTradeMutation = () => {
   const { user } = useAuth();
