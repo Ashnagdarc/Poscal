@@ -44,7 +44,7 @@ import {
 } from "@/lib/journalAnalytics";
 import { cn } from "@/lib/utils";
 
-type JournalTab = "overview" | "statistics" | "performance" | "charts";
+type JournalTab = "overview" | "insights" | "charts";
 
 interface JournalAnalyticsTabsProps {
   trades: JournalTrade[];
@@ -100,11 +100,11 @@ const EmptyState = ({ onAddTrade }: { onAddTrade: () => void }) => (
     <BarChart3 className="mb-3 h-12 w-12 opacity-30" />
     <p className="font-semibold text-foreground">No trades logged yet</p>
     <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-      Add manual trades to unlock overview metrics, statistics, performance breakdowns, and charts.
+      Log trades to unlock performance insights and charts.
     </p>
     <Button className="mt-4" onClick={onAddTrade}>
       <Plus className="mr-2 h-4 w-4" />
-      Add Manual Trade
+      Log Trade
     </Button>
   </div>
 );
@@ -481,7 +481,7 @@ export const JournalAnalyticsTabs = ({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <h2 className="text-base font-bold text-foreground">Manual Trades</h2>
+          <h2 className="text-base font-bold text-foreground">Trades</h2>
           <p className="text-sm text-muted-foreground">
             {serverStats ? serverStats.closedWithPnl : closedManualWithPnl} closed with P&amp;L
             {stats.openTrades > 0 ? ` · ${stats.openTrades} open` : ""}
@@ -504,15 +504,12 @@ export const JournalAnalyticsTabs = ({
       ) : null}
 
       <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as JournalTab)}>
-        <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl bg-secondary p-1">
+        <TabsList className="grid h-auto w-full grid-cols-3 rounded-2xl bg-secondary p-1">
           <TabsTrigger value="overview" className="rounded-xl py-2.5 text-xs sm:text-sm">
             Overview
           </TabsTrigger>
-          <TabsTrigger value="statistics" className="rounded-xl py-2.5 text-xs sm:text-sm">
-            Stats
-          </TabsTrigger>
-          <TabsTrigger value="performance" className="rounded-xl py-2.5 text-xs sm:text-sm">
-            Perf
+          <TabsTrigger value="insights" className="rounded-xl py-2.5 text-xs sm:text-sm">
+            Insights
           </TabsTrigger>
           <TabsTrigger value="charts" className="rounded-xl py-2.5 text-xs sm:text-sm">
             Charts
@@ -627,7 +624,7 @@ export const JournalAnalyticsTabs = ({
               </section>
             </TabsContent>
 
-            <TabsContent value="statistics" className="mt-4 space-y-4">
+            <TabsContent value="insights" className="mt-4 space-y-4">
               <section className="rounded-2xl bg-secondary p-3 sm:p-4">
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-foreground">Trade Statistics</h3>
@@ -712,7 +709,7 @@ export const JournalAnalyticsTabs = ({
               </section>
             </TabsContent>
 
-            <TabsContent value="performance" className="mt-4 space-y-4">
+            <TabsContent value="insights" className="mt-4 space-y-4">
               <BreakdownSection
                 title="By Strategy"
                 subtitle="From Tags / Setup on closed trades"
