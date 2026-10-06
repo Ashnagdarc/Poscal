@@ -198,3 +198,71 @@ export const getMonth = query({
     return { days };
   },
 });
+
+
+export const getDayEntries = query({
+  args: {
+    journalId: v.id("tradingAccounts"),
+    dateKey: v.string(),
+    timeZone: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return [];
+
+    await assertOwnedJournal(ctx, userId, args.journalId);
+
+    const [yearText, monthText, dayText] = args.dateKey.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return [];
+    }
+
+    const center = Date.UTC(year, month - 1, day, 12);
+    const roughStart = center - RANGE_PAD_MS;
+    const roughEnd = center + RANGE_PAD_MS;
+
+    const [datedTrades, createdFallback] = await Promise.all([
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_entry_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("entryDateMs", roughStart)
+            .lt("entryDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("createdAtMs", roughStart)
+            .lt("createdAtMs", roughEnd),
+        )
+        .collect(),
+    ]);
+
+    const unique = new Map<string, (typeof datedTrades)[number]>();
+    for (const trade of datedTrades) unique.set(String(trade._id), trade);
+    for (const trade of createdFallback) {
+      if (trade.entryDateMs == null) unique.set(String(trade._id), trade);
+    }
+
+    return Array.from(unique.values())
+      .filter((trade) => {
+        if (trade.deletionRequestedAtMs) return false;
+        const timestamp = trade.entryDateMs ?? trade.createdAtMs;
+        return dateKeyInTimeZone(timestamp, args.timeZone) === args.dateKey;
+      })
+      .sort(
+        (left, right) =>
+          (right.entryDateMs ?? right.createdAtMs)
+          - (left.entryDateMs ?? left.createdAtMs),
+      );
+  },
+});
