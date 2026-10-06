@@ -178,7 +178,7 @@ const DayJournal = () => {
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="truncate text-sm font-bold text-foreground">
-                        {trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair}
+                        {trade.journal_title?.trim() || (trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair)}
                       </p>
                       <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
                         {trade.status}
