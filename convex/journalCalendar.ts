@@ -90,7 +90,7 @@ export const getMonth = query({
     const nextMonth = new Date(Date.UTC(args.year, monthIndex + 1, 1));
     const nextMonthKey = `${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, "0")}-01`;
 
-    const [entryDatedTrades, exitDatedTrades, createdFallback, sessions] = await Promise.all([
+    const [entryDatedTrades, exitDatedTrades, createdFallback, scopedSessions, legacySessions] = await Promise.all([
       ctx.db
         .query("tradingJournal")
         .withIndex("by_user_journal_entry_date", (q) =>
@@ -127,6 +127,15 @@ export const getMonth = query({
           q
             .eq("userId", userId)
             .eq("journalId", args.journalId)
+            .gte("dateKey", monthStartKey)
+            .lt("dateKey", nextMonthKey),
+        )
+        .collect(),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_date", (q) =>
+          q
+            .eq("userId", userId)
             .gte("dateKey", monthStartKey)
             .lt("dateKey", nextMonthKey),
         )
@@ -183,7 +192,15 @@ export const getMonth = query({
       buckets.set(dateKey, bucket);
     }
 
-    for (const session of sessions) {
+    const sessionById = new Map<string, (typeof scopedSessions)[number]>();
+    for (const session of scopedSessions) sessionById.set(String(session._id), session);
+    for (const session of legacySessions) {
+      if (!session.journalId || session.journalId === args.journalId) {
+        sessionById.set(String(session._id), session);
+      }
+    }
+
+    for (const session of sessionById.values()) {
       if (!session.dateKey.startsWith(prefix)) continue;
       const bucket = buckets.get(session.dateKey) ?? emptyBucket(session.dateKey);
       bucket.journaled = true;
@@ -291,8 +308,8 @@ export const getDayEntries = query({
       })
       .sort(
         (left, right) =>
-          (right.entryDateMs ?? right.createdAtMs)
-          - (left.entryDateMs ?? left.createdAtMs),
+          (right.entryDateMs ?? right.exitDateMs ?? right.createdAtMs)
+          - (left.entryDateMs ?? left.exitDateMs ?? left.createdAtMs),
       );
   },
 });
