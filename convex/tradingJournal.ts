@@ -81,10 +81,34 @@ const bumpJournalStatsVersion = async (
   if (!journal || journal.userId !== userId) {
     throw new Error("Journal not found");
   }
+  const previousVersion = journal.statsVersion ?? 0;
+  const nextVersion = previousVersion + 1;
+
   await ctx.db.patch(journalId, {
-    statsVersion: (journal.statsVersion ?? 0) + 1,
+    statsVersion: nextVersion,
     updatedAtMs: Date.now(),
   });
+
+  // The trade-facts projection is synchronized before this helper is called.
+  // When its backfill is already complete for the previous version, advance
+  // the checkpoint in the same mutation instead of rescanning the journal.
+  const factsState = await ctx.db
+    .query("journalTradeFactsBackfills")
+    .withIndex("by_user_journal", (q: any) =>
+      q.eq("userId", userId).eq("journalId", journalId),
+    )
+    .unique();
+
+  if (
+    factsState
+    && factsState.status === "complete"
+    && factsState.sourceVersion === previousVersion
+  ) {
+    await ctx.db.patch(factsState._id, {
+      sourceVersion: nextVersion,
+      updatedAtMs: Date.now(),
+    });
+  }
 };
 
 const syncTradeFact = async (
