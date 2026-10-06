@@ -248,7 +248,7 @@ const Journal = () => {
             : pageSection === "today"
               ? "Log, review, and learn"
               : pageSection === "trades"
-                ? `${serverTradeStats?.totalTrades ?? manualTrades.length} trade${(serverTradeStats?.totalTrades ?? manualTrades.length) === 1 ? "" : "s"}`
+                ? `${serverTradeStats?.totalTrades ?? analyticsTrades.length} trade${(serverTradeStats?.totalTrades ?? analyticsTrades.length) === 1 ? "" : "s"}`
                 : "Charts, reasoning, and trade reviews"
         }
         icon={<BookOpen className="h-5 w-5" />}
