@@ -243,6 +243,85 @@ const queueUserAlert = async (
   }
 };
 
+const NOTEBOOK_SECTION_MAX_CHARS = 100_000;
+
+const normalizeNotebookText = (value: string | null | undefined) => {
+  if (value == null) return null;
+  const normalized = value.replace(/\r\n/g, "\n");
+  if (normalized.length > NOTEBOOK_SECTION_MAX_CHARS) {
+    throw new Error(`Notebook section is too long (max ${NOTEBOOK_SECTION_MAX_CHARS.toLocaleString()} characters)`);
+  }
+  return normalized.trim() ? normalized : null;
+};
+
+const deriveJournalStatus = (fields: {
+  entryReason?: string | null;
+  duringTradeNotes?: string | null;
+  postTradeReview?: string | null;
+  lessonsLearned?: string | null;
+}) => {
+  const values = [
+    fields.entryReason,
+    fields.duringTradeNotes,
+    fields.postTradeReview,
+    fields.lessonsLearned,
+  ];
+  const filled = values.filter((value) => Boolean(value?.trim())).length;
+  if (filled === 0) return "empty" as const;
+  if (filled === values.length) return "complete" as const;
+  return "draft" as const;
+};
+
+export const getById = query({
+  args: {
+    id: v.id("tradingJournal"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return null;
+
+    const trade = await ctx.db.get(args.id);
+    if (!trade || trade.userId !== userId) {
+      return null;
+    }
+
+    if (trade.journalId) {
+      await assertJournalOwned(ctx, userId, trade.journalId);
+    }
+
+    return trade;
+  },
+});
+
+export const getNotebookByTrade = query({
+  args: {
+    id: v.id("tradingJournal"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return null;
+
+    const trade = await ctx.db.get(args.id);
+    if (!trade || trade.userId !== userId) {
+      return null;
+    }
+    if (trade.journalId) {
+      await assertJournalOwned(ctx, userId, trade.journalId);
+    }
+
+    const notebook = await ctx.db
+      .query("tradeNotebooks")
+      .withIndex("by_trade", (q) => q.eq("tradeId", args.id))
+      .unique();
+
+    if (notebook && notebook.userId !== userId) {
+      throw new Error("Notebook ownership mismatch");
+    }
+
+    return { trade, notebook };
+  },
+});
+
 export const listForUser = query({
   args: {
     journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
@@ -608,6 +687,108 @@ export const updateEntry = mutation({
     });
 
     return await ctx.db.get(id);
+  },
+});
+
+export const updateNotebook = mutation({
+  args: {
+    id: v.id("tradingJournal"),
+    entryReason: nullableStringArg,
+    duringTradeNotes: nullableStringArg,
+    postTradeReview: nullableStringArg,
+    lessonsLearned: nullableStringArg,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const trade = await ctx.db.get(args.id);
+    if (!trade || trade.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+    if (!trade.journalId) {
+      throw new Error("Trade is not attached to a journal");
+    }
+    await assertJournalOwned(ctx, userId, trade.journalId);
+
+    const existingNotebook = await ctx.db
+      .query("tradeNotebooks")
+      .withIndex("by_trade", (q) => q.eq("tradeId", args.id))
+      .unique();
+
+    if (existingNotebook && existingNotebook.userId !== userId) {
+      throw new Error("Notebook ownership mismatch");
+    }
+
+    const entryReason =
+      args.entryReason !== undefined
+        ? normalizeNotebookText(args.entryReason)
+        : existingNotebook?.entryReason ?? null;
+    const duringTradeNotes =
+      args.duringTradeNotes !== undefined
+        ? normalizeNotebookText(args.duringTradeNotes)
+        : existingNotebook?.duringTradeNotes ?? null;
+    const postTradeReview =
+      args.postTradeReview !== undefined
+        ? normalizeNotebookText(args.postTradeReview)
+        : existingNotebook?.postTradeReview ?? null;
+    const lessonsLearned =
+      args.lessonsLearned !== undefined
+        ? normalizeNotebookText(args.lessonsLearned)
+        : existingNotebook?.lessonsLearned ?? null;
+
+    const journalStatus = deriveJournalStatus({
+      entryReason,
+      duringTradeNotes,
+      postTradeReview,
+      lessonsLearned,
+    });
+    const previewSource =
+      entryReason
+      ?? postTradeReview
+      ?? lessonsLearned
+      ?? duringTradeNotes
+      ?? null;
+    const journalPreview = previewSource
+      ? previewSource.replace(/\s+/g, " ").trim().slice(0, 220)
+      : null;
+    const now = Date.now();
+
+    if (existingNotebook) {
+      await ctx.db.patch(existingNotebook._id, {
+        entryReason,
+        duringTradeNotes,
+        postTradeReview,
+        lessonsLearned,
+        updatedAtMs: now,
+      });
+    } else {
+      await ctx.db.insert("tradeNotebooks", {
+        userId,
+        journalId: trade.journalId,
+        tradeId: args.id,
+        entryReason,
+        duringTradeNotes,
+        postTradeReview,
+        lessonsLearned,
+        createdAtMs: now,
+        updatedAtMs: now,
+      });
+    }
+
+    await ctx.db.patch(args.id, {
+      journalStatus,
+      journalPreview,
+      journalUpdatedAtMs: now,
+      updatedAtMs: now,
+    });
+
+    // Notebook writes never invalidate trade facts or journal analytics.
+    const updatedTrade = await ctx.db.get(args.id);
+    const updatedNotebook = await ctx.db
+      .query("tradeNotebooks")
+      .withIndex("by_trade", (q) => q.eq("tradeId", args.id))
+      .unique();
+
+    return { trade: updatedTrade, notebook: updatedNotebook };
   },
 });
 

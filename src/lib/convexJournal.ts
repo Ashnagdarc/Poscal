@@ -23,6 +23,13 @@ export interface JournalTrade {
   created_at: string;
   journal_type?: "structured" | "notes";
   rich_content?: unknown;
+  entry_reason?: string | null;
+  during_trade_notes?: string | null;
+  post_trade_review?: string | null;
+  lessons_learned?: string | null;
+  journal_status?: "empty" | "draft" | "complete";
+  journal_preview?: string | null;
+  journal_updated_at?: string | null;
   images?: Array<{ url: string; caption?: string }>;
   links?: Array<{ url: string; title?: string }>;
   screenshots?: string[];
@@ -67,6 +74,9 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   created_at: new Date(row.createdAtMs).toISOString(),
   journal_type: (row.journalType as "structured" | "notes" | null) ?? "structured",
   rich_content: row.richContent ?? null,
+  journal_status: row.journalStatus ?? "empty",
+  journal_preview: row.journalPreview ?? null,
+  journal_updated_at: toIsoString(row.journalUpdatedAtMs),
   images: Array.isArray(row.images) ? row.images : [],
   links: Array.isArray(row.links) ? row.links : [],
   screenshots: Array.isArray(row.screenshots) ? row.screenshots : [],
@@ -240,6 +250,66 @@ export const updateJournalEntry = async (_userId: string, id: string, updates: R
       ...toConvexTradePatch(updates),
     });
     return fromConvexTrade(row);
+  }
+
+  return await tradesApi.update(id, updates);
+};
+
+export const getJournalEntry = async (
+  _userId: string,
+  id: string,
+): Promise<JournalTrade | null> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const result = await client.query(api.tradingJournal.getNotebookByTrade, {
+      id: id as any,
+    });
+    if (!result?.trade) return null;
+
+    const trade = fromConvexTrade(result.trade);
+    return {
+      ...trade,
+      entry_reason: result.notebook?.entryReason ?? null,
+      during_trade_notes: result.notebook?.duringTradeNotes ?? null,
+      post_trade_review: result.notebook?.postTradeReview ?? null,
+      lessons_learned: result.notebook?.lessonsLearned ?? null,
+    };
+  }
+
+  return await tradesApi.getOne(id);
+};
+
+export type NotebookPatch = {
+  entry_reason?: string | null;
+  during_trade_notes?: string | null;
+  post_trade_review?: string | null;
+  lessons_learned?: string | null;
+};
+
+export const updateTradeNotebook = async (
+  _userId: string,
+  id: string,
+  updates: NotebookPatch,
+): Promise<JournalTrade> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const result = await client.mutation(api.tradingJournal.updateNotebook, {
+      id: id as any,
+      entryReason: updates.entry_reason,
+      duringTradeNotes: updates.during_trade_notes,
+      postTradeReview: updates.post_trade_review,
+      lessonsLearned: updates.lessons_learned,
+    });
+    if (!result?.trade) throw new Error("Journal entry not found");
+
+    const trade = fromConvexTrade(result.trade);
+    return {
+      ...trade,
+      entry_reason: result.notebook?.entryReason ?? null,
+      during_trade_notes: result.notebook?.duringTradeNotes ?? null,
+      post_trade_review: result.notebook?.postTradeReview ?? null,
+      lessons_learned: result.notebook?.lessonsLearned ?? null,
+    };
   }
 
   return await tradesApi.update(id, updates);
