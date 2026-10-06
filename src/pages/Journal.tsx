@@ -901,13 +901,7 @@ const Journal = () => {
                   const pnl = trade.pnl;
                   const direction =
                     trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long";
-                  const preview =
-                    trade.entry_reason
-                    || trade.post_trade_review
-                    || trade.lessons_learned
-                    || trade.during_trade_notes
-                    || trade.notes
-                    || null;
+                  const preview = trade.journal_preview || trade.notes || null;
                   const notebookStatus =
                     trade.journal_status === "complete"
                       ? "Complete"
