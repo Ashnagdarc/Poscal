@@ -34,11 +34,13 @@ import type { JournalTrade } from "@/lib/convexJournal";
 import {
   useAddTradeMutation,
   useDeleteTradeMutation,
+  usePaginatedTradesQuery,
   useTradesQuery,
   useUpdateTradeMutation,
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
+import { usePaginatedCalculatorHistory } from "@/hooks/queries/use-calculator-history-query";
 import { toast } from "sonner";
 import { useActionError } from "@/contexts/ActionErrorContext";
 import { preferencesApi } from "@/lib/api";
@@ -170,6 +172,19 @@ const Journal = () => {
   const [tradeToEdit, setTradeToEdit] = useState<JournalTrade | null>(null);
   const [tradeToDelete, setTradeToDelete] = useState<JournalTrade | null>(null);
   const { data: manualTrades = [], isLoading: isManualTradesLoading } = useTradesQuery();
+  const {
+    data: paginatedManualTrades,
+    canLoadMore: canLoadMoreTrades,
+    isLoadingMore: isLoadingMoreTrades,
+    loadMore: loadMoreTrades,
+  } = usePaginatedTradesQuery();
+  const {
+    data: paginatedHistory,
+    isLoading: isPaginatedHistoryLoading,
+    canLoadMore: canLoadMoreHistory,
+    isLoadingMore: isLoadingMoreHistory,
+    loadMore: loadMoreHistory,
+  } = usePaginatedCalculatorHistory();
   const addTradeMutation = useAddTradeMutation();
   const updateTradeMutation = useUpdateTradeMutation();
   const deleteTradeMutation = useDeleteTradeMutation();
@@ -360,7 +375,7 @@ const Journal = () => {
     if (!itemToDelete) return;
 
     try {
-      const nextItems = await deleteJournalEntry(itemToDelete.id, user?.id);
+      const nextItems = await deleteJournalEntry(itemToDelete.id, user?.id, activeJournalId);
       setItems(nextItems);
       if (selectedItem?.id === itemToDelete.id) {
         setSelectedItem(null);
@@ -393,6 +408,7 @@ const Journal = () => {
           closedAt: resultStatus === "open" ? null : new Date(),
         },
         user?.id,
+        activeJournalId,
       );
       setItems(nextItems);
       setSelectedItem(nextItems.find((item) => item.id === itemForResult.id) ?? null);
@@ -499,7 +515,7 @@ const Journal = () => {
             : pageSection === "today"
               ? "Growth, results, and session notes"
               : pageSection === "trades"
-                ? `${manualTrades.length} manual trade${manualTrades.length === 1 ? "" : "s"}`
+                ? `${serverTradeStats?.totalTrades ?? manualTrades.length} manual trade${(serverTradeStats?.totalTrades ?? manualTrades.length) === 1 ? "" : "s"}`
                 : `${items.length} saved calculation${items.length === 1 ? "" : "s"}`
         }
         icon={<BookOpen className="h-5 w-5" />}
@@ -814,6 +830,10 @@ const Journal = () => {
               timeZone={preferredTimeZone}
               serverStats={serverTradeStats}
               isStatsBackfilling={isTradeStatsBackfilling}
+              feedTrades={paginatedManualTrades}
+              canLoadMoreTrades={canLoadMoreTrades}
+              isLoadingMoreTrades={isLoadingMoreTrades}
+              onLoadMoreTrades={loadMoreTrades}
               onAddTrade={() => {
                 setTradeToEdit(null);
                 setIsTradeSheetOpen(true);
@@ -835,7 +855,7 @@ const Journal = () => {
                 Position sizes from the calculator
               </p>
             </section>
-            {isLoading ? (
+            {isPaginatedHistoryLoading ? (
               <div className="space-y-3">
                 {[1, 2, 3].map((item) => (
                   <div key={item} className="space-y-3 rounded-2xl bg-secondary p-4">
@@ -852,7 +872,7 @@ const Journal = () => {
                   </div>
                 ))}
               </div>
-            ) : items.length === 0 ? (
+            ) : paginatedHistory.length === 0 ? (
               <div className="flex h-72 flex-col items-center justify-center text-center text-muted-foreground animate-fade-in">
                 <Calculator className="mb-3 h-12 w-12 opacity-30" />
                 <p className="font-medium text-foreground">No saved calculations yet</p>
@@ -860,7 +880,7 @@ const Journal = () => {
               </div>
             ) : (
               <div className="space-y-4 animate-slide-up">
-                {items.map((item) => (
+                {paginatedHistory.map((item) => (
                   <article key={item.id} className="rounded-2xl bg-secondary p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -939,6 +959,16 @@ const Journal = () => {
                     </div>
                   </article>
                 ))}
+                {canLoadMoreHistory ? (
+                  <button
+                    type="button"
+                    onClick={loadMoreHistory}
+                    disabled={isLoadingMoreHistory}
+                    className="h-11 w-full rounded-xl bg-secondary text-sm font-semibold text-foreground transition-all active:scale-[0.98] disabled:opacity-60"
+                  >
+                    {isLoadingMoreHistory ? "Loading…" : "Load older calculations"}
+                  </button>
+                ) : null}
               </div>
             )}
           </>

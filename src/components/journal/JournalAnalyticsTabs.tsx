@@ -60,6 +60,10 @@ interface JournalAnalyticsTabsProps {
   /** Complete lifetime scalar stats from the batched server-side snapshot. */
   serverStats?: JournalTradeStatsSnapshot | null;
   isStatsBackfilling?: boolean;
+  feedTrades?: JournalTrade[];
+  canLoadMoreTrades?: boolean;
+  isLoadingMoreTrades?: boolean;
+  onLoadMoreTrades?: () => void;
 }
 
 const MetricCard = ({
@@ -362,6 +366,10 @@ export const JournalAnalyticsTabs = ({
   timeZone = null,
   serverStats = null,
   isStatsBackfilling = false,
+  feedTrades,
+  canLoadMoreTrades = false,
+  isLoadingMoreTrades = false,
+  onLoadMoreTrades,
 }: JournalAnalyticsTabsProps) => {
   void _calculatorResults;
   const { currency } = useCurrency();
@@ -422,9 +430,9 @@ export const JournalAnalyticsTabs = ({
   const strategyBreakdown = useMemo(() => computeStrategyBreakdown(trades), [trades]);
   const sessionBreakdown = useMemo(() => computeSessionBreakdown(trades), [trades]);
   const instrumentBreakdown = useMemo(() => computeInstrumentBreakdown(trades), [trades]);
-  const recentTrades = useMemo(
-    () => [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
-    [trades],
+  const visibleTrades = useMemo(
+    () => feedTrades ?? [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
+    [feedTrades, trades],
   );
   const closedManualWithPnl = useMemo(
     () =>
@@ -566,11 +574,11 @@ export const JournalAnalyticsTabs = ({
 
               <section className="space-y-3 rounded-2xl bg-secondary p-3 sm:p-4">
                 <div>
-                  <h3 className="text-base font-bold text-foreground">Recent Trades</h3>
-                  <p className="text-xs text-muted-foreground">Latest manual journal entries</p>
+                  <h3 className="text-base font-bold text-foreground">Trade History</h3>
+                  <p className="text-xs text-muted-foreground">Newest first, loaded in pages</p>
                 </div>
                 <div className="space-y-2">
-                  {recentTrades.map((trade) => (
+                  {visibleTrades.map((trade) => (
                     <TradeListItem
                       key={trade.id}
                       trade={trade}
@@ -581,6 +589,17 @@ export const JournalAnalyticsTabs = ({
                     />
                   ))}
                 </div>
+                {canLoadMoreTrades && onLoadMoreTrades ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="mt-3 w-full"
+                    onClick={onLoadMoreTrades}
+                    disabled={isLoadingMoreTrades}
+                  >
+                    {isLoadingMoreTrades ? "Loading…" : "Load older trades"}
+                  </Button>
+                ) : null}
               </section>
             </TabsContent>
 
