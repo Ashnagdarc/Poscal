@@ -20,6 +20,7 @@ import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
 import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
 import {
   useAddTradeMutation,
+  useCreateNotebookDraftMutation,
   useDeleteTradeMutation,
   usePaginatedTradesQuery,
   useTradesQuery,
@@ -88,6 +89,7 @@ const Journal = () => {
   } = usePaginatedTradesQuery();
 
   const addTradeMutation = useAddTradeMutation();
+  const createNotebookDraftMutation = useCreateNotebookDraftMutation();
   const updateTradeMutation = useUpdateTradeMutation();
   const deleteTradeMutation = useDeleteTradeMutation();
   const { stats: serverTradeStats, isBackfilling: isTradeStatsBackfilling } = useJournalTradeStats();
@@ -105,10 +107,18 @@ const Journal = () => {
 
   const startingBalance = activeJournal?.startingBalance ?? 0;
   const today = useMemo(() => startOfDay(new Date()), []);
+  const analyticsTrades = useMemo(
+    () => manualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
+    [manualTrades],
+  );
+  const analyticsFeedTrades = useMemo(
+    () => paginatedManualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
+    [paginatedManualTrades],
+  );
 
   const fallbackDaySummaries = useMemo(
-    () => buildResultDaySummaries([], manualTrades, preferredTimeZone),
-    [manualTrades, preferredTimeZone],
+    () => buildResultDaySummaries([], analyticsTrades, preferredTimeZone),
+    [analyticsTrades, preferredTimeZone],
   );
   const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
   const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
@@ -359,7 +369,7 @@ const Journal = () => {
                 </section>
 
                 <JournalAnalyticsTabs
-                  trades={manualTrades}
+                  trades={analyticsTrades}
                   isLoading={isManualTradesLoading}
                   activeTab={journalTab}
                   onTabChange={setJournalTab}
@@ -368,7 +378,7 @@ const Journal = () => {
                   serverStats={serverTradeStats}
                   isStatsBackfilling={isTradeStatsBackfilling}
                   serverPerformance={tradePerformanceSummary}
-                  feedTrades={paginatedManualTrades}
+                  feedTrades={analyticsFeedTrades}
                   canLoadMoreTrades={canLoadMoreTrades}
                   isLoadingMoreTrades={isLoadingMoreTrades}
                   onLoadMoreTrades={loadMoreTrades}
@@ -422,12 +432,14 @@ const Journal = () => {
                           <div className="flex items-start justify-between gap-4">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="truncate text-base font-bold text-foreground">{trade.pair}</h3>
+                                <h3 className="truncate text-base font-bold text-foreground">
+                                  {trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair}
+                                </h3>
                                 <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                                  {direction}
+                                  {trade.journal_type === "notebook_draft" ? "Manual notebook" : direction}
                                 </span>
                                 <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
-                                  {trade.status}
+                                  {trade.journal_type === "notebook_draft" ? "Draft" : trade.status}
                                 </span>
                               </div>
                               <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-muted-foreground">
@@ -498,13 +510,20 @@ const Journal = () => {
         onOpenChange={setIsLogTradeChooserOpen}
         onManual={() => {
           setIsLogTradeChooserOpen(false);
-          setTradeToEdit(null);
-          setOpenNotebookAfterManualSave(true);
-          setIsTradeSheetOpen(true);
+          void createNotebookDraftMutation.mutateAsync(new Date().toISOString())
+            .then((draftTrade) => {
+              navigate(`/journal/trade/${draftTrade.id}`);
+            })
+            .catch((error) => {
+              console.error("[journal] Failed to open manual notebook", error);
+              toast.error("Could not open a new notebook.");
+            });
         }}
         onAutomatic={() => {
           setIsLogTradeChooserOpen(false);
-          navigate("/calculator?journalLog=1");
+          setTradeToEdit(null);
+          setOpenNotebookAfterManualSave(true);
+          setIsTradeSheetOpen(true);
         }}
       />
 
