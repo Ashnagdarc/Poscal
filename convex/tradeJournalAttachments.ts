@@ -176,8 +176,8 @@ export const completeUpload = mutation({
     await ctx.db.patch(usage._id, {
       usedBytes: Math.max(0, usage.usedBytes - replacedBytes + args.actualSizeBytes),
       attachmentCount: Math.max(0, usage.attachmentCount - replaced.length + 1),
-      reservedBytes: Math.max(0, usage.reservedBytes - row.sizeBytes),
-      reservedCount: Math.max(0, usage.reservedCount - 1),
+      reservedBytes: Math.max(0, (usage.reservedBytes ?? 0) - row.sizeBytes),
+      reservedCount: Math.max(0, (usage.reservedCount ?? 0) - 1),
       updatedAtMs: now,
     });
 
@@ -204,8 +204,8 @@ export const cancelUpload = mutation({
     await ctx.db.patch(row._id, { status: "deleted", updatedAtMs: Date.now() });
     if (usage) {
       await ctx.db.patch(usage._id, {
-        reservedBytes: Math.max(0, usage.reservedBytes - row.sizeBytes),
-        reservedCount: Math.max(0, usage.reservedCount - 1),
+        reservedBytes: Math.max(0, (usage.reservedBytes ?? 0) - row.sizeBytes),
+        reservedCount: Math.max(0, (usage.reservedCount ?? 0) - 1),
         updatedAtMs: Date.now(),
       });
     }
