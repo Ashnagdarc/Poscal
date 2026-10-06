@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useActionError } from "@/contexts/ActionErrorContext";
+import { useJournalCalendar } from "@/hooks/queries/use-journal-calendar";
 import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
 import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
 import {
@@ -28,10 +29,10 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import {
-  buildResultDaySummaries,
   startOfDay,
   toDateKey,
 } from "@/lib/historyResults";
+import { journalCalendarLabel } from "@/lib/journalCalendar";
 import type { JournalTrade } from "@/lib/convexJournal";
 import { preferencesApi } from "@/lib/api";
 import {
@@ -95,8 +96,6 @@ const Journal = () => {
   const { stats: serverTradeStats, isBackfilling: isTradeStatsBackfilling } = useJournalTradeStats();
 
   const {
-    ready: areTradeFactsReady,
-    daySummaries: factDaySummaries,
     performanceSummary: tradePerformanceSummary,
   } = useJournalTradeFacts({
     calendarMonth,
@@ -116,11 +115,10 @@ const Journal = () => {
     [paginatedManualTrades],
   );
 
-  const fallbackDaySummaries = useMemo(
-    () => buildResultDaySummaries([], analyticsTrades, preferredTimeZone),
-    [analyticsTrades, preferredTimeZone],
-  );
-  const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
+  const { dayMap: resultDaySummaries } = useJournalCalendar({
+    month: calendarMonth,
+    timeZone: preferredTimeZone,
+  });
   const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
 
   useEffect(() => {
@@ -308,7 +306,7 @@ const Journal = () => {
                   <div>
                     <p className="text-xs text-muted-foreground">Today</p>
                     <p className="mt-1 text-xl font-bold text-foreground">
-                      {todaySummary?.label ?? "No result"}
+                      {todaySummary ? journalCalendarLabel(todaySummary) : "No activity"}
                     </p>
                   </div>
                   <div className="text-right">
