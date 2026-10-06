@@ -676,8 +676,16 @@ export const updateEntry = mutation({
     const updatedTrade = await ctx.db.get(id);
     if (updatedTrade) {
       await syncTradeFact(ctx, updatedTrade);
+
+      const statsChanged =
+        updatedTrade.status !== existing.status
+        || (updatedTrade.pnl ?? null) !== (existing.pnl ?? null)
+        || (updatedTrade.riskAmount ?? null) !== (existing.riskAmount ?? null);
+
+      if (statsChanged) {
+        await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+      }
     }
-    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
 
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
       userId,
