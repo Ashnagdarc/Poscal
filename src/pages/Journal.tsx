@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Camera, Clock3, Copy, Trash2, X } from "lucide-react";
+import { BookOpen, Camera, Clock3, Copy, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ACCOUNT_CURRENCIES, useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
@@ -15,12 +15,6 @@ import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCale
 import { TradingGrowthChart } from "@/components/journal/TradingGrowthChart";
 import { ReturnsCalendar } from "@/components/ui/returns-calendar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   deleteJournalEntry,
@@ -775,7 +769,12 @@ const Journal = () => {
                           : "breakeven";
 
                   return (
-                    <article key={`trade-${trade.id}`} className="rounded-2xl bg-secondary p-4">
+                    <button
+                      key={`trade-${trade.id}`}
+                      type="button"
+                      onClick={() => navigate(`/journal/trade/${trade.id}`)}
+                      className="w-full rounded-2xl bg-secondary p-4 text-left transition-all active:scale-[0.99]"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
@@ -805,7 +804,7 @@ const Journal = () => {
                           </p>
                         </div>
                       </div>
-                    </article>
+                    </button>
                   );
                 })}
 
