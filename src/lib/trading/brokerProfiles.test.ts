@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  resolveAutomaticBrokerProfile,
   resolveBrokerProfile,
   type BrokerProfileSnapshot,
 } from "@/lib/trading/brokerProfiles";
@@ -87,5 +88,103 @@ describe("broker profile resolver", () => {
     expect(profiled.specSource).toBe("broker-profile");
     expect(profiled.spec?.minLot).toBe(1);
     expect(profiled.spec?.lotStep).toBe(1);
+  });
+});
+
+
+describe("automatic broker profile resolver", () => {
+  it("chooses the largest complete sizing consensus and ignores outliers", () => {
+    const consensusSnapshot: BrokerProfileSnapshot = {
+      ...snapshot,
+      brokers: {
+        a: {
+          name: "Broker A",
+          platform: "MT5",
+          servers: ["A-Demo"],
+          symbols: {
+            "GBP/USD": { symbol: "GBPUSD", contractSize: 100000, minLot: 0.01, lotStep: 0.01 },
+          },
+        },
+        b: {
+          name: "Broker B",
+          platform: "MT4",
+          servers: ["B-Demo"],
+          symbols: {
+            "GBP/USD": { symbol: "GBPUSD", contractSize: 100000, minLot: 0.01, lotStep: 0.01 },
+          },
+        },
+        c: {
+          name: "Broker C",
+          platform: "MT5",
+          servers: ["C-Demo"],
+          symbols: {
+            "GBP/USD": { symbol: "GBPUSD", contractSize: 1000, minLot: 1, lotStep: 1 },
+          },
+        },
+        incomplete: {
+          name: "Incomplete",
+          platform: "MT5",
+          servers: ["I-Demo"],
+          symbols: {
+            "GBP/USD": { symbol: "GBPUSD" },
+          },
+        },
+      },
+    };
+
+    const resolved = resolveAutomaticBrokerProfile(consensusSnapshot, "GBP/USD", 5);
+
+    expect(resolved?.candidateCount).toBe(3);
+    expect(resolved?.selectedProfiles.map((profile) => profile.brokerName)).toEqual([
+      "Broker A",
+      "Broker B",
+    ]);
+    expect(resolved?.override).toMatchObject({
+      source: "broker-profile",
+      contractSize: 100000,
+      minLot: 0.01,
+      lotStep: 0.01,
+    });
+  });
+
+  it("uses at most five agreeing profiles and falls back when no complete data exists", () => {
+    const many = Object.fromEntries(
+      Array.from({ length: 7 }, (_, index) => [
+        `broker-${index}`,
+        {
+          name: `Broker ${index}`,
+          platform: "MT5",
+          servers: [`Demo-${index}`],
+          symbols: {
+            US500: { symbol: "US500", contractSize: 10, minLot: 0.1, lotStep: 0.1 },
+          },
+        },
+      ]),
+    );
+
+    const resolved = resolveAutomaticBrokerProfile(
+      { ...snapshot, brokers: many },
+      "US500",
+      5,
+    );
+    expect(resolved?.selectedProfiles).toHaveLength(5);
+
+    const fallback = resolveAutomaticBrokerProfile(
+      {
+        ...snapshot,
+        brokers: {
+          onlyMapping: {
+            name: "Mapping Only",
+            platform: "MT5",
+            servers: ["Demo"],
+            symbols: { "XAU/USD": { symbol: "GOLD" } },
+          },
+        },
+      },
+      "XAU/USD",
+    );
+
+    expect(fallback?.hasSizingData).toBe(false);
+    expect(fallback?.override).toBeNull();
   });
 });

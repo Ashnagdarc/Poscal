@@ -120,6 +120,133 @@ export const resolveBrokerProfile = (
   };
 };
 
+export type AutomaticBrokerResolution = {
+  symbol: string;
+  snapshotDate: string;
+  candidateCount: number;
+  selectedProfiles: Array<{
+    brokerSlug: string;
+    brokerName: string;
+    platform: string;
+    brokerSymbol: string;
+  }>;
+  override: InstrumentSpecOverride | null;
+  hasSizingData: boolean;
+};
+
+/**
+ * Automatically choose the strongest broker specification for an instrument.
+ *
+ * The current snapshot has one source-level snapshotDate rather than per-broker
+ * update timestamps, so we do not pretend one broker is "fresher" than another.
+ * Instead we reject incomplete records, group complete records by measured
+ * contractSize/minLot/lotStep, pick the largest agreement group, and use up to
+ * five deterministic profiles from that consensus. When a newer snapshot is
+ * deployed this is recalculated automatically.
+ */
+export const resolveAutomaticBrokerProfile = (
+  snapshot: BrokerProfileSnapshot | null | undefined,
+  symbol: string,
+  maxProfiles = 5,
+): AutomaticBrokerResolution | null => {
+  if (!snapshot) return null;
+
+  const canonical = resolveInstrumentSymbol(symbol);
+  const candidates = Object.entries(snapshot.brokers)
+    .map(([brokerSlug, broker]) => {
+      const profile = broker.symbols[canonical] ?? null;
+      if (
+        !profile
+        || !positive(profile.contractSize)
+        || !positive(profile.minLot)
+        || !positive(profile.lotStep)
+      ) {
+        return null;
+      }
+
+      return {
+        brokerSlug,
+        brokerName: broker.name,
+        platform: broker.platform,
+        brokerSymbol: profile.symbol,
+        profile,
+      };
+    })
+    .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null);
+
+  if (candidates.length === 0) {
+    return {
+      symbol: canonical,
+      snapshotDate: snapshot.source.snapshotDate,
+      candidateCount: 0,
+      selectedProfiles: [],
+      override: null,
+      hasSizingData: false,
+    };
+  }
+
+  const groups = new Map<string, typeof candidates>();
+  for (const candidate of candidates) {
+    const key = [
+      candidate.profile.contractSize,
+      candidate.profile.minLot,
+      candidate.profile.lotStep,
+    ].join("|");
+    const group = groups.get(key) ?? [];
+    group.push(candidate);
+    groups.set(key, group);
+  }
+
+  const consensus = [...groups.entries()]
+    .sort(([keyA, groupA], [keyB, groupB]) => {
+      if (groupA.length !== groupB.length) return groupB.length - groupA.length;
+      return keyA.localeCompare(keyB);
+    })[0]?.[1] ?? [];
+
+  const selected = [...consensus]
+    .sort((a, b) => {
+      const byName = a.brokerName.localeCompare(b.brokerName);
+      return byName !== 0 ? byName : a.brokerSlug.localeCompare(b.brokerSlug);
+    })
+    .slice(0, Math.max(1, maxProfiles));
+
+  const representative = selected[0]?.profile;
+  if (!representative) {
+    return {
+      symbol: canonical,
+      snapshotDate: snapshot.source.snapshotDate,
+      candidateCount: candidates.length,
+      selectedProfiles: [],
+      override: null,
+      hasSizingData: false,
+    };
+  }
+
+  const override: InstrumentSpecOverride = {
+    source: "broker-profile" as InstrumentSpecSource,
+    contractSize: representative.contractSize,
+    minLot: representative.minLot,
+    lotStep: representative.lotStep,
+    warning:
+      `Using automatic broker consensus from ${selected.length} measured profile${selected.length === 1 ? "" : "s"} ` +
+      `in the ${snapshot.source.snapshotDate} snapshot. Live MT5/cTrader verification is not connected yet.`,
+  };
+
+  return {
+    symbol: canonical,
+    snapshotDate: snapshot.source.snapshotDate,
+    candidateCount: candidates.length,
+    selectedProfiles: selected.map((candidate) => ({
+      brokerSlug: candidate.brokerSlug,
+      brokerName: candidate.brokerName,
+      platform: candidate.platform,
+      brokerSymbol: candidate.brokerSymbol,
+    })),
+    override,
+    hasSizingData: true,
+  };
+};
+
 export const brokerProfileStorageKey = (
   userId?: string | null,
   journalId?: string | null,
