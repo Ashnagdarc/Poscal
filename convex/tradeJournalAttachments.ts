@@ -33,6 +33,19 @@ export const listForTrade = query({
   },
 });
 
+export const listPendingForTrade = query({
+  args: { tradeId: v.id("tradingJournal") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    await assertOwnedTrade(ctx, userId, args.tradeId);
+    const rows = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_trade_role", (q) => q.eq("tradeId", args.tradeId))
+      .collect();
+    return rows.filter((row) => row.userId === userId && row.status === "pending");
+  },
+});
+
 export const reserveUpload = mutation({
   args: {
     tradeId: v.id("tradingJournal"),
