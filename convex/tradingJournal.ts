@@ -969,7 +969,7 @@ export const beginDeleteEntry = mutation({
 
     return {
       objectKeys: attachments
-        .filter((row) => row.userId === userId && row.status !== "deleted")
+        .filter((row) => row.userId === userId)
         .map((row) => row.objectKey)
         .filter((key) => Boolean(key) && key !== "pending"),
     };
@@ -1026,7 +1026,7 @@ export const deleteEntry = mutation({
       .withIndex("by_trade_role", (q) => q.eq("tradeId", args.id))
       .collect();
     const hasStoredAssets = attachments.some(
-      (row) => row.userId === userId && row.status !== "deleted" && row.objectKey !== "pending",
+      (row) => row.userId === userId && row.objectKey !== "pending",
     );
     if (hasStoredAssets) {
       throw new Error("Journal has stored images and requires asset-aware deletion");
