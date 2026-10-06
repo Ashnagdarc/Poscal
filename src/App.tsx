@@ -26,6 +26,7 @@ const ForgotPassword = lazyWithRetry(() => import("./pages/ForgotPassword"));
 const VerifyEmail = lazyWithRetry(() => import("./pages/VerifyEmail"));
 const Profile = lazyWithRetry(() => import("./pages/Profile"));
 const Journal = lazyWithRetry(() => import("./pages/Journal"));
+const TradeNotebook = lazyWithRetry(() => import("./pages/TradeNotebook"));
 const Settings = lazyWithRetry(() => import("./pages/Settings"));
 const News = lazyWithRetry(() => import("./pages/News"));
 const Upgrade = lazyWithRetry(() => import("./pages/Upgrade"));
@@ -62,7 +63,9 @@ const AppContent = () => {
     "/terms",
     "/privacy",
   ];
-  const shouldShowBottomNav = !hideBottomNavOn.includes(location.pathname);
+  const shouldShowBottomNav =
+    !hideBottomNavOn.includes(location.pathname)
+    && !location.pathname.startsWith("/journal/trade/");
 
   useEffect(() => {
     scrollRef.current?.scrollTo(0, 0);
@@ -98,6 +101,10 @@ const AppContent = () => {
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
+          <Route
+            path="/journal/trade/:tradeId"
+            element={<ProtectedRoute requiresPremium>{<TradeNotebook />}</ProtectedRoute>}
+          />
           <Route
             path="/history"
             element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>}
