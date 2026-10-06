@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Camera, Check, Clock3, Loader2 } from "lucide-react";
+import { ArrowLeft, Camera, Check, Clock3, Loader2, Trash2, Upload } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -9,6 +9,14 @@ import {
   type NotebookPatch,
 } from "@/lib/convexJournal";
 import { toast } from "sonner";
+import {
+  deleteJournalImage,
+  listJournalImages,
+  uploadJournalImage,
+  type JournalAttachment,
+  type JournalImageQuota,
+  type JournalImageRole,
+} from "@/lib/journalImages";
 
 type NotebookDraft = {
   entry_reason: string;
@@ -108,6 +116,10 @@ const TradeNotebook = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [attachments, setAttachments] = useState<JournalAttachment[]>([]);
+  const [imageQuota, setImageQuota] = useState<JournalImageQuota | null>(null);
+  const [uploadingRole, setUploadingRole] = useState<JournalImageRole | null>(null);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
 
   const hydratedRef = useRef(false);
   const revisionRef = useRef(0);
@@ -144,6 +156,27 @@ const TradeNotebook = () => {
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [tradeId, user?.id]);
+
+  useEffect(() => {
+    if (!tradeId || !user?.id) return;
+    let cancelled = false;
+
+    void listJournalImages(tradeId)
+      .then((result) => {
+        if (cancelled) return;
+        setAttachments(result.attachments);
+        setImageQuota(result.quota);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.error("[notebook] image metadata load failed", error);
+        }
       });
 
     return () => {
@@ -205,6 +238,134 @@ const TradeNotebook = () => {
       return next;
     });
     setSaveState("dirty");
+  };
+
+  const handleImageSelection = async (
+    role: JournalImageRole,
+    file: File | null,
+  ) => {
+    if (!file || !tradeId) return;
+    setUploadingRole(role);
+    try {
+      const result = await uploadJournalImage(tradeId, role, file);
+      setAttachments((current) => [
+        ...current.filter((item) => item.role !== role),
+        result.attachment,
+      ]);
+      const refreshed = await listJournalImages(tradeId);
+      setAttachments(refreshed.attachments);
+      setImageQuota(refreshed.quota);
+      toast.success(role === "before" ? "Before-trade chart saved" : "After-trade chart saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not upload chart");
+    } finally {
+      setUploadingRole(null);
+    }
+  };
+
+  const handleDeleteImage = async (attachment: JournalAttachment) => {
+    setDeletingAttachmentId(attachment.id);
+    try {
+      await deleteJournalImage(attachment.id);
+      setAttachments((current) => current.filter((item) => item.id !== attachment.id));
+      if (tradeId) {
+        const refreshed = await listJournalImages(tradeId);
+        setImageQuota(refreshed.quota);
+      }
+      toast.success("Chart removed");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not remove chart");
+    } finally {
+      setDeletingAttachmentId(null);
+    }
+  };
+
+  const imageFor = (role: JournalImageRole) =>
+    attachments.find((item) => item.role === role) ?? null;
+
+  const renderChartUploader = (role: JournalImageRole, label: string) => {
+    const attachment = imageFor(role);
+    const uploading = uploadingRole === role;
+
+    if (attachment) {
+      return (
+        <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-secondary/30">
+          <img
+            src={attachment.url}
+            alt={label}
+            className="max-h-[520px] w-full bg-black/20 object-contain"
+            loading="lazy"
+          />
+          <div className="flex items-center justify-between gap-3 px-3 py-3">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-foreground">{label}</p>
+              <p className="text-[11px] text-muted-foreground">
+                {(attachment.sizeBytes / 1024).toFixed(0)} KB
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-xl bg-background px-3 text-xs font-semibold text-foreground">
+                <Upload className="h-3.5 w-3.5" />
+                Replace
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={uploading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0] ?? null;
+                    event.currentTarget.value = "";
+                    void handleImageSelection(role, file);
+                  }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => void handleDeleteImage(attachment)}
+                disabled={deletingAttachmentId === attachment.id}
+                className="inline-flex h-9 items-center gap-2 rounded-xl bg-background px-3 text-xs font-semibold text-muted-foreground disabled:opacity-50"
+              >
+                {deletingAttachmentId === attachment.id ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Trash2 className="h-3.5 w-3.5" />
+                )}
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <label className="mt-4 flex min-h-40 cursor-pointer items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/40 px-4 text-center transition hover:bg-secondary/60">
+        <div>
+          {uploading ? (
+            <Loader2 className="mx-auto h-5 w-5 animate-spin text-muted-foreground" />
+          ) : (
+            <Camera className="mx-auto h-5 w-5 text-muted-foreground" />
+          )}
+          <p className="mt-2 text-sm font-semibold text-foreground">
+            {uploading ? "Uploading chart…" : `Add ${label.toLowerCase()}`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            PNG, JPEG or WebP. Poscal compresses images before upload.
+          </p>
+          <input
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            disabled={uploading}
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              event.currentTarget.value = "";
+              void handleImageSelection(role, file);
+            }}
+          />
+        </div>
+      </label>
+    );
   };
 
   const statusLabel = (() => {
@@ -311,15 +472,7 @@ const TradeNotebook = () => {
 
         <section className="border-b border-border/60 py-7">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Before the trade</p>
-          <div className="mt-4 flex min-h-36 items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/40 px-4 text-center">
-            <div>
-              <Camera className="mx-auto h-5 w-5 text-muted-foreground" />
-              <p className="mt-2 text-sm font-semibold text-foreground">Before-trade chart</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                Secure chart uploads are the next layer. The notebook data model is ready for them.
-              </p>
-            </div>
-          </div>
+          {renderChartUploader("before", "Before-trade chart")}
 
           <label className="mt-6 block">
             <span className="text-sm font-semibold text-foreground">Why did you take this trade?</span>
@@ -380,15 +533,7 @@ const TradeNotebook = () => {
 
         <section className="border-b border-border/60 py-7">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">After the trade</p>
-          <div className="mt-4 flex min-h-36 items-center justify-center rounded-2xl border border-dashed border-border bg-secondary/40 px-4 text-center">
-            <div>
-              <Camera className="mx-auto h-5 w-5 text-muted-foreground" />
-              <p className="mt-2 text-sm font-semibold text-foreground">After-trade chart</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                This slot will use the same private R2 attachment system as the before chart.
-              </p>
-            </div>
-          </div>
+          {renderChartUploader("after", "After-trade chart")}
 
           <textarea
             value={draft.post_trade_review}
@@ -417,6 +562,12 @@ const TradeNotebook = () => {
                 : "Your first note will start this journal"}
             </span>
           </div>
+
+          {imageQuota ? (
+            <p className="mt-3 text-[11px] text-muted-foreground">
+              Journal image storage: {(imageQuota.usedBytes / (1024 * 1024)).toFixed(1)} MB of {(imageQuota.limitBytes / (1024 * 1024)).toFixed(0)} MB · {imageQuota.attachmentCount} of {imageQuota.limitCount} images
+            </p>
+          ) : null}
 
           {saveState === "error" ? (
             <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">
