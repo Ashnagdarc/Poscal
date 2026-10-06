@@ -26,6 +26,7 @@ import { useCurrency } from "@/contexts/CurrencyContext";
 import type { JournalEntry } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
 import type { JournalTradeStatsSnapshot } from "@/hooks/queries/use-journal-trade-stats";
+import type { JournalPerformanceSummary } from "@/hooks/queries/use-journal-trade-facts";
 import {
   computeDailyPnl,
   computeDayOfWeekPerformance,
@@ -64,6 +65,7 @@ interface JournalAnalyticsTabsProps {
   canLoadMoreTrades?: boolean;
   isLoadingMoreTrades?: boolean;
   onLoadMoreTrades?: () => void;
+  serverPerformance?: JournalPerformanceSummary | null;
 }
 
 const MetricCard = ({
@@ -259,17 +261,26 @@ const CumulativePnlAreaChart = ({
   currencySymbol,
   startingBalance = 0,
   timeZone = null,
+  equityPointsOverride = null,
 }: {
   trades: JournalTrade[];
   calculatorResults?: JournalEntry[];
   currencySymbol: string;
   startingBalance?: number;
   timeZone?: string | null;
+  equityPointsOverride?: Array<{
+    label: string;
+    value: number;
+    tradePnl: number;
+    pair: string | null;
+    dateKey: string;
+  }> | null;
 }) => {
-  const equityPoints = useMemo(
+  const localEquityPoints = useMemo(
     () => computeEquityCurve(trades, calculatorResults, startingBalance, timeZone),
     [trades, calculatorResults, startingBalance, timeZone],
   );
+  const equityPoints = equityPointsOverride ?? localEquityPoints;
 
   const chartData = useMemo(
     () =>
@@ -370,6 +381,7 @@ export const JournalAnalyticsTabs = ({
   canLoadMoreTrades = false,
   isLoadingMoreTrades = false,
   onLoadMoreTrades,
+  serverPerformance = null,
 }: JournalAnalyticsTabsProps) => {
   void _calculatorResults;
   const { currency } = useCurrency();
@@ -422,14 +434,20 @@ export const JournalAnalyticsTabs = ({
       maxConsecutiveLosses: serverStats.maxConsecutiveLosses,
     };
   }, [localStats, serverStats]);
-  const dailyPnl = useMemo(() => computeDailyPnl(trades, timeZone), [trades, timeZone]);
-  const dayPerformance = useMemo(
+  const localDailyPnl = useMemo(() => computeDailyPnl(trades, timeZone), [trades, timeZone]);
+  const localDayPerformance = useMemo(
     () => computeDayOfWeekPerformance(trades, timeZone),
     [trades, timeZone],
   );
-  const strategyBreakdown = useMemo(() => computeStrategyBreakdown(trades), [trades]);
-  const sessionBreakdown = useMemo(() => computeSessionBreakdown(trades), [trades]);
-  const instrumentBreakdown = useMemo(() => computeInstrumentBreakdown(trades), [trades]);
+  const localStrategyBreakdown = useMemo(() => computeStrategyBreakdown(trades), [trades]);
+  const localSessionBreakdown = useMemo(() => computeSessionBreakdown(trades), [trades]);
+  const localInstrumentBreakdown = useMemo(() => computeInstrumentBreakdown(trades), [trades]);
+
+  const dailyPnl = serverPerformance?.dailyPnl ?? localDailyPnl;
+  const dayPerformance = serverPerformance?.dayPerformance ?? localDayPerformance;
+  const strategyBreakdown = (serverPerformance?.strategyBreakdown ?? localStrategyBreakdown) as PerformanceBreakdownRow[];
+  const sessionBreakdown = (serverPerformance?.sessionBreakdown ?? localSessionBreakdown) as PerformanceBreakdownRow[];
+  const instrumentBreakdown = (serverPerformance?.instrumentBreakdown ?? localInstrumentBreakdown) as PerformanceBreakdownRow[];
   const visibleTrades = useMemo(
     () => feedTrades ?? [...trades].sort((left, right) => right.created_at.localeCompare(left.created_at)).slice(0, 8),
     [feedTrades, trades],
@@ -478,6 +496,12 @@ export const JournalAnalyticsTabs = ({
           Add Trade
         </Button>
       </div>
+
+      {serverPerformance?.truncated ? (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+          Detailed performance views are capped at 20,000 closed trades. Lifetime headline totals remain complete.
+        </div>
+      ) : null}
 
       <Tabs value={activeTab} onValueChange={(value) => onTabChange(value as JournalTab)}>
         <TabsList className="grid h-auto w-full grid-cols-4 rounded-2xl bg-secondary p-1">
@@ -775,6 +799,7 @@ export const JournalAnalyticsTabs = ({
                   currencySymbol={currency.symbol}
                   startingBalance={startingBalance}
                   timeZone={timeZone}
+                  equityPointsOverride={serverPerformance?.equityCurve ?? null}
                 />
               </section>
 

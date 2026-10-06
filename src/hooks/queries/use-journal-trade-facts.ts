@@ -7,6 +7,31 @@ import { useJournal } from "@/contexts/JournalContext";
 import { fromConvexTrade, type JournalTrade } from "@/lib/convexJournal";
 import type { MonthlyReturnsGrid, ResultDaySummary } from "@/lib/historyResults";
 
+export type JournalPerformanceSummary = {
+  ready: boolean;
+  truncated: boolean;
+  factCount?: number;
+  dailyPnl?: Array<{ dateKey: string; label: string; pnl: number; trades: number }>;
+  dayPerformance?: Array<{
+    day: string; shortDay: string; wins: number; losses: number; total: number; winRate: number; pnl: number;
+  }>;
+  strategyBreakdown?: Array<{
+    key: string; label: string; trades: number; wins: number; losses: number;
+    breakeven: number; winRate: number; pnl: number; expectancy: number | null;
+  }>;
+  sessionBreakdown?: Array<{
+    key: string; label: string; trades: number; wins: number; losses: number;
+    breakeven: number; winRate: number; pnl: number; expectancy: number | null;
+  }>;
+  instrumentBreakdown?: Array<{
+    key: string; label: string; trades: number; wins: number; losses: number;
+    breakeven: number; winRate: number; pnl: number; expectancy: number | null;
+  }>;
+  equityCurve?: Array<{
+    label: string; value: number; tradePnl: number; pair: string | null; dateKey: string;
+  }>;
+};
+
 type MonthSummaryResult = {
   ready: boolean;
   days: Array<{
@@ -103,6 +128,13 @@ export const useJournalTradeFacts = ({
       : "skip",
   ) as MonthlyReturnsResult | undefined;
 
+  const performance = useQuery(
+    anyApi.journalTradeFacts.getPerformanceSummary,
+    ready && activeJournalId
+      ? { journalId: activeJournalId, timeZone: timeZone ?? null }
+      : "skip",
+  ) as JournalPerformanceSummary | undefined;
+
   const selection = useQuery(
     anyApi.journalTradeFacts.listForSelection,
     ready && activeJournalId && (selectedMonthKey || selectedDateKey)
@@ -147,6 +179,8 @@ export const useJournalTradeFacts = ({
     daySummaries,
     monthlyReturns: grid,
     selectedTrades,
+    performanceSummary: performance?.ready ? performance : null,
+    isPerformanceLoading: Boolean(ready && performance === undefined),
     isSelectionLoading: Boolean(ready && (selectedMonthKey || selectedDateKey) && selection === undefined),
   };
 };
