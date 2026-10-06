@@ -17,6 +17,7 @@ const assertOwnedTrade = async (ctx: any, userId: string, tradeId: any) => {
   const trade = await ctx.db.get(tradeId);
   if (!trade || trade.userId !== userId) throw new Error("Journal entry not found");
   if (!trade.journalId) throw new Error("Trade is not attached to a journal");
+  if (trade.deletionRequestedAtMs) throw new Error("Journal entry is being deleted");
   return trade;
 };
 
