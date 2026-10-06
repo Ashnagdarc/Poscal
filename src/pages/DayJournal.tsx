@@ -8,7 +8,12 @@ import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
 import { ProgressTracker } from "@/components/journal/ProgressTracker";
 import { useJournal } from "@/contexts/JournalContext";
 import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
-import { useAddTradeMutation, useTradesQuery, type ManualTradeInput } from "@/hooks/queries/use-trades-query";
+import {
+  useAddTradeMutation,
+  useCreateNotebookDraftMutation,
+  useTradesQuery,
+  type ManualTradeInput,
+} from "@/hooks/queries/use-trades-query";
 import { detectBrowserTimeZone } from "@/lib/timezones";
 import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 
@@ -28,6 +33,7 @@ const DayJournal = () => {
   const { activeJournal } = useJournal();
   const { data: loadedTrades = [] } = useTradesQuery();
   const addTradeMutation = useAddTradeMutation();
+  const createNotebookDraftMutation = useCreateNotebookDraftMutation();
 
   const [showChooser, setShowChooser] = useState(false);
   const [showManual, setShowManual] = useState(false);
@@ -61,7 +67,13 @@ const DayJournal = () => {
     );
   }, [factTrades, loadedTrades, timeZone, validDateKey]);
 
-  const dayPnl = dayTrades.reduce((sum, trade) => sum + (trade.pnl ?? 0), 0);
+  const analyticsTrades = useMemo(
+    () => loadedTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
+    [loadedTrades],
+  );
+  const dayPnl = dayTrades
+    .filter((trade) => trade.journal_type !== "notebook_draft")
+    .reduce((sum, trade) => sum + (trade.pnl ?? 0), 0);
 
   const handleSave = async (input: ManualTradeInput) => {
     const trade = await addTradeMutation.mutateAsync(input);
@@ -165,14 +177,22 @@ const DayJournal = () => {
                 >
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="truncate text-sm font-bold text-foreground">{trade.pair}</p>
+                      <p className="truncate text-sm font-bold text-foreground">
+                        {trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair}
+                      </p>
                       <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
                         {trade.status}
                       </span>
                     </div>
                     <div className="mt-1 flex items-center gap-1 text-[11px] text-muted-foreground">
                       <Clock3 className="h-3 w-3" />
-                      <span>{trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long"}</span>
+                      <span>
+                        {trade.journal_type === "notebook_draft"
+                          ? "Manual notebook"
+                          : trade.direction === "sell" || trade.direction === "short"
+                            ? "Short"
+                            : "Long"}
+                      </span>
                       <span>·</span>
                       <span>{trade.journal_status === "complete" ? "Journal complete" : trade.journal_status === "draft" ? "Journal in progress" : "Open notebook"}</span>
                     </div>
@@ -198,7 +218,7 @@ const DayJournal = () => {
             <p className="text-xs text-muted-foreground">Optional notes for the whole trading day.</p>
           </div>
           <ProgressTracker
-            trades={loadedTrades}
+            trades={analyticsTrades}
             calculatorResults={[]}
             dateKey={validDateKey}
             timeZone={timeZone}
@@ -212,11 +232,19 @@ const DayJournal = () => {
         onOpenChange={setShowChooser}
         onManual={() => {
           setShowChooser(false);
-          setShowManual(true);
+          const entryDate = new Date(`${validDateKey}T12:00:00`).toISOString();
+          void createNotebookDraftMutation.mutateAsync(entryDate)
+            .then((draftTrade) => {
+              navigate(`/journal/trade/${draftTrade.id}`);
+            })
+            .catch((error) => {
+              console.error("[day-journal] Failed to open manual notebook", error);
+              toast.error("Could not open a new notebook.");
+            });
         }}
         onAutomatic={() => {
           setShowChooser(false);
-          navigate(`/calculator?journalLog=1&journalDate=${encodeURIComponent(validDateKey)}`);
+          setShowManual(true);
         }}
       />
 
