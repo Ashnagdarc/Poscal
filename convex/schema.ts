@@ -106,6 +106,35 @@ export default defineSchema({
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
     .index("by_external_id", ["externalId"]),
 
+  journalTradeFacts: defineTable({
+    userId: v.string(),
+    journalId: v.id("tradingAccounts"),
+    tradeId: v.id("tradingJournal"),
+    analyticsAtMs: v.number(),
+    pair: v.string(),
+    tags: nullableString,
+    pnl: v.number(),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+  })
+    .index("by_trade", ["tradeId"])
+    .index("by_user_journal_date", ["userId", "journalId", "analyticsAtMs"]),
+
+  journalTradeFactsBackfills: defineTable({
+    userId: v.string(),
+    journalId: v.id("tradingAccounts"),
+    sourceVersion: v.number(),
+    status: v.union(
+      v.literal("running"),
+      v.literal("complete"),
+      v.literal("failed"),
+    ),
+    cursor: nullableString,
+    processedTrades: v.number(),
+    startedAtMs: v.number(),
+    updatedAtMs: v.number(),
+  }).index("by_user_journal", ["userId", "journalId"]),
+
   journalTradeStats: defineTable({
     userId: v.string(),
     journalId: v.id("tradingAccounts"),

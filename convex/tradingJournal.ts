@@ -87,6 +87,64 @@ const bumpJournalStatsVersion = async (
   });
 };
 
+const syncTradeFact = async (
+  ctx: { db: any },
+  trade: {
+    _id: Id<"tradingJournal">;
+    userId: string;
+    journalId?: Id<"tradingAccounts"> | null;
+    status: "open" | "closed" | "cancelled";
+    pair: string;
+    tags?: string | null;
+    pnl?: number | null;
+    exitDateMs?: number | null;
+    entryDateMs?: number | null;
+    createdAtMs: number;
+  },
+) => {
+  const existing = await ctx.db
+    .query("journalTradeFacts")
+    .withIndex("by_trade", (q: any) => q.eq("tradeId", trade._id))
+    .unique();
+
+  if (!trade.journalId || trade.status !== "closed") {
+    if (existing) await ctx.db.delete(existing._id);
+    return;
+  }
+
+  const now = Date.now();
+  const payload = {
+    userId: trade.userId,
+    journalId: trade.journalId,
+    tradeId: trade._id,
+    analyticsAtMs: trade.exitDateMs ?? trade.entryDateMs ?? trade.createdAtMs,
+    pair: trade.pair,
+    tags: trade.tags ?? null,
+    pnl: trade.pnl ?? 0,
+    updatedAtMs: now,
+  };
+
+  if (existing) {
+    await ctx.db.patch(existing._id, payload);
+  } else {
+    await ctx.db.insert("journalTradeFacts", {
+      ...payload,
+      createdAtMs: now,
+    });
+  }
+};
+
+const removeTradeFact = async (
+  ctx: { db: any },
+  tradeId: Id<"tradingJournal">,
+) => {
+  const existing = await ctx.db
+    .query("journalTradeFacts")
+    .withIndex("by_trade", (q: any) => q.eq("tradeId", tradeId))
+    .unique();
+  if (existing) await ctx.db.delete(existing._id);
+};
+
 const queueUserAlert = async (
   ctx: { db: any },
   args: {
@@ -433,6 +491,10 @@ export const createEntry = mutation({
       updatedAtMs: now,
     });
 
+    const insertedTrade = await ctx.db.get(insertedId);
+    if (insertedTrade) {
+      await syncTradeFact(ctx, insertedTrade);
+    }
     await bumpJournalStatsVersion(ctx, userId, args.journalId ?? null);
 
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
@@ -508,6 +570,10 @@ export const updateEntry = mutation({
       updatedAtMs: Date.now(),
     });
 
+    const updatedTrade = await ctx.db.get(id);
+    if (updatedTrade) {
+      await syncTradeFact(ctx, updatedTrade);
+    }
     await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
 
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
@@ -532,6 +598,7 @@ export const deleteEntry = mutation({
       throw new Error("Journal entry not found");
     }
 
+    await removeTradeFact(ctx, args.id);
     await ctx.db.delete(args.id);
     await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
     return { success: true };
@@ -554,13 +621,18 @@ export const saveMany = mutation({
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
       assertValidTradeFields(item);
-      ids.push(await ctx.db.insert("tradingJournal", {
+      const insertedId = await ctx.db.insert("tradingJournal", {
         ...item,
         userId,
         journalId: item.journalId ?? null,
         createdAtMs: now,
         updatedAtMs: now,
-      }));
+      });
+      ids.push(insertedId);
+      const insertedTrade = await ctx.db.get(insertedId);
+      if (insertedTrade) {
+        await syncTradeFact(ctx, insertedTrade);
+      }
       if (item.journalId) touchedJournalIds.add(item.journalId);
     }
 

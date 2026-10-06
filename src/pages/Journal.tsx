@@ -40,6 +40,7 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
+import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
 import { usePaginatedCalculatorHistory } from "@/hooks/queries/use-calculator-history-query";
 import { toast } from "sonner";
 import { useActionError } from "@/contexts/ActionErrorContext";
@@ -210,6 +211,19 @@ const Journal = () => {
   const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
   const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
 
+  const selectedDateKey = selectedCalendarDate ? toDateKey(selectedCalendarDate) : undefined;
+  const {
+    ready: areTradeFactsReady,
+    daySummaries: factDaySummaries,
+    monthlyReturns: factMonthlyReturns,
+    selectedTrades: factSelectedTrades,
+  } = useJournalTradeFacts({
+    calendarMonth,
+    selectedMonthKey,
+    selectedDateKey,
+    timeZone: preferredTimeZone,
+  });
+
   const startingBalance = activeJournal?.startingBalance ?? 0;
 
   useEffect(() => {
@@ -276,41 +290,25 @@ const Journal = () => {
 
   const today = useMemo(() => startOfDay(new Date()), []);
 
-  const resultDaySummaries = useMemo(
-    () => buildResultDaySummaries(items, manualTrades, preferredTimeZone),
-    [items, manualTrades, preferredTimeZone],
+  const fallbackDaySummaries = useMemo(
+    () => buildResultDaySummaries([], manualTrades, preferredTimeZone),
+    [manualTrades, preferredTimeZone],
   );
 
-  const monthlyReturns = useMemo(
-    () => buildMonthlyReturnsGrid(items, manualTrades, today, startingBalance, preferredTimeZone),
-    [items, manualTrades, today, startingBalance, preferredTimeZone],
+  const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
+
+  const fallbackMonthlyReturns = useMemo(
+    () => buildMonthlyReturnsGrid([], manualTrades, today, startingBalance, preferredTimeZone),
+    [manualTrades, today, startingBalance, preferredTimeZone],
   );
 
-  const filteredItems = useMemo(() => {
-    if (selectedMonthKey) {
-      return items.filter((item) => {
-        if (item.status === "open") return false;
-        const resultDate = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
-        return toDateKeyInTimeZone(resultDate, preferredTimeZone).startsWith(selectedMonthKey);
-      });
-    }
-
-    if (!selectedCalendarDate) {
-      return items;
-    }
-
-    // Calendar cells use YYYY-MM-DD keys; selection Date is noon local for that key.
-    const targetKey = toDateKey(selectedCalendarDate);
-    return items.filter((item) => {
-      const resultDate = item.closedAt ?? item.openedAt ?? item.updatedAt ?? item.createdAt;
-      return (
-        item.status !== "open"
-        && toDateKeyInTimeZone(resultDate, preferredTimeZone) === targetKey
-      );
-    });
-  }, [items, selectedCalendarDate, selectedMonthKey, preferredTimeZone]);
+  const monthlyReturns = areTradeFactsReady ? factMonthlyReturns : fallbackMonthlyReturns;
 
   const filteredManualTrades = useMemo(() => {
+    if (areTradeFactsReady) {
+      return factSelectedTrades;
+    }
+
     if (selectedMonthKey) {
       return manualTrades.filter((trade) => {
         if (trade.status !== "closed") return false;
@@ -329,7 +327,14 @@ const Journal = () => {
       const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
       return toDateKeyInTimeZone(new Date(raw), preferredTimeZone) === targetKey;
     });
-  }, [manualTrades, selectedCalendarDate, selectedMonthKey, preferredTimeZone]);
+  }, [
+    areTradeFactsReady,
+    factSelectedTrades,
+    manualTrades,
+    preferredTimeZone,
+    selectedCalendarDate,
+    selectedMonthKey,
+  ]);
 
   const openResultEditor = (item: JournalEntry) => {
     setItemForResult(item);
@@ -584,7 +589,7 @@ const Journal = () => {
             <div data-tour-id="journal-growth">
               <TradingGrowthChart
                 trades={manualTrades}
-                calculatorResults={items}
+                calculatorResults={[]}
                 startingBalance={startingBalance}
               />
             </div>
@@ -682,8 +687,8 @@ const Journal = () => {
                           })}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      {filteredItems.length + filteredManualTrades.length} result
-                      {filteredItems.length + filteredManualTrades.length === 1 ? "" : "s"}
+                      {filteredManualTrades.length} result
+                      {filteredManualTrades.length === 1 ? "" : "s"}
                       {selectedMonthKey ? " this month" : " on this day"}
                     </p>
                   </div>
@@ -699,7 +704,7 @@ const Journal = () => {
                   </button>
                 </div>
 
-                {filteredItems.length === 0 && filteredManualTrades.length === 0 ? (
+                {filteredManualTrades.length === 0 ? (
                   <div className="rounded-2xl bg-secondary p-5 text-center text-muted-foreground">
                     <p className="font-medium text-foreground">No results for this selection</p>
                     <p className="mt-1 text-sm">Pick another month or day.</p>
@@ -752,41 +757,7 @@ const Journal = () => {
                   );
                 })}
 
-                {filteredItems.map((item) => (
-                  <article key={item.id} className="rounded-2xl bg-secondary p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-bold text-foreground">{item.symbol}</h2>
-                          <span className="rounded-full bg-background px-2.5 py-1 text-[11px] font-semibold text-foreground">
-                            {formatOrderType(item.orderType)}
-                          </span>
-                          <span className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${STATUS_META[item.status].className}`}>
-                            {STATUS_META[item.status].label}
-                          </span>
-                        </div>
-                        <div className="mt-2 flex items-center gap-1 text-xs text-muted-foreground">
-                          <Clock3 className="h-3.5 w-3.5" />
-                          <span>{formatDate(item.closedAt ?? item.createdAt)}</span>
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">P&L</p>
-                        <p className={`text-lg font-bold ${
-                          (item.pnlAmount ?? 0) > 0
-                            ? "text-emerald-400"
-                            : (item.pnlAmount ?? 0) < 0
-                              ? "text-red-400"
-                              : "text-foreground"
-                        }`}>
-                          {item.pnlAmount === null || item.pnlAmount === undefined
-                            ? "—"
-                            : `${item.pnlAmount > 0 ? "+" : ""}${formatMoney(item.pnlAmount, 2)}`}
-                        </p>
-                      </div>
-                    </div>
-                  </article>
-                ))}
+
               </section>
             ) : null}
 
