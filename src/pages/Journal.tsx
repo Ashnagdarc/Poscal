@@ -29,6 +29,8 @@ import {
   type JournalEntry,
   type SavedCalculationStatus,
   updateJournalEntry,
+  uploadCalculatorScreenshot,
+  resolveCalculatorScreenshotUrls,
 } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
 import {
@@ -201,6 +203,10 @@ const Journal = () => {
   const [resultRInput, setResultRInput] = useState("");
   const [noteInput, setNoteInput] = useState("");
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
+  const [resolvedStorageScreenshotUrl, setResolvedStorageScreenshotUrl] = useState<string | null>(null);
+  const [selectedStorageScreenshotUrl, setSelectedStorageScreenshotUrl] = useState<string | null>(null);
+  const [screenshotRemoved, setScreenshotRemoved] = useState(false);
   const [calendarMonth, setCalendarMonth] = useState(() => startOfDay(new Date()));
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<Date | undefined>(undefined);
   const [selectedMonthKey, setSelectedMonthKey] = useState<string | undefined>(undefined);
@@ -336,12 +342,45 @@ const Journal = () => {
     selectedMonthKey,
   ]);
 
+  useEffect(() => {
+    let cancelled = false;
+    setSelectedStorageScreenshotUrl(null);
+
+    if (!selectedItem?.screenshotStorageIds?.length) return () => { cancelled = true; };
+
+    void resolveCalculatorScreenshotUrls(selectedItem.id)
+      .then((urls) => {
+        if (!cancelled) setSelectedStorageScreenshotUrl(urls[0] ?? null);
+      })
+      .catch(() => undefined);
+
+    return () => { cancelled = true; };
+  }, [selectedItem?.id, selectedItem?.screenshotStorageIds?.join("|")]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setResolvedStorageScreenshotUrl(null);
+
+    if (!itemForResult?.screenshotStorageIds?.length) return () => { cancelled = true; };
+
+    void resolveCalculatorScreenshotUrls(itemForResult.id)
+      .then((urls) => {
+        if (!cancelled) setResolvedStorageScreenshotUrl(urls[0] ?? null);
+      })
+      .catch(() => undefined);
+
+    return () => { cancelled = true; };
+  }, [itemForResult?.id, itemForResult?.screenshotStorageIds?.join("|")]);
+
   const openResultEditor = (item: JournalEntry) => {
     setItemForResult(item);
     setResultStatus(item.status === "open" ? "win" : item.status);
     setPnlAmountInput(item.pnlAmount !== null && item.pnlAmount !== undefined ? String(item.pnlAmount) : "");
     setResultRInput(item.resultR !== null && item.resultR !== undefined ? String(item.resultR) : "");
     setNoteInput(item.note ?? "");
+    setScreenshotFile(null);
+    setScreenshotRemoved(false);
+    setResolvedStorageScreenshotUrl(null);
     setScreenshotPreview(item.screenshotUrls?.[0] ?? null);
   };
 
@@ -350,7 +389,13 @@ const Journal = () => {
     setPnlAmountInput("");
     setResultRInput("");
     setNoteInput("");
+    if (screenshotPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(screenshotPreview);
+    }
     setScreenshotPreview(null);
+    setScreenshotFile(null);
+    setResolvedStorageScreenshotUrl(null);
+    setScreenshotRemoved(false);
     if (screenshotInputRef.current) {
       screenshotInputRef.current.value = "";
     }
@@ -364,16 +409,17 @@ const Journal = () => {
       toast.error("Please choose an image file");
       return;
     }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Screenshot must be 5MB or smaller");
+      return;
+    }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : null;
-      setScreenshotPreview(result);
-    };
-    reader.onerror = () => {
-      toast.error("Failed to load screenshot");
-    };
-    reader.readAsDataURL(file);
+    if (screenshotPreview?.startsWith("blob:")) {
+      URL.revokeObjectURL(screenshotPreview);
+    }
+    setScreenshotFile(file);
+    setScreenshotRemoved(false);
+    setScreenshotPreview(URL.createObjectURL(file));
   };
 
   const handleDelete = async () => {
@@ -402,6 +448,18 @@ const Journal = () => {
     if (!itemForResult) return;
 
     try {
+      let screenshotStorageIds = itemForResult.screenshotStorageIds ?? null;
+      let screenshotUrls = itemForResult.screenshotUrls ?? null;
+
+      if (screenshotRemoved) {
+        screenshotStorageIds = null;
+        screenshotUrls = null;
+      } else if (screenshotFile && user?.id) {
+        const storageId = await uploadCalculatorScreenshot(screenshotFile);
+        screenshotStorageIds = [storageId];
+        screenshotUrls = null;
+      }
+
       const nextItems = await updateJournalEntry(
         itemForResult.id,
         {
@@ -409,7 +467,8 @@ const Journal = () => {
           pnlAmount: parseNumericInput(pnlAmountInput),
           resultR: parseNumericInput(resultRInput),
           note: noteInput.trim() || null,
-          screenshotUrls: screenshotPreview ? [screenshotPreview] : null,
+          screenshotUrls,
+          screenshotStorageIds,
           closedAt: resultStatus === "open" ? null : new Date(),
         },
         user?.id,
@@ -1036,11 +1095,11 @@ const Journal = () => {
                 </div>
               )}
 
-              {selectedItem.screenshotUrls?.[0] && (
+              {(selectedItem.screenshotUrls?.[0] || selectedStorageScreenshotUrl) && (
                 <div className="rounded-xl bg-secondary px-3 py-3">
                   <p className="text-xs text-muted-foreground">Screenshot</p>
                   <img
-                    src={selectedItem.screenshotUrls[0]}
+                    src={selectedItem.screenshotUrls?.[0] ?? selectedStorageScreenshotUrl ?? ""}
                     alt={`${selectedItem.symbol} trade screenshot`}
                     className="mt-2 max-h-64 w-full rounded-xl object-cover"
                   />
@@ -1174,10 +1233,16 @@ const Journal = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3">
                   <label className="text-sm font-medium text-foreground">Screenshot</label>
-                  {screenshotPreview && (
+                  {(screenshotPreview || resolvedStorageScreenshotUrl) && (
                     <button
                       onClick={() => {
+                        if (screenshotPreview?.startsWith("blob:")) {
+                          URL.revokeObjectURL(screenshotPreview);
+                        }
                         setScreenshotPreview(null);
+                        setScreenshotFile(null);
+                        setResolvedStorageScreenshotUrl(null);
+                        setScreenshotRemoved(true);
                         if (screenshotInputRef.current) {
                           screenshotInputRef.current.value = "";
                         }
@@ -1198,10 +1263,10 @@ const Journal = () => {
                   className="hidden"
                 />
 
-                {screenshotPreview ? (
+                {screenshotPreview || resolvedStorageScreenshotUrl ? (
                   <div className="overflow-hidden rounded-2xl border border-border bg-secondary">
                     <img
-                      src={screenshotPreview}
+                      src={screenshotPreview ?? resolvedStorageScreenshotUrl ?? ""}
                       alt="Trade screenshot preview"
                       className="max-h-72 w-full object-cover"
                     />

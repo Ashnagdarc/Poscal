@@ -55,6 +55,7 @@ export interface SavedCalculationRecord {
   resultR?: number | null;
   note?: string | null;
   screenshotUrls?: string[] | null;
+  screenshotStorageIds?: string[] | null;
   openedAt: Date;
   closedAt?: Date | null;
   createdAt: Date;
@@ -88,6 +89,7 @@ export interface SaveCalculatorHistoryInput extends CalculatorHistoryItem {
   resultR?: number | null;
   note?: string | null;
   screenshotUrls?: string[] | null;
+  screenshotStorageIds?: string[] | null;
   openedAt?: Date | string | number | null;
   closedAt?: Date | string | number | null;
   updatedAt?: Date | string | number | null;
@@ -159,6 +161,7 @@ const toSavedCalculationFromLegacyItem = (
     resultR: null,
     note: null,
     screenshotUrls: null,
+    screenshotStorageIds: null,
     openedAt: parseTimestamp(item.timestamp),
     closedAt: null,
     createdAt: parseTimestamp(item.timestamp),
@@ -206,6 +209,9 @@ const toSavedCalculationFromStoredItem = (item: Record<string, unknown>): SavedC
       note: typeof item.note === "string" ? item.note : null,
       screenshotUrls: Array.isArray(item.screenshotUrls)
         ? item.screenshotUrls.filter((value): value is string => typeof value === "string")
+        : null,
+      screenshotStorageIds: Array.isArray(item.screenshotStorageIds)
+        ? item.screenshotStorageIds.filter((value): value is string => typeof value === "string")
         : null,
       openedAt: parseTimestamp(item.openedAt ?? item.openedAtMs ?? item.createdAt ?? item.timestamp),
       closedAt: item.closedAt || item.closedAtMs ? parseTimestamp(item.closedAt ?? item.closedAtMs) : null,
@@ -327,6 +333,7 @@ const toSavedCalculationRecord = (
     resultR: item.resultR ?? null,
     note: item.note ?? null,
     screenshotUrls: item.screenshotUrls ?? null,
+    screenshotStorageIds: item.screenshotStorageIds ?? null,
     openedAt: parseTimestamp(item.openedAt ?? item.timestamp),
     closedAt: item.closedAt ? parseTimestamp(item.closedAt) : null,
     createdAt: item.timestamp,
@@ -362,6 +369,7 @@ const toConvexInput = (userId: string, item: SaveCalculatorHistoryInput) => {
     resultR: record.resultR ?? null,
     note: record.note ?? null,
     screenshotUrls: record.screenshotUrls ?? null,
+    screenshotStorageIds: (record.screenshotStorageIds as any) ?? null,
     openedAtMs: record.openedAt.getTime(),
     closedAtMs: record.closedAt?.getTime() ?? null,
     stopLossPips: record.stopLossPips ?? null,
@@ -434,6 +442,7 @@ export const fromConvexSavedRecord = (row: {
   resultR?: number | null;
   note?: string | null;
   screenshotUrls?: string[] | null;
+  screenshotStorageIds?: string[] | null;
   openedAtMs?: number | null;
   closedAtMs?: number | null;
   createdAtMs: number;
@@ -467,6 +476,7 @@ export const fromConvexSavedRecord = (row: {
   resultR: row.resultR ?? null,
   note: row.note ?? null,
   screenshotUrls: row.screenshotUrls ?? null,
+  screenshotStorageIds: row.screenshotStorageIds ?? null,
   openedAt: new Date(row.openedAtMs ?? row.createdAtMs),
   closedAt: row.closedAtMs ? new Date(row.closedAtMs) : null,
   createdAt: new Date(row.createdAtMs),
@@ -620,6 +630,45 @@ export const deleteCalculatorHistoryItem = async (
 
 export const deleteJournalEntry = deleteCalculatorHistoryItem;
 
+export const uploadCalculatorScreenshot = async (file: File): Promise<string> => {
+  if (!isConvexEnabled()) {
+    throw new Error("Cloud screenshot storage is unavailable");
+  }
+
+  const client = getAuthenticatedConvexHttpClient();
+  const uploadUrl = await client.mutation(
+    (api as any).calculatorHistory.generateScreenshotUploadUrl,
+    {},
+  );
+
+  const response = await fetch(uploadUrl, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Screenshot upload failed (${response.status})`);
+  }
+
+  const result = (await response.json()) as { storageId?: string };
+  if (!result.storageId) {
+    throw new Error("Screenshot upload succeeded without a storage id");
+  }
+  return result.storageId;
+};
+
+export const resolveCalculatorScreenshotUrls = async (
+  clientId: string,
+): Promise<string[]> => {
+  if (!isConvexEnabled()) return [];
+  const client = getAuthenticatedConvexHttpClient();
+  return await client.query(
+    (api as any).calculatorHistory.getScreenshotUrls,
+    { clientId },
+  ) as string[];
+};
+
 export const updateSavedCalculation = async (
   id: string,
   updates: Partial<SavedCalculationRecord>,
@@ -634,7 +683,10 @@ export const updateSavedCalculation = async (
       pnlAmount: updates.pnlAmount ?? null,
       resultR: updates.resultR ?? null,
       note: updates.note ?? null,
-      screenshotUrls: updates.screenshotUrls ?? null,
+      screenshotUrls: updates.screenshotUrls === undefined ? undefined : updates.screenshotUrls,
+      screenshotStorageIds: updates.screenshotStorageIds === undefined
+        ? undefined
+        : updates.screenshotStorageIds as any,
       closedAtMs: updates.closedAt === null
         ? null
         : updates.closedAt

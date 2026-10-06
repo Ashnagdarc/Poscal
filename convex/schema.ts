@@ -272,6 +272,7 @@ export default defineSchema({
     resultR: nullableNumber,
     note: nullableString,
     screenshotUrls: v.optional(v.union(v.array(v.string()), v.null())),
+    screenshotStorageIds: v.optional(v.union(v.array(v.id("_storage")), v.null())),
     openedAtMs: nullableNumber,
     closedAtMs: nullableNumber,
     createdAtMs: v.number(),
