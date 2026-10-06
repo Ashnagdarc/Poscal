@@ -23,6 +23,12 @@ export interface JournalTrade {
   created_at: string;
   journal_type?: "structured" | "notes";
   rich_content?: unknown;
+  entry_reason?: string | null;
+  during_trade_notes?: string | null;
+  post_trade_review?: string | null;
+  lessons_learned?: string | null;
+  journal_status?: "empty" | "draft" | "complete";
+  journal_updated_at?: string | null;
   images?: Array<{ url: string; caption?: string }>;
   links?: Array<{ url: string; title?: string }>;
   screenshots?: string[];
@@ -67,6 +73,12 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   created_at: new Date(row.createdAtMs).toISOString(),
   journal_type: (row.journalType as "structured" | "notes" | null) ?? "structured",
   rich_content: row.richContent ?? null,
+  entry_reason: row.entryReason ?? null,
+  during_trade_notes: row.duringTradeNotes ?? null,
+  post_trade_review: row.postTradeReview ?? null,
+  lessons_learned: row.lessonsLearned ?? null,
+  journal_status: row.journalStatus ?? "empty",
+  journal_updated_at: toIsoString(row.journalUpdatedAtMs),
   images: Array.isArray(row.images) ? row.images : [],
   links: Array.isArray(row.links) ? row.links : [],
   screenshots: Array.isArray(row.screenshots) ? row.screenshots : [],
@@ -97,6 +109,12 @@ const toConvexTradeInput = (trade: Record<string, any>) => ({
   notes: trade.notes ?? null,
   journalType: trade.journal_type ?? null,
   richContent: trade.rich_content ?? null,
+  entryReason: trade.entry_reason ?? null,
+  duringTradeNotes: trade.during_trade_notes ?? null,
+  postTradeReview: trade.post_trade_review ?? null,
+  lessonsLearned: trade.lessons_learned ?? null,
+  journalStatus: trade.journal_status ?? "empty",
+  journalUpdatedAtMs: trade.journal_updated_at ? new Date(trade.journal_updated_at).getTime() : null,
   images: trade.images ?? null,
   links: trade.links ?? null,
   screenshots: trade.screenshot_urls ?? trade.screenshots ?? null,
@@ -153,6 +171,24 @@ const toConvexTradePatch = (updates: Record<string, any>) => {
   }
   if ("rich_content" in updates) {
     patch.richContent = updates.rich_content ?? null;
+  }
+  if ("entry_reason" in updates) {
+    patch.entryReason = updates.entry_reason ?? null;
+  }
+  if ("during_trade_notes" in updates) {
+    patch.duringTradeNotes = updates.during_trade_notes ?? null;
+  }
+  if ("post_trade_review" in updates) {
+    patch.postTradeReview = updates.post_trade_review ?? null;
+  }
+  if ("lessons_learned" in updates) {
+    patch.lessonsLearned = updates.lessons_learned ?? null;
+  }
+  if ("journal_status" in updates) {
+    patch.journalStatus = updates.journal_status ?? "empty";
+  }
+  if ("journal_updated_at" in updates) {
+    patch.journalUpdatedAtMs = updates.journal_updated_at ? new Date(updates.journal_updated_at).getTime() : null;
   }
   if ("images" in updates) {
     patch.images = updates.images ?? null;
@@ -239,6 +275,49 @@ export const updateJournalEntry = async (_userId: string, id: string, updates: R
       id: id as any,
       ...toConvexTradePatch(updates),
     });
+    return fromConvexTrade(row);
+  }
+
+  return await tradesApi.update(id, updates);
+};
+
+export const getJournalEntry = async (
+  _userId: string,
+  id: string,
+): Promise<JournalTrade | null> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const row = await client.query(api.tradingJournal.getById, {
+      id: id as any,
+    });
+    return row ? fromConvexTrade(row) : null;
+  }
+
+  return await tradesApi.getOne(id);
+};
+
+export type NotebookPatch = {
+  entry_reason?: string | null;
+  during_trade_notes?: string | null;
+  post_trade_review?: string | null;
+  lessons_learned?: string | null;
+};
+
+export const updateTradeNotebook = async (
+  _userId: string,
+  id: string,
+  updates: NotebookPatch,
+): Promise<JournalTrade> => {
+  if (isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const row = await client.mutation(api.tradingJournal.updateNotebook, {
+      id: id as any,
+      entryReason: updates.entry_reason,
+      duringTradeNotes: updates.during_trade_notes,
+      postTradeReview: updates.post_trade_review,
+      lessonsLearned: updates.lessons_learned,
+    });
+    if (!row) throw new Error("Journal entry not found");
     return fromConvexTrade(row);
   }
 
