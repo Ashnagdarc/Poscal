@@ -359,7 +359,6 @@ const TradeNotebook = () => {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete journal");
       setIsDeletingJournal(false);
-      throw error;
     }
   };
 
