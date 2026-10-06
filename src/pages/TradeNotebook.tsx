@@ -110,7 +110,7 @@ const TradeNotebook = () => {
   const [saveState, setSaveState] = useState<SaveState>("idle");
 
   const hydratedRef = useRef(false);
-  const saveSequenceRef = useRef(0);
+  const revisionRef = useRef(0);
 
   useEffect(() => {
     if (!tradeId || !user?.id) return;
@@ -134,6 +134,7 @@ const TradeNotebook = () => {
         const local = readLocalDraft(tradeId);
         const initial = local && local.updatedAtMs > remote.updatedAtMs ? local : remote;
         setDraft(initial);
+        revisionRef.current = 0;
         setSaveState(local && local.updatedAtMs > remote.updatedAtMs ? "dirty" : "idle");
         hydratedRef.current = true;
       })
@@ -166,18 +167,20 @@ const TradeNotebook = () => {
     if (!hydratedRef.current || !tradeId || !user?.id || saveState !== "dirty") return;
 
     const timer = window.setTimeout(() => {
-      const sequence = ++saveSequenceRef.current;
+      const savingRevision = revisionRef.current;
       setSaveState("saving");
 
       void updateTradeNotebook(user.id, tradeId, patch)
         .then((updated) => {
-          if (sequence !== saveSequenceRef.current) return;
+          // If the user typed again while this request was in flight, do not
+          // mark the newer local draft as saved or clear it.
+          if (savingRevision !== revisionRef.current) return;
           setTrade(updated);
           clearLocalDraft(tradeId);
           setSaveState("saved");
         })
         .catch(() => {
-          if (sequence !== saveSequenceRef.current) return;
+          if (savingRevision !== revisionRef.current) return;
           setSaveState("error");
         });
     }, AUTOSAVE_DELAY_MS);
@@ -191,6 +194,7 @@ const TradeNotebook = () => {
   ) => {
     if (!tradeId) return;
 
+    revisionRef.current += 1;
     setDraft((current) => {
       const next = {
         ...current,
