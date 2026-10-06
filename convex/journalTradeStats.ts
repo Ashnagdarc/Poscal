@@ -1,6 +1,5 @@
+import { anyApi } from "convex/server";
 import { v } from "convex/values";
-
-import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
@@ -263,7 +262,7 @@ export const ensureForJournal = mutation({
       });
     }
 
-    await ctx.scheduler.runAfter(0, internal.journalTradeStats.processBackfill, {
+    await ctx.scheduler.runAfter(0, anyApi.journalTradeStats.processBackfill, {
       backfillId,
     });
     return { status: "started" as const };
@@ -295,7 +294,7 @@ export const processBackfill = internalMutation({
         startedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
-      await ctx.scheduler.runAfter(0, internal.journalTradeStats.processBackfill, {
+      await ctx.scheduler.runAfter(0, anyApi.journalTradeStats.processBackfill, {
         backfillId: backfill._id,
       });
       return;
@@ -323,7 +322,7 @@ export const processBackfill = internalMutation({
         ...acc,
         updatedAtMs: Date.now(),
       });
-      await ctx.scheduler.runAfter(0, internal.journalTradeStats.processBackfill, {
+      await ctx.scheduler.runAfter(0, anyApi.journalTradeStats.processBackfill, {
         backfillId: backfill._id,
       });
       return;
@@ -349,7 +348,7 @@ export const processBackfill = internalMutation({
         startedAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
-      await ctx.scheduler.runAfter(0, internal.journalTradeStats.processBackfill, {
+      await ctx.scheduler.runAfter(0, anyApi.journalTradeStats.processBackfill, {
         backfillId: backfill._id,
       });
       return;
