@@ -24,12 +24,6 @@ export const ResultsCalendar = ({
   summaries,
   today,
 }: ResultsCalendarProps) => {
-  const dayModifiers = {
-    positive: (date: Date) => summaries.get(toDateKey(date))?.tone === "positive",
-    negative: (date: Date) => summaries.get(toDateKey(date))?.tone === "negative",
-    neutral: (date: Date) => summaries.get(toDateKey(date))?.tone === "neutral",
-  };
-
   return (
     <Calendar
       month={month}
@@ -48,84 +42,75 @@ export const ResultsCalendar = ({
 
         onSelectDate(startOfDay(date));
       }}
-      modifiers={dayModifiers}
-      className="w-full max-w-full rounded-2xl bg-background p-2 sm:p-3"
+      className="w-full max-w-full bg-transparent p-0"
       classNames={{
         months: "flex w-full flex-col",
-        month: "w-full space-y-2 sm:space-y-3",
-        caption: "relative flex items-center justify-center px-8 pb-1 pt-1",
-        caption_label: "text-sm font-semibold",
+        month: "w-full space-y-4",
+        caption: "relative flex h-10 items-center justify-center px-12",
+        caption_label: "text-[15px] font-semibold tracking-tight text-foreground",
+        nav: "flex items-center",
+        nav_button:
+          "inline-flex h-8 w-8 items-center justify-center rounded-full border-0 bg-transparent p-0 text-muted-foreground opacity-100 transition hover:bg-background hover:text-foreground",
         nav_button_previous: "absolute left-0",
         nav_button_next: "absolute right-0",
         table: "w-full border-collapse",
         head_row: "flex w-full",
         head_cell:
-          "w-[14.28%] basis-[14.28%] px-0 text-center text-[10px] font-medium text-muted-foreground sm:text-[11px]",
+          "w-[14.285%] basis-[14.285%] px-0 pb-1 text-center text-[10px] font-medium uppercase tracking-wide text-muted-foreground/70 sm:text-[11px]",
         row: "mt-1 flex w-full sm:mt-2",
-        cell: "relative w-[14.28%] basis-[14.28%] p-0.5 sm:p-1",
-        day: "h-11 w-full rounded-lg p-0 text-foreground hover:bg-secondary/80 sm:h-14 sm:rounded-xl",
-        day_selected: "bg-transparent text-foreground ring-2 ring-brand ring-offset-1 ring-offset-background hover:bg-transparent",
+        cell:
+          "relative flex w-[14.285%] basis-[14.285%] items-center justify-center p-0",
+        day:
+          "h-12 w-full rounded-none bg-transparent p-0 font-normal text-foreground hover:bg-transparent focus:bg-transparent sm:h-14",
+        day_selected:
+          "bg-transparent text-foreground hover:bg-transparent focus:bg-transparent",
         day_today: "bg-transparent text-foreground",
-        day_outside: "opacity-30",
-      }}
-      modifiersClassNames={{
-        positive: "!bg-emerald-500/20 !text-foreground",
-        negative: "!bg-red-500/20 !text-foreground",
-        neutral: "!bg-slate-500/20 !text-foreground",
+        day_outside: "text-muted-foreground opacity-30",
+        day_disabled: "text-muted-foreground opacity-30",
       }}
       components={{
-        DayContent: ({ date }: { date: Date }) => {
-          const dateKey = toDateKey(date);
-          const summary = summaries.get(dateKey);
-          const isFuture = startOfDay(date) > today;
+        DayContent: ({
+          date,
+          activeModifiers,
+        }: {
+          date: Date;
+          activeModifiers: Record<string, boolean>;
+        }) => {
+          const summary = summaries.get(toDateKey(date));
           const isCurrentMonth = date.getMonth() === month.getMonth();
-          const toneClass = summary?.tone === "positive"
-            ? "border border-emerald-500/50 bg-emerald-500/20"
-            : summary?.tone === "negative"
-              ? "border border-red-500/50 bg-red-500/20"
-              : summary?.tone === "neutral"
-                ? "border border-slate-400/50 bg-slate-500/20"
-                : isSameDay(date, today)
-                    ? "border border-border bg-secondary/70"
-                    : "";
+          const isToday = isSameDay(date, today);
+          const isSelected = Boolean(activeModifiers.selected);
+
+          const dotClass =
+            summary?.tone === "positive"
+              ? "bg-emerald-400"
+              : summary?.tone === "negative"
+                ? "bg-red-400"
+                : summary?.tone === "neutral"
+                  ? "bg-slate-300"
+                  : "bg-transparent";
 
           return (
-            <div
-              className={cn(
-                "flex h-full w-full flex-col items-center justify-center gap-0.5 rounded-lg sm:gap-1 sm:rounded-xl",
-                isCurrentMonth && toneClass,
-              )}
-            >
-              <span className="text-xs font-semibold leading-none sm:text-sm">
+            <div className="flex h-full w-full flex-col items-center justify-center gap-1">
+              <span
+                className={cn(
+                  "flex h-8 w-8 items-center justify-center rounded-full text-xs font-medium transition sm:h-9 sm:w-9 sm:text-sm",
+                  isCurrentMonth && isToday && !isSelected
+                    ? "ring-1 ring-brand/70 text-foreground"
+                    : "",
+                  isSelected
+                    ? "bg-foreground font-semibold text-background"
+                    : "hover:bg-secondary/70",
+                )}
+              >
                 {date.getDate()}
               </span>
-              {isCurrentMonth && summary && (
-                <>
-                  <span
-                    className={cn(
-                      "h-1.5 w-1.5 rounded-full sm:h-2 sm:w-2",
-                      summary.tone === "positive" && "bg-emerald-400",
-                      summary.tone === "negative" && "bg-red-400",
-                      summary.tone === "neutral" && "bg-slate-300",
-                    )}
-                  />
-                  <span
-                    className={cn(
-                      "hidden text-[9px] font-semibold leading-none sm:inline",
-                      summary.tone === "positive" && "text-emerald-400",
-                      summary.tone === "negative" && "text-red-400",
-                      summary.tone === "neutral" && "text-slate-300",
-                    )}
-                  >
-                    {summary.label}
-                  </span>
-                </>
-              )}
-              {isCurrentMonth && !summary && !isFuture && isSameDay(date, today) && (
-                <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
-                  Today
-                </span>
-              )}
+              <span
+                className={cn(
+                  "h-1 w-1 rounded-full sm:h-1.5 sm:w-1.5",
+                  isCurrentMonth ? dotClass : "bg-transparent",
+                )}
+              />
             </div>
           );
         },
@@ -133,24 +118,3 @@ export const ResultsCalendar = ({
     />
   );
 };
-
-export const ResultsLegend = () => (
-  <div className="grid grid-cols-2 gap-1.5 text-[11px] text-muted-foreground sm:gap-2 sm:text-xs">
-    <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
-      <span>Profitable</span>
-    </div>
-    <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-red-400" />
-      <span>Losing</span>
-    </div>
-    <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-      <span className="h-2 w-2 shrink-0 rounded-full bg-slate-300" />
-      <span>Breakeven</span>
-    </div>
-    <div className="flex items-center gap-2 rounded-xl bg-background px-2.5 py-2 sm:px-3">
-      <span className="h-2 w-2 shrink-0 rounded-full border border-border" />
-      <span>No trade</span>
-    </div>
-  </div>
-);
