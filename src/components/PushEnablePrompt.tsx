@@ -76,9 +76,6 @@ export const PushEnablePrompt = () => {
 
   useEffect(() => {
     if (!eligible) {
-      clearPushPromptSnooze(user?.id);
-      setSnoozed(false);
-      setDismissedThisVisit(true);
       setOpen(false);
       return;
     }
@@ -104,6 +101,9 @@ export const PushEnablePrompt = () => {
             ? "Push notifications are now linked to this Poscal account."
             : "Push notifications are on. Alerts can reach you when Poscal is closed.",
       );
+      clearPushPromptSnooze(user?.id);
+      setSnoozed(false);
+      setDismissedThisVisit(true);
       setOpen(false);
       return;
     }
