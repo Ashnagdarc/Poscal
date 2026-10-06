@@ -90,6 +90,16 @@ export default defineSchema({
     notes: nullableString,
     journalType: nullableString,
     richContent: nullableAny,
+    entryReason: nullableString,
+    duringTradeNotes: nullableString,
+    postTradeReview: nullableString,
+    lessonsLearned: nullableString,
+    journalStatus: v.optional(v.union(
+      v.literal("empty"),
+      v.literal("draft"),
+      v.literal("complete"),
+    )),
+    journalUpdatedAtMs: nullableNumber,
     images: nullableAny,
     links: nullableAny,
     screenshots: nullableAny,
@@ -106,6 +116,33 @@ export default defineSchema({
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
     .index("by_external_id", ["externalId"])
     .index("by_user_external", ["userId", "externalId"]),
+
+  tradeJournalAttachments: defineTable({
+    userId: v.string(),
+    journalId: v.id("tradingAccounts"),
+    tradeId: v.id("tradingJournal"),
+    role: v.union(v.literal("before"), v.literal("after")),
+    storageProvider: v.literal("r2"),
+    objectKey: v.string(),
+    mimeType: v.string(),
+    sizeBytes: v.number(),
+    width: nullableNumber,
+    height: nullableNumber,
+    sortOrder: v.number(),
+    status: v.union(v.literal("pending"), v.literal("ready"), v.literal("deleted")),
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+  })
+    .index("by_trade_role", ["tradeId", "role", "sortOrder"])
+    .index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_status_created", ["status", "createdAtMs"]),
+
+  userStorageUsage: defineTable({
+    userId: v.string(),
+    usedBytes: v.number(),
+    attachmentCount: v.number(),
+    updatedAtMs: v.number(),
+  }).index("by_user", ["userId"]),
 
   journalTradeFacts: defineTable({
     userId: v.string(),
