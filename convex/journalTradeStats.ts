@@ -92,6 +92,10 @@ const fromBackfill = (row: Doc<"journalTradeStatsBackfills">): Accumulator => ({
 });
 
 const accumulateTrade = (acc: Accumulator, trade: Doc<"tradingJournal">) => {
+  if (trade.journalType === "notebook_draft") {
+    return;
+  }
+
   acc.totalTrades += 1;
   acc.processedTrades += 1;
 

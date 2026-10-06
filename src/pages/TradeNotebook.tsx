@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Camera, Check, Clock3, Loader2, Trash2, Upload } from "lucide-react";
+import { ArrowLeft, Camera, Check, Clock3, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
+import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
 import {
   getJournalEntry,
+  updateJournalEntry,
   updateTradeNotebook,
   type JournalTrade,
   type NotebookPatch,
@@ -17,6 +19,7 @@ import {
   type JournalImageQuota,
   type JournalImageRole,
 } from "@/lib/journalImages";
+import type { ManualTradeInput } from "@/hooks/queries/use-trades-query";
 
 type NotebookDraft = {
   entry_reason: string;
@@ -120,6 +123,8 @@ const TradeNotebook = () => {
   const [imageQuota, setImageQuota] = useState<JournalImageQuota | null>(null);
   const [uploadingRole, setUploadingRole] = useState<JournalImageRole | null>(null);
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
+  const [isTradeDetailsOpen, setIsTradeDetailsOpen] = useState(false);
+  const [isSavingTradeDetails, setIsSavingTradeDetails] = useState(false);
 
   const hydratedRef = useRef(false);
   const revisionRef = useRef(0);
@@ -280,6 +285,31 @@ const TradeNotebook = () => {
     }
   };
 
+  const handleSaveTradeDetails = async (input: ManualTradeInput) => {
+    if (!trade || !user?.id) return;
+
+    setIsSavingTradeDetails(true);
+    try {
+      const updated = await updateJournalEntry(user.id, trade.id, {
+        ...input,
+        journal_type: "structured",
+      });
+      setTrade((current) => ({
+        ...updated,
+        entry_reason: current?.entry_reason ?? null,
+        during_trade_notes: current?.during_trade_notes ?? null,
+        post_trade_review: current?.post_trade_review ?? null,
+        lessons_learned: current?.lessons_learned ?? null,
+      }));
+      setIsTradeDetailsOpen(false);
+      toast.success("Trade details saved");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save trade details");
+    } finally {
+      setIsSavingTradeDetails(false);
+    }
+  };
+
   const imageFor = (role: JournalImageRole) =>
     attachments.find((item) => item.role === role) ?? null;
 
@@ -407,6 +437,8 @@ const TradeNotebook = () => {
     );
   }
 
+  const isNotebookDraft = trade.journal_type === "notebook_draft";
+  const displayPair = isNotebookDraft ? "Untitled trade" : trade.pair;
   const pnl = trade.pnl;
   const direction = trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long";
 
@@ -424,7 +456,7 @@ const TradeNotebook = () => {
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{trade.pair}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{displayPair}</p>
             <p className="text-xs text-muted-foreground">{statusLabel}</p>
           </div>
 
@@ -443,13 +475,23 @@ const TradeNotebook = () => {
         <section className="border-b border-border/60 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{trade.pair}</h1>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">{displayPair}</h1>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                <span>{direction}</span>
-                <span>•</span>
-                <span className="capitalize">{trade.status}</span>
-                <span>•</span>
-                <span>{formatDate(trade.entry_date ?? trade.created_at)}</span>
+                {isNotebookDraft ? (
+                  <>
+                    <span>Manual notebook</span>
+                    <span>•</span>
+                    <span>{formatDate(trade.entry_date ?? trade.created_at)}</span>
+                  </>
+                ) : (
+                  <>
+                    <span>{direction}</span>
+                    <span>•</span>
+                    <span className="capitalize">{trade.status}</span>
+                    <span>•</span>
+                    <span>{formatDate(trade.entry_date ?? trade.created_at)}</span>
+                  </>
+                )}
               </div>
             </div>
 
@@ -490,37 +532,57 @@ const TradeNotebook = () => {
         </section>
 
         <section className="border-b border-border/60 py-5">
-          <p className="text-sm font-bold text-foreground">Trade details</p>
-          <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
-            <div>
-              <p className="text-xs text-muted-foreground">Entry</p>
-              <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.entry_price)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Stop loss</p>
-              <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.stop_loss)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Take profit</p>
-              <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.take_profit)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Exit</p>
-              <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.exit_price)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Position size</p>
-              <p className="mt-1 font-semibold text-foreground">
-                {trade.position_size == null ? "—" : `${trade.position_size} lots`}
-              </p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Risk</p>
-              <p className="mt-1 font-semibold text-foreground">
-                {trade.risk_percent == null ? "—" : `${trade.risk_percent}%`}
-              </p>
-            </div>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-bold text-foreground">Trade details</p>
+            <button
+              type="button"
+              onClick={() => setIsTradeDetailsOpen(true)}
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-secondary px-3 text-xs font-semibold text-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              {isNotebookDraft ? "Add details" : "Edit"}
+            </button>
           </div>
+
+          {isNotebookDraft ? (
+            <div className="mt-3 rounded-2xl border border-dashed border-border bg-secondary/30 px-4 py-4">
+              <p className="text-sm font-semibold text-foreground">Details are optional</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Journal first if you want. Add the instrument, direction, prices, P&amp;L or risk later and Poscal will include it in your trade analytics then.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Entry</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.entry_price)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Stop loss</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.stop_loss)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Take profit</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.take_profit)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Exit</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.exit_price)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Position size</p>
+                <p className="mt-1 font-semibold text-foreground">
+                  {trade.position_size == null ? "—" : `${trade.position_size} lots`}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Risk</p>
+                <p className="mt-1 font-semibold text-foreground">
+                  {trade.risk_percent == null ? "—" : `${trade.risk_percent}%`}
+                </p>
+              </div>
+            </div>
+          )}
         </section>
 
         <section className="border-b border-border/60 py-5">
@@ -579,6 +641,14 @@ const TradeNotebook = () => {
           ) : null}
         </section>
       </main>
+
+      <ManualTradeSheet
+        open={isTradeDetailsOpen}
+        onOpenChange={setIsTradeDetailsOpen}
+        trade={trade}
+        isSaving={isSavingTradeDetails}
+        onSave={handleSaveTradeDetails}
+      />
     </div>
   );
 };

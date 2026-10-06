@@ -119,6 +119,7 @@ const syncTradeFact = async (
     journalId?: Id<"tradingAccounts"> | null;
     status: "open" | "closed" | "cancelled";
     pair: string;
+    journalType?: string | null;
     tags?: string | null;
     pnl?: number | null;
     exitDateMs?: number | null;
@@ -131,7 +132,11 @@ const syncTradeFact = async (
     .withIndex("by_trade", (q: any) => q.eq("tradeId", trade._id))
     .unique();
 
-  if (!trade.journalId || trade.status !== "closed") {
+  if (
+    !trade.journalId
+    || trade.status !== "closed"
+    || trade.journalType === "notebook_draft"
+  ) {
     if (existing) await ctx.db.delete(existing._id);
     return;
   }
@@ -578,6 +583,56 @@ export const evaluateTradeAlerts = internalMutation({
   },
 });
 
+export const createNotebookDraft = mutation({
+  args: {
+    journalId: v.id("tradingAccounts"),
+    entryDateMs: nullableNumberArg,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    await assertJournalOwned(ctx, userId, args.journalId);
+
+    const now = Date.now();
+    const insertedId = await ctx.db.insert("tradingJournal", {
+      userId,
+      journalId: args.journalId,
+      externalId: null,
+      pair: "JOURNAL",
+      direction: "long",
+      entryPrice: null,
+      exitPrice: null,
+      stopLoss: null,
+      takeProfit: null,
+      riskPercent: null,
+      riskAmount: null,
+      positionSize: null,
+      pnl: null,
+      pnlPercent: null,
+      status: "open",
+      notes: null,
+      journalType: "notebook_draft",
+      richContent: null,
+      journalStatus: "empty",
+      journalPreview: null,
+      journalUpdatedAtMs: null,
+      images: null,
+      links: null,
+      screenshots: null,
+      marketCondition: null,
+      tags: null,
+      entryDateMs: args.entryDateMs ?? now,
+      exitDateMs: null,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+
+    // Notebook drafts deliberately do not touch trade facts, statsVersion, or
+    // trading alerts. They become a real analytics trade only when the user
+    // adds structured trade details.
+    return await ctx.db.get(insertedId);
+  },
+});
+
 export const createEntry = mutation({
   args: tradeCreateFields,
   handler: async (ctx, args) => {
@@ -677,22 +732,33 @@ export const updateEntry = mutation({
     if (updatedTrade) {
       await syncTradeFact(ctx, updatedTrade);
 
+      const draftStateChanged =
+        (existing.journalType === "notebook_draft")
+        !== (updatedTrade.journalType === "notebook_draft");
       const statsChanged =
-        updatedTrade.status !== existing.status
-        || (updatedTrade.pnl ?? null) !== (existing.pnl ?? null)
-        || (updatedTrade.riskAmount ?? null) !== (existing.riskAmount ?? null);
+        draftStateChanged
+        || (
+          updatedTrade.journalType !== "notebook_draft"
+          && (
+            updatedTrade.status !== existing.status
+            || (updatedTrade.pnl ?? null) !== (existing.pnl ?? null)
+            || (updatedTrade.riskAmount ?? null) !== (existing.riskAmount ?? null)
+          )
+        );
 
       if (statsChanged) {
         await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
       }
     }
 
-    await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
-      userId,
-      tradeId: id,
-      previousPnl: existing.pnl ?? null,
-      previousStatus: existing.status,
-    });
+    if (updatedTrade?.journalType !== "notebook_draft") {
+      await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
+        userId,
+        tradeId: id,
+        previousPnl: existing.pnl ?? null,
+        previousStatus: existing.status,
+      });
+    }
 
     return await ctx.db.get(id);
   },
@@ -813,7 +879,9 @@ export const deleteEntry = mutation({
 
     await removeTradeFact(ctx, args.id);
     await ctx.db.delete(args.id);
-    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+    if (existing.journalType !== "notebook_draft") {
+      await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+    }
     return { success: true };
   },
 });
