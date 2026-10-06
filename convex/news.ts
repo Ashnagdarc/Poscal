@@ -96,6 +96,7 @@ export const listEvents = query({
 });
 
 const SNAPSHOT_LIMIT = 200;
+const FX_SYNC_SYMBOLS = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD"] as const;
 
 export const listSnapshots = query({
   args: {},
@@ -327,16 +328,20 @@ export const upsertSnapshotsBatch = internalMutation({
 export const syncFxFromPriceSnapshots = internalMutation({
   args: {},
   handler: async (ctx) => {
-    const symbols = ["EUR/USD", "GBP/USD", "USD/JPY", "XAU/USD", "AUD/USD"];
     const now = Date.now();
     let count = 0;
+    let written = 0;
+    let skipped = 0;
 
-    for (const symbol of symbols) {
+    for (const symbol of FX_SYNC_SYMBOLS) {
+      // Read the latest source row inside the mutation so Convex OCC prevents
+      // an older ingest run from overwriting a newer price snapshot.
       const price = await ctx.db
         .query("priceSnapshots")
         .withIndex("by_symbol", (q) => q.eq("symbol", symbol))
         .unique();
       if (!price) continue;
+      count += 1;
 
       const key = symbol.replace("/", "");
       const existing = await ctx.db
@@ -344,13 +349,39 @@ export const syncFxFromPriceSnapshots = internalMutation({
         .withIndex("by_key", (q) => q.eq("key", key))
         .unique();
 
+      const bid = price.bidPrice ?? null;
+      const ask = price.askPrice ?? null;
+      const existingSource =
+        existing?.meta
+        && typeof existing.meta === "object"
+        && !Array.isArray(existing.meta)
+        && "source" in existing.meta
+          ? (existing.meta as { source?: unknown }).source
+          : undefined;
+
+      const unchanged = Boolean(
+        existing
+        && existing.label === symbol
+        && existing.kind === "fx"
+        && (existing.rate ?? null) === price.midPrice
+        && (existing.bid ?? null) === bid
+        && (existing.ask ?? null) === ask
+        && (existing.changePercent ?? null) === null
+        && existingSource === price.source,
+      );
+
+      if (unchanged) {
+        skipped += 1;
+        continue;
+      }
+
       const payload = {
         key,
         label: symbol,
         kind: "fx",
         rate: price.midPrice,
-        bid: price.bidPrice ?? null,
-        ask: price.askPrice ?? null,
+        bid,
+        ask,
         changePercent: null,
         meta: { source: price.source },
         updatedAtMs: now,
@@ -361,10 +392,10 @@ export const syncFxFromPriceSnapshots = internalMutation({
       } else {
         await ctx.db.insert("marketSnapshots", payload);
       }
-      count += 1;
+      written += 1;
     }
 
-    return { count };
+    return { count, written, skipped };
   },
 });
 
