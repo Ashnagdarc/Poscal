@@ -10,6 +10,7 @@ export type AssetClass = CatalogAssetClass;
 export type InstrumentSpecSource =
   | "poscal-fallback"
   | "broker"
+  | "broker-profile"
   | "mt5"
   | "ctrader"
   | "custom";
