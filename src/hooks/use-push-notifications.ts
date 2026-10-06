@@ -5,6 +5,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -102,6 +103,8 @@ function usePushNotificationsState(): UsePushNotificationsResult {
     useState<PushSubscription | null>(null);
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastAction, setLastAction] = useState<PushSubscribeAction>(null);
+  const [optimisticEndpoint, setOptimisticEndpoint] = useState<string | null>(null);
+  const autoRepairKeyRef = useRef<string | null>(null);
 
   // Use Convex React's authenticated client directly. This avoids the old
   // in-memory JWT mirror race that could make device registration look unauthenticated.
@@ -117,6 +120,8 @@ function usePushNotificationsState(): UsePushNotificationsResult {
     setBrowserChecked(false);
     setIsSubscribed(false);
     setLastAction(null);
+    setOptimisticEndpoint(null);
+    autoRepairKeyRef.current = null;
 
     const checkBrowser = async () => {
       const supported =
@@ -177,16 +182,28 @@ function usePushNotificationsState(): UsePushNotificationsResult {
   useEffect(() => {
     if (!user) {
       setIsSubscribed(false);
+      setOptimisticEndpoint(null);
       return;
     }
     if (!browserChecked || serverSubscriptions === undefined) return;
-    setIsSubscribed(Boolean(browserSubscription && serverHasBrowserSubscription));
+
+    const endpoint = browserSubscription?.endpoint ?? null;
+    const registered =
+      Boolean(endpoint && serverHasBrowserSubscription)
+      || Boolean(endpoint && optimisticEndpoint === endpoint);
+
+    setIsSubscribed(registered);
+
+    if (endpoint && serverHasBrowserSubscription && optimisticEndpoint === endpoint) {
+      setOptimisticEndpoint(null);
+    }
   }, [
     user,
     browserChecked,
     browserSubscription,
     serverSubscriptions,
     serverHasBrowserSubscription,
+    optimisticEndpoint,
   ]);
 
   const checked =
@@ -239,6 +256,7 @@ function usePushNotificationsState(): UsePushNotificationsResult {
         )
       ) {
         setBrowserSubscription(subscription);
+        setOptimisticEndpoint(subscription.endpoint);
         setIsSubscribed(true);
         setPermission(Notification.permission);
         setLastAction("already_subscribed");
@@ -318,6 +336,7 @@ function usePushNotificationsState(): UsePushNotificationsResult {
       }
 
       setBrowserSubscription(subscription);
+      setOptimisticEndpoint(subscription.endpoint);
       setIsSubscribed(true);
 
       const status =
@@ -356,6 +375,36 @@ function usePushNotificationsState(): UsePushNotificationsResult {
     registerPush,
   ]);
 
+  useEffect(() => {
+    if (!user || !pushConfigured || !isSupported || !checked || loading || isSubscribed) return;
+    if (permission !== "granted") return;
+
+    const endpoint = browserSubscription?.endpoint ?? "new";
+    const repairKey = `${user.id}:${endpoint}`;
+    if (autoRepairKeyRef.current === repairKey) return;
+    autoRepairKeyRef.current = repairKey;
+
+    // Permission has already been granted, so repairing the browser/server
+    // registration should be silent. This prevents the enable modal from
+    // returning after app updates or service-worker refreshes.
+    void subscribe().then((result) => {
+      if (!result) {
+        // Allow a later remount/session to retry. We intentionally do not
+        // nag the user with the permission prompt when permission is granted.
+        logger.warn("[push] Silent subscription repair did not complete");
+      }
+    });
+  }, [
+    user,
+    isSupported,
+    checked,
+    loading,
+    isSubscribed,
+    permission,
+    browserSubscription,
+    subscribe,
+  ]);
+
   const unsubscribe = useCallback(async (): Promise<boolean> => {
     setLastError(null);
     setLastAction(null);
@@ -392,6 +441,7 @@ function usePushNotificationsState(): UsePushNotificationsResult {
       }
 
       setBrowserSubscription(null);
+      setOptimisticEndpoint(null);
       setIsSubscribed(false);
       return true;
     } catch (error) {
