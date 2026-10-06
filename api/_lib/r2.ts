@@ -10,7 +10,7 @@ const sha256Hex = (value: string) => createHash("sha256").update(value).digest("
 const hmac = (key: Buffer | string, value: string) => createHmac("sha256", key).update(value).digest();
 
 const amzDate = (date: Date) =>
-  date.toISOString().replace(/[:-]|.d{3}/g, "");
+  date.toISOString().replace(/[:-]|\.\d{3}/g, "");
 
 const dateStamp = (date: Date) => amzDate(date).slice(0, 8);
 
