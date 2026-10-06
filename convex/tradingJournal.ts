@@ -249,6 +249,16 @@ const queueUserAlert = async (
 };
 
 const NOTEBOOK_SECTION_MAX_CHARS = 100_000;
+const NOTEBOOK_TITLE_MAX_CHARS = 120;
+
+const normalizeNotebookTitle = (value: string | null | undefined) => {
+  if (value == null) return null;
+  const normalized = value.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  if (normalized.length > NOTEBOOK_TITLE_MAX_CHARS) {
+    throw new Error(`Notebook title is too long (max ${NOTEBOOK_TITLE_MAX_CHARS} characters)`);
+  }
+  return normalized || null;
+};
 
 const normalizeNotebookText = (value: string | null | undefined) => {
   if (value == null) return null;
@@ -611,6 +621,7 @@ export const createNotebookDraft = mutation({
       status: "open",
       notes: null,
       journalType: "notebook_draft",
+      journalTitle: null,
       richContent: null,
       journalStatus: "empty",
       journalPreview: null,
@@ -767,6 +778,7 @@ export const updateEntry = mutation({
 export const updateNotebook = mutation({
   args: {
     id: v.id("tradingJournal"),
+    title: nullableStringArg,
     entryReason: nullableStringArg,
     duringTradeNotes: nullableStringArg,
     postTradeReview: nullableStringArg,
@@ -791,6 +803,11 @@ export const updateNotebook = mutation({
     if (existingNotebook && existingNotebook.userId !== userId) {
       throw new Error("Notebook ownership mismatch");
     }
+
+    const journalTitle =
+      args.title !== undefined
+        ? normalizeNotebookTitle(args.title)
+        : trade.journalTitle ?? null;
 
     const entryReason =
       args.entryReason !== undefined
@@ -849,6 +866,7 @@ export const updateNotebook = mutation({
     }
 
     await ctx.db.patch(args.id, {
+      journalTitle,
       journalStatus,
       journalPreview,
       journalUpdatedAtMs: now,

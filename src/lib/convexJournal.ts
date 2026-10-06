@@ -22,6 +22,7 @@ export interface JournalTrade {
   exit_date?: string | null;
   created_at: string;
   journal_type?: "structured" | "notes" | "notebook_draft";
+  journal_title?: string | null;
   rich_content?: unknown;
   entry_reason?: string | null;
   during_trade_notes?: string | null;
@@ -73,6 +74,7 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   exit_date: toIsoString(row.exitDateMs),
   created_at: new Date(row.createdAtMs).toISOString(),
   journal_type: (row.journalType as "structured" | "notes" | "notebook_draft" | null) ?? "structured",
+  journal_title: row.journalTitle ?? null,
   rich_content: row.richContent ?? null,
   journal_status: row.journalStatus ?? "empty",
   journal_preview: row.journalPreview ?? null,
@@ -298,6 +300,7 @@ export const getJournalEntry = async (
 };
 
 export type NotebookPatch = {
+  journal_title?: string | null;
   entry_reason?: string | null;
   during_trade_notes?: string | null;
   post_trade_review?: string | null;
@@ -313,6 +316,7 @@ export const updateTradeNotebook = async (
     const client = getAuthenticatedConvexHttpClient();
     const result = await client.mutation(api.tradingJournal.updateNotebook, {
       id: id as any,
+      title: updates.journal_title,
       entryReason: updates.entry_reason,
       duringTradeNotes: updates.during_trade_notes,
       postTradeReview: updates.post_trade_review,
