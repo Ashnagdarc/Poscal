@@ -1,5 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { api, createConvexServerClient } from "./_convex.js";
+
+const journalAttachmentsApi = (api as any).tradeJournalAttachments;
 import { deleteR2Object, headR2Object, presignR2Object } from "./_lib/r2.js";
 
 export const config = { maxDuration: 30 };
@@ -42,8 +44,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!tradeId) return res.status(400).json({ success: false, message: "Missing tradeId" });
 
       const [rows, quota] = await Promise.all([
-        client.query(api.tradeJournalAttachments.listForTrade, { tradeId: tradeId as any }),
-        client.query(api.tradeJournalAttachments.getUsageForUser, {}),
+        client.query(journalAttachmentsApi.listForTrade, { tradeId: tradeId as any }),
+        client.query(journalAttachmentsApi.getUsageForUser, {}),
       ]);
 
       const attachments = rows.map((row: any) => ({
@@ -75,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           return res.status(400).json({ success: false, message: "Invalid upload request" });
         }
 
-        const reservation = await client.mutation(api.tradeJournalAttachments.reserveUpload, {
+        const reservation = await client.mutation(journalAttachmentsApi.reserveUpload, {
           tradeId: tradeId as any,
           role,
           mimeType,
@@ -99,14 +101,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // accepting an arbitrary object key from the browser.
         const tradeId = String(body.tradeId || "");
         if (!tradeId) return res.status(400).json({ success: false, message: "Missing tradeId" });
-        const rows = await client.query(api.tradeJournalAttachments.listPendingForTrade, {
+        const rows = await client.query(journalAttachmentsApi.listPendingForTrade, {
           tradeId: tradeId as any,
         });
         const pending = rows.find((row: any) => String(row._id) === attachmentId);
         if (!pending) return res.status(404).json({ success: false, message: "Pending attachment not found" });
 
         const head = await headR2Object(pending.objectKey);
-        const completed = await client.mutation(api.tradeJournalAttachments.completeUpload, {
+        const completed = await client.mutation(journalAttachmentsApi.completeUpload, {
           attachmentId: attachmentId as any,
           actualSizeBytes: head.size,
           actualMimeType: head.mimeType,
@@ -131,7 +133,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (action === "cancel") {
         const attachmentId = String(body.attachmentId || "");
         if (!attachmentId) return res.status(400).json({ success: false, message: "Missing attachmentId" });
-        const cancelled = await client.mutation(api.tradeJournalAttachments.cancelUpload, {
+        const cancelled = await client.mutation(journalAttachmentsApi.cancelUpload, {
           attachmentId: attachmentId as any,
         });
         if (cancelled?.objectKey) {
@@ -148,7 +150,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const attachmentId = String(body.attachmentId || "");
       if (!attachmentId) return res.status(400).json({ success: false, message: "Missing attachmentId" });
 
-      const deleted = await client.mutation(api.tradeJournalAttachments.deleteAttachment, {
+      const deleted = await client.mutation(journalAttachmentsApi.deleteAttachment, {
         attachmentId: attachmentId as any,
       });
       await deleteR2Object(deleted.objectKey).catch((error) => {
