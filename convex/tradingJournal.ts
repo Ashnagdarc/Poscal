@@ -49,6 +49,16 @@ const tradeCreateFields = {
   notes: nullableStringArg,
   journalType: nullableStringArg,
   richContent: nullableAnyArg,
+  entryReason: nullableStringArg,
+  duringTradeNotes: nullableStringArg,
+  postTradeReview: nullableStringArg,
+  lessonsLearned: nullableStringArg,
+  journalStatus: v.optional(v.union(
+    v.literal("empty"),
+    v.literal("draft"),
+    v.literal("complete"),
+  )),
+  journalUpdatedAtMs: nullableNumberArg,
   images: nullableAnyArg,
   links: nullableAnyArg,
   screenshots: nullableAnyArg,
@@ -242,6 +252,56 @@ const queueUserAlert = async (
     });
   }
 };
+
+const NOTEBOOK_SECTION_MAX_CHARS = 100_000;
+
+const normalizeNotebookText = (value: string | null | undefined) => {
+  if (value == null) return null;
+  const normalized = value.replace(/\r\n/g, "\n");
+  if (normalized.length > NOTEBOOK_SECTION_MAX_CHARS) {
+    throw new Error(`Notebook section is too long (max ${NOTEBOOK_SECTION_MAX_CHARS.toLocaleString()} characters)`);
+  }
+  return normalized.trim() ? normalized : null;
+};
+
+const deriveJournalStatus = (fields: {
+  entryReason?: string | null;
+  duringTradeNotes?: string | null;
+  postTradeReview?: string | null;
+  lessonsLearned?: string | null;
+}) => {
+  const values = [
+    fields.entryReason,
+    fields.duringTradeNotes,
+    fields.postTradeReview,
+    fields.lessonsLearned,
+  ];
+  const filled = values.filter((value) => Boolean(value?.trim())).length;
+  if (filled === 0) return "empty" as const;
+  if (filled === values.length) return "complete" as const;
+  return "draft" as const;
+};
+
+export const getById = query({
+  args: {
+    id: v.id("tradingJournal"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return null;
+
+    const trade = await ctx.db.get(args.id);
+    if (!trade || trade.userId !== userId) {
+      return null;
+    }
+
+    if (trade.journalId) {
+      await assertJournalOwned(ctx, userId, trade.journalId);
+    }
+
+    return trade;
+  },
+});
 
 export const listForUser = query({
   args: {
@@ -550,6 +610,16 @@ export const updateEntry = mutation({
     notes: nullableStringArg,
     journalType: nullableStringArg,
     richContent: nullableAnyArg,
+    entryReason: nullableStringArg,
+    duringTradeNotes: nullableStringArg,
+    postTradeReview: nullableStringArg,
+    lessonsLearned: nullableStringArg,
+    journalStatus: v.optional(v.union(
+      v.literal("empty"),
+      v.literal("draft"),
+      v.literal("complete"),
+    )),
+    journalUpdatedAtMs: nullableNumberArg,
     images: nullableAnyArg,
     links: nullableAnyArg,
     screenshots: nullableAnyArg,
@@ -608,6 +678,62 @@ export const updateEntry = mutation({
     });
 
     return await ctx.db.get(id);
+  },
+});
+
+export const updateNotebook = mutation({
+  args: {
+    id: v.id("tradingJournal"),
+    entryReason: nullableStringArg,
+    duringTradeNotes: nullableStringArg,
+    postTradeReview: nullableStringArg,
+    lessonsLearned: nullableStringArg,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+
+    const entryReason =
+      args.entryReason !== undefined
+        ? normalizeNotebookText(args.entryReason)
+        : existing.entryReason ?? null;
+    const duringTradeNotes =
+      args.duringTradeNotes !== undefined
+        ? normalizeNotebookText(args.duringTradeNotes)
+        : existing.duringTradeNotes ?? null;
+    const postTradeReview =
+      args.postTradeReview !== undefined
+        ? normalizeNotebookText(args.postTradeReview)
+        : existing.postTradeReview ?? null;
+    const lessonsLearned =
+      args.lessonsLearned !== undefined
+        ? normalizeNotebookText(args.lessonsLearned)
+        : existing.lessonsLearned ?? null;
+
+    const journalStatus = deriveJournalStatus({
+      entryReason,
+      duringTradeNotes,
+      postTradeReview,
+      lessonsLearned,
+    });
+    const now = Date.now();
+
+    await ctx.db.patch(args.id, {
+      entryReason,
+      duringTradeNotes,
+      postTradeReview,
+      lessonsLearned,
+      journalStatus,
+      journalUpdatedAtMs: now,
+      updatedAtMs: now,
+    });
+
+    // Deliberately do not touch trade facts, stats, or alerts. Notebook prose
+    // should not invalidate analytics or create write amplification.
+    return await ctx.db.get(args.id);
   },
 });
 
