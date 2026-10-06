@@ -104,7 +104,8 @@ export default defineSchema({
     .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
     .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
-    .index("by_external_id", ["externalId"]),
+    .index("by_external_id", ["externalId"])
+    .index("by_user_external", ["userId", "externalId"]),
 
   journalTradeFacts: defineTable({
     userId: v.string(),

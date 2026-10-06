@@ -260,10 +260,37 @@ export const deleteJournalEntry = async (_userId: string, id: string): Promise<v
 /** Server `saveMany` rejects batches larger than this. */
 export const JOURNAL_IMPORT_BATCH_SIZE = 100;
 
+const hashImportRow = async (value: string) => {
+  const bytes = new TextEncoder().encode(value);
+  if (globalThis.crypto?.subtle) {
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+    return Array.from(new Uint8Array(digest))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("");
+  }
+
+  // Deterministic fallback for older runtimes.
+  let hash = 2166136261;
+  for (const byte of bytes) {
+    hash ^= byte;
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+};
+
 export const importJournalEntries = async (_userId: string, trades: Record<string, any>[]) => {
   if (isConvexEnabled()) {
     const client = getAuthenticatedConvexHttpClient();
-    const items = trades.map((trade) => toConvexTradeInput(trade));
+    const items = await Promise.all(
+      trades.map(async (trade, index) => {
+        const input = toConvexTradeInput(trade);
+        const fingerprint = await hashImportRow(JSON.stringify({ index, ...input, externalId: null }));
+        return {
+          ...input,
+          externalId: input.externalId ?? `csv:${fingerprint}`,
+        };
+      }),
+    );
     for (let i = 0; i < items.length; i += JOURNAL_IMPORT_BATCH_SIZE) {
       const chunk = items.slice(i, i + JOURNAL_IMPORT_BATCH_SIZE);
       await client.mutation(api.tradingJournal.saveMany, { items: chunk });
