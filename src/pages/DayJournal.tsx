@@ -38,7 +38,6 @@ const DayJournal = () => {
   const [showManual, setShowManual] = useState(false);
 
   const validDateKey = DATE_KEY_RE.test(dateKey) ? dateKey : null;
-  const selectedDate = validDateKey ? new Date(`${validDateKey}T12:00:00`) : new Date();
   const timeZone = localStorage.getItem("preferredTimezone") || detectBrowserTimeZone();
 
   const {
