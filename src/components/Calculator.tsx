@@ -17,7 +17,6 @@ import {
   detectPipDecimal,
 } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
-import { BrokerProfilePicker } from "./BrokerProfilePicker";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useAuth } from "@/contexts/AuthContext";
@@ -36,9 +35,7 @@ import { useAutoMarketPrices } from "@/hooks/use-auto-market-prices";
 import { toast } from "sonner";
 import {
   loadBrokerProfileSnapshot,
-  readStoredBrokerProfile,
-  resolveBrokerProfile,
-  writeStoredBrokerProfile,
+  resolveAutomaticBrokerProfile,
   type BrokerProfileSnapshot,
 } from "@/lib/trading/brokerProfiles";
 
@@ -101,9 +98,6 @@ export const Calculator = () => {
   const { user } = useAuth();
   const { activeJournalId } = useJournal();
   const [brokerSnapshot, setBrokerSnapshot] = useState<BrokerProfileSnapshot | null>(null);
-  const [brokerProfilesLoading, setBrokerProfilesLoading] = useState(true);
-  const [brokerProfilesError, setBrokerProfilesError] = useState<string | null>(null);
-  const [selectedBrokerSlug, setSelectedBrokerSlug] = useState<string | null>(null);
   const [accountBalance, setAccountBalance] = useState("");
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
   const [riskPercent, setRiskPercent] = useState(1);
@@ -129,7 +123,6 @@ export const Calculator = () => {
   const [showNumPad, setShowNumPad] = useState<NumPadField | null>(null);
   const [showCurrencyGrid, setShowCurrencyGrid] = useState(false);
   const [showStopLossSelector, setShowStopLossSelector] = useState(false);
-  const [showBrokerPicker, setShowBrokerPicker] = useState(false);
   const [numPadValue, setNumPadValue] = useState("");
 
   const { currency } = useCurrency();
@@ -210,21 +203,13 @@ export const Calculator = () => {
 
   useEffect(() => {
     let cancelled = false;
-    setBrokerProfilesLoading(true);
-    setBrokerProfilesError(null);
     void loadBrokerProfileSnapshot()
       .then((snapshot) => {
-        if (cancelled) return;
-        setBrokerSnapshot(snapshot);
+        if (!cancelled) setBrokerSnapshot(snapshot);
       })
-      .catch((error) => {
-        if (cancelled) return;
-        setBrokerProfilesError(
-          error instanceof Error ? error.message : "Broker profile data is unavailable",
-        );
-      })
-      .finally(() => {
-        if (!cancelled) setBrokerProfilesLoading(false);
+      .catch(() => {
+        // Broker data is optional. Poscal Standard remains the fallback.
+        if (!cancelled) setBrokerSnapshot(null);
       });
 
     return () => {
@@ -232,23 +217,14 @@ export const Calculator = () => {
     };
   }, []);
 
-  useEffect(() => {
-    setSelectedBrokerSlug(readStoredBrokerProfile(user?.id, activeJournalId));
-  }, [activeJournalId, user?.id]);
-
-  const selectedBrokerResolution = useMemo(
-    () => resolveBrokerProfile(
+  const automaticBrokerResolution = useMemo(
+    () => resolveAutomaticBrokerProfile(
       brokerSnapshot,
-      selectedBrokerSlug,
       selectedPair.symbol,
+      5,
     ),
-    [brokerSnapshot, selectedBrokerSlug, selectedPair.symbol],
+    [brokerSnapshot, selectedPair.symbol],
   );
-
-  const selectedBrokerName =
-    selectedBrokerResolution?.brokerName
-    ?? (selectedBrokerSlug && brokerSnapshot?.brokers[selectedBrokerSlug]?.name)
-    ?? null;
 
   useEffect(() => {
     setConversionRate("");
@@ -334,7 +310,7 @@ export const Calculator = () => {
       direction: calculationMode === "price" ? tradeDirection : null,
       marketPrices: userMarketPrices,
       accountCurrency: currency.code,
-      instrumentSpecOverride: selectedBrokerResolution?.override ?? null,
+      instrumentSpecOverride: automaticBrokerResolution?.override ?? null,
     });
   }, [
     accountBalance,
@@ -350,7 +326,7 @@ export const Calculator = () => {
     selectedPair,
     userMarketPrices,
     currency.code,
-    selectedBrokerResolution,
+    automaticBrokerResolution,
   ]);
 
   const stopLossUnit = getStopLossUnitLabel(selectedPair.symbol);
@@ -728,7 +704,7 @@ export const Calculator = () => {
                 <span>Specification</span>
                 <span className="text-right font-medium text-foreground">
                   {calculation.specSource === "broker-profile"
-                    ? `Broker profile · ${selectedBrokerName ?? "MetaTrader"}`
+                    ? "Automatic broker consensus"
                     : calculation.specSource === "poscal-fallback"
                       ? "Poscal Standard"
                       : calculation.specSource}
@@ -736,17 +712,14 @@ export const Calculator = () => {
               </div>
               {calculation.specSource === "broker-profile" ? (
                 <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
-                  Using measured MetaTrader profile data for {selectedBrokerName ?? "this broker"}.
-                  This is a broker snapshot, not a live account specification.
+                  Poscal automatically selected a consensus specification from{" "}
+                  {automaticBrokerResolution?.selectedProfiles.length ?? 0} measured broker profile
+                  {(automaticBrokerResolution?.selectedProfiles.length ?? 0) === 1 ? "" : "s"}.
+                  This is snapshot data, not live MT5/cTrader verification.
                 </p>
               ) : calculation.spec.brokerSpecific && calculation.specSource === "poscal-fallback" ? (
                 <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
-                  This CFD uses Poscal Standard. Broker contract size, tick value, and volume rules can differ.
-                </p>
-              ) : selectedBrokerSlug && !selectedBrokerResolution?.hasSizingData ? (
-                <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
-                  {selectedBrokerName ?? "The selected broker"} does not have measured sizing fields for this instrument,
-                  so Poscal Standard is being used.
+                  No complete broker consensus is available for this instrument, so Poscal Standard is being used.
                 </p>
               ) : null}
             </details>
@@ -792,26 +765,6 @@ export const Calculator = () => {
               <p className="text-base font-bold text-foreground">{selectedPair.symbol}</p>
             </div>
             <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          </button>
-          <div className="mx-4 h-px bg-border/60" />
-          <button
-            type="button"
-            onClick={() => setShowBrokerPicker(true)}
-            className="flex w-full items-center justify-between px-4 py-3.5 transition-colors active:bg-secondary/80"
-          >
-            <div className="min-w-0 text-left">
-              <p className="text-xs text-muted-foreground">Broker profile</p>
-              <p className="truncate text-base font-bold text-foreground">
-                {selectedBrokerName ?? "Poscal Standard"}
-              </p>
-              {selectedBrokerResolution?.brokerSymbol ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  {selectedBrokerResolution.brokerSymbol}
-                  {selectedBrokerResolution.hasSizingData ? " · measured sizing data" : " · symbol mapping only"}
-                </p>
-              ) : null}
-            </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground" />
           </button>
           <div className="mx-4 h-px bg-border/60" />
           <button
@@ -1116,19 +1069,6 @@ export const Calculator = () => {
           onBack={() => setShowCurrencyGrid(false)}
         />
       )}
-
-      <BrokerProfilePicker
-        open={showBrokerPicker}
-        snapshot={brokerSnapshot}
-        selectedSlug={selectedBrokerSlug}
-        isLoading={brokerProfilesLoading}
-        error={brokerProfilesError}
-        onSelect={(slug) => {
-          setSelectedBrokerSlug(slug);
-          writeStoredBrokerProfile(slug, user?.id, activeJournalId);
-        }}
-        onClose={() => setShowBrokerPicker(false)}
-      />
 
       {/* Stop Loss Selector Modal */}
       {showStopLossSelector && (
