@@ -86,6 +86,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           height: Number.isFinite(height as number) ? height : null,
         });
 
+        if (reservation.staleObjectKeys?.length) {
+          await Promise.allSettled(
+            reservation.staleObjectKeys.map((key: string) => deleteR2Object(key)),
+          );
+        }
+
         return res.status(200).json({
           success: true,
           reservation,
