@@ -6,7 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { api } from "../../../convex/_generated/api";
 
-export type JournalTourSection = "today" | "trades" | "history";
+export type JournalTourSection = "today" | "trades" | "notebook";
 
 type TourStep = {
   id: string;
@@ -27,7 +27,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "tabs",
     title: "Three places to work",
-    body: "Today is your daily hub. Trades holds analytics. History keeps calculator results.",
+    body: "Today is your daily hub. Trades holds analytics. Notebook keeps your reasoning, reviews, and lessons.",
     section: "today",
     target: "journal-tabs",
   },
@@ -60,11 +60,11 @@ const TOUR_STEPS: TourStep[] = [
     target: "journal-trades",
   },
   {
-    id: "history",
-    title: "Saved calculations",
-    body: "Calculator results land here. Mark wins and losses so they feed your calendar and growth.",
-    section: "history",
-    target: "journal-history",
+    id: "notebook",
+    title: "Trading notebook",
+    body: "Open any recorded trade here to keep your reasoning, review what happened, and save lessons for later.",
+    section: "notebook",
+    target: "journal-notebook",
   },
 ];
 
