@@ -90,7 +90,7 @@ export const getMonth = query({
     const nextMonth = new Date(Date.UTC(args.year, monthIndex + 1, 1));
     const nextMonthKey = `${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, "0")}-01`;
 
-    const [datedTrades, createdFallback, sessions] = await Promise.all([
+    const [entryDatedTrades, exitDatedTrades, createdFallback, sessions] = await Promise.all([
       ctx.db
         .query("tradingJournal")
         .withIndex("by_user_journal_entry_date", (q) =>
@@ -99,6 +99,16 @@ export const getMonth = query({
             .eq("journalId", args.journalId)
             .gte("entryDateMs", roughStart)
             .lt("entryDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_exit_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("exitDateMs", roughStart)
+            .lt("exitDateMs", roughEnd),
         )
         .collect(),
       ctx.db
@@ -123,10 +133,15 @@ export const getMonth = query({
         .collect(),
     ]);
 
-    const uniqueTrades = new Map<string, (typeof datedTrades)[number]>();
-    for (const trade of datedTrades) uniqueTrades.set(String(trade._id), trade);
-    for (const trade of createdFallback) {
+    const uniqueTrades = new Map<string, (typeof entryDatedTrades)[number]>();
+    for (const trade of entryDatedTrades) uniqueTrades.set(String(trade._id), trade);
+    for (const trade of exitDatedTrades) {
       if (trade.entryDateMs == null) uniqueTrades.set(String(trade._id), trade);
+    }
+    for (const trade of createdFallback) {
+      if (trade.entryDateMs == null && trade.exitDateMs == null) {
+        uniqueTrades.set(String(trade._id), trade);
+      }
     }
 
     const buckets = new Map<string, Bucket>();
@@ -134,7 +149,7 @@ export const getMonth = query({
     for (const trade of uniqueTrades.values()) {
       if (trade.deletionRequestedAtMs) continue;
 
-      const timestamp = trade.entryDateMs ?? trade.createdAtMs;
+      const timestamp = trade.entryDateMs ?? trade.exitDateMs ?? trade.createdAtMs;
       const dateKey = dateKeyInTimeZone(timestamp, args.timeZone);
       if (!dateKey.startsWith(prefix)) continue;
 
@@ -224,7 +239,7 @@ export const getDayEntries = query({
     const roughStart = center - RANGE_PAD_MS;
     const roughEnd = center + RANGE_PAD_MS;
 
-    const [datedTrades, createdFallback] = await Promise.all([
+    const [entryDatedTrades, exitDatedTrades, createdFallback] = await Promise.all([
       ctx.db
         .query("tradingJournal")
         .withIndex("by_user_journal_entry_date", (q) =>
@@ -233,6 +248,16 @@ export const getDayEntries = query({
             .eq("journalId", args.journalId)
             .gte("entryDateMs", roughStart)
             .lt("entryDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_exit_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("exitDateMs", roughStart)
+            .lt("exitDateMs", roughEnd),
         )
         .collect(),
       ctx.db
@@ -247,16 +272,21 @@ export const getDayEntries = query({
         .collect(),
     ]);
 
-    const unique = new Map<string, (typeof datedTrades)[number]>();
-    for (const trade of datedTrades) unique.set(String(trade._id), trade);
-    for (const trade of createdFallback) {
+    const unique = new Map<string, (typeof entryDatedTrades)[number]>();
+    for (const trade of entryDatedTrades) unique.set(String(trade._id), trade);
+    for (const trade of exitDatedTrades) {
       if (trade.entryDateMs == null) unique.set(String(trade._id), trade);
+    }
+    for (const trade of createdFallback) {
+      if (trade.entryDateMs == null && trade.exitDateMs == null) {
+        unique.set(String(trade._id), trade);
+      }
     }
 
     return Array.from(unique.values())
       .filter((trade) => {
         if (trade.deletionRequestedAtMs) return false;
-        const timestamp = trade.entryDateMs ?? trade.createdAtMs;
+        const timestamp = trade.entryDateMs ?? trade.exitDateMs ?? trade.createdAtMs;
         return dateKeyInTimeZone(timestamp, args.timeZone) === args.dateKey;
       })
       .sort(
