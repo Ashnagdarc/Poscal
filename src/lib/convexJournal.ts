@@ -21,7 +21,7 @@ export interface JournalTrade {
   entry_date: string | null;
   exit_date?: string | null;
   created_at: string;
-  journal_type?: "structured" | "notes";
+  journal_type?: "structured" | "notes" | "notebook_draft";
   rich_content?: unknown;
   entry_reason?: string | null;
   during_trade_notes?: string | null;
@@ -72,7 +72,7 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   entry_date: toIsoString(row.entryDateMs),
   exit_date: toIsoString(row.exitDateMs),
   created_at: new Date(row.createdAtMs).toISOString(),
-  journal_type: (row.journalType as "structured" | "notes" | null) ?? "structured",
+  journal_type: (row.journalType as "structured" | "notes" | "notebook_draft" | null) ?? "structured",
   rich_content: row.richContent ?? null,
   journal_status: row.journalStatus ?? "empty",
   journal_preview: row.journalPreview ?? null,
@@ -230,6 +230,24 @@ export const listJournalEntries = async (
 ): Promise<JournalTrade[]> => {
   const { trades } = await listJournalEntriesWithMeta(_userId, status, journalId);
   return trades;
+};
+
+export const createNotebookDraft = async (
+  _userId: string,
+  journalId: string,
+  entryDate?: string | null,
+): Promise<JournalTrade> => {
+  if (!isConvexEnabled()) {
+    throw new Error("Manual notebook drafts require Convex");
+  }
+
+  const client = getAuthenticatedConvexHttpClient();
+  const row = await client.mutation(api.tradingJournal.createNotebookDraft, {
+    journalId: journalId as any,
+    entryDateMs: entryDate ? new Date(entryDate).getTime() : null,
+  });
+  if (!row) throw new Error("Could not create notebook draft");
+  return fromConvexTrade(row);
 };
 
 export const createJournalEntry = async (_userId: string, trade: Record<string, any>): Promise<JournalTrade> => {
