@@ -12,7 +12,6 @@ import { JournalTour } from "@/components/journal/JournalTour";
 import { LogTradeChoiceSheet } from "@/components/journal/LogTradeChoiceSheet";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
 import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCalendar";
-import { TradingGrowthChart } from "@/components/journal/TradingGrowthChart";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
@@ -309,14 +308,6 @@ const Journal = () => {
                     </p>
                   </div>
                 </section>
-
-                <div data-tour-id="journal-growth">
-                  <TradingGrowthChart
-                    trades={manualTrades}
-                    calculatorResults={[]}
-                    startingBalance={startingBalance}
-                  />
-                </div>
 
                 <section
                   className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4"
