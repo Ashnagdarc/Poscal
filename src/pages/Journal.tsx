@@ -1004,6 +1004,8 @@ const Journal = () => {
           pageSection={pageSection}
           onSectionChange={setPageSection}
         />
+          </>
+        )}
       </main>
 
       {selectedItem && (
