@@ -1,6 +1,6 @@
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { BookOpen, Camera, Clock3, Copy, X } from "lucide-react";
+import { BookOpen, Camera, Clock3, Copy, Plus, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { ACCOUNT_CURRENCIES, useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
@@ -10,6 +10,7 @@ import { JournalOnboarding } from "@/components/journal/JournalOnboarding";
 import { JournalSwitcher } from "@/components/journal/JournalSwitcher";
 import { JournalTour } from "@/components/journal/JournalTour";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
+import { LogTradeChoiceSheet } from "@/components/journal/LogTradeChoiceSheet";
 import { ProgressTracker } from "@/components/journal/ProgressTracker";
 import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCalendar";
 import { TradingGrowthChart } from "@/components/journal/TradingGrowthChart";
@@ -165,6 +166,8 @@ const Journal = () => {
   const [journalTab, setJournalTab] = useState<JournalTab>("overview");
   const [pageSection, setPageSection] = useState<"today" | "trades" | "notebook">("today");
   const [isTradeSheetOpen, setIsTradeSheetOpen] = useState(false);
+  const [isLogTradeChooserOpen, setIsLogTradeChooserOpen] = useState(false);
+  const [openNotebookAfterManualSave, setOpenNotebookAfterManualSave] = useState(false);
   const [tradeToEdit, setTradeToEdit] = useState<JournalTrade | null>(null);
   const [tradeToDelete, setTradeToDelete] = useState<JournalTrade | null>(null);
   const { data: manualTrades = [], isLoading: isManualTradesLoading } = useTradesQuery();
@@ -289,6 +292,7 @@ const Journal = () => {
   );
 
   const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
+  const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
 
   const fallbackMonthlyReturns = useMemo(
     () => buildMonthlyReturnsGrid([], manualTrades, today, startingBalance, preferredTimeZone),
@@ -493,12 +497,13 @@ const Journal = () => {
           ? tradeToEdit.pnl
           : 0;
 
+      let createdTrade: JournalTrade | null = null;
       if (tradeToEdit) {
         await updateTradeMutation.mutateAsync({ id: tradeToEdit.id, ...tradeInput });
         toast.success("Trade updated");
       } else {
-        await addTradeMutation.mutateAsync(tradeInput);
-        toast.success("Trade saved");
+        createdTrade = await addTradeMutation.mutateAsync(tradeInput);
+        toast.success(openNotebookAfterManualSave ? "Trade saved. Add your charts and notes." : "Trade saved");
       }
 
       const defaultRisk = parseDefaultRiskPercent(localStorage.getItem("defaultRisk"));
@@ -528,6 +533,11 @@ const Journal = () => {
 
       setIsTradeSheetOpen(false);
       setTradeToEdit(null);
+      const shouldOpenNotebook = openNotebookAfterManualSave && createdTrade;
+      setOpenNotebookAfterManualSave(false);
+      if (shouldOpenNotebook) {
+        navigate(`/journal/trade/${createdTrade.id}`);
+      }
     } catch (error) {
       console.error("[journal] Failed to save manual trade", error);
       showErrorFromUnknown(error, {
@@ -612,25 +622,32 @@ const Journal = () => {
         </section>
 
         {pageSection === "today" ? (
+          <button
+            type="button"
+            onClick={() => setIsLogTradeChooserOpen(true)}
+            className="mb-4 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-bold text-brand-foreground shadow-sm transition active:scale-[0.99]"
+          >
+            <Plus className="h-4 w-4" />
+            Log Trade
+          </button>
+        ) : null}
+
+        {pageSection === "today" ? (
           <div className="space-y-4 animate-slide-up">
-            {manualTrades.length === 0 && items.length === 0 ? (
-              <section className="rounded-2xl border border-dashed border-border bg-secondary/50 px-4 py-6 text-center">
-                <p className="text-sm font-semibold text-foreground">No trades yet</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Log your first closed trade to update growth and results.
+            <section className="grid grid-cols-2 gap-3 rounded-2xl bg-secondary p-4">
+              <div>
+                <p className="text-xs text-muted-foreground">Today</p>
+                <p className="mt-1 text-xl font-bold text-foreground">
+                  {todaySummary?.label ?? "No result"}
                 </p>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTradeToEdit(null);
-                    setIsTradeSheetOpen(true);
-                  }}
-                  className="mt-4 h-11 rounded-xl bg-brand px-5 text-sm font-semibold text-brand-foreground transition-all active:scale-[0.98]"
-                >
-                  Log a trade
-                </button>
-              </section>
-            ) : null}
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-muted-foreground">Trades</p>
+                <p className="mt-1 text-xl font-bold text-foreground">
+                  {todaySummary?.tradeCount ?? 0}
+                </p>
+              </div>
+            </section>
 
             <div data-tour-id="journal-growth">
               <TradingGrowthChart
@@ -644,76 +661,23 @@ const Journal = () => {
               className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4"
               data-tour-id="journal-results"
             >
-              <div className="mb-3 grid grid-cols-2 gap-2 rounded-xl bg-background/60 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView("heatmap");
-                    setSelectedCalendarDate(undefined);
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
-                    activeView === "heatmap"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Returns
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveView("calendar");
-                    setSelectedMonthKey(undefined);
-                  }}
-                  className={`h-10 rounded-lg text-sm font-semibold transition-all active:scale-[0.98] ${
-                    activeView === "calendar"
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground"
-                  }`}
-                >
-                  Calendar
-                </button>
+              <div className="mb-3">
+                <h2 className="text-base font-bold text-foreground">Calendar</h2>
+                <p className="text-xs text-muted-foreground">
+                  Tap a day to open its journal.
+                </p>
               </div>
-
-              {activeView === "heatmap" ? (
-                <ReturnsCalendar
-                  title="Monthly returns"
-                  hint="tap a month to filter · year = compounded"
-                  years={monthlyReturns.years}
-                  returns={monthlyReturns.returns}
-                  selectedMonthKey={selectedMonthKey}
-                  onSelectMonth={(year, monthIndex) => {
-                    const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
-                    setSelectedMonthKey((current) => (current === monthKey ? undefined : monthKey));
-                    setSelectedCalendarDate(undefined);
-                    setCalendarMonth(new Date(year, monthIndex, 1));
-                  }}
-                />
-              ) : (
-                <div className="space-y-3">
-                  <div>
-                    <h2 className="text-base font-bold text-foreground">Results Calendar</h2>
-                    <p className="text-xs text-muted-foreground">
-                      Tap a day to filter results and open that session
-                    </p>
-                  </div>
-                  <ResultsCalendar
-                    month={calendarMonth}
-                    onMonthChange={setCalendarMonth}
-                    selectedDate={selectedCalendarDate}
-                    onSelectDate={(date) => {
-                      setSelectedCalendarDate(date);
-                      setSelectedMonthKey(undefined);
-                      if (date) {
-                        setSessionDateKey(toDateKey(date));
-                      }
-                    }}
-                    summaries={resultDaySummaries}
-                    today={today}
-                  />
-                  <ResultsLegend />
-                </div>
-              )}
+              <ResultsCalendar
+                month={calendarMonth}
+                onMonthChange={setCalendarMonth}
+                selectedDate={undefined}
+                onSelectDate={(date) => {
+                  if (date) navigate(`/journal/day/${toDateKey(date)}`);
+                }}
+                summaries={resultDaySummaries}
+                today={today}
+              />
+              <ResultsLegend />
             </section>
 
             {selectedMonthKey || selectedCalendarDate ? (
@@ -812,22 +776,20 @@ const Journal = () => {
               </section>
             ) : null}
 
-            <div data-tour-id="journal-session">
-              <ProgressTracker
-                trades={manualTrades}
-                calculatorResults={items}
-                dateKey={sessionDateKey}
-                onDateKeyChange={(nextDateKey) => {
-                  setSessionDateKey(nextDateKey);
-                  const [year, month, day] = nextDateKey.split("-").map(Number);
-                  const nextDate = new Date(year, month - 1, day);
-                  setSelectedCalendarDate(startOfDay(nextDate));
-                  setSelectedMonthKey(undefined);
-                  setCalendarMonth(startOfDay(nextDate));
-                  setActiveView("calendar");
-                }}
-              />
-            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/journal/day/${toDateKey(today)}`)}
+              className="flex w-full items-center justify-between gap-3 rounded-2xl bg-secondary p-4 text-left transition active:scale-[0.99]"
+              data-tour-id="journal-session"
+            >
+              <div>
+                <p className="text-sm font-bold text-foreground">Today&apos;s journal</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Add a plan, review the day, or open today&apos;s trade notebooks.
+                </p>
+              </div>
+              <BookOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
+            </button>
           </div>
         ) : null}
 
@@ -859,7 +821,7 @@ const Journal = () => {
               onLoadMoreTrades={loadMoreTrades}
               onAddTrade={() => {
                 setTradeToEdit(null);
-                setIsTradeSheetOpen(true);
+                setIsLogTradeChooserOpen(true);
               }}
               onEditTrade={(trade) => {
                 setTradeToEdit(trade);
@@ -1316,6 +1278,21 @@ const Journal = () => {
         description="Remove this manual trade from your journal?"
         confirmText="Delete"
         variant="destructive"
+      />
+
+      <LogTradeChoiceSheet
+        open={isLogTradeChooserOpen}
+        onOpenChange={setIsLogTradeChooserOpen}
+        onManual={() => {
+          setIsLogTradeChooserOpen(false);
+          setTradeToEdit(null);
+          setOpenNotebookAfterManualSave(true);
+          setIsTradeSheetOpen(true);
+        }}
+        onAutomatic={() => {
+          setIsLogTradeChooserOpen(false);
+          navigate("/calculator?journalLog=1");
+        }}
       />
 
       <ManualTradeSheet
