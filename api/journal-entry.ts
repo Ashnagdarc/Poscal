@@ -47,13 +47,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const keys = Array.from(new Set((prepared.objectKeys ?? []) as string[]));
-    try {
-      await Promise.all(keys.map((key) => deleteR2Object(key)));
-    } catch (error) {
-      await client.mutation(tradingJournalApi.cancelDeleteEntry, {
-        id: tradeId as any,
-      }).catch(() => undefined);
-      throw error;
+    const deletionResults = await Promise.allSettled(
+      keys.map((key) => deleteR2Object(key)),
+    );
+    const failedDeletion = deletionResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failedDeletion) {
+      // Keep deletionRequestedAtMs set. Some objects may already be gone, and
+      // DELETE is idempotent, so retrying safely resumes cleanup instead of
+      // reopening a partially deleted journal for edits.
+      throw failedDeletion.reason;
     }
 
     await client.mutation(tradingJournalApi.finalizeDeleteEntry, {
