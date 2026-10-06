@@ -37,7 +37,6 @@ import {
 import {
   SUPPORTED_PAIR_SUGGESTIONS,
   formatPairTokenForDisplay,
-  validateTradePairInput,
 } from "@/lib/supportedPairs";
 import { estimateTradePnl, tradePnlRateSymbols } from "@/lib/tradePnl";
 import { cn } from "@/lib/utils";
@@ -48,6 +47,7 @@ interface ManualTradeSheetProps {
   trade?: JournalTrade | null;
   isSaving?: boolean;
   onSave: (trade: ManualTradeInput) => Promise<void>;
+  defaultDate?: string;
 }
 
 type DirectionOption = "long" | "short";
@@ -81,12 +81,12 @@ const toDirection = (value?: string | null): DirectionOption => {
   return "long";
 };
 
-const emptyForm = (): FormState => ({
+const emptyForm = (defaultDate?: string): FormState => ({
   pair: "",
   direction: "long",
   status: "closed",
-  entry_date: new Date().toISOString().slice(0, 10),
-  exit_date: new Date().toISOString().slice(0, 10),
+  entry_date: defaultDate || new Date().toISOString().slice(0, 10),
+  exit_date: defaultDate || new Date().toISOString().slice(0, 10),
   entry_price: "",
   exit_price: "",
   stop_loss: "",
@@ -109,6 +109,7 @@ export const ManualTradeSheet = ({
   trade,
   isSaving = false,
   onSave,
+  defaultDate,
 }: ManualTradeSheetProps) => {
   const { currency } = useCurrency();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -190,10 +191,10 @@ export const ManualTradeSheet = ({
       return;
     }
 
-    setForm(emptyForm());
+    setForm(emptyForm(defaultDate));
     setShowMore(false);
     setPnlOverride(null);
-  }, [open, trade]);
+  }, [open, trade, defaultDate]);
 
   const updatePriceField = (
     field: "entry_price" | "exit_price" | "stop_loss" | "take_profit",
@@ -251,14 +252,16 @@ export const ManualTradeSheet = ({
       return;
     }
 
-    const validation = validateTradePairInput(pair);
-    if (validation.ok === true) {
-      setPairError(null);
+    // Journal logging is intentionally more permissive than the calculator.
+    // Known instruments still appear as suggestions, but custom broker symbols
+    // are valid as long as the user entered a readable identifier.
+    if (pair.length > 32) {
+      setPairError("Instrument name is too long");
       setPairSuggestion(null);
       return;
     }
-    setPairError(validation.message);
-    setPairSuggestion(validation.suggestion);
+    setPairError(null);
+    setPairSuggestion(null);
   };
 
   const handlePairBlur = () => {
@@ -274,11 +277,14 @@ export const ManualTradeSheet = ({
     if (isSaving) return;
 
     const pair = canonicalizePairSymbol(form.pair);
-    const pairValidation = validateTradePairInput(pair);
-    if (pairValidation.ok === false) {
-      setPairError(pairValidation.message);
-      setPairSuggestion(pairValidation.suggestion);
-      toast.error(pairValidation.message);
+    if (!pair.trim()) {
+      setPairError("Add an instrument or trade label");
+      toast.error("Add an instrument or trade label");
+      return;
+    }
+    if (pair.length > 32) {
+      setPairError("Instrument name is too long");
+      toast.error("Instrument name is too long");
       return;
     }
 
@@ -335,19 +341,18 @@ export const ManualTradeSheet = ({
           <div className="mx-auto mb-1 h-1 w-10 rounded-full bg-border sm:hidden" aria-hidden="true" />
           <SheetTitle className="pr-8">{trade ? "Edit Trade" : "Add Trade"}</SheetTitle>
           <SheetDescription>
-            Prices follow the pair&apos;s decimal format
-            {form.pair.trim() ? ` (${priceDecimals} dp)` : ""}. P&amp;L fills in from the exit and lot size, and you can change it.
+            Add only what you know. Prices, risk, P&amp;L, notes and tags are optional. After saving, you can add before/after charts in the Notebook.
           </SheetDescription>
         </SheetHeader>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 pb-4 sm:px-6">
           <section className="space-y-3">
             <div className="space-y-2">
-              <Label htmlFor="pair">Symbol</Label>
+              <Label htmlFor="pair">Instrument / trade</Label>
               <Input
                 id="pair"
                 list="supported-trade-pairs"
-                placeholder="XAUUSD or EUR/USD"
+                placeholder="XAUUSD, NAS100, BTCUSD..."
                 autoCapitalize="characters"
                 autoCorrect="off"
                 spellCheck={false}
@@ -385,7 +390,7 @@ export const ManualTradeSheet = ({
                 </div>
               ) : (
                 <p className="text-[11px] text-muted-foreground">
-                  Full symbols only — e.g. XAUUSD (not XAUUS), EURUSD, BTCUSD.
+                  Use any instrument you traded. Poscal suggestions are optional.
                 </p>
               )}
             </div>
