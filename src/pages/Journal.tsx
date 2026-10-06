@@ -223,6 +223,7 @@ const Journal = () => {
     daySummaries: factDaySummaries,
     monthlyReturns: factMonthlyReturns,
     selectedTrades: factSelectedTrades,
+    performanceSummary: tradePerformanceSummary,
   } = useJournalTradeFacts({
     calendarMonth,
     selectedMonthKey,
@@ -860,6 +861,7 @@ const Journal = () => {
               timeZone={preferredTimeZone}
               serverStats={serverTradeStats}
               isStatsBackfilling={isTradeStatsBackfilling}
+              serverPerformance={tradePerformanceSummary}
               feedTrades={paginatedManualTrades}
               canLoadMoreTrades={canLoadMoreTrades}
               isLoadingMoreTrades={isLoadingMoreTrades}
