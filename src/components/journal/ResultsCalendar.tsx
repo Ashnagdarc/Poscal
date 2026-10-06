@@ -121,7 +121,7 @@ export const ResultsCalendar = ({
                   </span>
                 </>
               )}
-              {isCurrentMonth && !summary && !isMissed && !isFuture && isSameDay(date, today) && (
+              {isCurrentMonth && !summary && !isFuture && isSameDay(date, today) && (
                 <span className="hidden text-[9px] font-medium leading-none text-muted-foreground sm:inline">
                   Today
                 </span>
