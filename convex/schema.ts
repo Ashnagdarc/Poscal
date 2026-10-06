@@ -69,8 +69,7 @@ export default defineSchema({
     statsVersion: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_external_id", ["externalId"])
-    .index("by_user_external", ["userId", "externalId"]),
+    .index("by_external_id", ["externalId"]),
 
   tradingJournal: defineTable({
     userId: v.string(),
@@ -105,7 +104,8 @@ export default defineSchema({
     .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
     .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
-    .index("by_external_id", ["externalId"]),
+    .index("by_external_id", ["externalId"])
+    .index("by_user_external", ["userId", "externalId"]),
 
   journalTradeFacts: defineTable({
     userId: v.string(),
