@@ -152,8 +152,8 @@ export default defineSchema({
     userId: v.string(),
     usedBytes: v.number(),
     attachmentCount: v.number(),
-    reservedBytes: v.number(),
-    reservedCount: v.number(),
+    reservedBytes: v.optional(v.number()),
+    reservedCount: v.optional(v.number()),
     updatedAtMs: v.number(),
   }).index("by_user", ["userId"]),
 
