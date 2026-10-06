@@ -28,7 +28,7 @@ export const LogTradeChoiceSheet = ({
       <SheetHeader className="text-left">
         <SheetTitle>Log a trade</SheetTitle>
         <SheetDescription>
-          Choose how you want to create this journal entry. Nothing is pulled from your old calculator history.
+          Choose how you want to journal this trade. Calculator history stays separate.
         </SheetDescription>
       </SheetHeader>
 
@@ -44,7 +44,7 @@ export const LogTradeChoiceSheet = ({
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-bold text-foreground">Manual</span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-              Log only the details you have, then add notes and before/after charts.
+              Open a blank notebook. Add before/after charts, reasoning, notes, and trade details only when you want.
             </span>
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -61,7 +61,7 @@ export const LogTradeChoiceSheet = ({
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-bold text-foreground">Automatic</span>
             <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">
-              Start a fresh Poscal calculation and turn only that calculation into a new journal trade.
+              Open the structured Add Trade form and let Poscal organise the trade fields for you.
             </span>
           </span>
           <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
