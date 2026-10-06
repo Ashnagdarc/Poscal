@@ -7,6 +7,7 @@ import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 const nullableStringArrayArg = v.optional(v.union(v.array(v.string()), v.null()));
+const nullableStorageIdArrayArg = v.optional(v.union(v.array(v.id("_storage")), v.null()));
 const orderTypeArg = v.optional(v.union(
   v.literal("buy"),
   v.literal("sell"),
@@ -50,6 +51,7 @@ const historyFieldsWithoutUser = {
   resultR: nullableNumberArg,
   note: nullableStringArg,
   screenshotUrls: nullableStringArrayArg,
+  screenshotStorageIds: nullableStorageIdArrayArg,
   openedAtMs: nullableNumberArg,
   closedAtMs: nullableNumberArg,
   createdAtMs: v.number(),
@@ -99,6 +101,7 @@ const buildHistoryRow = (
   resultR: args.resultR ?? existing?.resultR ?? null,
   note: args.note ?? existing?.note ?? null,
   screenshotUrls: args.screenshotUrls ?? existing?.screenshotUrls ?? null,
+  screenshotStorageIds: args.screenshotStorageIds ?? existing?.screenshotStorageIds ?? null,
   openedAtMs: args.openedAtMs ?? existing?.openedAtMs ?? args.createdAtMs,
   closedAtMs: args.closedAtMs ?? existing?.closedAtMs ?? null,
   createdAtMs: args.createdAtMs,
@@ -192,6 +195,7 @@ export const updateResult = mutation({
     resultR: nullableNumberArg,
     note: nullableStringArg,
     screenshotUrls: nullableStringArrayArg,
+    screenshotStorageIds: nullableStorageIdArrayArg,
     closedAtMs: nullableNumberArg,
   },
   handler: async (ctx, args) => {
@@ -216,13 +220,49 @@ export const updateResult = mutation({
       pnlAmount: args.pnlAmount ?? null,
       resultR: args.resultR ?? null,
       note: args.note ?? null,
-      screenshotUrls: args.screenshotUrls ?? null,
+      screenshotUrls: args.screenshotUrls !== undefined
+        ? args.screenshotUrls
+        : existing.screenshotUrls ?? null,
+      screenshotStorageIds: args.screenshotStorageIds !== undefined
+        ? args.screenshotStorageIds
+        : existing.screenshotStorageIds ?? null,
       closedAtMs: args.closedAtMs ?? null,
       updatedAtMs: Date.now(),
     };
 
     await ctx.db.patch(existing._id, patch);
     return await ctx.db.get(existing._id);
+  },
+});
+
+export const generateScreenshotUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    await requireVerifiedAuthUserId(ctx);
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const getScreenshotUrls = query({
+  args: { clientId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return [];
+
+    const existing = await ctx.db
+      .query("calculatorHistory")
+      .withIndex("by_user_client", (q) =>
+        q.eq("userId", userId).eq("clientId", args.clientId),
+      )
+      .unique();
+
+    if (!existing) return [];
+
+    const storageIds = existing.screenshotStorageIds ?? [];
+    const urls = await Promise.all(
+      storageIds.map((storageId) => ctx.storage.getUrl(storageId)),
+    );
+    return urls.filter((url): url is string => Boolean(url));
   },
 });
 
