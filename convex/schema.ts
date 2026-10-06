@@ -69,7 +69,8 @@ export default defineSchema({
     statsVersion: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
-    .index("by_external_id", ["externalId"]),
+    .index("by_external_id", ["externalId"])
+    .index("by_user_external", ["userId", "externalId"]),
 
   tradingJournal: defineTable({
     userId: v.string(),

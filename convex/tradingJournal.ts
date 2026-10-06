@@ -645,6 +645,20 @@ export const saveMany = mutation({
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
       assertValidTradeFields(item);
+
+      if (item.externalId) {
+        const existing = await ctx.db
+          .query("tradingJournal")
+          .withIndex("by_user_external", (q) =>
+            q.eq("userId", userId).eq("externalId", item.externalId),
+          )
+          .first();
+        if (existing) {
+          ids.push(existing._id);
+          continue;
+        }
+      }
+
       const insertedId = await ctx.db.insert("tradingJournal", {
         ...item,
         userId,
