@@ -1,4 +1,5 @@
 import { tradesApi } from "@/lib/api";
+import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
 import { getAuthenticatedConvexHttpClient, isConvexEnabled } from "@/lib/convexClient";
 import { api } from "../../convex/_generated/api";
 
@@ -339,10 +340,21 @@ export const updateTradeNotebook = async (
 
 export const deleteJournalEntry = async (_userId: string, id: string): Promise<void> => {
   if (isConvexEnabled()) {
-    const client = getAuthenticatedConvexHttpClient();
-    await client.mutation(api.tradingJournal.deleteEntry, {
-      id: id as any,
+    const token = getConvexAuthTokenMirror();
+    if (!token) throw new Error("Your session is not ready. Please try again.");
+
+    const response = await fetch("/api/journal-entry", {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tradeId: id }),
     });
+    const payload = await response.json().catch(() => null) as { message?: string } | null;
+    if (!response.ok) {
+      throw new Error(payload?.message || `Could not delete journal (${response.status})`);
+    }
     return;
   }
 
