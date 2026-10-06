@@ -65,10 +65,34 @@ export const reserveUpload = mutation({
     }
 
     const existingUsage = await getUsage(ctx, userId);
+
+    // Reclaim abandoned reservations older than 30 minutes so a crashed
+    // browser cannot permanently consume a user's free quota.
+    const staleCutoff = Date.now() - 30 * 60 * 1000;
+    const stalePending = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_user_status_created", (q) =>
+        q.eq("userId", userId).eq("status", "pending").lt("createdAtMs", staleCutoff),
+      )
+      .take(20);
+
+    const staleReservedBytes = stalePending.reduce((sum, row) => sum + row.sizeBytes, 0);
+    for (const row of stalePending) {
+      await ctx.db.patch(row._id, { status: "deleted", updatedAtMs: Date.now() });
+    }
+
     const usedBytes = existingUsage?.usedBytes ?? 0;
     const attachmentCount = existingUsage?.attachmentCount ?? 0;
-    const reservedBytes = existingUsage?.reservedBytes ?? 0;
-    const reservedCount = existingUsage?.reservedCount ?? 0;
+    const reservedBytes = Math.max(0, (existingUsage?.reservedBytes ?? 0) - staleReservedBytes);
+    const reservedCount = Math.max(0, (existingUsage?.reservedCount ?? 0) - stalePending.length);
+
+    if (existingUsage && stalePending.length > 0) {
+      await ctx.db.patch(existingUsage._id, {
+        reservedBytes,
+        reservedCount,
+        updatedAtMs: Date.now(),
+      });
+    }
 
     if (usedBytes + reservedBytes + args.sizeBytes > FREE_STORAGE_BYTES) {
       throw new Error("Free journal image storage limit reached");
@@ -128,6 +152,9 @@ export const reserveUpload = mutation({
         reservedCount: reservedCount + 1,
         limitCount: FREE_ATTACHMENT_COUNT,
       },
+      staleObjectKeys: stalePending
+        .map((row) => row.objectKey)
+        .filter((key) => key && key !== "pending"),
     };
   },
 });
