@@ -5,6 +5,7 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const BATCH_SIZE = 200;
+const BACKFILL_ACTIVE_WINDOW_MS = 5 * 60 * 1000;
 
 type Accumulator = {
   totalTrades: number;
@@ -235,6 +236,18 @@ export const ensureForJournal = mutation({
         q.eq("userId", userId).eq("journalId", args.journalId),
       )
       .unique();
+
+    if (
+      existing
+      && existing.status === "running"
+      && existing.sourceVersion === sourceVersion
+      && now - existing.updatedAtMs < BACKFILL_ACTIVE_WINDOW_MS
+    ) {
+      // Multiple tabs/devices can notice the same stale stats at once.
+      // Treat recently-updated work as single-flight, but allow an abandoned
+      // backfill to be restarted after the activity window.
+      return { status: "already_running" as const };
+    }
 
     const initial = emptyAccumulator();
     let backfillId: Id<"journalTradeStatsBackfills">;
