@@ -146,6 +146,7 @@ export default defineSchema({
   })
     .index("by_trade_role", ["tradeId", "role", "sortOrder"])
     .index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_status_created", ["status", "createdAtMs"]),
 
   userStorageUsage: defineTable({
