@@ -90,15 +90,12 @@ export default defineSchema({
     notes: nullableString,
     journalType: nullableString,
     richContent: nullableAny,
-    entryReason: nullableString,
-    duringTradeNotes: nullableString,
-    postTradeReview: nullableString,
-    lessonsLearned: nullableString,
     journalStatus: v.optional(v.union(
       v.literal("empty"),
       v.literal("draft"),
       v.literal("complete"),
     )),
+    journalPreview: nullableString,
     journalUpdatedAtMs: nullableNumber,
     images: nullableAny,
     links: nullableAny,
@@ -116,6 +113,20 @@ export default defineSchema({
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
     .index("by_external_id", ["externalId"])
     .index("by_user_external", ["userId", "externalId"]),
+
+  tradeNotebooks: defineTable({
+    userId: v.string(),
+    journalId: v.id("tradingAccounts"),
+    tradeId: v.id("tradingJournal"),
+    entryReason: nullableString,
+    duringTradeNotes: nullableString,
+    postTradeReview: nullableString,
+    lessonsLearned: nullableString,
+    createdAtMs: v.number(),
+    updatedAtMs: v.number(),
+  })
+    .index("by_trade", ["tradeId"])
+    .index("by_user_updated", ["userId", "updatedAtMs"]),
 
   tradeJournalAttachments: defineTable({
     userId: v.string(),
