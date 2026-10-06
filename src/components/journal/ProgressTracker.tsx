@@ -13,7 +13,7 @@ import {
 } from "@/hooks/queries/use-progress-query";
 import type { JournalEntry } from "@/lib/calculatorHistory";
 import type { JournalTrade } from "@/lib/convexJournal";
-import { formatJournalMoney, formatJournalPercent } from "@/lib/journalAnalytics";
+import { formatJournalMoney, formatJournalPercent, toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 import {
   createEmptySession,
   formatProgressDateKey,
@@ -27,6 +27,7 @@ interface ProgressTrackerProps {
   calculatorResults?: JournalEntry[];
   dateKey: string;
   onDateKeyChange: (dateKey: string) => void;
+  timeZone?: string | null;
 }
 
 export const ProgressTracker = ({
@@ -34,6 +35,7 @@ export const ProgressTracker = ({
   calculatorResults = [],
   dateKey,
   onDateKeyChange,
+  timeZone = null,
 }: ProgressTrackerProps) => {
   const { currency } = useCurrency();
   const { showErrorFromUnknown } = useActionError();
@@ -59,9 +61,9 @@ export const ProgressTracker = ({
       trades.filter((trade) => {
         const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
         if (!raw) return false;
-        return formatProgressDateKey(new Date(raw)) === dateKey;
+        return toDateKeyInTimeZone(new Date(raw), timeZone) === dateKey;
       }),
-    [trades, dateKey],
+    [trades, dateKey, timeZone],
   );
 
   // Kept only for backward compatibility with older callers. New Journal UX
