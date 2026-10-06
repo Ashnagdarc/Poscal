@@ -88,13 +88,53 @@ export const presignR2Object = (
   return `${cfg.endpoint}${path}?${canonicalQuery}&X-Amz-Signature=${signature}`;
 };
 
-export const headR2Object = async (objectKey: string) => {
-  const response = await fetch(presignR2Object("HEAD", objectKey, 60), { method: "HEAD" });
-  if (!response.ok) {
-    throw new Error(`R2 object verification failed (${response.status})`);
+const hasImageSignature = (bytes: Uint8Array, mimeType: string) => {
+  if (mimeType === "image/png") {
+    return bytes.length >= 8
+      && bytes[0] === 0x89
+      && bytes[1] === 0x50
+      && bytes[2] === 0x4e
+      && bytes[3] === 0x47
+      && bytes[4] === 0x0d
+      && bytes[5] === 0x0a
+      && bytes[6] === 0x1a
+      && bytes[7] === 0x0a;
   }
-  const size = Number(response.headers.get("content-length") || "0");
-  const mimeType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+  if (mimeType === "image/jpeg") {
+    return bytes.length >= 3
+      && bytes[0] === 0xff
+      && bytes[1] === 0xd8
+      && bytes[2] === 0xff;
+  }
+  if (mimeType === "image/webp") {
+    return bytes.length >= 12
+      && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF"
+      && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
+  }
+  return false;
+};
+
+export const inspectR2Object = async (objectKey: string) => {
+  const headResponse = await fetch(presignR2Object("HEAD", objectKey, 60), { method: "HEAD" });
+  if (!headResponse.ok) {
+    throw new Error(`R2 object verification failed (${headResponse.status})`);
+  }
+
+  const size = Number(headResponse.headers.get("content-length") || "0");
+  const mimeType = (headResponse.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+
+  const signatureResponse = await fetch(presignR2Object("GET", objectKey, 60), {
+    method: "GET",
+    headers: { Range: "bytes=0-15" },
+  });
+  if (!signatureResponse.ok && signatureResponse.status !== 206) {
+    throw new Error(`R2 image signature verification failed (${signatureResponse.status})`);
+  }
+  const signature = new Uint8Array(await signatureResponse.arrayBuffer());
+  if (!hasImageSignature(signature, mimeType)) {
+    throw new Error("Uploaded object is not a valid PNG, JPEG, or WebP image");
+  }
+
   return { size, mimeType };
 };
 
