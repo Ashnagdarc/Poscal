@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Check, Clock3, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
+  deleteJournalEntry,
   getJournalEntry,
   updateJournalEntry,
   updateTradeNotebook,
@@ -19,7 +22,7 @@ import {
   type JournalImageQuota,
   type JournalImageRole,
 } from "@/lib/journalImages";
-import type { ManualTradeInput } from "@/hooks/queries/use-trades-query";
+import { TRADES_QUERY_KEY, type ManualTradeInput } from "@/hooks/queries/use-trades-query";
 
 type NotebookDraft = {
   journal_title: string;
@@ -123,6 +126,7 @@ const formatDate = (value?: string | null) => {
 const TradeNotebook = () => {
   const { tradeId } = useParams<{ tradeId: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { user } = useAuth();
 
   const [trade, setTrade] = useState<JournalTrade | null>(null);
@@ -136,6 +140,8 @@ const TradeNotebook = () => {
   const [deletingAttachmentId, setDeletingAttachmentId] = useState<string | null>(null);
   const [isTradeDetailsOpen, setIsTradeDetailsOpen] = useState(false);
   const [isSavingTradeDetails, setIsSavingTradeDetails] = useState(false);
+  const [isDeleteOpen, setIsDeleteOpen] = useState(false);
+  const [isDeletingJournal, setIsDeletingJournal] = useState(false);
 
   const hydratedRef = useRef(false);
   const revisionRef = useRef(0);
@@ -337,6 +343,23 @@ const TradeNotebook = () => {
       toast.error(error instanceof Error ? error.message : "Could not save trade details");
     } finally {
       setIsSavingTradeDetails(false);
+    }
+  };
+
+  const handleDeleteJournal = async () => {
+    if (!trade || !user?.id || isDeletingJournal) return;
+
+    setIsDeletingJournal(true);
+    try {
+      await deleteJournalEntry(user.id, trade.id);
+      clearLocalDraft(trade.id);
+      await queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
+      toast.success("Journal deleted");
+      navigate("/journal", { replace: true });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not delete journal");
+      setIsDeletingJournal(false);
+      throw error;
     }
   };
 
@@ -679,6 +702,25 @@ const TradeNotebook = () => {
             </p>
           ) : null}
         </section>
+
+        <section className="py-6">
+          <button
+            type="button"
+            onClick={() => setIsDeleteOpen(true)}
+            disabled={isDeletingJournal || uploadingRole !== null}
+            className="flex w-full items-center justify-center gap-2 rounded-2xl border border-destructive/25 px-4 py-3 text-sm font-semibold text-destructive transition hover:bg-destructive/5 disabled:opacity-50"
+          >
+            {isDeletingJournal ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            Delete journal
+          </button>
+          <p className="mt-2 text-center text-[11px] leading-relaxed text-muted-foreground">
+            Removes this journal entry, its trade data, notes, and chart images.
+          </p>
+        </section>
       </main>
 
       <ManualTradeSheet
@@ -687,6 +729,20 @@ const TradeNotebook = () => {
         trade={trade}
         isSaving={isSavingTradeDetails}
         onSave={handleSaveTradeDetails}
+      />
+
+      <ConfirmDialog
+        isOpen={isDeleteOpen}
+        onClose={() => {
+          if (!isDeletingJournal) setIsDeleteOpen(false);
+        }}
+        onConfirm={() => {
+          void handleDeleteJournal().finally(() => setIsDeleteOpen(false));
+        }}
+        title="Delete this journal?"
+        description="This permanently removes the journal entry, trade details, notes, and before/after chart images. This cannot be undone."
+        confirmText={isDeletingJournal ? "Deleting…" : "Delete journal"}
+        variant="destructive"
       />
     </div>
   );
