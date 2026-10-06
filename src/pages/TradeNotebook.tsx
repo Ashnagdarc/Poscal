@@ -22,6 +22,7 @@ import {
 import type { ManualTradeInput } from "@/hooks/queries/use-trades-query";
 
 type NotebookDraft = {
+  journal_title: string;
   entry_reason: string;
   during_trade_notes: string;
   post_trade_review: string;
@@ -32,9 +33,11 @@ type NotebookDraft = {
 type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
 
 const MAX_SECTION_CHARS = 100_000;
+const MAX_TITLE_CHARS = 120;
 const AUTOSAVE_DELAY_MS = 1_500;
 
 const emptyDraft = (): NotebookDraft => ({
+  journal_title: "",
   entry_reason: "",
   during_trade_notes: "",
   post_trade_review: "",
@@ -45,6 +48,7 @@ const emptyDraft = (): NotebookDraft => ({
 const draftKey = (tradeId: string) => `poscal.tradeNotebookDraft.${tradeId}`;
 
 const fromTrade = (trade: JournalTrade): NotebookDraft => ({
+  journal_title: trade.journal_title ?? "",
   entry_reason: trade.entry_reason ?? "",
   during_trade_notes: trade.during_trade_notes ?? "",
   post_trade_review: trade.post_trade_review ?? "",
@@ -66,7 +70,14 @@ const readLocalDraft = (tradeId: string): NotebookDraft | null => {
     ) {
       return null;
     }
-    return parsed as NotebookDraft;
+    return {
+      journal_title: typeof parsed.journal_title === "string" ? parsed.journal_title : "",
+      entry_reason: parsed.entry_reason,
+      during_trade_notes: parsed.during_trade_notes,
+      post_trade_review: parsed.post_trade_review,
+      lessons_learned: parsed.lessons_learned,
+      updatedAtMs: parsed.updatedAtMs,
+    };
   } catch {
     return null;
   }
@@ -190,11 +201,13 @@ const TradeNotebook = () => {
   }, [tradeId, user?.id]);
 
   const patch = useMemo<NotebookPatch>(() => ({
+    journal_title: draft.journal_title.trim() || null,
     entry_reason: draft.entry_reason || null,
     during_trade_notes: draft.during_trade_notes || null,
     post_trade_review: draft.post_trade_review || null,
     lessons_learned: draft.lessons_learned || null,
   }), [
+    draft.journal_title,
     draft.entry_reason,
     draft.during_trade_notes,
     draft.post_trade_review,
@@ -225,6 +238,23 @@ const TradeNotebook = () => {
 
     return () => window.clearTimeout(timer);
   }, [patch, saveState, tradeId, user?.id]);
+
+  const updateTitle = (value: string) => {
+    if (!tradeId) return;
+
+    revisionRef.current += 1;
+    const normalized = value.replace(/[\r\n]+/g, " ").slice(0, MAX_TITLE_CHARS);
+    setDraft((current) => {
+      const next = {
+        ...current,
+        journal_title: normalized,
+        updatedAtMs: Date.now(),
+      };
+      writeLocalDraft(tradeId, next);
+      return next;
+    });
+    setSaveState("dirty");
+  };
 
   const updateSection = (
     key: "entry_reason" | "during_trade_notes" | "post_trade_review" | "lessons_learned",
@@ -438,7 +468,8 @@ const TradeNotebook = () => {
   }
 
   const isNotebookDraft = trade.journal_type === "notebook_draft";
-  const displayPair = isNotebookDraft ? "Untitled trade" : trade.pair;
+  const fallbackTitle = isNotebookDraft ? "Untitled trade" : trade.pair;
+  const displayTitle = draft.journal_title.trim() || fallbackTitle;
   const pnl = trade.pnl;
   const direction = trade.direction === "sell" || trade.direction === "short" ? "Short" : "Long";
 
@@ -456,7 +487,7 @@ const TradeNotebook = () => {
           </button>
 
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{displayPair}</p>
+            <p className="truncate text-sm font-semibold text-foreground">{displayTitle}</p>
             <p className="text-xs text-muted-foreground">{statusLabel}</p>
           </div>
 
@@ -475,7 +506,15 @@ const TradeNotebook = () => {
         <section className="border-b border-border/60 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{displayPair}</h1>
+              <input
+                type="text"
+                value={draft.journal_title}
+                onChange={(event) => updateTitle(event.target.value)}
+                maxLength={MAX_TITLE_CHARS}
+                placeholder={fallbackTitle}
+                aria-label="Journal title"
+                className="block w-full min-w-0 bg-transparent text-2xl font-bold tracking-tight text-foreground outline-none placeholder:text-foreground"
+              />
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
                 {isNotebookDraft ? (
                   <>
