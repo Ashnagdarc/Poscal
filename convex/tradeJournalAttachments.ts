@@ -94,10 +94,29 @@ export const reserveUpload = mutation({
       });
     }
 
-    if (usedBytes + reservedBytes + args.sizeBytes > FREE_STORAGE_BYTES) {
+    const readyForRole = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_trade_role", (q) => q.eq("tradeId", args.tradeId).eq("role", args.role))
+      .collect();
+    const currentReady = readyForRole.find(
+      (row) => row.userId === userId && row.status === "ready",
+    ) ?? null;
+
+    const projectedBytes =
+      usedBytes
+      - (currentReady?.sizeBytes ?? 0)
+      + reservedBytes
+      + args.sizeBytes;
+    const projectedCount =
+      attachmentCount
+      - (currentReady ? 1 : 0)
+      + reservedCount
+      + 1;
+
+    if (projectedBytes > FREE_STORAGE_BYTES) {
       throw new Error("Free journal image storage limit reached");
     }
-    if (attachmentCount + reservedCount + 1 > FREE_ATTACHMENT_COUNT) {
+    if (projectedCount > FREE_ATTACHMENT_COUNT) {
       throw new Error("Free journal image limit reached");
     }
 
