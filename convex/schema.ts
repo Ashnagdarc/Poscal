@@ -89,6 +89,7 @@ export default defineSchema({
     status: v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled")),
     notes: nullableString,
     journalType: nullableString,
+    journalTitle: nullableString,
     richContent: nullableAny,
     journalStatus: v.optional(v.union(
       v.literal("empty"),
