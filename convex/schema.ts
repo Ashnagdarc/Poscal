@@ -112,6 +112,7 @@ export default defineSchema({
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
     .index("by_user_journal_entry_date", ["userId", "journalId", "entryDateMs"])
+    .index("by_user_journal_exit_date", ["userId", "journalId", "exitDateMs"])
     .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_user_journal_status_created", ["userId", "journalId", "status", "createdAtMs"])
     .index("by_external_id", ["externalId"])
