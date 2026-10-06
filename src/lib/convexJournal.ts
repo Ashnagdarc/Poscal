@@ -46,7 +46,7 @@ const parseNumberish = (value: unknown): number | null => {
   return Number.isFinite(parsed) ? parsed : null;
 };
 
-const fromConvexTrade = (row: any): JournalTrade => ({
+export const fromConvexTrade = (row: any): JournalTrade => ({
   id: row._id,
   journal_id: row.journalId ?? null,
   pair: row.pair,

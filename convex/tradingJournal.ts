@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
@@ -196,6 +197,72 @@ export const listForUser = query({
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
+  },
+});
+
+
+/**
+ * Cursor-paginated trade feed for large journals.
+ * Kept alongside listForUser so existing analytics remain unchanged during migration.
+ */
+export const listForUserPaginated = query({
+  args: {
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
+    status: nullableStringArg,
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) {
+      return {
+        page: [],
+        isDone: true,
+        continueCursor: "",
+      };
+    }
+
+    const statusFilter = parseTradeStatusFilter(args.status);
+
+    if (args.journalId) {
+      await assertJournalOwned(ctx, userId, args.journalId);
+
+      if (statusFilter) {
+        return await ctx.db
+          .query("tradingJournal")
+          .withIndex("by_user_journal_status_created", (q) =>
+            q
+              .eq("userId", userId)
+              .eq("journalId", args.journalId)
+              .eq("status", statusFilter),
+          )
+          .order("desc")
+          .paginate(args.paginationOpts);
+      }
+
+      return await ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.journalId),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
+
+    if (statusFilter) {
+      return await ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_status_created", (q) =>
+          q.eq("userId", userId).eq("status", statusFilter),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
+
+    return await ctx.db
+      .query("tradingJournal")
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
   },
 });
 

@@ -1,5 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { usePaginatedQuery } from 'convex/react';
+import { api } from '../../../convex/_generated/api';
 import { toast } from 'sonner';
 import { useAuth } from '@/contexts/AuthContext';
 import { useJournal } from '@/contexts/JournalContext';
@@ -9,12 +11,46 @@ import {
   JOURNAL_FETCH_LIMIT,
   listJournalEntriesWithMeta,
   updateJournalEntry,
+  fromConvexTrade,
   type JournalTrade,
 } from '@/lib/convexJournal';
 
 export const TRADES_QUERY_KEY = ['trades'] as const;
 
 type Trade = JournalTrade;
+
+export const JOURNAL_TRADE_PAGE_SIZE = 50;
+
+/**
+ * Reactive, cursor-paginated trade feed.
+ * Phase 1: exposed alongside the legacy bounded query. The Journal UI is not
+ * switched until analytics are decoupled from loaded feed rows.
+ */
+export const usePaginatedTradesQuery = () => {
+  const { user } = useAuth();
+  const { activeJournalId } = useJournal();
+  const enabled = Boolean(user && activeJournalId);
+
+  const paginated = usePaginatedQuery(
+    api.tradingJournal.listForUserPaginated,
+    enabled
+      ? {
+          journalId: activeJournalId as any,
+          status: null,
+        }
+      : 'skip',
+    { initialNumItems: JOURNAL_TRADE_PAGE_SIZE },
+  );
+
+  return {
+    ...paginated,
+    data: paginated.results.map(fromConvexTrade),
+    isLoading: paginated.status === 'LoadingFirstPage',
+    isLoadingMore: paginated.status === 'LoadingMore',
+    canLoadMore: paginated.status === 'CanLoadMore',
+    loadMore: () => paginated.loadMore(JOURNAL_TRADE_PAGE_SIZE),
+  };
+};
 
 export const useTradesQuery = () => {
   const { user } = useAuth();
