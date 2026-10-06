@@ -119,7 +119,11 @@ const Journal = () => {
     month: calendarMonth,
     timeZone: preferredTimeZone,
   });
-  const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
+  const { dayMap: currentMonthDaySummaries } = useJournalCalendar({
+    month: today,
+    timeZone: preferredTimeZone,
+  });
+  const todaySummary = currentMonthDaySummaries.get(toDateKey(today)) ?? null;
 
   useEffect(() => {
     if (!user) return;
