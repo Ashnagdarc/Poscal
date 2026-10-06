@@ -38,6 +38,7 @@ import {
   useUpdateTradeMutation,
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
+import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
 import { toast } from "sonner";
 import { useActionError } from "@/contexts/ActionErrorContext";
 import { preferencesApi } from "@/lib/api";
@@ -172,6 +173,7 @@ const Journal = () => {
   const addTradeMutation = useAddTradeMutation();
   const updateTradeMutation = useUpdateTradeMutation();
   const deleteTradeMutation = useDeleteTradeMutation();
+  const { stats: serverTradeStats, isBackfilling: isTradeStatsBackfilling } = useJournalTradeStats();
   const [activeView, setActiveView] = useState<"heatmap" | "calendar">("calendar");
   const [items, setItems] = useState<JournalEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -810,6 +812,8 @@ const Journal = () => {
               onTabChange={setJournalTab}
               startingBalance={startingBalance}
               timeZone={preferredTimeZone}
+              serverStats={serverTradeStats}
+              isStatsBackfilling={isTradeStatsBackfilling}
               onAddTrade={() => {
                 setTradeToEdit(null);
                 setIsTradeSheetOpen(true);
