@@ -404,7 +404,7 @@ const toConvexInputFromSavedRecord = (_userId: string, record: SavedCalculationR
   };
 };
 
-const fromConvexSavedRecord = (row: {
+export const fromConvexSavedRecord = (row: {
   _id: string;
   userId?: string | null;
   journalId?: string | null;
@@ -602,6 +602,7 @@ export const clearJournalEntries = clearCalculatorHistory;
 export const deleteCalculatorHistoryItem = async (
   id: string,
   userId?: string | null,
+  journalId?: string | null,
 ): Promise<SavedCalculationRecord[]> => {
   const nextLocalHistory = readLocalSavedCalculations().filter((item) => item.id !== id);
   writeLocalSavedCalculations(nextLocalHistory);
@@ -611,7 +612,7 @@ export const deleteCalculatorHistoryItem = async (
     await client.mutation(api.calculatorHistory.remove, {
       clientId: id,
     });
-    return await loadSavedCalculations(userId);
+    return await loadSavedCalculations(userId, journalId);
   }
 
   return nextLocalHistory;
@@ -623,7 +624,42 @@ export const updateSavedCalculation = async (
   id: string,
   updates: Partial<SavedCalculationRecord>,
   userId?: string | null,
+  journalId?: string | null,
 ): Promise<SavedCalculationRecord[]> => {
+  if (userId && isConvexEnabled()) {
+    const client = getAuthenticatedConvexHttpClient();
+    const updated = await client.mutation((api as any).calculatorHistory.updateResult, {
+      clientId: id,
+      status: updates.status ?? null,
+      pnlAmount: updates.pnlAmount ?? null,
+      resultR: updates.resultR ?? null,
+      note: updates.note ?? null,
+      screenshotUrls: updates.screenshotUrls ?? null,
+      closedAtMs: updates.closedAt === null
+        ? null
+        : updates.closedAt
+          ? parseTimestamp(updates.closedAt).getTime()
+          : null,
+    });
+
+    if (!updated) {
+      throw new Error("Saved calculation not found");
+    }
+
+    const updatedRecord = fromConvexSavedRecord(updated as any);
+    const localItems = readLocalSavedCalculations();
+    const nextLocal = [
+      updatedRecord,
+      ...localItems.filter((item) => item.id !== updatedRecord.id),
+    ].slice(0, HISTORY_LIMIT);
+    writeLocalSavedCalculations(nextLocal);
+
+    const current = await loadSavedCalculations(userId, journalId);
+    return current.some((item) => item.id === updatedRecord.id)
+      ? current
+      : [updatedRecord, ...current];
+  }
+
   const currentItems = readLocalSavedCalculations();
   const existing = currentItems.find((item) => item.id === id);
 
@@ -648,13 +684,6 @@ export const updateSavedCalculation = async (
 
   const nextItems = currentItems.map((item) => (item.id === id ? nextRecord : item));
   writeLocalSavedCalculations(nextItems);
-
-  if (userId && isConvexEnabled()) {
-    const client = getAuthenticatedConvexHttpClient();
-    await client.mutation(api.calculatorHistory.save, toConvexInputFromSavedRecord(userId, nextRecord));
-    return await loadSavedCalculations(userId);
-  }
-
   return nextItems;
 };
 

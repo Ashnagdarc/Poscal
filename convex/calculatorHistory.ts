@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
@@ -133,6 +134,95 @@ export const listForUser = query({
       .withIndex("by_user_created", (q) => q.eq("userId", userId))
       .order("desc")
       .take(limit);
+  },
+});
+
+
+/** Cursor-paginated calculator history for large journals. */
+export const listForUserPaginated = query({
+  args: {
+    journalId: v.optional(v.union(v.id("tradingAccounts"), v.null())),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) {
+      return { page: [], isDone: true, continueCursor: "" };
+    }
+
+    if (args.journalId) {
+      await assertJournalOwned(ctx, userId, args.journalId);
+      return await ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.journalId),
+        )
+        .order("desc")
+        .paginate(args.paginationOpts);
+    }
+
+    return await ctx.db
+      .query("calculatorHistory")
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
+      .order("desc")
+      .paginate(args.paginationOpts);
+  },
+});
+
+export const getByClientId = query({
+  args: { clientId: v.string() },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return null;
+
+    return await ctx.db
+      .query("calculatorHistory")
+      .withIndex("by_user_client", (q) =>
+        q.eq("userId", userId).eq("clientId", args.clientId),
+      )
+      .unique();
+  },
+});
+
+export const updateResult = mutation({
+  args: {
+    clientId: v.string(),
+    status: statusArg,
+    pnlAmount: nullableNumberArg,
+    resultR: nullableNumberArg,
+    note: nullableStringArg,
+    screenshotUrls: nullableStringArrayArg,
+    closedAtMs: nullableNumberArg,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db
+      .query("calculatorHistory")
+      .withIndex("by_user_client", (q) =>
+        q.eq("userId", userId).eq("clientId", args.clientId),
+      )
+      .unique();
+
+    if (!existing) {
+      throw new Error("Saved calculation not found");
+    }
+
+    if (args.note != null && args.note.length > 5000) {
+      throw new Error("Note is too long");
+    }
+
+    const patch = {
+      status: args.status ?? existing.status ?? "open",
+      pnlAmount: args.pnlAmount ?? null,
+      resultR: args.resultR ?? null,
+      note: args.note ?? null,
+      screenshotUrls: args.screenshotUrls ?? null,
+      closedAtMs: args.closedAtMs ?? null,
+      updatedAtMs: Date.now(),
+    };
+
+    await ctx.db.patch(existing._id, patch);
+    return await ctx.db.get(existing._id);
   },
 });
 
