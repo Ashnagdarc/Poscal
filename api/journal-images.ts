@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from "@vercel/node";
 import { api, createConvexServerClient } from "./_convex.js";
 
 const journalAttachmentsApi = (api as any).tradeJournalAttachments;
-import { deleteR2Object, headR2Object, presignR2Object } from "./_lib/r2.js";
+import { deleteR2Object, inspectR2Object, presignR2Object } from "./_lib/r2.js";
 
 export const config = { maxDuration: 30 };
 
@@ -113,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const pending = rows.find((row: any) => String(row._id) === attachmentId);
         if (!pending) return res.status(404).json({ success: false, message: "Pending attachment not found" });
 
-        const head = await headR2Object(pending.objectKey);
+        const head = await inspectR2Object(pending.objectKey);
         const completed = await client.mutation(journalAttachmentsApi.completeUpload, {
           attachmentId: attachmentId as any,
           actualSizeBytes: head.size,
