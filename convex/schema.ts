@@ -17,6 +17,8 @@ export default defineSchema({
     freeJournalChosen: v.optional(v.boolean()),
     autoRenewEnabled: v.optional(v.boolean()),
     autoRenewPlan: v.optional(v.union(v.literal("monthly"), v.literal("yearly"))),
+    autoRenewAmount: v.optional(v.number()),
+    autoRenewPolicyVersion: v.optional(v.number()),
     autoRenewAuthorizationCode: v.optional(v.string()),
     autoRenewEmail: v.optional(v.string()),
     autoRenewSignature: v.optional(v.string()),
