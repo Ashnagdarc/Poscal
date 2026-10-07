@@ -63,6 +63,13 @@ export async function getProAccess(
       screenshots: storage?.attachmentCount ?? 0,
       storageBytes: storage?.usedBytes ?? 0,
     },
+    autoRenew: {
+      enabled: account?.autoRenewEnabled === true,
+      plan: account?.autoRenewPlan ?? null,
+      nextChargeAtMs: account?.autoRenewNextChargeAtMs ?? null,
+      last4: account?.autoRenewLast4 ?? null,
+      brand: account?.autoRenewBrand ?? null,
+    },
   };
 }
 
