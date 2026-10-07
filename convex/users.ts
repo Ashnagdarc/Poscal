@@ -416,6 +416,27 @@ export const deleteAccount = mutation({
       throw new Error("User not found");
     }
 
+    const [remainingJournal, remainingTrade, remainingAttachment] =
+      await Promise.all([
+        ctx.db
+          .query("tradingAccounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .first(),
+        ctx.db
+          .query("tradingJournal")
+          .withIndex("by_user_created", (q) => q.eq("userId", userId))
+          .first(),
+        ctx.db
+          .query("tradeJournalAttachments")
+          .withIndex("by_user_created", (q) => q.eq("userId", userId))
+          .first(),
+      ]);
+    if (remainingJournal || remainingTrade || remainingAttachment) {
+      throw new Error(
+        "Account assets must be cleaned through the resumable deletion flow before deleting the account.",
+      );
+    }
+
     const counts = {
       trades: 0,
       history: 0,
@@ -425,6 +446,7 @@ export const deleteAccount = mutation({
       payments: 0,
       proUsage: 0,
       proAccount: 0,
+      storageUsage: 0,
       notifications: 0,
       authSessions: 0,
       authAccounts: 0,
@@ -504,6 +526,15 @@ export const deleteAccount = mutation({
     for (const row of usageRows) {
       await ctx.db.delete(row._id);
       counts.proUsage += 1;
+    }
+
+    const storageUsage = await ctx.db
+      .query("userStorageUsage")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (storageUsage) {
+      await ctx.db.delete(storageUsage._id);
+      counts.storageUsage += 1;
     }
 
     const notificationRows = await ctx.db
