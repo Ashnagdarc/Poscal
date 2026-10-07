@@ -35,7 +35,6 @@ import {
   tradesToCsv,
 } from "@/lib/exportJournalCsv";
 import { parseAndValidateJournalCsv } from "@/lib/importJournalCsv";
-import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
@@ -65,8 +64,8 @@ const Profile = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
-  const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
+  const { subscriptionTier, expiresAt: proExpiry } = useSubscription();
+  const subscriptionExpiry = proExpiry?.toISOString() ?? null;
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
@@ -93,13 +92,6 @@ const Profile = () => {
         });
         setFullName(data.full_name || "");
         
-        // Try to get subscription info
-        if (data.subscription_tier) {
-          setSubscriptionTier(data.subscription_tier);
-        }
-        if (data.subscription_expires_at) {
-          setSubscriptionExpiry(data.subscription_expires_at);
-        }
       }
     } catch (error) {
       logger.error('Error fetching profile:', error);
@@ -109,13 +101,6 @@ const Profile = () => {
 
   const handleExportData = async () => {
     if (!user || isExporting) return;
-
-    // While checkout is paused, keep export available to signed-in users.
-    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
-      toast.info("CSV export is a premium feature.");
-      navigate("/upgrade?tier=premium&redirectPath=/profile");
-      return;
-    }
 
     setIsExporting(true);
     try {
@@ -144,9 +129,9 @@ const Profile = () => {
 
   const handleImportCsvClick = () => {
     if (!user || isImporting) return;
-    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
-      toast.info("CSV import is a premium feature.");
-      navigate("/upgrade?tier=premium&redirectPath=/profile");
+    if (!checkFeatureAccess("import_csv")) {
+      toast.info("CSV import is a Poscal Pro feature.");
+      navigate("/pro?returnTo=/profile");
       return;
     }
     if (!activeJournalId) {
@@ -381,7 +366,7 @@ const Profile = () => {
           {subscriptionTier !== 'free' && (
             <div className="mt-3 flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-black px-3 py-1 rounded-full text-sm font-semibold">
               <Crown className="w-4 h-4" />
-              {subscriptionTier === 'premium' ? 'Premium' : 'Pro'}
+              {'Pro'}
               {subscriptionExpiry && (
                 <span className="text-xs ml-1">
                   • Expires {new Date(subscriptionExpiry).toLocaleDateString()}

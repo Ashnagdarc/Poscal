@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
-import { adminUsersApi, featureFlagApi } from "@/lib/api";
+import { adminUsersApi } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
@@ -30,14 +30,13 @@ const USERS_PER_PAGE = 15;
 function getTierLabel(tier: string | null | undefined) {
   const normalized = (tier || "free").toLowerCase();
   if (normalized === "pro") return "Pro";
-  if (normalized === "premium") return "Premium";
   if (normalized === "trial") return "Trial";
   return "Free";
 }
 
 function getTierBadgeClass(tier: string | null | undefined) {
   const normalized = (tier || "free").toLowerCase();
-  if (normalized === "pro" || normalized === "premium") {
+  if (normalized === "pro") {
     return "bg-brand/15 text-brand border-brand/20";
   }
   if (normalized === "trial") {
@@ -54,7 +53,6 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 
@@ -70,27 +68,6 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const fetchPaidLock = async () => {
-    try {
-      const enabled = await featureFlagApi.getPaidLock();
-      setPaidLockEnabled(!!enabled);
-    } catch (err) {
-      console.error("Could not fetch paid lock flag", err);
-      setPaidLockEnabled(false);
-    }
-  };
-
-  const togglePaidLock = async () => {
-    try {
-      const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
-      setPaidLockEnabled(!!updatedState);
-      toast.success(updatedState ? "Paid lock enabled" : "Paid lock disabled");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to toggle paid lock");
     }
   };
 
@@ -136,7 +113,6 @@ const UserManagement = () => {
     }
     if (isAdmin) {
       fetchUsers();
-      fetchPaidLock();
     }
   }, [isAdmin, adminLoading, navigate]);
 
@@ -154,11 +130,11 @@ const UserManagement = () => {
 
   const stats = useMemo(() => {
     const admins = users.filter((u) => u.is_admin).length;
-    const premium = users.filter((u) => {
+    const pro = users.filter((u) => {
       const tier = (u.subscription_tier || "free").toLowerCase();
       return tier !== "free";
     }).length;
-    return { total: users.length, admins, premium };
+    return { total: users.length, admins, pro };
   }, [users]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
@@ -216,35 +192,12 @@ const UserManagement = () => {
       />
 
       <main className="mx-auto max-w-2xl space-y-6 px-6 md:max-w-3xl">
-        {/* Paid lock */}
-        <section className="overflow-hidden rounded-2xl border border-border/50 bg-secondary/50">
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10">
-                <Shield className="h-4 w-4 text-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">Paid features lock</p>
-                <p className="text-xs text-muted-foreground">
-                  Restrict premium pages for free users
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant={paidLockEnabled ? "default" : "outline"}
-              className="shrink-0 rounded-xl"
-              onClick={togglePaidLock}
-            >
-              {paidLockEnabled ? "Enabled" : "Disabled"}
-            </Button>
-          </div>
-        </section>
+        <Button variant="outline" onClick={() => navigate("/admin/billing")}>Pro billing controls</Button>
 
         {/* Stats */}
         <section className="grid grid-cols-3 gap-3">
           <StatPill label="Total" value={loading ? "—" : String(stats.total)} />
-          <StatPill label="Premium" value={loading ? "—" : String(stats.premium)} accent />
+          <StatPill label="Pro" value={loading ? "—" : String(stats.pro)} accent />
           <StatPill label="Admins" value={loading ? "—" : String(stats.admins)} />
         </section>
 

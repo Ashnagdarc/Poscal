@@ -16,7 +16,7 @@ function escapeHtml(value: string): string {
 
 /** First word of the name they typed, or null when sign-up left the name blank. */
 export function welcomeFirstName(raw: string): string | null {
-  const cleaned = raw.replace(/[\u0000-\u001F]/g, "").replace(/\s+/g, " ").trim();
+  const cleaned = Array.from(raw).filter(char => char.charCodeAt(0) > 31).join("").replace(/\s+/g, " ").trim();
   if (!cleaned || cleaned.includes("@")) {
     return null;
   }

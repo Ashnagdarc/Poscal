@@ -17,7 +17,6 @@ import {
   attachOrphanJournalData,
   createTradingJournal,
   deleteTradingJournal,
-  getJournalLimit,
   listTradingJournals,
   readStoredActiveJournalId,
   writeStoredActiveJournalId,
@@ -45,7 +44,7 @@ const JournalContext = createContext<JournalContextValue | undefined>(undefined)
 
 export const JournalProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useAuth();
-  const { subscriptionTier } = useSubscription();
+  const { subscriptionTier, limits, hasPro, freeJournalId, isLoading: subscriptionLoading } = useSubscription();
   const { setCurrency } = useCurrency();
   const queryClient = useQueryClient();
 
@@ -53,7 +52,7 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
   const [activeJournalId, setActiveJournalIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const journalLimit = getJournalLimit(subscriptionTier);
+  const journalLimit = limits.journals;
   const canCreateJournal = journals.length < journalLimit;
 
   const refreshJournals = useCallback(async () => {
@@ -90,9 +89,10 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     void refreshJournals();
   }, [refreshJournals]);
 
+  const accessibleJournals = useMemo(() => journals.map(journal => ({ ...journal, isReadOnly: journal.status === "archived" || (!hasPro && journal.id !== freeJournalId) })), [journals, hasPro, freeJournalId]);
   const activeJournal = useMemo(
-    () => journals.find((journal) => journal.id === activeJournalId) ?? null,
-    [journals, activeJournalId],
+    () => accessibleJournals.find(journal => journal.id === activeJournalId) ?? null,
+    [accessibleJournals, activeJournalId],
   );
 
   useEffect(() => {
@@ -161,10 +161,10 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
   }, [activeJournalId, queryClient, user?.id]);
 
   const value = useMemo<JournalContextValue>(() => ({
-    journals,
+    journals: accessibleJournals,
     activeJournal,
     activeJournalId,
-    isLoading,
+    isLoading: isLoading || subscriptionLoading,
     needsOnboarding: !isLoading && !!user?.id && journals.length === 0,
     canCreateJournal,
     journalLimit,
@@ -173,10 +173,12 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     createJournal,
     deleteJournal,
   }), [
-    journals,
+    accessibleJournals,
+    journals.length,
     activeJournal,
     activeJournalId,
     isLoading,
+    subscriptionLoading,
     user?.id,
     canCreateJournal,
     journalLimit,

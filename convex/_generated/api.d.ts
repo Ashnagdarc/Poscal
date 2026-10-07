@@ -8,6 +8,9 @@
  * @module
  */
 
+import type * as proBilling from "../proBilling.js";
+import type * as proPayments from "../proPayments.js";
+import type * as proHttp from "../proHttp.js";
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as admin from "../admin.js";
@@ -33,13 +36,13 @@ import type * as newsIngest from "../newsIngest.js";
 import type * as notifications from "../notifications.js";
 import type * as notificationsHttp from "../notificationsHttp.js";
 import type * as notificationsNode from "../notificationsNode.js";
-import type * as paymentHttp from "../paymentHttp.js";
 import type * as prices from "../prices.js";
 import type * as pricesHttp from "../pricesHttp.js";
 import type * as profiles from "../profiles.js";
 import type * as progressSessions from "../progressSessions.js";
 import type * as status from "../status.js";
 import type * as tradingJournal from "../tradingJournal.js";
+import type * as tradeJournalAttachments from "../tradeJournalAttachments.js";
 import type * as tradingJournals from "../tradingJournals.js";
 import type * as users from "../users.js";
 import type * as welcomeEmail from "../welcomeEmail.js";
@@ -53,6 +56,9 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
+  proBilling: typeof proBilling;
+  proPayments: typeof proPayments;
+  proHttp: typeof proHttp;
   admin: typeof admin;
   auth: typeof auth;
   authRateLimit: typeof authRateLimit;
@@ -76,13 +82,13 @@ declare const fullApi: ApiFromModules<{
   notifications: typeof notifications;
   notificationsHttp: typeof notificationsHttp;
   notificationsNode: typeof notificationsNode;
-  paymentHttp: typeof paymentHttp;
   prices: typeof prices;
   pricesHttp: typeof pricesHttp;
   profiles: typeof profiles;
   progressSessions: typeof progressSessions;
   status: typeof status;
   tradingJournal: typeof tradingJournal;
+  tradeJournalAttachments: typeof tradeJournalAttachments;
   tradingJournals: typeof tradingJournals;
   users: typeof users;
   welcomeEmail: typeof welcomeEmail;

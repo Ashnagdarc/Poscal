@@ -16,12 +16,28 @@ const run = (command, args, env = process.env) => {
   return result.status ?? 1;
 };
 
+// Verify before any backend deployment, so a test failure cannot remove APIs
+// from the running app while leaving the previous frontend in production.
+run("npm", ["run", "gate:fx"]);
+if (process.exitCode) process.exit(process.exitCode);
+
+if (process.env.VERCEL_ENV === "preview") {
+  const previewKey = (process.env.CONVEX_PREVIEW_DEPLOY_KEY || "").trim();
+  if (!previewKey.startsWith("preview:") || !previewKey.includes("|")) {
+    console.error("[convex-preview] Configure a dedicated CONVEX_PREVIEW_DEPLOY_KEY. Do not point this billing preview at the production backend.");
+    process.exit(1);
+  }
+  run("npx", ["convex", "deploy", "--preview-name", process.env.VERCEL_GIT_COMMIT_REF || "poscal-pro-preview", "--cmd-url-env-var-name", "VITE_CONVEX_URL", "--cmd", "npm run build"], { ...process.env, CONVEX_DEPLOY_KEY: previewKey });
+  process.exit(process.exitCode ?? 0);
+}
 if (process.env.VERCEL_ENV !== "production") {
-  run("npm", ["run", "gate:fx"]);
-  if (process.exitCode) process.exit(process.exitCode);
   run("npm", ["run", "build"]);
   process.exit(process.exitCode ?? 0);
 }
+
+// Compile once before deploying. Convex's --cmd below rebuilds with its exact URL.
+run("npm", ["run", "build"]);
+if (process.exitCode) process.exit(process.exitCode);
 
 const deploymentName = "helpful-sturgeon-546";
 const token = (process.env.CONVEX_DEPLOY_TOKEN || "").trim();
@@ -59,7 +75,7 @@ run(
     "--cmd-url-env-var-name",
     "VITE_CONVEX_URL",
     "--cmd",
-    "npm run gate:fx && npm run build",
+    "npm run build",
   ],
   { ...process.env, CONVEX_DEPLOY_KEY: deployKey },
 );

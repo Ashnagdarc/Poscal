@@ -1,28 +1,16 @@
 import React from "react";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 
-const mockGetPaidLock = vi.fn();
 const mockUseAuth = vi.fn();
-const mockUseSubscription = vi.fn();
 const mockUseAdmin = vi.fn();
 const mockIsClientEmailVerificationRequired = vi.fn();
 const mockUseQuery = vi.fn();
 
-vi.mock("@/lib/api", () => ({
-  featureFlagApi: {
-    getPaidLock: (...args: unknown[]) => mockGetPaidLock(...args),
-  },
-}));
-
 vi.mock("@/lib/emailVerificationClient", () => ({
   isClientEmailVerificationRequired: () => mockIsClientEmailVerificationRequired(),
-}));
-
-vi.mock("@/lib/paymentsConfig", () => ({
-  isPaymentsEnabled: () => true,
 }));
 
 vi.mock("convex/react", () => ({
@@ -41,10 +29,6 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => mockUseAuth(),
 }));
 
-vi.mock("@/contexts/SubscriptionContext", () => ({
-  useSubscription: () => mockUseSubscription(),
-}));
-
 vi.mock("@/hooks/use-admin", () => ({
   useAdmin: () => mockUseAdmin(),
 }));
@@ -56,14 +40,13 @@ function renderAt(path: string) {
         <Route
           path="/journal"
           element={
-            <ProtectedRoute requiresPremium>
+            <ProtectedRoute>
               <div>Journal Content</div>
             </ProtectedRoute>
           }
         />
         <Route path="/signin" element={<div>Sign In Page</div>} />
         <Route path="/verify-email" element={<div>Verify Email Page</div>} />
-        <Route path="/upgrade" element={<div>Upgrade Page</div>} />
         <Route path="/settings" element={<div>Settings Page</div>} />
       </Routes>
     </MemoryRouter>,
@@ -73,7 +56,6 @@ function renderAt(path: string) {
 describe("ProtectedRoute", () => {
   beforeEach(() => {
     vi.useRealTimers();
-    mockGetPaidLock.mockReset();
     mockIsClientEmailVerificationRequired.mockReset();
     mockUseQuery.mockReset();
     // Default: soft mode
@@ -83,7 +65,6 @@ describe("ProtectedRoute", () => {
       user: { id: "u1", email: "u@test.com", email_verified: true },
       loading: false,
     });
-    mockUseSubscription.mockReturnValue({ isPaid: false, isTrial: false, isLoading: false });
     mockUseAdmin.mockReturnValue({ isAdmin: false, loading: false });
   });
 
@@ -93,7 +74,6 @@ describe("ProtectedRoute", () => {
 
   it("redirects unauthenticated users to sign in", async () => {
     mockUseAuth.mockReturnValue({ user: null, loading: false });
-    mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
 
@@ -106,7 +86,6 @@ describe("ProtectedRoute", () => {
       loading: false,
     });
     mockIsClientEmailVerificationRequired.mockReturnValue(false);
-    mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
 
@@ -121,7 +100,6 @@ describe("ProtectedRoute", () => {
     });
     mockUseQuery.mockReturnValue({ requireEmailVerification: true });
     mockIsClientEmailVerificationRequired.mockReturnValue(true);
-    mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
 
@@ -134,59 +112,14 @@ describe("ProtectedRoute", () => {
       loading: false,
     });
     mockIsClientEmailVerificationRequired.mockReturnValue(false);
-    mockGetPaidLock.mockResolvedValue(false);
 
     renderAt("/journal");
 
     expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 
-  it("fails open when paid lock request hangs", async () => {
-    vi.useFakeTimers();
-    mockGetPaidLock.mockImplementation(() => new Promise(() => {}));
-
+  it("keeps the journal readable for a signed-in Free user", async () => {
     renderAt("/journal");
-
-    expect(screen.getByText("Journal Content")).toBeInTheDocument();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
-
-    expect(screen.getByText("Journal Content")).toBeInTheDocument();
-    expect(screen.queryByText("Upgrade Page")).not.toBeInTheDocument();
-  });
-
-  it("fails open when paid lock request rejects", async () => {
-    mockGetPaidLock.mockRejectedValue(new Error("network"));
-
-    renderAt("/journal");
-
-    expect(await screen.findByText("Journal Content")).toBeInTheDocument();
-  });
-
-  it("redirects free users only after paid lock is confirmed on", async () => {
-    mockGetPaidLock.mockResolvedValue(true);
-
-    renderAt("/journal");
-
-    expect(await screen.findByText("Upgrade Page")).toBeInTheDocument();
-  });
-
-  it("allows free users when paid lock is confirmed off", async () => {
-    mockGetPaidLock.mockResolvedValue(false);
-
-    renderAt("/journal");
-
-    expect(await screen.findByText("Journal Content")).toBeInTheDocument();
-  });
-
-  it("allows paid users regardless of paid lock", async () => {
-    mockUseSubscription.mockReturnValue({ isPaid: true, isTrial: false, isLoading: false });
-    mockGetPaidLock.mockResolvedValue(true);
-
-    renderAt("/journal");
-
     expect(await screen.findByText("Journal Content")).toBeInTheDocument();
   });
 });

@@ -1,3 +1,4 @@
+import { getProAccess, assertEditableJournal, getActiveJournals } from "./lib/proAccess";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
@@ -7,43 +8,8 @@ import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 
-export const JOURNAL_LIMITS = {
-  free: 2,
-  premium: 5,
-  pro: 5,
-} as const;
-
-type SubscriptionTier = keyof typeof JOURNAL_LIMITS;
 type UserId = Id<"users">;
-
-const normalizeTier = (tier?: string | null): SubscriptionTier => {
-  if (tier === "premium" || tier === "pro") return tier;
-  // Legacy rows stored plan period as tier.
-  if (tier === "monthly" || tier === "yearly") return "premium";
-  return "free";
-};
-
-const resolveJournalLimit = (tier?: string | null) => JOURNAL_LIMITS[normalizeTier(tier)];
-
 const isActiveJournal = (status?: string | null) => status !== "archived";
-
-const countActiveJournals = async (ctx: { db: any }, userId: string) => {
-  const rows = (await ctx.db
-    .query("tradingAccounts")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as Doc<"tradingAccounts">[];
-  return rows.filter((row) => isActiveJournal(row.status)).length;
-};
-
-const getUserTier = async (ctx: { db: any }, userId: string) => {
-  const user = await ctx.db.get(userId as UserId);
-  const profile = await ctx.db
-    .query("profiles")
-    .withIndex("by_external_user_id", (q: any) => q.eq("externalUserId", userId))
-    .first();
-
-  return (profile?.subscriptionTier ?? user?.subscriptionTier ?? "free") as string;
-};
 
 export const listForUser = query({
   args: {
@@ -55,16 +21,17 @@ export const listForUser = query({
       return [];
     }
 
-    const rows = await ctx.db
+    const rows = args.includeArchived ? await ctx.db
       .query("tradingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+      .take(100) : await getActiveJournals(ctx, userId);
 
+    const access = await getProAccess(ctx, userId);
     const filtered = args.includeArchived
       ? rows
       : rows.filter((row) => isActiveJournal(row.status));
 
-    return filtered.sort((a, b) => b.createdAtMs - a.createdAtMs);
+    return filtered.sort((a, b) => b.createdAtMs - a.createdAtMs).map(row => ({ ...row, isReadOnly: row.status === "archived" || access.lockedJournalIds.includes(row._id) }));
   },
 });
 
@@ -92,12 +59,9 @@ export const create = mutation({
       throw new Error("Currency must be a 3-letter code (e.g. USD)");
     }
 
-    // Tier is always server-derived — never accept client subscriptionTier.
-    const tier = await getUserTier(ctx, userId);
-    const limit = resolveJournalLimit(tier);
-    const activeCount = await countActiveJournals(ctx, userId);
-    if (activeCount >= limit) {
-      throw new Error(`Journal limit reached for ${normalizeTier(tier)} plan (${limit})`);
+    const access = await getProAccess(ctx, userId);
+    if (access.usage.journals >= access.limits.journals) {
+      throw new Error(`PRO_REQUIRED: Journal limit reached (${access.limits.journals}). Your existing journals are safe.`);
     }
 
     const now = Date.now();
@@ -142,9 +106,7 @@ export const create = mutation({
           fullName,
           avatarUrl: userDoc.avatarUrl ?? userDoc.image ?? null,
           role: userDoc.role,
-          paymentStatus: userDoc.paymentStatus,
-          subscriptionTier: userDoc.subscriptionTier,
-          subscriptionExpiresAtMs: userDoc.subscriptionExpiresAtMs ?? null,
+
           journalOnboardedAtMs: now,
           createdAtMs: now,
           updatedAtMs: now,
@@ -183,6 +145,7 @@ export const update = mutation({
       throw new Error("Journal not found");
     }
 
+    await assertEditableJournal(ctx, userId, args.id);
     const patch: Record<string, unknown> = {
       updatedAtMs: Date.now(),
     };
@@ -358,25 +321,10 @@ export const attachOrphanData = mutation({
 
 export const getLimits = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async ctx => {
     const userId = await getVerifiedAuthUserId(ctx);
-    if (!userId) {
-      return {
-        tier: "free" as const,
-        limit: JOURNAL_LIMITS.free,
-        activeCount: 0,
-        canCreate: false,
-      };
-    }
-
-    const tier = normalizeTier(await getUserTier(ctx, userId));
-    const limit = JOURNAL_LIMITS[tier];
-    const activeCount = await countActiveJournals(ctx, userId);
-    return {
-      tier,
-      limit,
-      activeCount,
-      canCreate: activeCount < limit,
-    };
+    if (!userId) return { tier: "free" as const, limit: 1, activeCount: 0, canCreate: false };
+    const access = await getProAccess(ctx, userId);
+    return { tier: access.pro ? "pro" as const : "free" as const, limit: access.limits.journals, activeCount: access.usage.journals, canCreate: access.usage.journals < access.limits.journals };
   },
 });

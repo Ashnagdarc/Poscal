@@ -630,34 +630,6 @@ export const deleteCalculatorHistoryItem = async (
 
 export const deleteJournalEntry = deleteCalculatorHistoryItem;
 
-export const uploadCalculatorScreenshot = async (file: File): Promise<string> => {
-  if (!isConvexEnabled()) {
-    throw new Error("Cloud screenshot storage is unavailable");
-  }
-
-  const client = getAuthenticatedConvexHttpClient();
-  const uploadUrl = await client.mutation(
-    (api as any).calculatorHistory.generateScreenshotUploadUrl,
-    {},
-  );
-
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": file.type || "application/octet-stream" },
-    body: file,
-  });
-
-  if (!response.ok) {
-    throw new Error(`Screenshot upload failed (${response.status})`);
-  }
-
-  const result = (await response.json()) as { storageId?: string };
-  if (!result.storageId) {
-    throw new Error("Screenshot upload succeeded without a storage id");
-  }
-  return result.storageId;
-};
-
 export const resolveCalculatorScreenshotUrls = async (
   clientId: string,
 ): Promise<string[]> => {

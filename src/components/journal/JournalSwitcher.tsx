@@ -1,3 +1,5 @@
+import { useProPaywall } from "@/contexts/ProPaywallContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { useState } from "react";
 import { ChevronDown, Plus, Trash2 } from "lucide-react";
 import { useJournal } from "@/contexts/JournalContext";
@@ -24,6 +26,8 @@ export const JournalSwitcher = () => {
     journalLimit,
     deleteJournal,
   } = useJournal();
+  const openPro = useProPaywall();
+  const { hasPro } = useSubscription();
   const { showErrorFromUnknown } = useActionError();
   const [open, setOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -79,6 +83,7 @@ export const JournalSwitcher = () => {
                   key={journal.id}
                   className={cn(
                     "flex items-center gap-1 rounded-xl",
+                    journal.isReadOnly && "bg-muted/40 opacity-60",
                     journal.id === activeJournal.id
                       ? "bg-secondary text-foreground"
                       : "text-muted-foreground",
@@ -95,7 +100,7 @@ export const JournalSwitcher = () => {
                       journal.id !== activeJournal.id && "hover:bg-secondary/70 hover:text-foreground",
                     )}
                   >
-                    <span className="block truncate text-sm font-semibold">{journal.name}</span>
+                    <span className="block truncate text-sm font-semibold">{journal.name}{journal.isReadOnly ? " · Read-only" : ""}</span>
                     <span className="block text-[11px]">
                       {journal.currency} · {journal.startingBalance.toLocaleString()}
                     </span>
@@ -133,7 +138,7 @@ export const JournalSwitcher = () => {
                   type="button"
                   onClick={() => {
                     setOpen(false);
-                    setLimitOpen(true);
+                    if (!hasPro) openPro("Create more journals"); else setLimitOpen(true);
                   }}
                   className="block w-full rounded-xl px-3 py-2.5 text-left text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
                 >
@@ -164,9 +169,9 @@ export const JournalSwitcher = () => {
       <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
         <DialogContent className="max-w-sm border-border bg-background sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Two journals for now</DialogTitle>
+            <DialogTitle>Journal allowance reached</DialogTitle>
             <DialogDescription>
-              Each account can keep {journalLimit} journals. A paid version is coming soon, with room for up to 5 or 10 accounts.
+              Your plan includes {journalLimit} active journals. Archive a journal to make room. Existing data stays available.
             </DialogDescription>
           </DialogHeader>
           <button

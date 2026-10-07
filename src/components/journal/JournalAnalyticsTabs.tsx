@@ -1,3 +1,5 @@
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useProPaywall } from "@/contexts/ProPaywallContext";
 import { useMemo } from "react";
 import {
   BarChart3,
@@ -383,6 +385,8 @@ export const JournalAnalyticsTabs = ({
   onLoadMoreTrades,
   serverPerformance = null,
 }: JournalAnalyticsTabsProps) => {
+  const { hasPro } = useSubscription();
+  const openPro = useProPaywall();
   void _calculatorResults;
   const { currency } = useCurrency();
 
@@ -476,6 +480,14 @@ export const JournalAnalyticsTabs = ({
       </div>
     );
   }
+
+  if (!hasPro) return <div className="space-y-4">
+    <div className="grid grid-cols-3 gap-2 rounded-2xl bg-secondary p-3"><MetricCard label="Net P&L" value={formatJournalMoney(stats.totalPnl, currency.symbol)} /><MetricCard label="Win rate" value={formatJournalPercent(stats.winRate)} /><MetricCard label="Trades" value={String(stats.totalTrades)} /></div>
+    <button className="w-full rounded-2xl border border-border bg-muted/40 p-5 text-left" onClick={() => openPro("Unlock full analytics")}><h3 className="font-semibold">Full analytics · Poscal Pro</h3><p className="mt-2 text-sm text-muted-foreground">Unlock drawdown, expectancy, strategy and session breakdowns, and equity charts.</p></button>
+    <div className="flex items-center justify-between"><h3 className="font-semibold">Trades</h3><Button onClick={onAddTrade}>Add Trade</Button></div>
+    {visibleTrades.map(trade => <TradeListItem key={trade.id} trade={trade} currencySymbol={currency.symbol} timeZone={timeZone} onEdit={() => onEditTrade(trade)} onDelete={() => onDeleteTrade(trade)} />)}
+    {canLoadMoreTrades && <Button variant="outline" disabled={isLoadingMoreTrades} onClick={onLoadMoreTrades}>Load more trades</Button>}
+  </div>;
 
   return (
     <div className="space-y-4">

@@ -1,3 +1,4 @@
+import { assertEditableJournal, getProAccess } from "./lib/proAccess";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
@@ -211,6 +212,7 @@ export const updateResult = mutation({
       throw new Error("Saved calculation not found");
     }
 
+    if (existing.journalId) await assertEditableJournal(ctx, userId, existing.journalId);
     if (args.note != null && args.note.length > 5000) {
       throw new Error("Note is too long");
     }
@@ -232,14 +234,6 @@ export const updateResult = mutation({
 
     await ctx.db.patch(existing._id, patch);
     return await ctx.db.get(existing._id);
-  },
-});
-
-export const generateScreenshotUploadUrl = mutation({
-  args: {},
-  handler: async (ctx) => {
-    await requireVerifiedAuthUserId(ctx);
-    return await ctx.storage.generateUploadUrl();
   },
 });
 
@@ -296,6 +290,7 @@ export const save = mutation({
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
+    if (args.journalId) await assertEditableJournal(ctx, userId, args.journalId);
     assertHistoryFinancials(args);
     const now = Date.now();
     const existing = args.clientId
@@ -326,6 +321,7 @@ export const saveMany = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
+    if (!(await getProAccess(ctx, userId)).pro) throw new Error("PRO_REQUIRED: CSV import requires Poscal Pro");
     if (args.items.length > 100) {
       throw new Error("Batch too large (max 100 history items)");
     }
@@ -334,6 +330,7 @@ export const saveMany = mutation({
 
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
+      if (item.journalId) await assertEditableJournal(ctx, userId, item.journalId);
       assertHistoryFinancials(item);
       const existing = item.clientId
         ? await ctx.db

@@ -1,78 +1,34 @@
-import {
-  parseSuccessfulCharge,
-  verifyPaystackSignature,
-  type PaystackWebhookEvent,
-} from './_lib/paystackWebhookCore.js';
-import { syncSubscriptionFromPaymentHttp } from './_lib/paymentSyncClient.js';
-
-const PAYSTACK_WEBHOOK_SECRET = process.env.PAYSTACK_WEBHOOK_SECRET;
-const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-function buffer(req: any): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    req.on('data', (chunk: Buffer) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
-    req.on('error', reject);
-  });
-}
-
-export default async function handler(req: any, res: any) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
+import type { VercelRequest, VercelResponse } from "@vercel/node";
+export const config = { api: { bodyParser: false } };
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") return res.status(405).end();
+  const site = process.env.CONVEX_SITE_URL;
+  if (!site || !/^https:\/\/[a-z0-9-]+\.convex\.site$/.test(site))
+    return res.status(503).send("Webhook configuration unavailable");
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += bytes.length;
+    if (size > 200_000) return res.status(413).end();
+    chunks.push(bytes);
   }
-
-  if (!PAYSTACK_WEBHOOK_SECRET || !PAYMENT_SYNC_SECRET) {
-    const missing = [
-      !PAYSTACK_WEBHOOK_SECRET ? 'PAYSTACK_WEBHOOK_SECRET' : null,
-      !PAYMENT_SYNC_SECRET ? 'PAYMENT_SYNC_SECRET' : null,
-    ].filter(Boolean);
-
-    return res.status(500).json({
-      error: 'Server not configured (missing env vars)',
-      missing,
-    });
-  }
-
   try {
-    const rawBody = await buffer(req);
-    const signature = req.headers['x-paystack-signature'] as string | undefined;
-
-    const signatureCheck = verifyPaystackSignature(rawBody, signature, PAYSTACK_WEBHOOK_SECRET);
-    if (!signatureCheck.ok) {
-      return res.status(signatureCheck.status).json({ error: signatureCheck.error });
-    }
-
-    const event = JSON.parse(rawBody.toString('utf8')) as PaystackWebhookEvent;
-    const parsed = parseSuccessfulCharge(event);
-
-    if (parsed && 'error' in parsed) {
-      return res.status(parsed.status).json({ error: parsed.error });
-    }
-
-    if (parsed) {
-      await syncSubscriptionFromPaymentHttp({
-        userId: parsed.userId,
-        reference: parsed.reference,
-        tier: parsed.tier,
-        amount: parsed.amount,
-        currency: parsed.currency,
-        status: 'success',
-        expiresAtMs: parsed.expiresAtMs,
-        paidAtMs: parsed.paidAtMs,
-        metadata: parsed.metadata,
-      });
-    }
-
-    return res.status(200).json({ success: true });
-  } catch (error: any) {
-    console.error('[paystack-webhook] unexpected error', error);
-    return res.status(500).json({ error: error?.message || 'Internal server error' });
+    const response = await fetch(`${site}/billing/paystack-webhook`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-paystack-signature": String(
+          req.headers["x-paystack-signature"] ?? "",
+        ),
+      },
+      body: Buffer.concat(chunks),
+      signal: AbortSignal.timeout(20_000),
+    });
+    return res
+      .status(response.status)
+      .send(response.ok ? "OK" : "Webhook not accepted");
+  } catch {
+    return res.status(503).send("Retry webhook delivery");
   }
 }

@@ -21,4 +21,6 @@ crons.interval(
   { force: true },
 );
 
+crons.interval("reconcile Pro payments", { minutes: 1 }, internal.proPayments.reconcileDue, {});
+
 export default crons;

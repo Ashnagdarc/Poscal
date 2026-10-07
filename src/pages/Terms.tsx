@@ -15,7 +15,7 @@ const Terms = () => {
           <ArrowLeft className="w-5 h-5 text-foreground" />
         </button>
         <h1 className="text-3xl font-bold text-foreground">Terms and Conditions</h1>
-        <p className="text-sm text-muted-foreground mt-1">Last updated: January 14, 2026</p>
+        <p className="text-sm text-muted-foreground mt-1">Last updated: October 7, 2026</p>
       </header>
 
       {/* Content */}
@@ -109,16 +109,18 @@ const Terms = () => {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-foreground mb-3">9. Premium Features and Subscriptions</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">9. Poscal Pro Payments</h2>
           <p className="text-muted-foreground leading-relaxed mb-2">
-            When premium features become available:
+            Pro features are included during beta. Payments begin only when Poscal ends beta and enables billing.
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>Subscriptions will be billed on a recurring basis</li>
-            <li>You can cancel at any time before the next billing cycle</li>
-            <li>Refunds are subject to our refund policy</li>
+            <li>A monthly or yearly purchase pays for one calendar month or year. There is no automatic renewal or automatic charge.</li>
+            <li>A renewal extends any remaining paid access. Discounts apply to the quoted purchase only.</li>
+            <li>At expiry, Free limits apply. Existing journals, notes and uploads remain readable; extra journals become read-only.</li>
+            <li>Payments are processed by Paystack and access starts after server verification. Keep your payment reference for support.</li>
+            <li>For a payment issue or refund request, contact info@poscalfx.com with your payment reference. Refunds and disputes may affect paid access.</li>
             <li>Prices may change with advance notice</li>
-            <li>Premium features may be modified or discontinued</li>
+            <li>Pro features may be modified or discontinued</li>
           </ul>
         </section>
 

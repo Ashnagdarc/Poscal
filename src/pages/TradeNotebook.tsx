@@ -1,3 +1,6 @@
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useProPaywall } from "@/contexts/ProPaywallContext";
+import { ProAccessBanner } from "@/components/ProAccessBanner";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Check, Clock3, Loader2, Pencil, Trash2, Upload } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -130,6 +133,9 @@ const TradeNotebook = () => {
   const { user } = useAuth();
 
   const [trade, setTrade] = useState<JournalTrade | null>(null);
+  const { hasPro, freeJournalId, isLoading: accessLoading } = useSubscription();
+  const readOnly = accessLoading || (!hasPro && trade?.journal_id !== freeJournalId);
+  const openPro = useProPaywall();
   const [draft, setDraft] = useState<NotebookDraft>(emptyDraft);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -228,7 +234,7 @@ const TradeNotebook = () => {
   }, [patch]);
 
   useEffect(() => {
-    if (!hydratedRef.current || !tradeId || !user?.id || saveState !== "dirty") return;
+    if (readOnly || !hydratedRef.current || !tradeId || !user?.id || saveState !== "dirty") return;
 
     const timer = window.setTimeout(() => {
       if (saveInFlightRef.current) {
@@ -275,10 +281,16 @@ const TradeNotebook = () => {
     }, AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timer);
-  }, [patch, saveState, tradeId, user?.id]);
+  }, [patch, saveState, tradeId, user?.id, readOnly]);
+
+  const previouslyReadOnly = useRef(readOnly);
+  useEffect(() => {
+    if (previouslyReadOnly.current && !readOnly && hydratedRef.current && saveState === "error") setSaveState("dirty");
+    previouslyReadOnly.current = readOnly;
+  }, [readOnly, saveState]);
 
   const updateTitle = (value: string) => {
-    if (!tradeId) return;
+    if (!tradeId || readOnly) return;
 
     revisionRef.current += 1;
     const normalized = value.replace(/[\r\n]+/g, " ").slice(0, MAX_TITLE_CHARS);
@@ -298,7 +310,7 @@ const TradeNotebook = () => {
     key: "entry_reason" | "during_trade_notes" | "post_trade_review" | "lessons_learned",
     value: string,
   ) => {
-    if (!tradeId) return;
+    if (!tradeId || readOnly) return;
 
     revisionRef.current += 1;
     setDraft((current) => {
@@ -318,6 +330,13 @@ const TradeNotebook = () => {
     file: File | null,
   ) => {
     if (!file || !tradeId) return;
+    if (readOnly) { openPro("Upload more screenshots"); return; }
+    const replacesImage = attachments.some(image => image.role === role);
+    if (!replacesImage && imageQuota && (imageQuota.attachmentCount >= imageQuota.limitCount || imageQuota.usedBytes >= imageQuota.limitBytes)) {
+      if (hasPro) toast.error("Screenshot limit reached. Remove images to free space.");
+      else openPro("Upload more screenshots");
+      return;
+    }
     setUploadingRole(role);
     try {
       const result = await uploadJournalImage(tradeId, role, file);
@@ -330,7 +349,8 @@ const TradeNotebook = () => {
       setImageQuota(refreshed.quota);
       toast.success(role === "before" ? "Before-trade chart saved" : "After-trade chart saved");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not upload chart");
+      if (error instanceof Error && error.message.includes("PRO_REQUIRED:") && !hasPro) openPro("Upload more screenshots");
+      else toast.error(error instanceof Error ? error.message : "Could not upload chart");
     } finally {
       setUploadingRole(null);
     }
@@ -425,7 +445,7 @@ const TradeNotebook = () => {
                   type="file"
                   accept="image/png,image/jpeg,image/webp"
                   className="hidden"
-                  disabled={uploading}
+                  disabled={readOnly || uploading}
                   onChange={(event) => {
                     const file = event.target.files?.[0] ?? null;
                     event.currentTarget.value = "";
@@ -470,7 +490,7 @@ const TradeNotebook = () => {
             type="file"
             accept="image/png,image/jpeg,image/webp"
             className="hidden"
-            disabled={uploading}
+            disabled={readOnly || uploading}
             onChange={(event) => {
               const file = event.target.files?.[0] ?? null;
               event.currentTarget.value = "";
@@ -557,11 +577,13 @@ const TradeNotebook = () => {
       </header>
 
       <main className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
+        <ProAccessBanner journalId={trade?.journal_id} />
         <section className="border-b border-border/60 pb-5">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <input
                 type="text"
+                readOnly={readOnly}
                 value={draft.journal_title}
                 onChange={(event) => updateTitle(event.target.value)}
                 maxLength={MAX_TITLE_CHARS}
@@ -615,6 +637,7 @@ const TradeNotebook = () => {
           <label className="mt-6 block">
             <span className="text-sm font-semibold text-foreground">Why did you take this trade?</span>
             <textarea
+              readOnly={readOnly}
               value={draft.entry_reason}
               onChange={(event) => updateSection("entry_reason", event.target.value)}
               maxLength={MAX_SECTION_CHARS}
@@ -629,7 +652,7 @@ const TradeNotebook = () => {
             <p className="text-sm font-bold text-foreground">Trade details</p>
             <button
               type="button"
-              onClick={() => setIsTradeDetailsOpen(true)}
+              onClick={() => readOnly ? openPro("Edit this journal") : setIsTradeDetailsOpen(true)}
               className="inline-flex h-9 items-center gap-2 rounded-xl bg-secondary px-3 text-xs font-semibold text-foreground"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -681,6 +704,7 @@ const TradeNotebook = () => {
         <section className="border-b border-border/60 py-5">
           <p className="text-sm font-bold text-foreground">During the trade</p>
           <textarea
+              readOnly={readOnly}
             value={draft.during_trade_notes}
             onChange={(event) => updateSection("during_trade_notes", event.target.value)}
             maxLength={MAX_SECTION_CHARS}
@@ -694,6 +718,7 @@ const TradeNotebook = () => {
           {renderChartUploader("after", "After-trade chart")}
 
           <textarea
+              readOnly={readOnly}
             value={draft.post_trade_review}
             onChange={(event) => updateSection("post_trade_review", event.target.value)}
             maxLength={MAX_SECTION_CHARS}
@@ -705,6 +730,7 @@ const TradeNotebook = () => {
         <section className="py-5">
           <p className="text-sm font-bold text-foreground">What I learned</p>
           <textarea
+              readOnly={readOnly}
             value={draft.lessons_learned}
             onChange={(event) => updateSection("lessons_learned", event.target.value)}
             maxLength={MAX_SECTION_CHARS}

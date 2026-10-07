@@ -2,11 +2,7 @@ import { httpRouter } from "convex/server";
 import { auth } from "./auth";
 import { processNotifications } from "./notificationsHttp";
 import { ingestNews } from "./newsHttp";
-import {
-  expireSubscriptionsBefore,
-  listExpiringSubscriptions,
-  syncSubscriptionFromPayment,
-} from "./paymentHttp";
+import { paystackWebhook } from "./proHttp";
 import { ingestPrices } from "./pricesHttp";
 
 const http = httpRouter();
@@ -27,20 +23,6 @@ http.route({
   method: "POST",
   handler: processNotifications,
 });
-http.route({
-  path: "/payments/sync",
-  method: "POST",
-  handler: syncSubscriptionFromPayment,
-});
-http.route({
-  path: "/payments/expire",
-  method: "POST",
-  handler: expireSubscriptionsBefore,
-});
-http.route({
-  path: "/payments/expiring",
-  method: "POST",
-  handler: listExpiringSubscriptions,
-});
+http.route({ path: "/billing/paystack-webhook", method: "POST", handler: paystackWebhook });
 
 export default http;

@@ -15,7 +15,7 @@ const Privacy = () => {
           <ArrowLeft className="w-5 h-5 text-foreground" />
         </button>
         <h1 className="text-3xl font-bold text-foreground">Privacy Policy</h1>
-        <p className="text-sm text-muted-foreground mt-1">Last updated: January 14, 2026</p>
+        <p className="text-sm text-muted-foreground mt-1">Last updated: October 7, 2026</p>
       </header>
 
       {/* Content */}
@@ -41,6 +41,7 @@ const Privacy = () => {
             <li>Trading account information (account names, balances, broker details)</li>
             <li>Journal entries and trading data</li>
             <li>Communication preferences</li>
+            <li>Pro payment references, provider transaction IDs, amounts, payment status and access expiry. Paystack handles card details; Poscal does not store card numbers.</li>
           </ul>
 
           <h3 className="text-lg font-medium text-foreground mb-2 mt-4">Automatically Collected Information</h3>
@@ -66,6 +67,7 @@ const Privacy = () => {
             <li><span className="font-medium text-foreground">Analytics:</span> Understand how users interact with the App to improve features</li>
             <li><span className="font-medium text-foreground">Security:</span> Detect and prevent fraud, abuse, and security issues</li>
             <li><span className="font-medium text-foreground">Communication:</span> Respond to your inquiries and send important updates</li>
+            <li><span className="font-medium text-foreground">Billing:</span> Verify payments, maintain paid access and send payment status emails. Push notifications require device permission. Unfinished checkout reminders are optional.</li>
             <li><span className="font-medium text-foreground">Legal Compliance:</span> Comply with legal obligations and enforce our Terms</li>
           </ul>
         </section>
@@ -78,7 +80,7 @@ const Privacy = () => {
             Your data is securely stored using:
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>Supabase (authentication and database services)</li>
+            <li>Convex (authentication and database services)</li>
             <li>Cloud storage providers with encryption</li>
             <li>Local device storage for certain preferences</li>
           </ul>
@@ -88,7 +90,6 @@ const Privacy = () => {
             We implement industry-standard security measures:
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>End-to-end encryption for sensitive data</li>
             <li>Secure HTTPS connections</li>
             <li>Regular security audits and updates</li>
             <li>Access controls and authentication</li>

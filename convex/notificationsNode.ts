@@ -70,6 +70,7 @@ async function sendEmail(
   body: string,
   html: string | null,
   fromEmail: string | null,
+  idempotencyKey: string,
 ) {
   const resendApiKey = getRequiredEnv("RESEND_API_KEY");
   const sender = fromEmail ?? getOptionalEnv("EMAIL_FROM") ?? "Poscal <noreply@poscalfx.com>";
@@ -79,6 +80,7 @@ async function sendEmail(
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${resendApiKey}`,
+      "Idempotency-Key": idempotencyKey,
     },
     body: JSON.stringify({
       from: sender,
@@ -167,6 +169,15 @@ export const processPendingBatch = internalAction({
 
     for (const notification of claimed as QueuedNotification[]) {
       try {
+        if (notification.data?.billingOrderId && notification.data?.billingKind) {
+          const relevant = await ctx.runQuery(internal.proBilling.notificationStillRelevant, {
+            id: notification.data.billingOrderId as Id<"proOrders">, kind: notification.data.billingKind,
+          });
+          if (!relevant) {
+            await ctx.runMutation(internal.notifications.finalizeNotification, { id: notification._id, status: "sent", errorMessage: "Suppressed: superseded billing status" });
+            continue;
+          }
+        }
         if (notification.channel === "push") {
           if (!webPushReady) {
             throw new Error("VAPID keys are not configured");
@@ -251,7 +262,7 @@ export const processPendingBatch = internalAction({
 
           const html = typeof notification.data?.html === "string" ? notification.data.html : null;
           const fromEmail = typeof notification.data?.fromEmail === "string" ? notification.data.fromEmail : null;
-          await sendEmail(recipientEmail, notification.title, notification.body, html, fromEmail);
+          await sendEmail(recipientEmail, notification.title, notification.body, html, fromEmail, `notification-${notification._id}`);
 
           await ctx.runMutation(internal.notifications.finalizeNotification, {
             id: notification._id,

@@ -1,9 +1,8 @@
+import { assertEditableJournal, getProAccess } from "./lib/proAccess";
 import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import { requireVerifiedAuthUserId } from "./lib/auth";
 
-const FREE_STORAGE_BYTES = 50 * 1024 * 1024;
-const FREE_ATTACHMENT_COUNT = 50;
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_MIME = new Set(["image/webp", "image/jpeg", "image/png"]);
 
@@ -59,6 +58,7 @@ export const reserveUpload = mutation({
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     const trade = await assertOwnedTrade(ctx, userId, args.tradeId);
+    const access = await assertEditableJournal(ctx, userId, trade.journalId);
 
     if (!ALLOWED_MIME.has(args.mimeType)) throw new Error("Unsupported image type");
     if (!Number.isFinite(args.sizeBytes) || args.sizeBytes <= 0 || args.sizeBytes > MAX_IMAGE_BYTES) {
@@ -114,11 +114,11 @@ export const reserveUpload = mutation({
       + reservedCount
       + 1;
 
-    if (projectedBytes > FREE_STORAGE_BYTES) {
-      throw new Error("Free journal image storage limit reached");
+    if (projectedBytes > access.limits.storageBytes) {
+      throw new Error("PRO_REQUIRED: Screenshot storage allowance reached. Existing images remain available.");
     }
-    if (projectedCount > FREE_ATTACHMENT_COUNT) {
-      throw new Error("Free journal image limit reached");
+    if (projectedCount > access.limits.screenshots) {
+      throw new Error("PRO_REQUIRED: Screenshot allowance reached. Existing images remain available.");
     }
 
     const now = Date.now();
@@ -167,10 +167,10 @@ export const reserveUpload = mutation({
       quota: {
         usedBytes,
         reservedBytes: reservedBytes + args.sizeBytes,
-        limitBytes: FREE_STORAGE_BYTES,
+        limitBytes: access.limits.storageBytes,
         attachmentCount,
         reservedCount: reservedCount + 1,
-        limitCount: FREE_ATTACHMENT_COUNT,
+        limitCount: access.limits.screenshots,
       },
       staleObjectKeys: stalePending
         .map((row) => row.objectKey)
@@ -287,14 +287,15 @@ export const getUsageForUser = query({
   args: {},
   handler: async (ctx) => {
     const userId = await requireVerifiedAuthUserId(ctx);
+    const access = await getProAccess(ctx, userId);
     const usage = await getUsage(ctx, userId);
     return {
       usedBytes: usage?.usedBytes ?? 0,
       attachmentCount: usage?.attachmentCount ?? 0,
       reservedBytes: usage?.reservedBytes ?? 0,
       reservedCount: usage?.reservedCount ?? 0,
-      limitBytes: FREE_STORAGE_BYTES,
-      limitCount: FREE_ATTACHMENT_COUNT,
+      limitBytes: access.limits.storageBytes,
+      limitCount: access.limits.screenshots,
     };
   },
 });
