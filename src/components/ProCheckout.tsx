@@ -292,10 +292,35 @@ export function ProCheckout({
       ) : (
         <>
           {isPaid && (
-            <p className="rounded-xl bg-secondary p-3 text-sm">
-              Pro active until {expiresAt?.toLocaleDateString()}. A renewal
-              extends your existing access.
-            </p>
+            <div className="rounded-xl bg-secondary p-3 text-sm">
+              <p>
+                Pro active until {expiresAt?.toLocaleDateString()}. A renewal
+                extends your existing access.
+              </p>
+              <p className="mt-2 text-xs text-muted-foreground">
+                Auto-renew is {autoRenewState.enabled ? "on" : "off"}
+                {autoRenewState.last4 ? ` for the method ending ${autoRenewState.last4}` : ""}.
+              </p>
+              {(autoRenewState.enabled || autoRenewState.last4) && (
+                <button
+                  type="button"
+                  className="mt-2 text-xs font-medium underline"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    setError("");
+                    void setAutoRenew({
+                      enabled: !autoRenewState.enabled,
+                      plan: autoRenewState.plan ?? plan,
+                    })
+                      .catch((err) => setError(message(err)))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  {autoRenewState.enabled ? "Turn off auto-renew" : "Turn on auto-renew"}
+                </button>
+              )}
+            </div>
           )}
           {openOrder ? (
             <div
