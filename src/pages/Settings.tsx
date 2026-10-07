@@ -42,6 +42,7 @@ import { toast } from "sonner";
 import { preferencesApi } from "@/lib/api";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
 import { clearSensitiveLocalStorage } from "@/lib/privacyCleanup";
+import { hasConsent } from "@/lib/consent";
 import type { AppFontId } from "@/lib/fonts";
 import { COMMON_TIMEZONES, detectBrowserTimeZone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
@@ -92,6 +93,7 @@ const Settings = () => {
   const subscriptionLabel = isBeta ? "Beta access" : isPaid ? "Pro" : "Free";
 
   useEffect(() => {
+    if (!hasConsent("preferences")) return;
     const savedRisk = localStorage.getItem("defaultRisk");
     if (savedRisk) setDefaultRisk(savedRisk);
 
@@ -111,12 +113,16 @@ const Settings = () => {
         if (!mounted || !prefs) return;
         if (prefs.timezone) {
           setTimezone(prefs.timezone);
-          localStorage.setItem("preferredTimezone", prefs.timezone);
+          if (hasConsent("preferences")) {
+            localStorage.setItem("preferredTimezone", prefs.timezone);
+          }
         }
         if (prefs.default_risk_percent != null) {
           const risk = String(prefs.default_risk_percent);
           setDefaultRisk(risk);
-          localStorage.setItem("defaultRisk", risk);
+          if (hasConsent("preferences")) {
+            localStorage.setItem("defaultRisk", risk);
+          }
         }
       } catch {
         // Keep local defaults
@@ -147,13 +153,17 @@ const Settings = () => {
   const toggleHaptics = () => {
     const newValue = !hapticsEnabled;
     setHapticsEnabled(newValue);
-    localStorage.setItem("hapticsEnabled", String(newValue));
+    if (hasConsent("preferences")) {
+      localStorage.setItem("hapticsEnabled", String(newValue));
+    }
     if (newValue) lightTap();
   };
 
   const handleRiskChange = (value: string) => {
     setDefaultRisk(value);
-    localStorage.setItem("defaultRisk", value);
+    if (hasConsent("preferences")) {
+      localStorage.setItem("defaultRisk", value);
+    }
     lightTap();
     if (user) {
       void preferencesApi
@@ -169,7 +179,9 @@ const Settings = () => {
     setIsSavingTimezone(true);
     const previous = timezone;
     setTimezone(nextZone);
-    localStorage.setItem("preferredTimezone", nextZone);
+    if (hasConsent("preferences")) {
+      localStorage.setItem("preferredTimezone", nextZone);
+    }
     try {
       if (user) {
         await preferencesApi.update({ timezone: nextZone });
@@ -180,7 +192,9 @@ const Settings = () => {
       lightTap();
     } catch {
       setTimezone(previous);
-      localStorage.setItem("preferredTimezone", previous);
+      if (hasConsent("preferences")) {
+        localStorage.setItem("preferredTimezone", previous);
+      }
       toast.error("Could not update timezone");
     } finally {
       setIsSavingTimezone(false);
