@@ -1034,7 +1034,12 @@ export const claimAutoRenew = internalMutation({
   handler: async (ctx, args) => {
     const account = await ctx.db.get(args.id);
     const now = Date.now();
+    const billing = await ctx.db
+      .query("appSettings")
+      .withIndex("by_key", (q) => q.eq("key", PRO_LOCK_KEY))
+      .unique();
     if (
+      billing?.valueBoolean !== true ||
       !account ||
       account.autoRenewEnabled !== true ||
       !account.autoRenewNextChargeAtMs ||
