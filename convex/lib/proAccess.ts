@@ -21,9 +21,10 @@ export async function getProAccess(
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
   const enabled = setting?.valueBoolean === true;
-  const paid =
-    account?.paymentMode === process.env.PRO_PAYMENT_MODE &&
-    (account?.expiresAtMs ?? 0) > now;
+  // A verified grant remains valid even if a later deployment misconfigures
+  // the gateway environment. Gateway readiness may stop new charges, but it
+  // must never revoke access that was already granted and persisted.
+  const paid = (account?.expiresAtMs ?? 0) > now;
   const pro = !enabled || paid;
   const journals = await getActiveJournals(ctx, userId);
   const active = journals;
