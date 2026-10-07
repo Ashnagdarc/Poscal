@@ -1139,6 +1139,59 @@ describe("production billing hardening", () => {
     expect(account!.autoRenewFailureCount).toBe(0);
   });
 
+  it("account deletion removes reusable Paystack authorization and stops auto-renew", async () => {
+    const { t, user, userId } = await setup();
+    const now = Date.now();
+    const accountId = await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        autoRenewEnabled: true,
+        autoRenewPlan: "monthly",
+        autoRenewAuthorizationCode: "AUTH_delete_me",
+        autoRenewEmail: "trader@example.com",
+        autoRenewSignature: "SIG_delete_me",
+        autoRenewNextChargeAtMs: now - 1,
+        updatedAtMs: now,
+      }),
+    );
+
+    await user.mutation(api.users.deleteAccount, { confirmation: "DELETE" });
+
+    expect(await t.run((ctx) => ctx.db.get(accountId))).toBeNull();
+    expect(await t.run((ctx) => ctx.db.get(userId))).toBeNull();
+    expect(
+      await t.mutation(internal.proBilling.claimAutoRenew, { id: accountId }),
+    ).toBe(false);
+  });
+
+  it("a late verified payment after account deletion is quarantined and cannot recreate access", async () => {
+    const { t, user, userId } = await setup();
+    const { order } = await prepare(user);
+
+    await user.mutation(api.users.deleteAccount, { confirmation: "DELETE" });
+    expect(await t.run((ctx) => ctx.db.get(userId))).toBeNull();
+
+    await t.mutation(internal.proBilling.recordVerification, {
+      id: order._id,
+      transaction: verified(order),
+      mode: "test",
+    });
+
+    const saved = await t.run((ctx) => ctx.db.get(order._id));
+    expect(saved?.status).toBe("review");
+    expect(saved?.reviewReason).toMatch(/Account was deleted/);
+    expect(
+      await t.run((ctx) =>
+        ctx.db
+          .query("proAccounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .unique(),
+      ),
+    ).toBeNull();
+  });
+
   it("billing kill switch blocks due auto-renew claims", async () => {
     const { t, user, userId } = await setup();
     const now = Date.now();
