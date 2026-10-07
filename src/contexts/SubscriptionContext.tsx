@@ -35,6 +35,7 @@ interface SubscriptionContextType {
   autoRenew: {
     enabled: boolean;
     plan: "monthly" | "yearly" | null;
+    amount: number | null;
     nextChargeAt: Date | null;
     last4: string | null;
     brand: string | null;
@@ -116,6 +117,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     autoRenew: {
       enabled: access?.autoRenew?.enabled ?? false,
       plan: access?.autoRenew?.plan ?? null,
+      amount: access?.autoRenew?.amount ?? null,
       nextChargeAt: access?.autoRenew?.nextChargeAtMs
         ? new Date(access.autoRenew.nextChargeAtMs)
         : null,
