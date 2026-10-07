@@ -18,7 +18,7 @@ Implementation and research reviewed on 7 October 2026. This change is a replace
 | CSV export | Available | Available |
 | CSV import | Available | Pro required |
 
-Price: **₦2,500 monthly or ₦25,000 annually**. Annual saves ₦5,000 against twelve monthly purchases. Purchases are prepaid calendar periods with **no automatic renewal**. Month/year end dates clamp to the last valid day and preserve the UTC time. Early renewal starts at the current paid expiry; expiry after failed renewal is unchanged. Delayed activation after a backend outage grants the full purchased period from recovery, so users do not lose paid days waiting for confirmation.
+Price: **₦2,500 monthly or ₦25,000 annually**. Annual saves ₦5,000 against twelve monthly purchases. Purchases are prepaid calendar periods. **Auto-renew is off by default and only activates when the user explicitly opts in and Paystack returns a verified reusable authorization.** Month/year end dates clamp to the last valid day and preserve the UTC time. Early renewal starts at the current paid expiry; expiry after failed renewal is unchanged. Delayed activation after a backend outage grants the full purchased period from recovery, so users do not lose paid days waiting for confirmation.
 
 The beta toggle grants Pro feature access with Pro storage/journal caps; it does not invent paid transactions or subscriptions. Beta creations do not consume the initial launch month's Free creation allowance. Once billing is enabled, creations made while paid count toward that month's counter; after expiry an already exceeded Free allowance blocks further creations until renewal or the next UTC month. Deleting a draft/trade does not refill the allowance.
 
@@ -26,23 +26,19 @@ Downgrade never deletes journals, notebooks or images. Extra journals are visibl
 
 These limits are product decisions, not measured statements about current user behavior. No live usage analysis or database queries were performed to justify them. Review aggregate journal, entry and image usage before changing the limits.
 
-## Gateway decision and price comparison
+## Gateway decision: Paystack
 
-Recommend **Paystack for this release** because the existing app already uses it and the replacement uses its server initialization, resumable InlineJS v2 checkout, verification and signed webhooks. Keep provider calls inside `convex/proPayments.ts`, the product policy in `shared/proPolicy.ts`, and entitlement changes inside `convex/proBilling.ts`. An Interswitch adapter can later supply independently verified proof without changing feature gates.
+**Paystack is the production payment provider for this architecture.** Checkout uses server initialization, resumable InlineJS v2 checkout, server verification and signed webhooks. Automatic renewal uses Paystack reusable authorizations and `/transaction/charge_authorization`; it does not use Paystack plan codes, because a gateway plan can override Poscal's server-owned quoted amount and discount logic.
 
-| Published local-card fee | ₦2,500 purchase | ₦25,000 purchase |
-| --- | --- | --- |
-| Paystack: 1.5% + ₦100; fixed fee waived **under** ₦2,500; ₦2,000 cap | ₦137.50 | ₦475 |
-| Interswitch: 1.5%, ₦2,000 cap; published VAT exclusive | ₦37.50 before VAT | ₦375 before VAT |
+Published Nigeria local-card pricing at review time is 1.5% + ₦100, with the fixed ₦100 waived for transactions under ₦2,500 and a ₦2,000 cap. At ₦2,500 the published fee calculation is ₦137.50. At ₦25,000 it is ₦475. At a 20% early-bird monthly price of ₦2,000, the fixed fee is waived under the published rule and 1.5% is ₦30. These are public fee calculations, not a merchant-specific settlement guarantee. Confirm the merchant dashboard before launch.
 
-These are calculations from the published fee schedules, not merchant-specific quotes or settlement guarantees. Interswitch is cheaper on these published local-card figures. At a 20% early-bird discount the monthly charge is ₦2,000, and Paystack's published fixed-fee waiver applies: 1.5% is ₦30. Confirm actual gateway channels, account eligibility, fee payer and applicable taxes in the merchant dashboard before launch. Do not silently add gateway fees to the quoted order.
+For recurring charges, only a **verified authorization with `reusable: true`** can be stored for auto-renew. Store the authorization token and the original payment email required by Paystack. Never store PAN, CVV or PIN. Automatic renewal creates a normal immutable `proOrder`, charges using the stored authorization, then independently verifies that same order reference before granting or extending access.
 
-Paystack's automatic subscriptions have different channel/retry constraints. This release deliberately uses one-time payments without Paystack plan codes: a plan code can override a discounted amount. Automatic recurring billing would require an explicit future product and consent change.
-
+A network timeout during an automatic charge is treated as financially ambiguous. Poscal does not create a new debit immediately. It keeps the same order/reference and verifies that reference first. If the provider confirms the reference is absent after the recovery window, the attempt can become terminal and a later bounded retry may be scheduled.
 ## Architecture and payment lifecycle
 
-- `proAccounts`: one canonical entitlement per authenticated user, paid expiry, payment environment, current open order and Free journal selection.
-- `proOrders`: server-created tracking reference `ppro-<orderId>`, user, immutable quote, plan, coupon, test/live mode, initialization code, provider ID, verified timestamps, status and next recovery check.
+- `proAccounts`: one canonical entitlement per authenticated user, paid expiry, current open order, Free journal selection, and optional Paystack auto-renew authorization/consent state.
+- `proOrders`: server-created tracking reference `ppro-<orderId>` for checkout or `ppro-auto-<orderId>` for auto-renew, user, immutable quote, source, plan, coupon, test/live mode, provider ID, verified timestamps, status and next recovery check.
 - `proCoupons`: admin-created codes with expiry, usage budget, optional plan restriction, beta-account cutoff, first-purchase eligibility and atomic reservation/redemption counters.
 - `proUsage` plus the existing `userStorageUsage`: authoritative monthly creations and transactional upload reservations.
 - `proWebhookEvents`: durable inbox keyed by raw-body digest. Stores identifiers, not full gateway/card data.
@@ -67,7 +63,10 @@ Status is `initializing`, `pending`, `paid`, `failed`, `abandoned`, `review` or 
 | Wrong amount/currency/reference/metadata/environment | Review required; no access granted |
 | Duplicate success/webhook/retry | One grant, one discount redemption and deduplicated notifications |
 | Provider transaction reused for a different order | Quarantine rather than fulfil twice |
-| Failed renewal | Previous verified period remains available |
+| Failed manual renewal | Previous verified period remains available |
+| Auto-renew timeout | Keep the same order/reference and verify it before any retry; never create an immediate second debit |
+| Auto-renew failure | Retry is bounded; after repeated failures auto-renew is disabled and existing paid access remains valid until expiry |
+| Admin billing kill switch | Stops new checkout initialization and due auto-renew charges; existing verified access remains valid |
 | Expired access | Mutations enforce server expiry immediately; UI refreshes every 15 seconds and on focus; old data remains readable |
 | Refund, partial refund or dispute | Hold the affected order, recompute other valid grants, check separate refund/dispute APIs before any restoration |
 | Refund event precedes provider list visibility | Preserve the signed hold; an empty list, verification outage or check started before a newer signed event cannot clear it |
@@ -88,7 +87,7 @@ Example early-bird offer: 20% on the first purchase, 30-day code expiry and 100 
 
 ## Checkout feel and continuation
 
-A feature action opens an accessible Poscal Pro dialog describing the feature being unlocked. The same checkout is available on `/pro`; old `/upgrade` and `/pricing` URLs lead to this replacement. During beta it shows “Included during beta” and a Continue action, without a payment button. After launch it shows monthly/annual choices, discount application, final price, optional unfinished reminder and the no-auto-renewal statement.
+A feature action opens an accessible Poscal Pro dialog describing the feature being unlocked. The same checkout is available on `/pro`; old `/upgrade` and `/pricing` URLs lead to this replacement. During beta it shows “Included during beta” and a Continue action, without a payment button. After launch it shows monthly/annual choices, discount application, final price, optional unfinished reminder and a separate auto-renew opt-in. Auto-renew is never preselected.
 
 Paystack opens only after a durable server order exists. The Poscal dialog closes first to avoid trapping focus around Paystack's iframe. Hosted checkout is the fallback. Pending/review screens display the immutable amount and reference, a status check and clear advice against paying twice. Confirmation appears after the backend reports paid. “Continue where you left off” uses the saved, sanitized internal path. Payment history is paginated and selection persists in the URL. Notebook local drafts survive the upgrade route; arbitrary unsaved calculator/manual trade forms are not newly persisted by this billing change.
 
@@ -98,13 +97,27 @@ Paystack opens only after a durable server order exists. The Poscal dialog close
 | --- | --- |
 | Pending initialization/confirmation | Delayed ten minutes; suppressed if resolved first |
 | Unfinished checkout | One reminder after one hour only when explicitly opted in |
-| Verified success | Confirmation with plan, amount, expiry and reference |
+| Verified success | Confirmation with plan, amount, expiry, reference and whether auto-renew was successfully enabled |
+| Auto-renew failure | Payment status plus bounded retry/disable behavior; no false success |
 | Verified failure/reversal | Status, reference and support/verification guidance |
 | Refund/dispute/detail mismatch | Review notice; no false-success message |
 | Expiring / expired | One-day warning and expiry notice; superseded renewals suppressed |
 
 The email outbox is transactional and delivery uses the queue ID as a Resend idempotency key. Resend's idempotency retention is 24 hours; this is not a permanent exactly-once delivery guarantee. Device push uses the existing subscription and dedupe/tag handling; push requires browser permission and an active device subscription. Optional unfinished reminders use the same opt-in for both channels. Failed deliveries use the existing bounded retry/dead-letter behavior and must be monitored. No test emails or pushes were sent to real users during implementation.
 
+## Cookies, analytics and consent
+
+Poscal uses a versioned consent record and separates **Necessary**, **Preferences**, **Analytics** and **Marketing** categories. Necessary storage remains available for authentication, security, core app behavior and the consent record itself. Optional categories default off until the user chooses.
+
+- Vercel Analytics is mounted only after Analytics consent.
+- Sentry initialization and exception transmission are gated by Analytics consent.
+- Payment-sensitive URL parameters such as `reference`, `trxref`, `access_code`, `token`, `returnTo` and `redirectPath` are removed from analytics event URLs before transmission.
+- The optional sidebar preference cookie is written only after Preferences consent and uses `SameSite=Lax; Secure`.
+- The Privacy page provides a control to reopen privacy choices.
+- Marketing consent is separate and is not required to use Poscal.
+- Auto-renew consent, unfinished-checkout reminder consent and analytics/marketing consent are separate decisions.
+
+This consent layer does not replace a legal review of Poscal's full storage inventory, cross-border processing, retention schedule or jurisdiction-specific obligations.
 ## Configuration, deployment and safe legacy cleanup
 
 1. **Keep billing off.** The new key is `poscal_pro_paid_features_enabled`; absence or false means beta. Old `signals_paid_lock_enabled` never enables the replacement. Do not seed the new key to true in a deployment.
