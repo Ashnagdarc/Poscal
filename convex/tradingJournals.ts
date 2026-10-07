@@ -3,7 +3,7 @@ import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -219,7 +219,7 @@ export const archive = mutation({
 export const beginRemove = mutation({
   args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
@@ -249,7 +249,7 @@ export const beginRemove = mutation({
 export const removeBatch = query({
   args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const journal = await ctx.db.get(args.id);
     if (!journal || journal.userId !== userId) throw new Error("Journal not found");
     if (!journal.deletionRequestedAtMs)
@@ -268,7 +268,7 @@ export const removeBatch = query({
 export const cleanupRemoveBatch = mutation({
   args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const journal = await ctx.db.get(args.id);
     if (!journal || journal.userId !== userId) return { done: true };
     if (!journal.deletionRequestedAtMs)
