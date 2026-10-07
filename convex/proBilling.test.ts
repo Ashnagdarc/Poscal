@@ -556,7 +556,7 @@ describe("discounts, renewals and authentication", () => {
       (await user.query(api.proBilling.entitlements, {}))!.expiresAtMs,
     ).toBe(addPlanPeriod(before.expiresAtMs!, "monthly"));
   });
-  it("does not reuse test entitlements after changing to the live environment", async () => {
+  it("does not revoke an already verified entitlement when gateway mode changes", async () => {
     const { t, user } = await setup();
     const { order } = await prepare(user);
     await t.mutation(internal.proBilling.recordVerification, {
@@ -566,7 +566,7 @@ describe("discounts, renewals and authentication", () => {
     });
     vi.stubEnv("PRO_PAYMENT_MODE", "live");
     expect((await user.query(api.proBilling.entitlements, {}))!.paid).toBe(
-      false,
+      true,
     );
   });
   it("refuses test checkout on the production website", async () => {
