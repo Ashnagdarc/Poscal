@@ -5,7 +5,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
-import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 import { assertValidTradeFields } from "./lib/tradeValidation";
 import {
   CLOSED_TRADE_ALERT_SCAN_LIMIT,
@@ -956,7 +956,7 @@ const deleteJournalEntryRows = async (
 export const beginDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -984,7 +984,7 @@ export const beginDeleteEntry = mutation({
 export const cancelDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       return { success: true };
@@ -1001,7 +1001,7 @@ export const cancelDeleteEntry = mutation({
 export const finalizeDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       return { success: true };
