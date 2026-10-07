@@ -1,6 +1,7 @@
 import { Moon, Sun } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useHaptics } from "@/hooks/use-haptics";
+import { hasConsent } from "@/lib/consent";
 
 interface ThemeToggleProps {
   className?: string;
@@ -22,10 +23,10 @@ export const ThemeToggle = ({ className = "" }: ThemeToggleProps) => {
 
     if (newValue) {
       document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
+      if (hasConsent("preferences")) localStorage.setItem("theme", "dark");
     } else {
       document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
+      if (hasConsent("preferences")) localStorage.setItem("theme", "light");
     }
   };
 
