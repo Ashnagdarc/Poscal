@@ -1135,3 +1135,50 @@ describe("production billing hardening", () => {
     expect((await user.query(api.proBilling.entitlements, {}))!.beta).toBe(true);
   });
 });
+
+
+describe("resumable journal deletion", () => {
+  it("cleans entry-owned rows before deleting the parent journal", async () => {
+    const { t, user } = await setup(false);
+    const journal = await user.mutation(api.tradingJournals.create, {
+      name: "Delete me",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    const trade = await user.mutation(api.tradingJournal.createNotebookDraft, {
+      journalId: journal!._id,
+    });
+    await user.mutation(api.tradingJournal.updateNotebook, {
+      id: trade!._id,
+      title: "Delete test",
+      entryReason: "Test",
+      duringTradeNotes: null,
+      postTradeReview: null,
+      lessonsLearned: null,
+    });
+
+    await user.mutation(api.tradingJournals.beginRemove, { id: journal!._id });
+    const batch = await user.query(api.tradingJournals.removeBatch, {
+      id: journal!._id,
+    });
+    expect(batch.tradeIds).toContain(trade!._id);
+
+    await user.mutation(api.tradingJournal.beginDeleteEntry, { id: trade!._id });
+    await user.mutation(api.tradingJournal.finalizeDeleteEntry, { id: trade!._id });
+
+    expect(
+      await user.mutation(api.tradingJournals.cleanupRemoveBatch, {
+        id: journal!._id,
+      }),
+    ).toEqual({ done: true });
+    expect(await t.run((ctx) => ctx.db.get(journal!._id))).toBeNull();
+    expect(
+      await t.run((ctx) =>
+        ctx.db
+          .query("tradeNotebooks")
+          .withIndex("by_journal", (q) => q.eq("journalId", journal!._id))
+          .collect(),
+      ),
+    ).toHaveLength(0);
+  });
+});
