@@ -1063,7 +1063,7 @@ describe("production billing hardening", () => {
   });
 
   it("only enables auto-renew from a verified reusable Paystack authorization", async () => {
-    const { t, user } = await setup();
+    const { t, user, userId } = await setup();
     const { order } = await user.mutation(internal.proBilling.prepareOrder, {
       plan: "monthly",
       reminders: false,
