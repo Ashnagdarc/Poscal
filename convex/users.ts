@@ -422,6 +422,8 @@ export const beginAccountDeletion = mutation({
     if (proAccount) {
       await ctx.db.patch(proAccount._id, {
         autoRenewEnabled: false,
+        autoRenewAmount: undefined,
+        autoRenewPolicyVersion: undefined,
         autoRenewNextChargeAtMs: undefined,
         autoRenewLeaseUntilMs: 0,
         autoRenewOrderId: undefined,
