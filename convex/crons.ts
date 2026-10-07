@@ -23,4 +23,11 @@ crons.interval(
 
 crons.interval("reconcile Pro payments", { minutes: 1 }, internal.proPayments.reconcileDue, {});
 
+crons.interval(
+  "charge due Pro auto-renewals",
+  { minutes: 15 },
+  internal.proPayments.runAutoRenewDue,
+  {},
+);
+
 export default crons;
