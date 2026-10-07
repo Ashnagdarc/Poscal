@@ -256,6 +256,7 @@ export const prepareOrder = internalMutation({
     code: v.optional(v.string()),
     returnTo: v.optional(v.string()),
     reminders: v.boolean(),
+    autoRenew: v.optional(v.boolean()),
   },
   returns: v.object({ order: orderDoc, initialize: v.boolean() }),
   handler: async (ctx, args) => {
@@ -303,6 +304,8 @@ export const prepareOrder = internalMutation({
       couponReservationActive: !!price.coupon,
       returnTo: safeReturnTo(args.returnTo),
       reminders: args.reminders,
+      source: "checkout",
+      autoRenewRequested: args.autoRenew === true,
       nextCheckAtMs: now + 60_000,
       checks: 0,
       createdAtMs: now,
@@ -591,10 +594,7 @@ export const recordVerification = internalMutation({
         );
         return null;
       }
-      const start = Math.max(
-        account.paymentMode === args.mode ? account.expiresAtMs : 0,
-        now,
-      );
+      const start = Math.max(account.expiresAtMs, now);
       const end = addPlanPeriod(start, order.plan);
       await ctx.db.patch(order._id, {
         ...checkPatch,
@@ -610,6 +610,54 @@ export const recordVerification = internalMutation({
         couponReservationActive: false,
         nextCheckAtMs: now + 24 * 3600_000,
       });
+      const authorization = data.authorization;
+      const canEnableAutoRenew =
+        order.source !== "auto_renew" &&
+        order.autoRenewRequested === true &&
+        authorization?.reusable === true &&
+        typeof authorization.authorization_code === "string" &&
+        authorization.authorization_code.startsWith("AUTH_") &&
+        typeof authorization.signature === "string" &&
+        authorization.signature.length > 3;
+
+      const renewalPatch =
+        canEnableAutoRenew
+          ? {
+              autoRenewEnabled: true,
+              autoRenewPlan: order.plan,
+              autoRenewAuthorizationCode: authorization!.authorization_code!,
+              autoRenewEmail: order.email,
+              autoRenewSignature: authorization!.signature!,
+              autoRenewChannel: authorization!.channel ?? "card",
+              autoRenewLast4: authorization!.last4,
+              autoRenewBrand:
+                authorization!.brand ?? authorization!.card_type,
+              autoRenewBank: authorization!.bank,
+              autoRenewExpMonth: authorization!.exp_month,
+              autoRenewExpYear: authorization!.exp_year,
+              autoRenewCountryCode: authorization!.country_code,
+              autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
+              autoRenewFailureCount: 0,
+              autoRenewLeaseUntilMs: 0,
+              autoRenewConsentAtMs: now,
+              autoRenewConsentVersion: 1,
+            }
+          : order.source === "auto_renew" && account.autoRenewEnabled
+            ? {
+                autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
+                autoRenewFailureCount: 0,
+                autoRenewLeaseUntilMs: 0,
+                autoRenewOrderId: undefined,
+              }
+            : order.autoRenewRequested
+              ? {
+                  autoRenewEnabled: false,
+                  autoRenewNextChargeAtMs: undefined,
+                  autoRenewLeaseUntilMs: 0,
+                  autoRenewOrderId: undefined,
+                }
+              : {};
+
       await ctx.db.patch(account._id, {
         expiresAtMs: end,
         paymentMode: args.mode,
@@ -619,6 +667,7 @@ export const recordVerification = internalMutation({
             ? undefined
             : account.activeOrderId,
         freeJournalChosen: false,
+        ...renewalPatch,
         updatedAtMs: now,
       });
       if (order.couponId) {
@@ -638,7 +687,7 @@ export const recordVerification = internalMutation({
         granted,
         "paid",
         "Poscal Pro is active",
-        `Payment confirmed. Your Pro access ends on ${new Date(end).toISOString().slice(0, 10)}. You will not be charged automatically.`,
+        `Payment confirmed. Your Pro access ends on ${new Date(end).toISOString().slice(0, 10)}. ${canEnableAutoRenew || (order.source === "auto_renew" && account.autoRenewEnabled) ? "Auto-renew is on and the next charge is scheduled before expiry." : "You will not be charged automatically."}`,
       );
       await ctx.scheduler.runAt(
         Math.max(now, end - 24 * 3600_000),
@@ -695,6 +744,21 @@ export const recordVerification = internalMutation({
           });
         await ctx.db.patch(order._id, { couponReservationActive: false });
       }
+      if (order.source === "auto_renew") {
+        const account = await accountFor(ctx, order.userId);
+        const failures = (account.autoRenewFailureCount ?? 0) + 1;
+        await ctx.db.patch(account._id, {
+          autoRenewFailureCount: failures,
+          autoRenewLeaseUntilMs: 0,
+          autoRenewOrderId: undefined,
+          autoRenewEnabled: failures < 3 && account.autoRenewEnabled === true,
+          autoRenewNextChargeAtMs:
+            failures < 3 && account.autoRenewEnabled === true
+              ? now + 12 * 3600_000
+              : undefined,
+          updatedAtMs: now,
+        });
+      }
       if (status !== "abandoned" || order.reminders)
         await notify(
           ctx,
@@ -736,15 +800,10 @@ async function recomputeEntitlement(ctx: MutationCtx, userId: Id<"users">) {
       "Ledger exceeds automatic recovery limit. Manual review required.",
     );
   const account = await accountFor(ctx, userId);
-  let expires =
-    account.legacyPaymentMode === process.env.PRO_PAYMENT_MODE
-      ? (account.legacyExpiresAtMs ?? 0)
-      : 0;
+  let expires = account.legacyExpiresAtMs ?? 0;
   let last: Doc<"proOrders"> | null = null;
   for (const order of orders
-    .filter(
-      (o) => o.status === "paid" && o.mode === process.env.PRO_PAYMENT_MODE,
-    )
+    .filter((o) => o.status === "paid")
     .sort((a, b) => (a.paidAtMs ?? 0) - (b.paidAtMs ?? 0))) {
     const start = Math.max(expires, order.activatedAtMs ?? order.paidAtMs!);
     expires = addPlanPeriod(start, order.plan);
@@ -769,7 +828,7 @@ async function recomputeEntitlement(ctx: MutationCtx, userId: Id<"users">) {
   }
   await ctx.db.patch(account._id, {
     expiresAtMs: expires,
-    paymentMode: process.env.PRO_PAYMENT_MODE as "test" | "live",
+    paymentMode: last?.mode ?? account.paymentMode,
     updatedAtMs: Date.now(),
   });
 }
@@ -902,6 +961,179 @@ export const captureWebhook = internalMutation({
     }
     return null;
   },
+});
+
+export const setAutoRenew = mutation({
+  args: {
+    enabled: v.boolean(),
+    plan: v.optional(planValidator),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const account = await accountFor(ctx, userId);
+    const now = Date.now();
+
+    if (!args.enabled) {
+      await ctx.db.patch(account._id, {
+        autoRenewEnabled: false,
+        autoRenewNextChargeAtMs: undefined,
+        autoRenewLeaseUntilMs: 0,
+        updatedAtMs: now,
+      });
+      return null;
+    }
+
+    if (
+      !account.autoRenewAuthorizationCode ||
+      !account.autoRenewEmail ||
+      !account.autoRenewSignature
+    ) {
+      throw new Error(
+        "Make a payment with auto-renew selected before enabling automatic renewal.",
+      );
+    }
+    if (account.expiresAtMs <= now) {
+      throw new Error("Renew Pro manually before enabling auto-renew.");
+    }
+
+    await ctx.db.patch(account._id, {
+      autoRenewEnabled: true,
+      autoRenewPlan: args.plan ?? account.autoRenewPlan ?? "monthly",
+      autoRenewNextChargeAtMs: Math.max(
+        now + 60_000,
+        account.expiresAtMs - 24 * 3600_000,
+      ),
+      autoRenewFailureCount: 0,
+      autoRenewLeaseUntilMs: 0,
+      autoRenewConsentAtMs: now,
+      autoRenewConsentVersion: 1,
+      updatedAtMs: now,
+    });
+    return null;
+  },
+});
+
+export const dueAutoRenewAccounts = internalQuery({
+  args: {},
+  returns: v.array(v.id("proAccounts")),
+  handler: async (ctx) =>
+    (
+      await ctx.db
+        .query("proAccounts")
+        .withIndex("by_auto_renew_due", (q) =>
+          q.eq("autoRenewEnabled", true).lte("autoRenewNextChargeAtMs", Date.now()),
+        )
+        .take(10)
+    ).map((row) => row._id),
+});
+
+export const claimAutoRenew = internalMutation({
+  args: { id: v.id("proAccounts") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.id);
+    const now = Date.now();
+    if (
+      !account ||
+      account.autoRenewEnabled !== true ||
+      !account.autoRenewNextChargeAtMs ||
+      account.autoRenewNextChargeAtMs > now ||
+      (account.autoRenewLeaseUntilMs ?? 0) > now ||
+      !account.autoRenewAuthorizationCode ||
+      !account.autoRenewEmail ||
+      !account.autoRenewPlan
+    )
+      return false;
+    await ctx.db.patch(account._id, {
+      autoRenewLeaseUntilMs: now + 5 * 60_000,
+      updatedAtMs: now,
+    });
+    return true;
+  },
+});
+
+export const prepareAutoRenewOrder = internalMutation({
+  args: { id: v.id("proAccounts") },
+  returns: orderDoc,
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.id);
+    if (
+      !account ||
+      account.autoRenewEnabled !== true ||
+      !account.autoRenewAuthorizationCode ||
+      !account.autoRenewEmail ||
+      !account.autoRenewPlan
+    )
+      throw new Error("Auto-renew is not ready");
+
+    if (account.autoRenewOrderId) {
+      const existing = await ctx.db.get(account.autoRenewOrderId);
+      if (
+        existing &&
+        ["initializing", "pending", "review"].includes(existing.status)
+      )
+        return existing;
+    }
+
+    const now = Date.now();
+    const amount = PRICES[account.autoRenewPlan];
+    const id = await ctx.db.insert("proOrders", {
+      userId: account.userId,
+      email: account.autoRenewEmail,
+      reference: "",
+      plan: account.autoRenewPlan,
+      mode: process.env.PRO_PAYMENT_MODE as "test" | "live",
+      amount,
+      baseAmount: amount,
+      currency: "NGN",
+      status: "pending",
+      returnTo: "/pro",
+      reminders: false,
+      source: "auto_renew",
+      autoRenewRequested: true,
+      nextCheckAtMs: now + 60_000,
+      checks: 0,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+    await ctx.db.patch(id, { reference: `ppro-auto-${id}` });
+    await ctx.db.patch(account._id, {
+      autoRenewOrderId: id,
+      autoRenewNextChargeAtMs: now + 12 * 3600_000,
+      updatedAtMs: now,
+    });
+    return (await ctx.db.get(id))!;
+  },
+});
+
+export const autoRenewChargeFailed = internalMutation({
+  args: { id: v.id("proAccounts") },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const account = await ctx.db.get(args.id);
+    if (!account) return null;
+    const now = Date.now();
+    const failures = (account.autoRenewFailureCount ?? 0) + 1;
+    await ctx.db.patch(account._id, {
+      autoRenewFailureCount: failures,
+      autoRenewLeaseUntilMs: 0,
+      autoRenewOrderId: undefined,
+      autoRenewEnabled: failures < 3 && account.autoRenewEnabled === true,
+      autoRenewNextChargeAtMs:
+        failures < 3 && account.autoRenewEnabled === true
+          ? now + 12 * 3600_000
+          : undefined,
+      updatedAtMs: now,
+    });
+    return null;
+  },
+});
+
+export const getAutoRenewAccount = internalQuery({
+  args: { id: v.id("proAccounts") },
+  returns: v.any(),
+  handler: async (ctx, args) => ctx.db.get(args.id),
 });
 
 export const dueOrders = internalQuery({
