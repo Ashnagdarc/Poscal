@@ -399,6 +399,25 @@ export const revokeAllSessions = mutation({
 });
 
 /**
+ * Start resumable account deletion. The marker lets asset-aware cleanup remove
+ * the selected Free journal without turning that exception into a normal
+ * journal-rotation path.
+ */
+export const beginAccountDeletion = mutation({
+  args: { confirmation: v.literal("DELETE") },
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+    await ctx.db.patch(userId, {
+      accountDeletionRequestedAtMs: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
  * Hard-delete the authenticated user's Poscal data + auth records (GDPR-style).
  * Irreversible. Client must sign out after success.
  */
@@ -414,6 +433,16 @@ export const deleteAccount = mutation({
     const user = await ctx.db.get(userId);
     if (!user) {
       throw new Error("User not found");
+    }
+
+    const deletionStartedAt = user.accountDeletionRequestedAtMs ?? 0;
+    if (
+      !deletionStartedAt ||
+      Date.now() - deletionStartedAt > 60 * 60_000
+    ) {
+      throw new Error(
+        "Account deletion session expired. Start account deletion again.",
+      );
     }
 
     const [remainingJournal, remainingTrade, remainingAttachment] =
