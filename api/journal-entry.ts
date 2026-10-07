@@ -32,7 +32,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ success: false, message: "Missing auth token" });
   }
 
-  const body = bodyObject(req);
+  let body: Record<string, unknown>;
+  try {
+    body = bodyObject(req);
+  } catch {
+    return res.status(400).json({ success: false, message: "Invalid JSON body" });
+  }
+
   const tradeId = String(body.tradeId || "");
   if (!tradeId) {
     return res.status(400).json({ success: false, message: "Missing tradeId" });
