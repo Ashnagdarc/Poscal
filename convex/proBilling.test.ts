@@ -1157,6 +1157,7 @@ describe("production billing hardening", () => {
       }),
     );
 
+    await user.mutation(api.users.beginAccountDeletion, { confirmation: "DELETE" });
     await user.mutation(api.users.deleteAccount, { confirmation: "DELETE" });
 
     expect(await t.run((ctx) => ctx.db.get(accountId))).toBeNull();
@@ -1170,6 +1171,7 @@ describe("production billing hardening", () => {
     const { t, user, userId } = await setup();
     const { order } = await prepare(user);
 
+    await user.mutation(api.users.beginAccountDeletion, { confirmation: "DELETE" });
     await user.mutation(api.users.deleteAccount, { confirmation: "DELETE" });
     expect(await t.run((ctx) => ctx.db.get(userId))).toBeNull();
 
@@ -1225,6 +1227,43 @@ describe("production billing hardening", () => {
   });
 });
 
+
+describe("account deletion cleanup", () => {
+  it("allows the selected Free journal to enter cleanup only after explicit account deletion starts", async () => {
+    const { user } = await setup(false);
+    const journal = await user.mutation(api.tradingJournals.create, {
+      name: "Free journal",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+
+    await expect(
+      user.mutation(api.tradingJournals.beginRemove, { id: journal!._id }),
+    ).rejects.toThrow("Choose your one Free journal");
+
+    await user.mutation(api.users.beginAccountDeletion, {
+      confirmation: "DELETE",
+    });
+    await expect(
+      user.mutation(api.tradingJournals.beginRemove, { id: journal!._id }),
+    ).resolves.toEqual({ success: true });
+  });
+
+  it("refuses final account deletion until asset-aware journal cleanup is complete", async () => {
+    const { user } = await setup(false);
+    await user.mutation(api.tradingJournals.create, {
+      name: "Has data",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    await user.mutation(api.users.beginAccountDeletion, {
+      confirmation: "DELETE",
+    });
+    await expect(
+      user.mutation(api.users.deleteAccount, { confirmation: "DELETE" }),
+    ).rejects.toThrow("asset");
+  });
+});
 
 describe("resumable journal deletion", () => {
   it("cleans entry-owned rows before deleting the parent journal", async () => {
