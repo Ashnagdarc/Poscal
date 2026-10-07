@@ -24,6 +24,7 @@ import {
   discountAmount,
   PRICES,
   PRO_LOCK_KEY,
+  PRO_POLICY_VERSION,
   safeReturnTo,
   verifyTransactionMatch,
   type ProPlan,
@@ -33,6 +34,8 @@ export const planValidator = v.union(v.literal("monthly"), v.literal("yearly"));
 const CLOSED = Number.MAX_SAFE_INTEGER;
 
 const clearAutoRenewPaymentMethod = () => ({
+  autoRenewAmount: undefined,
+  autoRenewPolicyVersion: undefined,
   autoRenewAuthorizationCode: undefined,
   autoRenewEmail: undefined,
   autoRenewSignature: undefined,
@@ -664,6 +667,8 @@ export const recordVerification = internalMutation({
             ? {
                 autoRenewEnabled: true,
                 autoRenewPlan: order.plan,
+                autoRenewAmount: PRICES[order.plan],
+                autoRenewPolicyVersion: PRO_POLICY_VERSION,
                 autoRenewAuthorizationCode: authorization!.authorization_code!,
                 autoRenewEmail: order.email,
                 autoRenewSignature: authorization!.signature!,
@@ -1038,10 +1043,13 @@ export const setAutoRenew = mutation({
     if (
       !account.autoRenewAuthorizationCode ||
       !account.autoRenewEmail ||
-      !account.autoRenewSignature
+      !account.autoRenewSignature ||
+      !account.autoRenewPlan ||
+      account.autoRenewAmount !== PRICES[account.autoRenewPlan] ||
+      account.autoRenewPolicyVersion !== PRO_POLICY_VERSION
     ) {
       throw new Error(
-        "Make a payment with auto-renew selected before enabling automatic renewal.",
+        "Make a new payment with auto-renew selected before enabling automatic renewal.",
       );
     }
     if (account.expiresAtMs <= now) {
@@ -1050,7 +1058,9 @@ export const setAutoRenew = mutation({
 
     await ctx.db.patch(account._id, {
       autoRenewEnabled: true,
-      autoRenewPlan: args.plan ?? account.autoRenewPlan ?? "monthly",
+      autoRenewPlan: account.autoRenewPlan,
+      autoRenewAmount: account.autoRenewAmount,
+      autoRenewPolicyVersion: account.autoRenewPolicyVersion,
       autoRenewNextChargeAtMs: Math.max(
         now + 60_000,
         account.expiresAtMs - 24 * 3600_000,
@@ -1089,6 +1099,21 @@ export const claimAutoRenew = internalMutation({
       .query("appSettings")
       .withIndex("by_key", (q) => q.eq("key", PRO_LOCK_KEY))
       .unique();
+    if (
+      account?.autoRenewPlan &&
+      (account.autoRenewAmount !== PRICES[account.autoRenewPlan] ||
+        account.autoRenewPolicyVersion !== PRO_POLICY_VERSION)
+    ) {
+      await ctx.db.patch(account._id, {
+        autoRenewEnabled: false,
+        autoRenewNextChargeAtMs: undefined,
+        autoRenewLeaseUntilMs: 0,
+        autoRenewOrderId: undefined,
+        ...clearAutoRenewPaymentMethod(),
+        updatedAtMs: now,
+      });
+      return false;
+    }
     if (account && now > account.expiresAtMs + 48 * 3600_000) {
       await ctx.db.patch(account._id, {
         autoRenewEnabled: false,
@@ -1109,7 +1134,10 @@ export const claimAutoRenew = internalMutation({
       (account.autoRenewLeaseUntilMs ?? 0) > now ||
       !account.autoRenewAuthorizationCode ||
       !account.autoRenewEmail ||
-      !account.autoRenewPlan
+      !account.autoRenewPlan ||
+      !account.autoRenewAmount ||
+      account.autoRenewAmount !== PRICES[account.autoRenewPlan] ||
+      account.autoRenewPolicyVersion !== PRO_POLICY_VERSION
     )
       return false;
     await ctx.db.patch(account._id, {
@@ -1130,7 +1158,10 @@ export const prepareAutoRenewOrder = internalMutation({
       account.autoRenewEnabled !== true ||
       !account.autoRenewAuthorizationCode ||
       !account.autoRenewEmail ||
-      !account.autoRenewPlan
+      !account.autoRenewPlan ||
+      !account.autoRenewAmount ||
+      account.autoRenewAmount !== PRICES[account.autoRenewPlan] ||
+      account.autoRenewPolicyVersion !== PRO_POLICY_VERSION
     )
       throw new Error("Auto-renew is not ready");
 
@@ -1144,7 +1175,7 @@ export const prepareAutoRenewOrder = internalMutation({
     }
 
     const now = Date.now();
-    const amount = PRICES[account.autoRenewPlan];
+    const amount = account.autoRenewAmount;
     const id = await ctx.db.insert("proOrders", {
       userId: account.userId,
       email: account.autoRenewEmail,
