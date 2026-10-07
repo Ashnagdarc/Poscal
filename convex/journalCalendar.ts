@@ -25,16 +25,13 @@ const dateKeyInTimeZone = (timestampMs: number, timeZone?: string | null) => {
   return date.toISOString().slice(0, 10);
 };
 
-const assertOwnedJournal = async (
+const hasOwnedJournal = async (
   ctx: { db: any },
   userId: string,
   journalId: Id<"tradingAccounts">,
 ) => {
   const journal = await ctx.db.get(journalId);
-  if (!journal || journal.userId !== userId) {
-    throw new Error("Journal not found");
-  }
-  return journal;
+  return Boolean(journal && journal.userId === userId);
 };
 
 type Bucket = {
@@ -80,7 +77,9 @@ export const getMonth = query({
     const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) return { days: [] };
 
-    await assertOwnedJournal(ctx, userId, args.journalId);
+    if (!(await hasOwnedJournal(ctx, userId, args.journalId))) {
+      return { days: [] };
+    }
 
     const monthIndex = Math.min(Math.max(Math.trunc(args.month) - 1, 0), 11);
     const roughStart = Date.UTC(args.year, monthIndex, 1) - RANGE_PAD_MS;
@@ -242,7 +241,9 @@ export const getDayEntries = query({
     const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) return [];
 
-    await assertOwnedJournal(ctx, userId, args.journalId);
+    if (!(await hasOwnedJournal(ctx, userId, args.journalId))) {
+      return [];
+    }
 
     const [yearText, monthText, dayText] = args.dateKey.split("-");
     const year = Number(yearText);
