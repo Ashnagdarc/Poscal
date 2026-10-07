@@ -114,13 +114,13 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     freeJournalId: access?.freeJournalId ?? null,
     canChooseFreeJournal: !!access?.canChooseFreeJournal,
     autoRenew: {
-      enabled: access?.autoRenew.enabled ?? false,
-      plan: access?.autoRenew.plan ?? null,
-      nextChargeAt: access?.autoRenew.nextChargeAtMs
+      enabled: access?.autoRenew?.enabled ?? false,
+      plan: access?.autoRenew?.plan ?? null,
+      nextChargeAt: access?.autoRenew?.nextChargeAtMs
         ? new Date(access.autoRenew.nextChargeAtMs)
         : null,
-      last4: access?.autoRenew.last4 ?? null,
-      brand: access?.autoRenew.brand ?? null,
+      last4: access?.autoRenew?.last4 ?? null,
+      brand: access?.autoRenew?.brand ?? null,
     },
     checkFeatureAccess: (feature) =>
       isAuthenticated &&
