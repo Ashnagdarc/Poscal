@@ -130,6 +130,10 @@ Whole-journal deletion is asset-aware and resumable. The client calls `/api/jour
 Account deletion uses the same principle through `/api/account-delete`. The first step records an explicit deletion session and **immediately disables auto-renew and erases the reusable Paystack authorization**, before slower journal/R2 cleanup begins. The endpoint then removes journals and orphan entries in resumable bounded batches. Final user deletion is refused while any journal, trade or attachment remains.
 
 Open payment records are not allowed to recreate an account or entitlement after deletion starts. A payment that settles after the deletion marker exists is quarantined in `review` for operator investigation/refund. Historical `proOrders` may remain as a minimal financial ledger for accounting, dispute and legal evidence, but the reusable authorization lives only on `proAccounts` and is removed when deletion begins. The exact financial-record retention period still requires an accounting/legal retention policy before production launch.
+## Preview testing simplification
+
+For billing development, Vercel Preview builds reuse Poscal's existing isolated Convex development deployment `valuable-axolotl-815`. Preview builds do not create disposable Convex deployments and do not require a Convex Preview Deploy Key. Production remains pinned to `helpful-sturgeon-546` and keeps the existing production deploy-key flow. Test Paystack credentials and test-mode billing configuration belong only on the Convex dev deployment.
+
 ## Configuration, deployment and safe legacy cleanup
 
 1. **Keep billing off.** The new key is `poscal_pro_paid_features_enabled`; absence or false means beta. Old `signals_paid_lock_enabled` never enables the replacement. Do not seed the new key to true in a deployment.
