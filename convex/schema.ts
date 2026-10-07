@@ -14,8 +14,28 @@ export default defineSchema({
     userId: v.id("users"), expiresAtMs: v.number(), legacyExpiresAtMs: v.optional(v.number()), legacyPaymentMode: v.optional(v.union(v.literal("live"), v.literal("test"))), paymentMode: v.optional(v.union(v.literal("live"), v.literal("test"))), hasPaidBefore: v.optional(v.boolean()),
     activeOrderId: v.optional(v.id("proOrders")),
     freeJournalId: v.optional(v.id("tradingAccounts")),
-    freeJournalChosen: v.optional(v.boolean()), updatedAtMs: v.number(),
-  }).index("by_user", ["userId"]).index("by_expiry", ["expiresAtMs"]),
+    freeJournalChosen: v.optional(v.boolean()),
+    autoRenewEnabled: v.optional(v.boolean()),
+    autoRenewPlan: v.optional(v.union(v.literal("monthly"), v.literal("yearly"))),
+    autoRenewAuthorizationCode: v.optional(v.string()),
+    autoRenewEmail: v.optional(v.string()),
+    autoRenewSignature: v.optional(v.string()),
+    autoRenewChannel: v.optional(v.string()),
+    autoRenewLast4: v.optional(v.string()),
+    autoRenewBrand: v.optional(v.string()),
+    autoRenewBank: v.optional(v.string()),
+    autoRenewExpMonth: v.optional(v.string()),
+    autoRenewExpYear: v.optional(v.string()),
+    autoRenewCountryCode: v.optional(v.string()),
+    autoRenewNextChargeAtMs: v.optional(v.number()),
+    autoRenewFailureCount: v.optional(v.number()),
+    autoRenewLeaseUntilMs: v.optional(v.number()),
+    autoRenewConsentAtMs: v.optional(v.number()),
+    autoRenewConsentVersion: v.optional(v.number()),
+    autoRenewOrderId: v.optional(v.id("proOrders")),
+    updatedAtMs: v.number(),
+  }).index("by_user", ["userId"]).index("by_expiry", ["expiresAtMs"])
+    .index("by_auto_renew_due", ["autoRenewEnabled", "autoRenewNextChargeAtMs"]),
   proOrders: defineTable({
     userId: v.id("users"), email: v.string(), reference: v.string(),
     plan: v.union(v.literal("monthly"), v.literal("yearly")), mode: v.union(v.literal("live"), v.literal("test")),
@@ -23,6 +43,8 @@ export default defineSchema({
     status: v.union(v.literal("initializing"), v.literal("pending"), v.literal("paid"), v.literal("failed"), v.literal("abandoned"), v.literal("review"), v.literal("reversed")),
     couponId: v.optional(v.id("proCoupons")), couponCode: v.optional(v.string()), couponReservationActive: v.optional(v.boolean()),
     returnTo: v.string(), reminders: v.boolean(),
+    source: v.optional(v.union(v.literal("checkout"), v.literal("auto_renew"))),
+    autoRenewRequested: v.optional(v.boolean()),
     accessCode: v.optional(v.string()), checkoutUrl: v.optional(v.string()),
     providerTransactionId: v.optional(v.string()), providerStatus: v.optional(v.string()),
     paidAtMs: v.optional(v.number()), activatedAtMs: v.optional(v.number()), grantStartMs: v.optional(v.number()), grantEndMs: v.optional(v.number()),
@@ -196,6 +218,7 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_trade_role", ["tradeId", "role", "sortOrder"])
+    .index("by_journal", ["journalId", "createdAtMs"])
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_status_created", ["status", "createdAtMs"]),
