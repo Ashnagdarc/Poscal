@@ -34,10 +34,12 @@ Published Nigeria local-card pricing at review time is 1.5% + ₦100, with the f
 
 For recurring charges, only a **verified authorization with `reusable: true`** can be stored for auto-renew. Store the authorization token and the original payment email required by Paystack. Never store PAN, CVV or PIN. Automatic renewal creates a normal immutable `proOrder`, charges using the stored authorization, then independently verifies that same order reference before granting or extending access.
 
-A network timeout during an automatic charge is treated as financially ambiguous. Poscal does not create a new debit immediately. It keeps the same order/reference and verifies that reference first. If the provider confirms the reference is absent after the recovery window, the attempt can become terminal and a later bounded retry may be scheduled.
+Auto-renew consent is price-specific. The opt-in shows the standard renewal price separately from any discount on the first purchase. `proAccounts` stores the consented renewal amount and billing policy version. An automatic charge is permitted only while that saved amount still exactly matches the server-owned current price and policy version. A price/policy change disables auto-renew and erases the reusable authorization, requiring a fresh explicit payment opt-in. Turning auto-renew off also erases the stored reusable authorization locally; re-enabling therefore requires a new explicit Paystack payment. Repeated terminal renewal failures and stale renewal state eventually fail closed and erase the authorization rather than leaving a dormant debit credential.
+
+A network timeout during an automatic charge is treated as financially ambiguous. Poscal does not create a new debit immediately. It keeps the same order/reference and verifies that reference first. If the provider confirms the reference is absent after the recovery window, the attempt can become terminal and a later bounded retry may be scheduled. A charge already submitted to Paystack before cancellation/account deletion may still settle; if account deletion has started, any later verified settlement is quarantined for operator review/refund instead of restoring access.
 ## Architecture and payment lifecycle
 
-- `proAccounts`: one canonical entitlement per authenticated user, paid expiry, current open order, Free journal selection, and optional Paystack auto-renew authorization/consent state.
+- `proAccounts`: one canonical entitlement per authenticated user, paid expiry, current open order, Free journal selection, and optional Paystack auto-renew authorization plus exact consented renewal amount/policy state.
 - `proOrders`: server-created tracking reference `ppro-<orderId>` for checkout or `ppro-auto-<orderId>` for auto-renew, user, immutable quote, source, plan, coupon, test/live mode, provider ID, verified timestamps, status and next recovery check.
 - `proCoupons`: admin-created codes with expiry, usage budget, optional plan restriction, beta-account cutoff, first-purchase eligibility and atomic reservation/redemption counters.
 - `proUsage` plus the existing `userStorageUsage`: authoritative monthly creations and transactional upload reservations.
@@ -65,7 +67,9 @@ Status is `initializing`, `pending`, `paid`, `failed`, `abandoned`, `review` or 
 | Provider transaction reused for a different order | Quarantine rather than fulfil twice |
 | Failed manual renewal | Previous verified period remains available |
 | Auto-renew timeout | Keep the same order/reference and verify it before any retry; never create an immediate second debit |
-| Auto-renew failure | Retry is bounded; after repeated failures auto-renew is disabled and existing paid access remains valid until expiry |
+| Auto-renew failure | Retry is bounded; after repeated failures auto-renew is disabled, the reusable authorization is erased, and existing paid access remains valid until expiry |
+| Auto-renew price/policy mismatch | Do not charge; disable auto-renew, erase the reusable authorization and require fresh consent |
+| User cancels auto-renew | Stop future scheduled debits and erase the reusable authorization locally; a charge already submitted may still complete |
 | Admin billing kill switch | Stops new checkout initialization and due auto-renew charges; existing verified access remains valid |
 | Expired access | Mutations enforce server expiry immediately; UI refreshes every 15 seconds and on focus; old data remains readable |
 | Refund, partial refund or dispute | Hold the affected order, recompute other valid grants, check separate refund/dispute APIs before any restoration |
@@ -87,7 +91,7 @@ Example early-bird offer: 20% on the first purchase, 30-day code expiry and 100 
 
 ## Checkout feel and continuation
 
-A feature action opens an accessible Poscal Pro dialog describing the feature being unlocked. The same checkout is available on `/pro`; old `/upgrade` and `/pricing` URLs lead to this replacement. During beta it shows “Included during beta” and a Continue action, without a payment button. After launch it shows monthly/annual choices, discount application, final price, optional unfinished reminder and a separate auto-renew opt-in. Auto-renew is never preselected.
+A feature action opens an accessible Poscal Pro dialog describing the feature being unlocked. The same checkout is available on `/pro`; old `/upgrade` and `/pricing` URLs lead to this replacement. During beta it shows “Included during beta” and a Continue action, without a payment button. After launch it shows monthly/annual choices, discount application, final price, optional unfinished reminder and a separate auto-renew opt-in. Auto-renew is never preselected. The opt-in states the exact standard amount that future automatic renewals may charge, even when the current checkout is discounted, and explains that a later price-policy change requires fresh consent.
 
 Paystack opens only after a durable server order exists. The Poscal dialog closes first to avoid trapping focus around Paystack's iframe. Hosted checkout is the fallback. Pending/review screens display the immutable amount and reference, a status check and clear advice against paying twice. Confirmation appears after the backend reports paid. “Continue where you left off” uses the saved, sanitized internal path. Payment history is paginated and selection persists in the URL. Notebook local drafts survive the upgrade route; arbitrary unsaved calculator/manual trade forms are not newly persisted by this billing change.
 
@@ -118,6 +122,14 @@ Poscal uses a versioned consent record and separates **Necessary**, **Preference
 - Auto-renew consent, unfinished-checkout reminder consent and analytics/marketing consent are separate decisions.
 
 This consent layer does not replace a legal review of Poscal's full storage inventory, cross-border processing, retention schedule or jurisdiction-specific obligations.
+
+## Journal and account deletion safety
+
+Whole-journal deletion is asset-aware and resumable. The client calls `/api/journal-book`; the server marks the journal for deletion, prepares bounded trade batches, deletes each R2 object idempotently, finalizes trade/notebook/attachment metadata, cleans bounded history/session rows and projections, then removes the parent only when child cleanup is complete. Cached clients cannot use the old destructive shortcut on non-empty journals.
+
+Account deletion uses the same principle through `/api/account-delete`. The first step records an explicit deletion session and **immediately disables auto-renew and erases the reusable Paystack authorization**, before slower journal/R2 cleanup begins. The endpoint then removes journals and orphan entries in resumable bounded batches. Final user deletion is refused while any journal, trade or attachment remains.
+
+Open payment records are not allowed to recreate an account or entitlement after deletion starts. A payment that settles after the deletion marker exists is quarantined in `review` for operator investigation/refund. Historical `proOrders` may remain as a minimal financial ledger for accounting, dispute and legal evidence, but the reusable authorization lives only on `proAccounts` and is removed when deletion begins. The exact financial-record retention period still requires an accounting/legal retention policy before production launch.
 ## Configuration, deployment and safe legacy cleanup
 
 1. **Keep billing off.** The new key is `poscal_pro_paid_features_enabled`; absence or false means beta. Old `signals_paid_lock_enabled` never enables the replacement. Do not seed the new key to true in a deployment.
@@ -136,33 +148,32 @@ Old payment modal, upgrade prompt, paid-lock hook, restore/sync/verify API grant
 
 ## Verification status and launch monitoring
 
-Local verification: 521 tests across 41 files, frontend/Node/Convex and changed API typechecking, required `gate:fx`, frontend build, repository lint (warnings, no errors), and the CI coverage thresholds. The coverage set now includes the replacement billing engine, entitlement helper and checkout alongside the existing calculator files: 73.14% lines, 72.05% statements, 70.65% functions and 65.8% branches, without lowering thresholds. Regression cases cover mode isolation, exact expiry, raw webhook signatures, duplicate creation/fulfilment, mismatch/failure/outage recovery, refund holds through outages and newer events, renewals, provider initialization contract, promotion races/repeated failures, quota reservation races, beta data preservation and safe legacy migration. UI component tests cover beta visibility, click dedupe and backend-only activation.
+The branch gate is intentionally fail-closed. Vercel runs `gate:fx`, TypeScript checks and the full Vitest suite before it attempts any Convex preview deployment. Completed branch builds during this review have proven the gate can reach and run the test suite; subsequent defects found during review were reproduced by that gate and corrected rather than waived. **The final release count must be taken from the latest head build, not copied from an older commit.**
 
-Native authenticated Convex deployment, full browser visuals and real gateway/email/device delivery remain release checks. This workspace has no authenticated Convex deployment credential; its browser download was unavailable and the remote browser cannot reach the local fixture. Local tests are not a claim of live end-to-end validation or zero defects. A pre-existing `no-control-regex` lint error in `convex/lib/welcomeEmailCopy.ts` was corrected with equivalent character filtering so the CI lint step can pass; other repository lint warnings remain.
+The preview deployment itself is still blocked until a dedicated `CONVEX_PREVIEW_DEPLOY_KEY` is configured. That is deliberate: the billing preview must never fall back to the production Convex backend. Therefore browser-to-Convex-to-Paystack end-to-end behavior, real Paystack test checkout/authorization, signed webhook delivery, scheduled auto-renew, refund/dispute handling, Resend delivery and a permitted real push device remain mandatory release checks.
 
-The repository's Codacy instructions were checked, but no Codacy MCP tools are available in this session. Local lint/typechecking/tests and npm dependency audit are the available checks. To restore Codacy-specific analysis, reset the extension's MCP connection, check [GitHub Copilot MCP settings](https://github.com/settings/copilot/features) if using VSCode, and contact Codacy support if the connection remains unavailable. No Codacy check is represented as completed.
+GitGuardian has reported no committed secrets on reviewed PR commits. GitHub Actions has also shown a separate runner/job-start failure in which the quality job produced no executable steps and Playwright was skipped; available logs do not establish a code failure for that runner issue. Do not waive it: restore a green GitHub CI path before merge so the repository has an independent required check in addition to Vercel.
 
-**Dependency audit is an additional release concern:** npm audit reports 54 findings (5 critical, 36 high, 13 moderate). Comparing every reported vulnerable package path and installed version against the original lockfile shows zero newly added vulnerable paths and zero changed vulnerable versions: the findings predate this billing change. Do not describe the whole app as vulnerability-free or activate real payment collection without reviewing the existing dependency findings. Broad forced upgrades were not applied because the suggested fixes include framework/tooling changes that need their own regression review.
+**Dependency security remains a release concern.** A prior audit in this runbook recorded 54 findings (5 critical, 36 high, 13 moderate). This review did not independently establish that every finding predates the billing branch, so that claim is not relied on. Re-run the dependency audit on the final lockfile, determine reachability of every critical/high finding, remediate or explicitly accept each risk, and re-run regression tests before enabling live billing.
 
-The admin view exposes the latest 25 orders, codes and reference verification; customer history is paginated. This is not a complete billing conversion dashboard. Before launch, monitor the ledger/queue and gateway dashboard for: pending age, oldest recovery lease, unverified successes, refund/dispute holds, coupon reserved versus redeemed counts, failed deliveries and unmatched webhook references. Reconcile by payment reference and provider ID every day. Alert on paid-provider/unpaid-app disagreement and stop new payment collection if it grows.
+The admin view exposes the latest orders, codes and reference verification; customer history is paginated. This is not a complete billing conversion dashboard. Before launch, monitor the ledger/queue and Paystack dashboard for pending age, oldest recovery lease, unverified successes, refund/dispute holds, coupon reserved versus redeemed counts, auto-renew attempts/failures, failed deliveries and unmatched webhook references. Reconcile by payment reference and provider ID every day. Alert on paid-provider/unpaid-app disagreement and stop new payment collection if it grows.
 
 For product analytics, define authenticated server outcomes rather than treating popup callbacks as revenue: checkout attempts, verified first purchases/renewals, time to activation, failed/abandoned/review outcomes, expired users, read-only journal usage, quota hits, renewal rate and discount net receipts. Actual funnel instrumentation, aggregate reporting and empirical Free-limit tuning are follow-up work; no measured conversion rate is asserted here.
-
-Account deletion, billing-record retention and restore procedures must be reviewed alongside the existing account deletion flow before production launch. Keep financial records as required for support/accounting and avoid retaining full gateway payloads or card authorizations. Notification permission loss never changes paid access.
 
 ## Primary sources
 
 - [Paystack Nigeria pricing](https://paystack.com/pricing)
-- [Interswitch pricing and payment channels, 27 March 2026](https://interswitchgroup.com/blog/how-interswitch-payment-gateway-is-redefining-digital-payments-in-nigeria/)
-- [Interswitch Web Checkout and server requery](https://docs.interswitchgroup.com/docs/web-checkout)
 - [Paystack transaction initialization contract](https://paystack.com/docs/api/transaction/)
 - [Paystack server verification and duplicate fulfilment guidance](https://paystack.com/docs/payments/verify-payments/)
 - [Paystack signed webhooks and retries](https://paystack.com/docs/payments/webhooks/)
 - [Paystack InlineJS initialization and resume](https://paystack.com/docs/developer-tools/inlinejs/)
-- [Paystack subscriptions and channel/retry constraints](https://paystack.com/docs/payments/subscriptions/)
+- [Paystack recurring charges and reusable authorizations](https://paystack.com/docs/payments/recurring-charges/)
+- [Paystack charge authorization API](https://paystack.com/docs/api/transaction/#charge-authorization)
 - [Paystack refund API](https://paystack.com/docs/api/refund/)
 - [Paystack dispute API](https://paystack.com/docs/api/dispute/)
 - [Paystack dispute handling](https://paystack.com/docs/payments/manage-disputes/)
 - [Convex action transaction boundaries](https://docs.convex.dev/functions/actions)
 - [Convex backend testing](https://docs.convex.dev/testing/convex-test)
 - [Resend email idempotency](https://resend.com/docs/dashboard/emails/idempotency-keys)
+- [ICO cookies and similar technologies guidance](https://ico.org.uk/for-organisations/direct-marketing-and-privacy-and-electronic-communications/guide-to-pecr/cookies-and-similar-technologies/)
+- [Vercel Analytics sensitive-data redaction](https://vercel.com/docs/analytics/redacting-sensitive-data)
