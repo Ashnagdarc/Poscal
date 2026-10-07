@@ -22,31 +22,18 @@ run("npm", ["run", "gate:fx"]);
 if (process.exitCode) process.exit(process.exitCode);
 
 if (process.env.VERCEL_ENV === "preview") {
-  // Convex's official Vercel setup uses CONVEX_DEPLOY_KEY scoped to Preview.
-  // Keep the legacy custom name as a fallback while migrating project settings.
-  const previewKey = (
-    process.env.CONVEX_PREVIEW_DEPLOY_KEY ||
-    process.env.CONVEX_DEPLOY_KEY ||
-    ""
-  ).trim();
-  if (!previewKey.startsWith("preview:") || !previewKey.includes("|")) {
-    console.error("[convex-preview] Configure a dedicated Convex Preview Deploy Key in the Vercel Preview environment. Do not point this billing preview at the production backend.");
-    process.exit(1);
-  }
-  run(
-    "npx",
-    [
-      "convex",
-      "deploy",
-      "--preview-name",
-      process.env.VERCEL_GIT_COMMIT_REF || "poscal-pro-preview",
-      "--cmd-url-env-var-name",
-      "VITE_CONVEX_URL",
-      "--cmd",
-      "npm run build",
-    ],
-    { ...process.env, CONVEX_DEPLOY_KEY: previewKey },
+  // Billing previews reuse Poscal's isolated Convex development deployment.
+  // This deliberately avoids creating disposable Convex preview deployments
+  // and never falls back to the production backend.
+  const devConvexUrl = "https://valuable-axolotl-815.convex.cloud";
+  console.log(
+    "[convex-preview] building against isolated dev backend",
+    devConvexUrl,
   );
+  run("npm", ["run", "build"], {
+    ...process.env,
+    VITE_CONVEX_URL: devConvexUrl,
+  });
   process.exit(process.exitCode ?? 0);
 }
 if (process.env.VERCEL_ENV !== "production") {
