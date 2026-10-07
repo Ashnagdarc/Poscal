@@ -1015,6 +1015,18 @@ export const finalizeDeleteEntry = mutation({
   },
 });
 
+export const accountDeletionBatch = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const rows = await ctx.db
+      .query("tradingJournal")
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
+      .take(10);
+    return { tradeIds: rows.map((row) => row._id) };
+  },
+});
+
 export const deleteEntry = mutation({
   args: {
     id: v.id("tradingJournal"),
