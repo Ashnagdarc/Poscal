@@ -1,0 +1,316 @@
+import { v } from "convex/values";
+
+import type { Id } from "./_generated/dataModel";
+import { query } from "./_generated/server";
+import { getVerifiedAuthUserId } from "./lib/auth";
+
+const RANGE_PAD_MS = 2 * 24 * 60 * 60 * 1000;
+
+const dateKeyInTimeZone = (timestampMs: number, timeZone?: string | null) => {
+  const date = new Date(timestampMs);
+  if (!timeZone) return date.toISOString().slice(0, 10);
+
+  try {
+    const formatted = new Intl.DateTimeFormat("en-CA", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(date);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(formatted)) return formatted;
+  } catch {
+    // Fall back to UTC below.
+  }
+
+  return date.toISOString().slice(0, 10);
+};
+
+const hasOwnedJournal = async (
+  ctx: { db: any },
+  userId: string,
+  journalId: Id<"tradingAccounts">,
+) => {
+  const journal = await ctx.db.get(journalId);
+  return Boolean(journal && journal.userId === userId);
+};
+
+type Bucket = {
+  dateKey: string;
+  journaled: boolean;
+  tradeCount: number;
+  closedTradeCount: number;
+  openTradeCount: number;
+  cancelledCount: number;
+  pnl: number;
+  wins: number;
+  losses: number;
+  breakeven: number;
+};
+
+const emptyBucket = (dateKey: string): Bucket => ({
+  dateKey,
+  journaled: false,
+  tradeCount: 0,
+  closedTradeCount: 0,
+  openTradeCount: 0,
+  cancelledCount: 0,
+  pnl: 0,
+  wins: 0,
+  losses: 0,
+  breakeven: 0,
+});
+
+/**
+ * Calendar data is intentionally read from the actual journal records instead
+ * of the closed-trade analytics projection. The calendar is navigation and
+ * activity history, so open trades, notebook-only days, older trades, and
+ * no-trade day journals must all remain visible.
+ */
+export const getMonth = query({
+  args: {
+    journalId: v.id("tradingAccounts"),
+    year: v.number(),
+    month: v.number(),
+    timeZone: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return { days: [] };
+
+    if (!(await hasOwnedJournal(ctx, userId, args.journalId))) {
+      return { days: [] };
+    }
+
+    const monthIndex = Math.min(Math.max(Math.trunc(args.month) - 1, 0), 11);
+    const roughStart = Date.UTC(args.year, monthIndex, 1) - RANGE_PAD_MS;
+    const roughEnd = Date.UTC(args.year, monthIndex + 1, 1) + RANGE_PAD_MS;
+    const prefix = `${args.year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    const monthStartKey = `${prefix}-01`;
+    const nextMonth = new Date(Date.UTC(args.year, monthIndex + 1, 1));
+    const nextMonthKey = `${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, "0")}-01`;
+
+    const [entryDatedTrades, exitDatedTrades, createdFallback, scopedSessions, legacySessions] = await Promise.all([
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_entry_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("entryDateMs", roughStart)
+            .lt("entryDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_exit_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("exitDateMs", roughStart)
+            .lt("exitDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("createdAtMs", roughStart)
+            .lt("createdAtMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_journal_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("dateKey", monthStartKey)
+            .lt("dateKey", nextMonthKey),
+        )
+        .collect(),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_date", (q) =>
+          q
+            .eq("userId", userId)
+            .gte("dateKey", monthStartKey)
+            .lt("dateKey", nextMonthKey),
+        )
+        .collect(),
+    ]);
+
+    const uniqueTrades = new Map<string, (typeof entryDatedTrades)[number]>();
+    for (const trade of entryDatedTrades) uniqueTrades.set(String(trade._id), trade);
+    for (const trade of exitDatedTrades) {
+      if (trade.entryDateMs == null) uniqueTrades.set(String(trade._id), trade);
+    }
+    for (const trade of createdFallback) {
+      if (trade.entryDateMs == null && trade.exitDateMs == null) {
+        uniqueTrades.set(String(trade._id), trade);
+      }
+    }
+
+    const buckets = new Map<string, Bucket>();
+
+    for (const trade of uniqueTrades.values()) {
+      if (trade.deletionRequestedAtMs) continue;
+
+      const timestamp = trade.entryDateMs ?? trade.exitDateMs ?? trade.createdAtMs;
+      const dateKey = dateKeyInTimeZone(timestamp, args.timeZone);
+      if (!dateKey.startsWith(prefix)) continue;
+
+      const bucket = buckets.get(dateKey) ?? emptyBucket(dateKey);
+      bucket.journaled = true;
+
+      if (trade.journalType === "notebook_draft") {
+        buckets.set(dateKey, bucket);
+        continue;
+      }
+
+      if (trade.status === "cancelled") {
+        bucket.cancelledCount += 1;
+        buckets.set(dateKey, bucket);
+        continue;
+      }
+
+      bucket.tradeCount += 1;
+
+      if (trade.status === "open") {
+        bucket.openTradeCount += 1;
+      } else if (trade.status === "closed") {
+        const pnl = Number.isFinite(trade.pnl) ? (trade.pnl as number) : 0;
+        bucket.closedTradeCount += 1;
+        bucket.pnl += pnl;
+        if (pnl > 0) bucket.wins += 1;
+        else if (pnl < 0) bucket.losses += 1;
+        else bucket.breakeven += 1;
+      }
+
+      buckets.set(dateKey, bucket);
+    }
+
+    const sessionById = new Map<string, (typeof scopedSessions)[number]>();
+    for (const session of scopedSessions) sessionById.set(String(session._id), session);
+    for (const session of legacySessions) {
+      if (!session.journalId || session.journalId === args.journalId) {
+        sessionById.set(String(session._id), session);
+      }
+    }
+
+    for (const session of sessionById.values()) {
+      if (!session.dateKey.startsWith(prefix)) continue;
+      const bucket = buckets.get(session.dateKey) ?? emptyBucket(session.dateKey);
+      bucket.journaled = true;
+      buckets.set(session.dateKey, bucket);
+    }
+
+    const days = Array.from(buckets.values())
+      .map((bucket) => {
+        const tone =
+          bucket.closedTradeCount > 0
+            ? bucket.pnl > 0
+              ? "win"
+              : bucket.pnl < 0
+                ? "loss"
+                : "breakeven"
+            : bucket.openTradeCount > 0
+              ? "open"
+              : "no_trade";
+
+        return {
+          ...bucket,
+          tone,
+        };
+      })
+      .sort((a, b) => a.dateKey.localeCompare(b.dateKey));
+
+    return { days };
+  },
+});
+
+
+export const getDayEntries = query({
+  args: {
+    journalId: v.id("tradingAccounts"),
+    dateKey: v.string(),
+    timeZone: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return [];
+
+    if (!(await hasOwnedJournal(ctx, userId, args.journalId))) {
+      return [];
+    }
+
+    const [yearText, monthText, dayText] = args.dateKey.split("-");
+    const year = Number(yearText);
+    const month = Number(monthText);
+    const day = Number(dayText);
+    if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) {
+      return [];
+    }
+
+    const center = Date.UTC(year, month - 1, day, 12);
+    const roughStart = center - RANGE_PAD_MS;
+    const roughEnd = center + RANGE_PAD_MS;
+
+    const [entryDatedTrades, exitDatedTrades, createdFallback] = await Promise.all([
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_entry_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("entryDateMs", roughStart)
+            .lt("entryDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_exit_date", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("exitDateMs", roughStart)
+            .lt("exitDateMs", roughEnd),
+        )
+        .collect(),
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q
+            .eq("userId", userId)
+            .eq("journalId", args.journalId)
+            .gte("createdAtMs", roughStart)
+            .lt("createdAtMs", roughEnd),
+        )
+        .collect(),
+    ]);
+
+    const unique = new Map<string, (typeof entryDatedTrades)[number]>();
+    for (const trade of entryDatedTrades) unique.set(String(trade._id), trade);
+    for (const trade of exitDatedTrades) {
+      if (trade.entryDateMs == null) unique.set(String(trade._id), trade);
+    }
+    for (const trade of createdFallback) {
+      if (trade.entryDateMs == null && trade.exitDateMs == null) {
+        unique.set(String(trade._id), trade);
+      }
+    }
+
+    return Array.from(unique.values())
+      .filter((trade) => {
+        if (trade.deletionRequestedAtMs) return false;
+        const timestamp = trade.entryDateMs ?? trade.exitDateMs ?? trade.createdAtMs;
+        return dateKeyInTimeZone(timestamp, args.timeZone) === args.dateKey;
+      })
+      .sort(
+        (left, right) =>
+          (right.entryDateMs ?? right.exitDateMs ?? right.createdAtMs)
+          - (left.entryDateMs ?? left.exitDateMs ?? left.createdAtMs),
+      );
+  },
+});

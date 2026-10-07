@@ -7,7 +7,7 @@ import { LogTradeChoiceSheet } from "@/components/journal/LogTradeChoiceSheet";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
 import { ProgressTracker } from "@/components/journal/ProgressTracker";
 import { useJournal } from "@/contexts/JournalContext";
-import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
+import { useJournalDayEntries } from "@/hooks/queries/use-journal-calendar";
 import {
   useAddTradeMutation,
   useCreateNotebookDraftMutation,
@@ -15,7 +15,6 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import { detectBrowserTimeZone } from "@/lib/timezones";
-import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 
 const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -39,33 +38,15 @@ const DayJournal = () => {
   const [showManual, setShowManual] = useState(false);
 
   const validDateKey = DATE_KEY_RE.test(dateKey) ? dateKey : null;
-  const selectedDate = validDateKey ? new Date(`${validDateKey}T12:00:00`) : new Date();
   const timeZone = localStorage.getItem("preferredTimezone") || detectBrowserTimeZone();
 
-  const { selectedTrades: factTrades, isSelectionLoading } = useJournalTradeFacts({
-    calendarMonth: selectedDate,
-    selectedDateKey: validDateKey ?? undefined,
-    selectedMonthKey: undefined,
+  const {
+    trades: dayTrades,
+    isLoading: isSelectionLoading,
+  } = useJournalDayEntries({
+    dateKey: validDateKey,
     timeZone,
   });
-
-  const dayTrades = useMemo(() => {
-    if (!validDateKey) return [];
-    const byId = new Map<string, (typeof loadedTrades)[number]>();
-
-    for (const trade of factTrades) byId.set(trade.id, trade);
-    for (const trade of loadedTrades) {
-      const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
-      if (!raw) continue;
-      if (toDateKeyInTimeZone(new Date(raw), timeZone) === validDateKey) {
-        byId.set(trade.id, trade);
-      }
-    }
-
-    return [...byId.values()].sort((a, b) =>
-      new Date(b.entry_date ?? b.created_at).getTime() - new Date(a.entry_date ?? a.created_at).getTime(),
-    );
-  }, [factTrades, loadedTrades, timeZone, validDateKey]);
 
   const analyticsTrades = useMemo(
     () => loadedTrades.filter((trade) => trade.journal_type !== "notebook_draft"),

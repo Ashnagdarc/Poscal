@@ -59,7 +59,7 @@ export const ProgressTracker = ({
   const dayTrades = useMemo(
     () =>
       trades.filter((trade) => {
-        const raw = trade.exit_date ?? trade.entry_date ?? trade.created_at;
+        const raw = trade.entry_date ?? trade.exit_date ?? trade.created_at;
         if (!raw) return false;
         return toDateKeyInTimeZone(new Date(raw), timeZone) === dateKey;
       }),

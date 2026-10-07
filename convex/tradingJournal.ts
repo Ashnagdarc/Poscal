@@ -709,6 +709,9 @@ export const updateEntry = mutation({
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
     }
+    if (existing.deletionRequestedAtMs) {
+      throw new Error("Journal entry is being deleted");
+    }
 
     const { id, ...rest } = args;
     const nextPair = rest.pair ?? existing.pair;
@@ -789,6 +792,9 @@ export const updateNotebook = mutation({
     const trade = await ctx.db.get(args.id);
     if (!trade || trade.userId !== userId) {
       throw new Error("Journal entry not found");
+    }
+    if (trade.deletionRequestedAtMs) {
+      throw new Error("Journal entry is being deleted");
     }
     if (!trade.journalId) {
       throw new Error("Trade is not attached to a journal");
@@ -884,6 +890,126 @@ export const updateNotebook = mutation({
   },
 });
 
+const deleteJournalEntryRows = async (
+  ctx: { db: any },
+  userId: string,
+  id: Id<"tradingJournal">,
+  existing: any,
+) => {
+  const [notebook, attachments, usage] = await Promise.all([
+    ctx.db
+      .query("tradeNotebooks")
+      .withIndex("by_trade", (q: any) => q.eq("tradeId", id))
+      .unique(),
+    ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_trade_role", (q: any) => q.eq("tradeId", id))
+      .collect(),
+    ctx.db
+      .query("userStorageUsage")
+      .withIndex("by_user", (q: any) => q.eq("userId", userId))
+      .unique(),
+  ]);
+
+  if (notebook && notebook.userId === userId) {
+    await ctx.db.delete(notebook._id);
+  }
+
+  const ownedAttachments = attachments.filter((row: any) => row.userId === userId);
+  const readyRows = ownedAttachments.filter((row: any) => row.status === "ready");
+  const pendingRows = ownedAttachments.filter((row: any) => row.status === "pending");
+
+  for (const row of ownedAttachments) {
+    await ctx.db.delete(row._id);
+  }
+
+  if (usage) {
+    await ctx.db.patch(usage._id, {
+      usedBytes: Math.max(
+        0,
+        usage.usedBytes - readyRows.reduce((sum: number, row: any) => sum + row.sizeBytes, 0),
+      ),
+      attachmentCount: Math.max(0, usage.attachmentCount - readyRows.length),
+      reservedBytes: Math.max(
+        0,
+        (usage.reservedBytes ?? 0)
+          - pendingRows.reduce((sum: number, row: any) => sum + row.sizeBytes, 0),
+      ),
+      reservedCount: Math.max(0, (usage.reservedCount ?? 0) - pendingRows.length),
+      updatedAtMs: Date.now(),
+    });
+  }
+
+  await removeTradeFact(ctx, id);
+  await ctx.db.delete(id);
+
+  if (existing.journalType !== "notebook_draft") {
+    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+  }
+};
+
+export const beginDeleteEntry = mutation({
+  args: { id: v.id("tradingJournal") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+
+    const attachments = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_trade_role", (q) => q.eq("tradeId", args.id))
+      .collect();
+
+    await ctx.db.patch(args.id, {
+      deletionRequestedAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    });
+
+    return {
+      objectKeys: attachments
+        .filter((row) => row.userId === userId)
+        .map((row) => row.objectKey)
+        .filter((key) => Boolean(key) && key !== "pending"),
+    };
+  },
+});
+
+export const cancelDeleteEntry = mutation({
+  args: { id: v.id("tradingJournal") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) {
+      return { success: true };
+    }
+
+    await ctx.db.patch(args.id, {
+      deletionRequestedAtMs: null,
+      updatedAtMs: Date.now(),
+    });
+    return { success: true };
+  },
+});
+
+export const finalizeDeleteEntry = mutation({
+  args: { id: v.id("tradingJournal") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) {
+      return { success: true };
+    }
+    if (!existing.deletionRequestedAtMs) {
+      throw new Error("Journal deletion has not been prepared");
+    }
+
+    await deleteJournalEntryRows(ctx, userId, args.id, existing);
+    return { success: true };
+  },
+});
+
 export const deleteEntry = mutation({
   args: {
     id: v.id("tradingJournal"),
@@ -895,11 +1021,18 @@ export const deleteEntry = mutation({
       throw new Error("Journal entry not found");
     }
 
-    await removeTradeFact(ctx, args.id);
-    await ctx.db.delete(args.id);
-    if (existing.journalType !== "notebook_draft") {
-      await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+    const attachments = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_trade_role", (q) => q.eq("tradeId", args.id))
+      .collect();
+    const hasStoredAssets = attachments.some(
+      (row) => row.userId === userId && row.objectKey !== "pending",
+    );
+    if (hasStoredAssets) {
+      throw new Error("Journal has stored images and requires asset-aware deletion");
     }
+
+    await deleteJournalEntryRows(ctx, userId, args.id, existing);
     return { success: true };
   },
 });

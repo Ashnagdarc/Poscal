@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useActionError } from "@/contexts/ActionErrorContext";
+import { useJournalCalendar } from "@/hooks/queries/use-journal-calendar";
 import { useJournalTradeFacts } from "@/hooks/queries/use-journal-trade-facts";
 import { useJournalTradeStats } from "@/hooks/queries/use-journal-trade-stats";
 import {
@@ -28,10 +29,11 @@ import {
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
 import {
-  buildResultDaySummaries,
   startOfDay,
   toDateKey,
 } from "@/lib/historyResults";
+import { journalCalendarLabel } from "@/lib/journalCalendar";
+import { toDateKeyInTimeZone } from "@/lib/journalAnalytics";
 import type { JournalTrade } from "@/lib/convexJournal";
 import { preferencesApi } from "@/lib/api";
 import {
@@ -95,8 +97,6 @@ const Journal = () => {
   const { stats: serverTradeStats, isBackfilling: isTradeStatsBackfilling } = useJournalTradeStats();
 
   const {
-    ready: areTradeFactsReady,
-    daySummaries: factDaySummaries,
     performanceSummary: tradePerformanceSummary,
   } = useJournalTradeFacts({
     calendarMonth,
@@ -106,7 +106,14 @@ const Journal = () => {
   });
 
   const startingBalance = activeJournal?.startingBalance ?? 0;
-  const today = useMemo(() => startOfDay(new Date()), []);
+  const todayDateKey = useMemo(
+    () => toDateKeyInTimeZone(new Date(), preferredTimeZone),
+    [preferredTimeZone],
+  );
+  const today = useMemo(
+    () => startOfDay(new Date(`${todayDateKey}T12:00:00`)),
+    [todayDateKey],
+  );
   const analyticsTrades = useMemo(
     () => manualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
     [manualTrades],
@@ -116,12 +123,15 @@ const Journal = () => {
     [paginatedManualTrades],
   );
 
-  const fallbackDaySummaries = useMemo(
-    () => buildResultDaySummaries([], analyticsTrades, preferredTimeZone),
-    [analyticsTrades, preferredTimeZone],
-  );
-  const resultDaySummaries = areTradeFactsReady ? factDaySummaries : fallbackDaySummaries;
-  const todaySummary = resultDaySummaries.get(toDateKey(today)) ?? null;
+  const { dayMap: resultDaySummaries } = useJournalCalendar({
+    month: calendarMonth,
+    timeZone: preferredTimeZone,
+  });
+  const { dayMap: currentMonthDaySummaries } = useJournalCalendar({
+    month: today,
+    timeZone: preferredTimeZone,
+  });
+  const todaySummary = currentMonthDaySummaries.get(todayDateKey) ?? null;
 
   useEffect(() => {
     if (!user) return;
@@ -308,7 +318,7 @@ const Journal = () => {
                   <div>
                     <p className="text-xs text-muted-foreground">Today</p>
                     <p className="mt-1 text-xl font-bold text-foreground">
-                      {todaySummary?.label ?? "No result"}
+                      {todaySummary ? journalCalendarLabel(todaySummary) : "No activity"}
                     </p>
                   </div>
                   <div className="text-right">
@@ -341,7 +351,7 @@ const Journal = () => {
 
                 <button
                   type="button"
-                  onClick={() => navigate(`/journal/day/${toDateKey(today)}`)}
+                  onClick={() => navigate(`/journal/day/${todayDateKey}`)}
                   className="flex w-full items-center justify-between gap-3 rounded-2xl bg-secondary p-4 text-left transition active:scale-[0.99]"
                   data-tour-id="journal-session"
                 >
