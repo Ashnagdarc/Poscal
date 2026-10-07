@@ -383,6 +383,8 @@ export default defineSchema({
     lastIngestAtMs: nullableNumber,
     lastNewsCount: nullableNumber,
     lastError: nullableString,
+    ingestLeaseUntilMs: v.optional(v.union(v.number(), v.null())),
+    ingestLeaseToken: v.optional(v.union(v.string(), v.null())),
     updatedAtMs: v.number(),
   }).index("by_key", ["key"]),
 
