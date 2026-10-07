@@ -1115,6 +1115,75 @@ describe("production billing hardening", () => {
     expect(account?.autoRenewSignature).toBeUndefined();
   });
 
+  it("pins a discounted first purchase to the clearly disclosed standard renewal price", async () => {
+    const { t, user, userId } = await setup();
+    await t.run((ctx) => ctx.db.patch(userId, { role: "admin" }));
+    await user.mutation(api.proBilling.createCoupon, {
+      code: "RENEWTEST",
+      percentOff: 20,
+      maxUses: 10,
+      validUntilMs: Date.now() + 86400_000,
+      firstPurchaseOnly: false,
+      betaUsersOnly: false,
+      plan: "monthly",
+    });
+    const { order } = await user.mutation(internal.proBilling.prepareOrder, {
+      plan: "monthly",
+      code: "RENEWTEST",
+      reminders: false,
+      returnTo: "/journal",
+      autoRenew: true,
+    });
+    expect(order.amount).toBe(200000);
+
+    await t.mutation(internal.proBilling.recordVerification, {
+      id: order._id,
+      transaction: {
+        ...verified(order),
+        authorization: {
+          authorization_code: "AUTH_discount",
+          signature: "SIG_discount",
+          reusable: true,
+          channel: "card",
+          last4: "4081",
+        },
+      },
+      mode: "test",
+    });
+
+    expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew.amount).toBe(
+      PRICES.monthly,
+    );
+  });
+
+  it("fails closed instead of charging when the stored renewal price no longer matches policy", async () => {
+    const { t, userId } = await setup();
+    const now = Date.now();
+    const accountId = await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        autoRenewEnabled: true,
+        autoRenewPlan: "monthly",
+        autoRenewAmount: PRICES.monthly - 1,
+        autoRenewPolicyVersion: PRO_POLICY_VERSION,
+        autoRenewAuthorizationCode: "AUTH_old_price",
+        autoRenewEmail: "trader@example.com",
+        autoRenewSignature: "SIG_old_price",
+        autoRenewNextChargeAtMs: now - 1,
+        updatedAtMs: now,
+      }),
+    );
+
+    expect(
+      await t.mutation(internal.proBilling.claimAutoRenew, { id: accountId }),
+    ).toBe(false);
+    const account = await t.run((ctx) => ctx.db.get(accountId));
+    expect(account?.autoRenewEnabled).toBe(false);
+    expect(account?.autoRenewAuthorizationCode).toBeUndefined();
+  });
+
   it("keeps auto-renew enabled after a verified scheduled renewal", async () => {
     const { t, user, userId } = await setup();
     const now = Date.now();
