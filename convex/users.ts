@@ -410,9 +410,34 @@ export const beginAccountDeletion = mutation({
     const userId = await requireAuthUserId(ctx);
     const user = await ctx.db.get(userId);
     if (!user) throw new Error("User not found");
+    const now = Date.now();
     await ctx.db.patch(userId, {
-      accountDeletionRequestedAtMs: Date.now(),
+      accountDeletionRequestedAtMs: now,
     });
+
+    const proAccount = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (proAccount) {
+      await ctx.db.patch(proAccount._id, {
+        autoRenewEnabled: false,
+        autoRenewNextChargeAtMs: undefined,
+        autoRenewLeaseUntilMs: 0,
+        autoRenewOrderId: undefined,
+        autoRenewAuthorizationCode: undefined,
+        autoRenewEmail: undefined,
+        autoRenewSignature: undefined,
+        autoRenewChannel: undefined,
+        autoRenewLast4: undefined,
+        autoRenewBrand: undefined,
+        autoRenewBank: undefined,
+        autoRenewExpMonth: undefined,
+        autoRenewExpYear: undefined,
+        autoRenewCountryCode: undefined,
+        updatedAtMs: now,
+      });
+    }
     return null;
   },
 });
