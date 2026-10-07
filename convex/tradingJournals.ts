@@ -216,10 +216,8 @@ export const archive = mutation({
   },
 });
 
-export const remove = mutation({
-  args: {
-    id: v.id("tradingAccounts"),
-  },
+export const beginRemove = mutation({
+  args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
@@ -236,54 +234,232 @@ export const remove = mutation({
       );
     }
 
-    // Whole-journal deletion must never strand R2 objects. Entries with stored
-    // screenshots already have an asset-aware deletion path, so block the
-    // destructive shortcut until those assets are removed through that path.
-    const attachment = await ctx.db
-      .query("tradeJournalAttachments")
-      .withIndex("by_journal", (q) => q.eq("journalId", args.id))
-      .filter((q) => q.neq(q.field("status"), "deleted"))
-      .first();
-    if (attachment) {
-      throw new Error(
-        "This journal contains screenshots. Delete its screenshot entries first so storage can be cleaned safely.",
-      );
+    if (!existing.deletionRequestedAtMs) {
+      await ctx.db.patch(args.id, {
+        status: "archived",
+        deletionRequestedAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
     }
 
-    // Keep this mutation bounded. Large journals should be archived rather than
-    // risking an unbounded destructive transaction.
-    const tradeRows = await ctx.db
+    return { success: true };
+  },
+});
+
+export const removeBatch = query({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const journal = await ctx.db.get(args.id);
+    if (!journal || journal.userId !== userId) throw new Error("Journal not found");
+    if (!journal.deletionRequestedAtMs)
+      throw new Error("Journal deletion has not been prepared");
+
+    const rows = await ctx.db
       .query("tradingJournal")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .take(201);
+      .take(10);
+    return { tradeIds: rows.map((row) => row._id) };
+  },
+});
+
+export const cleanupRemoveBatch = mutation({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const journal = await ctx.db.get(args.id);
+    if (!journal || journal.userId !== userId) return { done: true };
+    if (!journal.deletionRequestedAtMs)
+      throw new Error("Journal deletion has not been prepared");
+
+    const remainingTrade = await ctx.db
+      .query("tradingJournal")
+      .withIndex("by_user_journal_created", (q) =>
+        q.eq("userId", userId).eq("journalId", args.id),
+      )
+      .first();
+    if (remainingTrade) return { done: false };
+
+    // Entry deletion is responsible for R2 and notebook cleanup. Refuse to
+    // remove the parent if any child escaped that path.
+    const [attachment, notebook, fact] = await Promise.all([
+      ctx.db
+        .query("tradeJournalAttachments")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("tradeNotebooks")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("journalTradeFacts")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (attachment || notebook || fact) {
+      throw new Error(
+        "Journal child cleanup is incomplete. Retry deletion before removing the journal.",
+      );
+    }
+
+    const [historyRows, sessionRows] = await Promise.all([
+      ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .take(50),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .take(50),
+    ]);
+    for (const row of historyRows) await ctx.db.delete(row._id);
+    for (const row of sessionRows) await ctx.db.delete(row._id);
+
+    const [historyLeft, sessionsLeft] = await Promise.all([
+      ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (historyLeft || sessionsLeft) return { done: false };
+
+    const [factsBackfill, stats, statsBackfill] = await Promise.all([
+      ctx.db
+        .query("journalTradeFactsBackfills")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+      ctx.db
+        .query("journalTradeStats")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+      ctx.db
+        .query("journalTradeStatsBackfills")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+    ]);
+    if (factsBackfill) await ctx.db.delete(factsBackfill._id);
+    if (stats) await ctx.db.delete(stats._id);
+    if (statsBackfill) await ctx.db.delete(statsBackfill._id);
+
+    const account = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (account?.freeJournalId === args.id) {
+      await ctx.db.patch(account._id, {
+        freeJournalId: undefined,
+        freeJournalChosen: false,
+        updatedAtMs: Date.now(),
+      });
+    }
+
+    await ctx.db.delete(args.id);
+    return { done: true };
+  },
+});
+
+/**
+ * Backward-compatible mutation for cached clients. It only deletes a truly
+ * empty journal. Non-empty journals must use the asset-aware resumable route.
+ */
+export const remove = mutation({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) throw new Error("Journal not found");
+
+    const access = await getProAccess(ctx, userId);
+    if (!access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before deleting the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be deleted while you are on Free.",
+      );
+    }
+
+    const [trade, attachment, notebook, fact] = await Promise.all([
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+      ctx.db
+        .query("tradeJournalAttachments")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("tradeNotebooks")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("journalTradeFacts")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (trade || attachment || notebook || fact) {
+      throw new Error(
+        "This journal contains entries and requires the asset-aware deletion flow. Refresh Poscal and try again.",
+      );
+    }
+
+    await ctx.db.patch(args.id, {
+      status: "archived",
+      deletionRequestedAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    });
+
+    // Small empty journals can finish in one call. If non-trade child rows
+    // exceed the bounded batch, the refreshed client will resume safely.
     const historyRows = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .take(201);
+      .take(51);
     const sessionRows = await ctx.db
       .query("progressSessions")
       .withIndex("by_user_journal_date", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .take(201);
-    if (tradeRows.length > 200 || historyRows.length > 200 || sessionRows.length > 200) {
+      .take(51);
+    if (historyRows.length > 50 || sessionRows.length > 50) {
       throw new Error(
-        "This journal is too large for immediate deletion. Archive it and contact support for a resumable deletion.",
+        "This journal requires the resumable deletion flow. Refresh Poscal and try again.",
       );
     }
-
-    for (const row of tradeRows) await ctx.db.delete(row._id);
     for (const row of historyRows) await ctx.db.delete(row._id);
     for (const row of sessionRows) await ctx.db.delete(row._id);
-    await ctx.db.delete(args.id);
 
+    await ctx.db.delete(args.id);
     return {
       success: true,
-      trades: tradeRows.length,
+      trades: 0,
       history: historyRows.length,
       sessions: sessionRows.length,
     };
