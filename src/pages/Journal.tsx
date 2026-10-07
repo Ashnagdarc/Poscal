@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { BookOpen, Clock3, Plus } from "lucide-react";
+import { BookOpen, Clock3, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -235,12 +235,12 @@ const Journal = () => {
 
     try {
       await deleteTradeMutation.mutateAsync(tradeToDelete.id);
-      toast.success("Trade deleted");
+      toast.success("Journal entry deleted");
     } catch (error) {
       console.error("[journal] Failed to delete manual trade", error);
       showErrorFromUnknown(error, {
-        title: "Couldn't delete trade",
-        fallbackMessage: "We couldn’t delete that trade.",
+        title: "Couldn't delete journal entry",
+        fallbackMessage: "We couldn’t delete that journal entry.",
         code: "JNL-DEL",
       });
     } finally {
@@ -429,18 +429,24 @@ const Journal = () => {
                             ? "In progress"
                             : "Add notes & charts";
 
+                      const displayTitle =
+                        trade.journal_title?.trim()
+                        || (trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair);
+
                       return (
-                        <button
+                        <article
                           key={trade.id}
-                          type="button"
-                          onClick={() => navigate(`/journal/trade/${trade.id}`)}
-                          className="w-full rounded-2xl bg-secondary p-4 text-left transition active:scale-[0.99]"
+                          className="relative w-full rounded-2xl bg-secondary p-4 text-left"
                         >
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/journal/trade/${trade.id}`)}
+                              className="min-w-0 flex-1 text-left transition active:opacity-70"
+                            >
                               <div className="flex flex-wrap items-center gap-2">
                                 <h3 className="truncate text-base font-bold text-foreground">
-                                  {trade.journal_title?.trim() || (trade.journal_type === "notebook_draft" ? "Untitled trade" : trade.pair)}
+                                  {displayTitle}
                                 </h3>
                                 <span className="rounded-full bg-background px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
                                   {trade.journal_type === "notebook_draft" ? "Manual notebook" : direction}
@@ -453,28 +459,43 @@ const Journal = () => {
                                 <Clock3 className="h-3 w-3" />
                                 <span>{formatDate(trade.entry_date ?? trade.created_at)}</span>
                               </div>
-                            </div>
+                            </button>
 
-                            <p
-                              className={`shrink-0 text-sm font-bold ${
-                                (trade.pnl ?? 0) > 0
-                                  ? "text-emerald-400"
-                                  : (trade.pnl ?? 0) < 0
-                                    ? "text-red-400"
-                                    : "text-foreground"
-                              }`}
-                            >
-                              {formatPnl(trade.pnl)}
-                            </p>
+                            <div className="flex shrink-0 items-center gap-2">
+                              <p
+                                className={`text-sm font-bold ${
+                                  (trade.pnl ?? 0) > 0
+                                    ? "text-emerald-400"
+                                    : (trade.pnl ?? 0) < 0
+                                      ? "text-red-400"
+                                      : "text-foreground"
+                                }`}
+                              >
+                                {formatPnl(trade.pnl)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => setTradeToDelete(trade)}
+                                aria-label={`Delete ${displayTitle}`}
+                                title="Delete journal entry"
+                                className="inline-flex size-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-destructive/10 hover:text-destructive active:scale-95"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
                           </div>
 
-                          <div className="mt-3 rounded-xl bg-background px-3 py-2.5">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/journal/trade/${trade.id}`)}
+                            className="mt-3 w-full rounded-xl bg-background px-3 py-2.5 text-left transition active:opacity-70"
+                          >
                             <p className="text-[11px] font-semibold text-foreground">{notebookStatus}</p>
                             <p className="mt-0.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">
                               {trade.journal_preview || trade.notes || "Open the notebook to add before/after charts, reasoning, and lessons."}
                             </p>
-                          </div>
-                        </button>
+                          </button>
+                        </article>
                       );
                     })}
 
@@ -506,9 +527,9 @@ const Journal = () => {
         isOpen={!!tradeToDelete}
         onClose={() => setTradeToDelete(null)}
         onConfirm={() => void handleDeleteManualTrade()}
-        title="Delete Trade"
-        description="Remove this trade from your journal?"
-        confirmText="Delete"
+        title="Delete journal entry?"
+        description="Permanently remove this trade or notebook, including its notes and chart images. This cannot be undone."
+        confirmText="Delete journal"
         variant="destructive"
       />
 

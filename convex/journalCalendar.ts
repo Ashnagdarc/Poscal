@@ -60,6 +60,13 @@ const emptyBucket = (dateKey: string): Bucket => ({
   breakeven: 0,
 });
 
+const hasMeaningfulSessionActivity = (session: any) =>
+  session.journalCreated === true
+  || session.sessionStarted === true
+  || Boolean(session.preMarketNotes?.trim())
+  || Boolean(session.postMarketNotes?.trim())
+  || (Array.isArray(session.tasks) && session.tasks.some((task: any) => task?.completed === true));
+
 /**
  * Calendar data is intentionally read from the actual journal records instead
  * of the closed-trade analytics projection. The calendar is navigation and
@@ -85,6 +92,7 @@ export const getMonth = query({
     const roughStart = Date.UTC(args.year, monthIndex, 1) - RANGE_PAD_MS;
     const roughEnd = Date.UTC(args.year, monthIndex + 1, 1) + RANGE_PAD_MS;
     const prefix = `${args.year}-${String(monthIndex + 1).padStart(2, "0")}`;
+    const todayKey = dateKeyInTimeZone(Date.now(), args.timeZone);
     const monthStartKey = `${prefix}-01`;
     const nextMonth = new Date(Date.UTC(args.year, monthIndex + 1, 1));
     const nextMonthKey = `${nextMonth.getUTCFullYear()}-${String(nextMonth.getUTCMonth() + 1).padStart(2, "0")}-01`;
@@ -159,7 +167,7 @@ export const getMonth = query({
 
       const timestamp = trade.entryDateMs ?? trade.exitDateMs ?? trade.createdAtMs;
       const dateKey = dateKeyInTimeZone(timestamp, args.timeZone);
-      if (!dateKey.startsWith(prefix)) continue;
+      if (!dateKey.startsWith(prefix) || dateKey > todayKey) continue;
 
       const bucket = buckets.get(dateKey) ?? emptyBucket(dateKey);
       bucket.journaled = true;
@@ -200,7 +208,13 @@ export const getMonth = query({
     }
 
     for (const session of sessionById.values()) {
-      if (!session.dateKey.startsWith(prefix)) continue;
+      if (
+        !session.dateKey.startsWith(prefix)
+        || session.dateKey > todayKey
+        || !hasMeaningfulSessionActivity(session)
+      ) {
+        continue;
+      }
       const bucket = buckets.get(session.dateKey) ?? emptyBucket(session.dateKey);
       bucket.journaled = true;
       buckets.set(session.dateKey, bucket);
@@ -244,6 +258,9 @@ export const getDayEntries = query({
     if (!(await hasOwnedJournal(ctx, userId, args.journalId))) {
       return [];
     }
+
+    const todayKey = dateKeyInTimeZone(Date.now(), args.timeZone);
+    if (args.dateKey > todayKey) return [];
 
     const [yearText, monthText, dayText] = args.dateKey.split("-");
     const year = Number(yearText);
