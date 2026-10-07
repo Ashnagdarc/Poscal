@@ -12,6 +12,7 @@ import {
 } from "./lib/ffCalendarFeed";
 
 const MIN_INTERVAL_MS = 2 * 60 * 1000; // collapse bursts; the calendar still pulls on its own
+const INGEST_LEASE_MS = 2 * 60 * 1000;
 // Fair Economy only publishes this week. lastweek/nextweek return 404.
 // Each run upserts by externalId, so earlier weeks already stored are kept.
 const FEEDS = [
@@ -102,18 +103,21 @@ export const runIngest = internalAction({
     highImpactCount?: number;
     alertsQueued?: number;
   }> => {
-    if (!args.force) {
-      const gate = await ctx.runQuery(internal.news.shouldSkipIngest, {
-        minIntervalMs: MIN_INTERVAL_MS,
-      });
-      if (gate.skip) {
-        return {
-          ok: true,
-          skipped: true,
-          reason: "min_interval",
-          lastIngestAtMs: gate.lastIngestAtMs ?? null,
-        };
-      }
+    const ingestToken = crypto.randomUUID();
+    const claim = await ctx.runMutation(internal.news.claimIngest, {
+      minIntervalMs: MIN_INTERVAL_MS,
+      leaseMs: INGEST_LEASE_MS,
+      token: ingestToken,
+      force: args.force ?? false,
+    });
+
+    if (!claim.acquired) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: claim.reason ?? "in_progress",
+        lastIngestAtMs: claim.lastIngestAtMs ?? null,
+      };
     }
 
     try {
@@ -179,7 +183,8 @@ export const runIngest = internalAction({
         alertsQueued = queued.queued;
       }
 
-      await ctx.runMutation(internal.news.markIngestState, {
+      await ctx.runMutation(internal.news.finishIngest, {
+        token: ingestToken,
         lastIngestAtMs: Date.now(),
         lastNewsCount: deduped.length,
         lastError: null,
@@ -195,7 +200,8 @@ export const runIngest = internalAction({
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown ingest error";
-      await ctx.runMutation(internal.news.markIngestState, {
+      await ctx.runMutation(internal.news.finishIngest, {
+        token: ingestToken,
         lastIngestAtMs: undefined,
         lastNewsCount: undefined,
         lastError: message,
