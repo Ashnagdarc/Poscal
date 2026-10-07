@@ -7,10 +7,20 @@ import { verifyTransactionMatch } from "../shared/proPolicy";
 import type { Doc } from "./_generated/dataModel";
 const planValidator = v.union(v.literal("monthly"), v.literal("yearly"));
 
+function paymentMode(): "test" | "live" {
+  const mode = process.env.PRO_PAYMENT_MODE;
+  const key = process.env.PAYSTACK_SECRET_KEY ?? "";
+  if (mode !== "test" && mode !== "live")
+    throw new Error("Payment environment is unavailable");
+  const expectedPrefix = mode === "live" ? "sk_live_" : "sk_test_";
+  if (!key.startsWith(expectedPrefix))
+    throw new Error("Paystack key does not match the payment environment");
+  return mode;
+}
+
 function secret() {
-  const key = process.env.PAYSTACK_SECRET_KEY;
-  if (!key) throw new Error("Payment verification is unavailable");
-  return key;
+  paymentMode();
+  return process.env.PAYSTACK_SECRET_KEY!;
 }
 
 class ProviderError extends Error {
@@ -105,6 +115,7 @@ export const reconcileOrder = internalAction({
   args: { id: v.id("proOrders") },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
+    const mode = paymentMode();
     if (!(await ctx.runMutation(internal.proBilling.claimVerification, args)))
       return null;
     const order: Doc<"proOrders"> | null = await ctx.runQuery(
@@ -112,8 +123,6 @@ export const reconcileOrder = internalAction({
       args,
     );
     if (!order) return null;
-    const mode = process.env.PRO_PAYMENT_MODE;
-    if (mode !== "test" && mode !== "live") return null;
     let transaction: unknown = null;
     let error: string | undefined;
     let financialReview: string | undefined;
@@ -194,11 +203,11 @@ export const chargeAutoRenew = internalAction({
   args: { id: v.id("proAccounts") },
   returns: v.null(),
   handler: async (ctx, args): Promise<null> => {
+    // Validate environment/key pairing before claiming a renewal lease or
+    // creating an order. A configuration mismatch must never submit a debit.
+    paymentMode();
     if (!(await ctx.runMutation(internal.proBilling.claimAutoRenew, args)))
       return null;
-
-    const mode = process.env.PRO_PAYMENT_MODE;
-    if (mode !== "test" && mode !== "live") return null;
 
     const account = await ctx.runQuery(internal.proBilling.getAutoRenewAccount, args);
     if (
