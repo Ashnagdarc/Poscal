@@ -1,4 +1,5 @@
 import { getAuthenticatedConvexHttpClient } from "@/lib/convexClient";
+import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { SubscriptionTier } from "@/contexts/SubscriptionContext";
@@ -114,11 +115,31 @@ export const attachOrphanJournalData = async (_userId: string, journalId: string
 };
 
 export const deleteTradingJournal = async (_userId: string, journalId: string) => {
-  const client = getAuthenticatedConvexHttpClient();
+  const token = getConvexAuthTokenMirror();
+  if (!token) throw new Error("Your session is not ready. Please try again.");
 
-  return await client.mutation(api.tradingJournals.remove, {
-    id: journalId as Id<"tradingAccounts">,
-  });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const response = await fetch("/api/journal-book", {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ journalId }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; done?: boolean; message?: string }
+      | null;
+
+    if (!response.ok && response.status !== 202) {
+      throw new Error(payload?.message || `Could not delete journal (${response.status})`);
+    }
+    if (payload?.done) return { success: true };
+  }
+
+  throw new Error(
+    "Journal deletion is taking longer than expected. Your journal is archived and cleanup can be resumed safely.",
+  );
 };
 
 export const getTradingJournalLimits = async (
