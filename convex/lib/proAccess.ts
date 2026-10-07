@@ -66,6 +66,7 @@ export async function getProAccess(
     autoRenew: {
       enabled: account?.autoRenewEnabled === true,
       plan: account?.autoRenewPlan ?? null,
+      amount: account?.autoRenewAmount ?? null,
       nextChargeAtMs: account?.autoRenewNextChargeAtMs ?? null,
       last4: account?.autoRenewLast4 ?? null,
       brand: account?.autoRenewBrand ?? null,
