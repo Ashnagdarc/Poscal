@@ -25,6 +25,13 @@ export const accessValidator = v.object({
     screenshots: v.number(),
     storageBytes: v.number(),
   }),
+  autoRenew: v.object({
+    enabled: v.boolean(),
+    plan: v.union(v.literal("monthly"), v.literal("yearly"), v.null()),
+    nextChargeAtMs: v.union(v.number(), v.null()),
+    last4: v.union(v.string(), v.null()),
+    brand: v.union(v.string(), v.null()),
+  }),
 });
 export const clientOrderValidator = v.object({
   id: v.id("proOrders"),
