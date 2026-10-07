@@ -210,6 +210,24 @@ export const chargeAutoRenew = internalAction({
     )
       return null;
 
+    if (account.autoRenewOrderId) {
+      const existing: Doc<"proOrders"> | null = await ctx.runQuery(
+        internal.proBilling.getOrder,
+        { id: account.autoRenewOrderId },
+      );
+      if (
+        existing &&
+        ["initializing", "pending", "review"].includes(existing.status)
+      ) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.proPayments.reconcileOrder,
+          { id: existing._id },
+        );
+        return null;
+      }
+    }
+
     const order: Doc<"proOrders"> = await ctx.runMutation(
       internal.proBilling.prepareAutoRenewOrder,
       args,
