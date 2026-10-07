@@ -807,19 +807,27 @@ export const recordVerification = internalMutation({
           updatedAtMs: now,
         });
       }
-      if (status !== "abandoned" || order.reminders)
+      if (
+        status !== "abandoned" ||
+        order.reminders ||
+        order.source === "auto_renew"
+      )
         await notify(
           ctx,
           order,
           status,
-          status === "abandoned"
-            ? "Continue your Poscal Pro checkout"
-            : status === "reversed"
-              ? "Your Poscal Pro payment was reversed"
-              : "Your Poscal Pro payment failed",
-          status === "abandoned"
-            ? "Your checkout was not completed. You can review it in Poscal."
-            : "We did not confirm a successful payment. Check your payment reference before trying again.",
+          order.source === "auto_renew"
+            ? "Your Poscal Pro auto-renewal needs attention"
+            : status === "abandoned"
+              ? "Continue your Poscal Pro checkout"
+              : status === "reversed"
+                ? "Your Poscal Pro payment was reversed"
+                : "Your Poscal Pro payment failed",
+          order.source === "auto_renew"
+            ? "We could not confirm this automatic renewal. Your existing paid access is unchanged. Poscal will only retry within the bounded renewal policy while auto-renew remains enabled."
+            : status === "abandoned"
+              ? "Your checkout was not completed. You can review it in Poscal."
+              : "We did not confirm a successful payment. Check your payment reference before trying again.",
         );
     } else {
       await ctx.db.patch(order._id, {
