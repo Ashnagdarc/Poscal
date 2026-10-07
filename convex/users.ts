@@ -423,6 +423,8 @@ export const deleteAccount = mutation({
       journals: 0,
       push: 0,
       payments: 0,
+      proUsage: 0,
+      proAccount: 0,
       notifications: 0,
       authSessions: 0,
       authAccounts: 0,
@@ -481,6 +483,27 @@ export const deleteAccount = mutation({
     for (const row of paymentRows) {
       await ctx.db.delete(row._id);
       counts.payments += 1;
+    }
+
+    // Disable and remove the live entitlement/auto-renew record before the
+    // user disappears. Historical Pro orders remain as financial evidence,
+    // but reusable Paystack authorization tokens must not survive deletion.
+    const proAccount = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (proAccount) {
+      await ctx.db.delete(proAccount._id);
+      counts.proAccount += 1;
+    }
+
+    const usageRows = await ctx.db
+      .query("proUsage")
+      .withIndex("by_user_month", (q) => q.eq("userId", userId))
+      .collect();
+    for (const row of usageRows) {
+      await ctx.db.delete(row._id);
+      counts.proUsage += 1;
     }
 
     const notificationRows = await ctx.db
