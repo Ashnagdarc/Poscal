@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { openConsentPreferences } from "@/lib/consent";
 
 const Privacy = () => {
   const navigate = useNavigate();
@@ -41,7 +42,8 @@ const Privacy = () => {
             <li>Trading account information (account names, balances, broker details)</li>
             <li>Journal entries and trading data</li>
             <li>Communication preferences</li>
-            <li>Pro payment references, provider transaction IDs, amounts, payment status and access expiry. Paystack handles card details; Poscal does not store card numbers.</li>
+            <li>Pro payment references, Paystack transaction IDs, amounts, payment status and access expiry. Paystack handles card details; Poscal does not store card numbers, CVV or PIN.</li>
+            <li>If you explicitly enable auto-renew, we store the Paystack reusable authorization token, the email tied to that authorization, and limited masked payment-method details such as card brand and last four digits so we can identify the method and request future charges.</li>
           </ul>
 
           <h3 className="text-lg font-medium text-foreground mb-2 mt-4">Automatically Collected Information</h3>
@@ -153,24 +155,31 @@ const Privacy = () => {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">6. Data Retention</h2>
           <p className="text-muted-foreground leading-relaxed">
-            We retain your personal information for as long as necessary to provide our services and comply with legal obligations. When you delete your account, we will delete or anonymize your personal data within 30 days, except where we are required to retain it for legal purposes.
+            We retain personal information only for as long as necessary for the service, security, dispute handling, accounting, tax and other legal obligations. Account deletion removes or anonymizes product data according to our deletion process, but a minimal billing ledger may be retained where required to prove payments, refunds, disputes or legal compliance. Retained financial records are separated from active product access and are not used to recreate a deleted account.
           </p>
         </section>
 
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">7. Cookies and Tracking Technologies</h2>
           <p className="text-muted-foreground leading-relaxed mb-2">
-            We use cookies and similar tracking technologies to:
+            Poscal separates browser storage into necessary, preferences, analytics and marketing categories.
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>Maintain your session and keep you logged in</li>
-            <li>Remember your preferences and settings</li>
-            <li>Analyze app usage and performance</li>
-            <li>Provide personalized content</li>
+            <li><span className="font-medium text-foreground">Necessary:</span> authentication, security, consent records and storage required for core app operation.</li>
+            <li><span className="font-medium text-foreground">Preferences:</span> optional interface choices such as remembered UI state.</li>
+            <li><span className="font-medium text-foreground">Analytics:</span> optional product analytics and diagnostic reporting. Payment references and checkout tokens are removed from analytics URLs before events are sent.</li>
+            <li><span className="font-medium text-foreground">Marketing:</span> optional marketing measurement. This is not required to use Poscal.</li>
           </ul>
           <p className="text-muted-foreground leading-relaxed mt-2">
-            You can control cookies through your browser settings, but disabling them may affect app functionality.
+            Non-essential categories remain off until you make a choice. Rejecting optional storage does not block core Poscal features.
           </p>
+          <button
+            type="button"
+            className="mt-3 rounded-xl border border-border px-4 py-2 text-sm font-medium text-foreground"
+            onClick={openConsentPreferences}
+          >
+            Change privacy choices
+          </button>
         </section>
 
         <section>
@@ -183,7 +192,7 @@ const Privacy = () => {
         <section>
           <h2 className="text-xl font-semibold text-foreground mb-3">9. International Data Transfers</h2>
           <p className="text-muted-foreground leading-relaxed">
-            Your information may be transferred to and processed in countries other than your country of residence. These countries may have different data protection laws. By using the App, you consent to the transfer of your information to these countries. We ensure appropriate safeguards are in place to protect your data.
+            Some service providers may process information outside your country of residence. Where cross-border processing applies, we use the safeguards and contractual mechanisms required by applicable data-protection law rather than treating ordinary use of the App as blanket consent to international transfers.
           </p>
         </section>
 
@@ -226,7 +235,7 @@ const Privacy = () => {
         <section className="pt-4">
           <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4">
             <p className="text-sm text-foreground/90 leading-relaxed">
-              By using Poscal FX, you acknowledge that you have read and understood this Privacy Policy and agree to the collection, use, and disclosure of your information as described herein.
+              By using Poscal FX, you acknowledge that you have read this Privacy Policy. Where consent is required for optional processing, Poscal asks for that consent separately and allows you to change it later.
             </p>
           </div>
         </section>
