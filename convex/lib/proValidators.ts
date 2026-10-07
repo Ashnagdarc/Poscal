@@ -28,6 +28,7 @@ export const accessValidator = v.object({
   autoRenew: v.object({
     enabled: v.boolean(),
     plan: v.union(v.literal("monthly"), v.literal("yearly"), v.null()),
+    amount: v.union(v.number(), v.null()),
     nextChargeAtMs: v.union(v.number(), v.null()),
     last4: v.union(v.string(), v.null()),
     brand: v.union(v.string(), v.null()),
