@@ -18,7 +18,6 @@ import {
   Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useMutation } from "convex/react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -38,7 +37,7 @@ import { parseAndValidateJournalCsv } from "@/lib/importJournalCsv";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
-import { api } from "../../convex/_generated/api";
+import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
 
 interface Profile {
   id: string;
@@ -54,7 +53,6 @@ const Profile = () => {
   const { user, signOut } = useAuth();
   const { activeJournalId } = useJournal();
   const { checkFeatureAccess } = useSubscription();
-  const deleteAccount = useMutation(api.users.deleteAccount);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -193,7 +191,42 @@ const Profile = () => {
     if (isDeletingAccount) return;
     setIsDeletingAccount(true);
     try {
-      await deleteAccount({ confirmation: "DELETE" });
+      const token = getConvexAuthTokenMirror();
+      if (!token) {
+        throw new Error("Your session is not ready. Please try again.");
+      }
+
+      let deleted = false;
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        const response = await fetch("/api/account-delete", {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ confirmation: "DELETE" }),
+        });
+        const result = (await response.json().catch(() => null)) as
+          | { success?: boolean; done?: boolean; message?: string }
+          | null;
+
+        if (!response.ok && response.status !== 202) {
+          throw new Error(
+            result?.message || `Account deletion failed (${response.status})`,
+          );
+        }
+        if (result?.done) {
+          deleted = true;
+          break;
+        }
+      }
+
+      if (!deleted) {
+        throw new Error(
+          "Account cleanup is larger than the automatic deletion window. Your deletion is resumable, so retrying will continue safely.",
+        );
+      }
+
       await signOut();
       toast.success("Your account and trading data have been deleted.");
       navigate("/welcome");
