@@ -32,6 +32,19 @@ import {
 export const planValidator = v.union(v.literal("monthly"), v.literal("yearly"));
 const CLOSED = Number.MAX_SAFE_INTEGER;
 
+const clearAutoRenewPaymentMethod = () => ({
+  autoRenewAuthorizationCode: undefined,
+  autoRenewEmail: undefined,
+  autoRenewSignature: undefined,
+  autoRenewChannel: undefined,
+  autoRenewLast4: undefined,
+  autoRenewBrand: undefined,
+  autoRenewBank: undefined,
+  autoRenewExpMonth: undefined,
+  autoRenewExpYear: undefined,
+  autoRenewCountryCode: undefined,
+});
+
 async function requireAdmin(ctx: QueryCtx) {
   const userId = await requireVerifiedAuthUserId(ctx);
   const user = await ctx.db.get(userId);
@@ -677,6 +690,7 @@ export const recordVerification = internalMutation({
                     autoRenewNextChargeAtMs: undefined,
                     autoRenewLeaseUntilMs: 0,
                     autoRenewOrderId: undefined,
+                    ...clearAutoRenewPaymentMethod(),
                   }
                 : {};
 
@@ -769,15 +783,17 @@ export const recordVerification = internalMutation({
       if (order.source === "auto_renew") {
         const account = await accountFor(ctx, order.userId);
         const failures = (account.autoRenewFailureCount ?? 0) + 1;
+        const retrying =
+          failures < 3 && account.autoRenewEnabled === true;
         await ctx.db.patch(account._id, {
           autoRenewFailureCount: failures,
           autoRenewLeaseUntilMs: 0,
           autoRenewOrderId: undefined,
-          autoRenewEnabled: failures < 3 && account.autoRenewEnabled === true,
-          autoRenewNextChargeAtMs:
-            failures < 3 && account.autoRenewEnabled === true
-              ? now + 12 * 3600_000
-              : undefined,
+          autoRenewEnabled: retrying,
+          autoRenewNextChargeAtMs: retrying
+            ? now + 12 * 3600_000
+            : undefined,
+          ...(retrying ? {} : clearAutoRenewPaymentMethod()),
           updatedAtMs: now,
         });
       }
@@ -1002,6 +1018,8 @@ export const setAutoRenew = mutation({
         autoRenewEnabled: false,
         autoRenewNextChargeAtMs: undefined,
         autoRenewLeaseUntilMs: 0,
+        autoRenewOrderId: undefined,
+        ...clearAutoRenewPaymentMethod(),
         updatedAtMs: now,
       });
       return null;
@@ -1066,6 +1084,8 @@ export const claimAutoRenew = internalMutation({
         autoRenewEnabled: false,
         autoRenewNextChargeAtMs: undefined,
         autoRenewLeaseUntilMs: 0,
+        autoRenewOrderId: undefined,
+        ...clearAutoRenewPaymentMethod(),
         updatedAtMs: now,
       });
       return false;
@@ -1152,15 +1172,16 @@ export const autoRenewChargeFailed = internalMutation({
     if (!account) return null;
     const now = Date.now();
     const failures = (account.autoRenewFailureCount ?? 0) + 1;
+    const retrying = failures < 3 && account.autoRenewEnabled === true;
     await ctx.db.patch(account._id, {
       autoRenewFailureCount: failures,
       autoRenewLeaseUntilMs: 0,
       autoRenewOrderId: undefined,
-      autoRenewEnabled: failures < 3 && account.autoRenewEnabled === true,
-      autoRenewNextChargeAtMs:
-        failures < 3 && account.autoRenewEnabled === true
-          ? now + 12 * 3600_000
-          : undefined,
+      autoRenewEnabled: retrying,
+      autoRenewNextChargeAtMs: retrying
+        ? now + 12 * 3600_000
+        : undefined,
+      ...(retrying ? {} : clearAutoRenewPaymentMethod()),
       updatedAtMs: now,
     });
     return null;
