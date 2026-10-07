@@ -76,6 +76,19 @@ export type ProviderTransaction = {
   id?: number | string;
   paid_at?: string;
   metadata?: { orderId?: string } | null;
+  authorization?: {
+    authorization_code?: string;
+    signature?: string;
+    reusable?: boolean;
+    channel?: string;
+    last4?: string;
+    card_type?: string;
+    brand?: string;
+    bank?: string;
+    exp_month?: string;
+    exp_year?: string;
+    country_code?: string;
+  } | null;
 };
 
 export function verifyTransactionMatch(
