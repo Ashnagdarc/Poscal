@@ -22,12 +22,31 @@ run("npm", ["run", "gate:fx"]);
 if (process.exitCode) process.exit(process.exitCode);
 
 if (process.env.VERCEL_ENV === "preview") {
-  const previewKey = (process.env.CONVEX_PREVIEW_DEPLOY_KEY || "").trim();
+  // Convex's official Vercel setup uses CONVEX_DEPLOY_KEY scoped to Preview.
+  // Keep the legacy custom name as a fallback while migrating project settings.
+  const previewKey = (
+    process.env.CONVEX_PREVIEW_DEPLOY_KEY ||
+    process.env.CONVEX_DEPLOY_KEY ||
+    ""
+  ).trim();
   if (!previewKey.startsWith("preview:") || !previewKey.includes("|")) {
-    console.error("[convex-preview] Configure a dedicated CONVEX_PREVIEW_DEPLOY_KEY. Do not point this billing preview at the production backend.");
+    console.error("[convex-preview] Configure a dedicated Convex Preview Deploy Key in the Vercel Preview environment. Do not point this billing preview at the production backend.");
     process.exit(1);
   }
-  run("npx", ["convex", "deploy", "--preview-name", process.env.VERCEL_GIT_COMMIT_REF || "poscal-pro-preview", "--cmd-url-env-var-name", "VITE_CONVEX_URL", "--cmd", "npm run build"], { ...process.env, CONVEX_DEPLOY_KEY: previewKey });
+  run(
+    "npx",
+    [
+      "convex",
+      "deploy",
+      "--preview-name",
+      process.env.VERCEL_GIT_COMMIT_REF || "poscal-pro-preview",
+      "--cmd-url-env-var-name",
+      "VITE_CONVEX_URL",
+      "--cmd",
+      "npm run build",
+    ],
+    { ...process.env, CONVEX_DEPLOY_KEY: previewKey },
+  );
   process.exit(process.exitCode ?? 0);
 }
 if (process.env.VERCEL_ENV !== "production") {
