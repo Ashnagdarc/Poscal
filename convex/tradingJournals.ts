@@ -216,6 +216,28 @@ export const archive = mutation({
   },
 });
 
+export const accountDeletionBooks = query({
+  args: {},
+  returns: v.array(v.id("tradingAccounts")),
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const user = await ctx.db.get(userId);
+    const deletionStartedAt = user?.accountDeletionRequestedAtMs ?? 0;
+    if (
+      !deletionStartedAt ||
+      Date.now() - deletionStartedAt > 60 * 60_000
+    ) {
+      throw new Error("Account deletion session is not active");
+    }
+    return (
+      await ctx.db
+        .query("tradingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .take(10)
+    ).map((row) => row._id);
+  },
+});
+
 export const beginRemove = mutation({
   args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
@@ -226,7 +248,11 @@ export const beginRemove = mutation({
     }
 
     const access = await getProAccess(ctx, userId);
-    if (!access.pro && access.freeJournalId === args.id) {
+    const user = await ctx.db.get(userId);
+    const deletionStartedAt = user?.accountDeletionRequestedAtMs ?? 0;
+    const deletingAccount =
+      deletionStartedAt > 0 && Date.now() - deletionStartedAt <= 60 * 60_000;
+    if (!deletingAccount && !access.pro && access.freeJournalId === args.id) {
       throw new Error(
         access.canChooseFreeJournal
           ? "Choose your one Free journal before deleting the current Free journal."
