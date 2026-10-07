@@ -8,6 +8,7 @@ import {
   X,
 } from "lucide-react";
 import { NumPad } from "./NumPad";
+import { AnimatedNumber } from "@/components/ui/animated-number";
 import { PageHeader } from "./PageHeader";
 import { UserAvatar } from "./UserAvatar";
 import {
@@ -660,7 +661,7 @@ export const Calculator = () => {
           <div className="rounded-3xl bg-foreground px-6 py-7 text-background">
             <p className="mb-1 text-center text-sm font-medium opacity-60">Position size</p>
             <p className="text-center font-display text-5xl font-bold tracking-tight">
-              {formatNumber(calculation.positionSize)}
+              <AnimatedNumber value={calculation.positionSize} />
             </p>
             <p className="mt-1 text-center text-lg font-medium opacity-80">lots</p>
 
@@ -672,13 +673,18 @@ export const Calculator = () => {
                   Risk ({riskDisplayCurrency.code})
                 </p>
                 <p className="text-lg font-semibold">
-                  {riskDisplayCurrency.symbol}
-                  {formatNumber(calculation.actualRisk || calculation.riskAmount, 0)}
+                  <AnimatedNumber
+                    value={calculation.actualRisk || calculation.riskAmount}
+                    decimals={0}
+                    prefix={riskDisplayCurrency.symbol}
+                  />
                 </p>
               </div>
               <div className="text-center">
                 <p className="mb-1 text-xs font-medium opacity-60">Units</p>
-                <p className="text-lg font-semibold">{formatNumber(calculation.units, 0)}</p>
+                <p className="text-lg font-semibold">
+                  <AnimatedNumber value={calculation.units} decimals={0} />
+                </p>
               </div>
             </div>
 
@@ -691,15 +697,20 @@ export const Calculator = () => {
                       <Target className="h-3 w-3 opacity-60" />
                       <p className="text-xs font-medium opacity-60">R:R</p>
                     </div>
-                    <p className="text-lg font-semibold">1:{formatNumber(calculation.rewardToRisk, 1)}</p>
+                    <p className="text-lg font-semibold">
+                      <AnimatedNumber value={calculation.rewardToRisk} decimals={1} prefix="1:" />
+                    </p>
                   </div>
                   <div className="text-center">
                     <p className="mb-1 text-xs font-medium opacity-60">
                       Potential ({riskDisplayCurrency.code})
                     </p>
                     <p className="text-lg font-semibold">
-                      +{riskDisplayCurrency.symbol}
-                      {formatNumber(calculation.potentialProfitAccount, 0)}
+                      <AnimatedNumber
+                        value={calculation.potentialProfitAccount}
+                        decimals={0}
+                        prefix={`+${riskDisplayCurrency.symbol}`}
+                      />
                     </p>
                   </div>
                 </div>
