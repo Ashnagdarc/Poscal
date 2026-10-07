@@ -179,6 +179,16 @@ export const update = mutation({
       if (!ALLOWED_JOURNAL_STATUS.has(status)) {
         throw new Error("Invalid journal status");
       }
+      if (status === "archived") {
+        const access = await getProAccess(ctx, userId);
+        if (!access.pro && access.freeJournalId === args.id) {
+          throw new Error(
+            access.canChooseFreeJournal
+              ? "Choose your one Free journal before archiving the current Free journal."
+              : "PRO_REQUIRED: Your selected Free journal cannot be archived while you are on Free.",
+          );
+        }
+      }
       patch.status = status;
     }
 
