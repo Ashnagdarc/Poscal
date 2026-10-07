@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   useAction,
   useConvex,
+  useMutation,
   useQuery,
   usePaginatedQuery,
 } from "convex/react";
@@ -39,7 +40,7 @@ export function ProCheckout({
   onCheckoutOpen?: () => void;
 }) {
   const { user } = useAuth();
-  const { isPaid, expiresAt } = useSubscription();
+  const { isPaid, expiresAt, autoRenew: autoRenewState } = useSubscription();
   const location = useLocation();
   const navigate = useNavigate();
   const client = useConvex();
@@ -59,6 +60,7 @@ export function ProCheckout({
   );
   const start = useAction(api.proPayments.startCheckout);
   const verify = useAction(api.proPayments.checkPayment);
+  const setAutoRenew = useMutation(api.proBilling.setAutoRenew);
   const [plan, setPlan] = useState<ProPlan>("monthly");
   const [code, setCode] = useState("");
   const [quote, setQuote] = useState<{
@@ -66,6 +68,7 @@ export function ProCheckout({
     code: string | null;
   } | null>(null);
   const [reminders, setReminders] = useState(false);
+  const [autoRenewRequested, setAutoRenewRequested] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const clickLock = useRef(false);
@@ -170,6 +173,7 @@ export function ProCheckout({
         code: quote?.code ?? undefined,
         returnTo: destination,
         reminders,
+        autoRenew: autoRenewRequested,
       });
       setReference(nextReference);
       // Read the durable record rather than assuming initialization/activation succeeded.
@@ -235,6 +239,42 @@ export function ProCheckout({
               ? "Your Pro access is active. Your notes and uploads are ready."
               : "This paid period has ended. Your existing data remains available."}
           </p>
+          {isPaid && (
+            <div className="mt-3 rounded-xl bg-secondary p-3 text-xs">
+              <p className="font-medium">
+                Auto-renew {autoRenewState.enabled ? "on" : "off"}
+              </p>
+              {autoRenewState.enabled ? (
+                <p className="mt-1 text-muted-foreground">
+                  {autoRenewState.brand ?? "Payment method"}
+                  {autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}.
+                  {autoRenewState.nextChargeAt
+                    ? ` Next charge is scheduled for ${autoRenewState.nextChargeAt.toLocaleDateString()}.`
+                    : ""}
+                </p>
+              ) : (
+                <p className="mt-1 text-muted-foreground">
+                  You will not be charged again automatically.
+                </p>
+              )}
+              {autoRenewState.enabled && (
+                <button
+                  type="button"
+                  className="mt-2 underline"
+                  disabled={busy}
+                  onClick={() => {
+                    setBusy(true);
+                    setError("");
+                    void setAutoRenew({ enabled: false })
+                      .catch((err) => setError(message(err)))
+                      .finally(() => setBusy(false));
+                  }}
+                >
+                  Turn off auto-renew
+                </button>
+              )}
+            </div>
+          )}
           <Button className="mt-4 w-full" onClick={() => navigate(destination)}>
             Continue where you left off
           </Button>
@@ -364,6 +404,18 @@ export function ProCheckout({
               <label className="flex items-start gap-2 text-xs text-muted-foreground">
                 <input
                   type="checkbox"
+                  checked={autoRenewRequested}
+                  onChange={(e) => setAutoRenewRequested(e.target.checked)}
+                />
+                <span>
+                  Automatically renew this {plan} plan using this Paystack payment method.
+                  You can turn auto-renew off before the next charge. Auto-renew only activates
+                  if Paystack returns a verified reusable authorization.
+                </span>
+              </label>
+              <label className="flex items-start gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
                   checked={reminders}
                   onChange={(e) => setReminders(e.target.checked)}
                 />
@@ -398,8 +450,8 @@ export function ProCheckout({
             </p>
           )}
           <p className="text-center text-xs text-muted-foreground">
-            One payment. No automatic renewal. Payment details are handled by
-            Paystack.
+            Payment details are handled by Paystack. Auto-renew is off by default
+            and only starts when you explicitly select it.
           </p>
         </>
       )}
