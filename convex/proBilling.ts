@@ -642,12 +642,17 @@ export const recordVerification = internalMutation({
               autoRenewConsentAtMs: now,
               autoRenewConsentVersion: 1,
             }
-          : order.source === "auto_renew" && account.autoRenewEnabled
+          : account.autoRenewEnabled &&
+              (order.source === "auto_renew" || order.source === "checkout") &&
+              !order.autoRenewRequested
             ? {
                 autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
                 autoRenewFailureCount: 0,
                 autoRenewLeaseUntilMs: 0,
-                autoRenewOrderId: undefined,
+                autoRenewOrderId:
+                  order.source === "auto_renew"
+                    ? undefined
+                    : account.autoRenewOrderId,
               }
             : order.autoRenewRequested
               ? {
@@ -1038,6 +1043,15 @@ export const claimAutoRenew = internalMutation({
       .query("appSettings")
       .withIndex("by_key", (q) => q.eq("key", PRO_LOCK_KEY))
       .unique();
+    if (account && now > account.expiresAtMs + 48 * 3600_000) {
+      await ctx.db.patch(account._id, {
+        autoRenewEnabled: false,
+        autoRenewNextChargeAtMs: undefined,
+        autoRenewLeaseUntilMs: 0,
+        updatedAtMs: now,
+      });
+      return false;
+    }
     if (
       billing?.valueBoolean !== true ||
       !account ||
