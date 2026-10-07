@@ -1063,6 +1063,44 @@ describe("production billing hardening", () => {
     ).rejects.toThrow("Choose your one Free journal");
   });
 
+  it("cannot rotate the Free journal through the generic status update path", async () => {
+    const { t, user } = await setup(false);
+    const first = await user.mutation(api.tradingJournals.create, {
+      name: "First",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    await user.mutation(api.tradingJournals.create, {
+      name: "Second",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    await t.run((ctx) =>
+      ctx.db.insert("appSettings", {
+        key: PRO_LOCK_KEY,
+        valueBoolean: true,
+        updatedAtMs: Date.now(),
+      }),
+    );
+
+    expect((await user.query(api.proBilling.entitlements, {}))!.freeJournalId).toBe(
+      first!._id,
+    );
+    await expect(
+      user.mutation(api.tradingJournals.update, {
+        id: first!._id,
+        name: null,
+        currency: null,
+        startingBalance: null,
+        balance: null,
+        status: "archived",
+      }),
+    ).rejects.toThrow("Choose your one Free journal");
+    expect((await user.query(api.proBilling.entitlements, {}))!.freeJournalId).toBe(
+      first!._id,
+    );
+  });
+
   it("only enables auto-renew from a verified reusable Paystack authorization", async () => {
     const { t, user, userId } = await setup();
     const { order } = await user.mutation(internal.proBilling.prepareOrder, {
@@ -1307,6 +1345,41 @@ describe("production billing hardening", () => {
     ).toBe(false);
 
     expect((await user.query(api.proBilling.entitlements, {}))!.beta).toBe(true);
+  });
+
+  it("never submits an auto-renew debit when the Paystack key and payment mode disagree", async () => {
+    const { t, userId } = await setup();
+    const now = Date.now();
+    const accountId = await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        autoRenewEnabled: true,
+        autoRenewPlan: "monthly",
+        autoRenewAmount: PRICES.monthly,
+        autoRenewPolicyVersion: PRO_POLICY_VERSION,
+        autoRenewAuthorizationCode: "AUTH_fixture",
+        autoRenewEmail: "trader@example.com",
+        autoRenewSignature: "SIG_fixture",
+        autoRenewNextChargeAtMs: now - 1,
+        updatedAtMs: now,
+      }),
+    );
+    const request = vi.fn();
+    vi.stubGlobal("fetch", request);
+    vi.stubEnv("PRO_PAYMENT_MODE", "test");
+    vi.stubEnv("PAYSTACK_SECRET_KEY", "sk_live_wrong_environment");
+
+    await expect(
+      t.action(internal.proPayments.chargeAutoRenew, { id: accountId }),
+    ).rejects.toThrow("does not match the payment environment");
+    expect(request).not.toHaveBeenCalled();
+    expect(
+      await t.run((ctx) => ctx.db.query("proOrders").collect()),
+    ).toHaveLength(0);
+    const account = await t.run((ctx) => ctx.db.get(accountId));
+    expect(account?.autoRenewLeaseUntilMs ?? 0).toBe(0);
   });
 });
 
