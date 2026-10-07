@@ -22,7 +22,9 @@ async function ensureSentry(): Promise<SentryLike | null> {
       Sentry.init({
         dsn,
         environment: import.meta.env.MODE,
-        tracesSampleRate: 0.1,
+        beforeSend: (event: unknown) =>
+          hasConsent("analytics") ? event : null,
+        tracesSampleRate: 0,
       });
       sentryInitialized = true;
     }
