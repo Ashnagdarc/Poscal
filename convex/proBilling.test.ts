@@ -7,6 +7,7 @@ import { createHmac } from "node:crypto";
 import { api, internal } from "./_generated/api";
 import {
   PRO_LOCK_KEY,
+  PRO_POLICY_VERSION,
   addPlanPeriod,
   PRICES,
   safeReturnTo,
@@ -1094,6 +1095,7 @@ describe("production billing hardening", () => {
     expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew).toMatchObject({
       enabled: true,
       plan: "monthly",
+      amount: PRICES.monthly,
       last4: "4081",
     });
 
@@ -1123,6 +1125,8 @@ describe("production billing hardening", () => {
         paymentMode: "test",
         autoRenewEnabled: true,
         autoRenewPlan: "monthly",
+        autoRenewAmount: PRICES.monthly,
+        autoRenewPolicyVersion: PRO_POLICY_VERSION,
         autoRenewAuthorizationCode: "AUTH_fixture",
         autoRenewEmail: "trader@example.com",
         autoRenewSignature: "SIG_fixture",
