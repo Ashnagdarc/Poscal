@@ -94,6 +94,7 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     subscriptionTier: v.optional(v.string()),
     subscriptionExpiresAtMs: nullableNumber,
+    accountDeletionRequestedAtMs: nullableNumber,
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
