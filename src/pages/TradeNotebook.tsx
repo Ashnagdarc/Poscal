@@ -145,6 +145,9 @@ const TradeNotebook = () => {
 
   const hydratedRef = useRef(false);
   const revisionRef = useRef(0);
+  const saveInFlightRef = useRef(false);
+  const saveQueuedRef = useRef(false);
+  const latestPatchRef = useRef<NotebookPatch | null>(null);
 
   useEffect(() => {
     if (!tradeId || !user?.id) return;
@@ -221,24 +224,53 @@ const TradeNotebook = () => {
   ]);
 
   useEffect(() => {
+    latestPatchRef.current = patch;
+  }, [patch]);
+
+  useEffect(() => {
     if (!hydratedRef.current || !tradeId || !user?.id || saveState !== "dirty") return;
 
     const timer = window.setTimeout(() => {
+      if (saveInFlightRef.current) {
+        // Do not send a second mutation against the same notebook document.
+        // Remember that newer text exists and flush it after the current save.
+        saveQueuedRef.current = true;
+        return;
+      }
+
       const savingRevision = revisionRef.current;
+      const patchToSave = latestPatchRef.current ?? patch;
+      saveInFlightRef.current = true;
+      saveQueuedRef.current = false;
       setSaveState("saving");
 
-      void updateTradeNotebook(user.id, tradeId, patch)
+      void updateTradeNotebook(user.id, tradeId, patchToSave)
         .then((updated) => {
-          // If the user typed again while this request was in flight, do not
-          // mark the newer local draft as saved or clear it.
-          if (savingRevision !== revisionRef.current) return;
-          setTrade(updated);
-          clearLocalDraft(tradeId);
-          setSaveState("saved");
+          const hasNewerDraft =
+            savingRevision !== revisionRef.current || saveQueuedRef.current;
+
+          if (!hasNewerDraft) {
+            setTrade(updated);
+            clearLocalDraft(tradeId);
+            setSaveState("saved");
+            return;
+          }
+
+          // A newer local revision arrived while the request was in flight.
+          // Keep the local draft and schedule one follow-up save, never two
+          // overlapping writes to tradeNotebooks.
+          setSaveState("dirty");
         })
         .catch(() => {
-          if (savingRevision !== revisionRef.current) return;
-          setSaveState("error");
+          if (savingRevision === revisionRef.current) {
+            setSaveState("error");
+          } else {
+            setSaveState("dirty");
+          }
+        })
+        .finally(() => {
+          saveInFlightRef.current = false;
+          saveQueuedRef.current = false;
         });
     }, AUTOSAVE_DELAY_MS);
 
