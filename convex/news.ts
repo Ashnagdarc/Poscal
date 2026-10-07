@@ -399,6 +399,110 @@ export const syncFxFromPriceSnapshots = internalMutation({
   },
 });
 
+export const claimIngest = internalMutation({
+  args: {
+    minIntervalMs: v.number(),
+    leaseMs: v.number(),
+    token: v.string(),
+    force: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("newsIngestState")
+      .withIndex("by_key", (q) => q.eq("key", "primary"))
+      .unique();
+
+    if (
+      !args.force
+      && existing?.lastIngestAtMs
+      && now - existing.lastIngestAtMs < args.minIntervalMs
+    ) {
+      return {
+        acquired: false as const,
+        reason: "min_interval" as const,
+        lastIngestAtMs: existing.lastIngestAtMs,
+      };
+    }
+
+    if (
+      existing?.ingestLeaseUntilMs
+      && existing.ingestLeaseUntilMs > now
+      && existing.ingestLeaseToken
+      && existing.ingestLeaseToken !== args.token
+    ) {
+      return {
+        acquired: false as const,
+        reason: "in_progress" as const,
+        lastIngestAtMs: existing.lastIngestAtMs ?? null,
+      };
+    }
+
+    const leaseUntilMs = now + Math.max(5_000, args.leaseMs);
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        ingestLeaseUntilMs: leaseUntilMs,
+        ingestLeaseToken: args.token,
+        updatedAtMs: now,
+      });
+    } else {
+      await ctx.db.insert("newsIngestState", {
+        key: "primary",
+        lastIngestAtMs: null,
+        lastNewsCount: null,
+        lastError: null,
+        ingestLeaseUntilMs: leaseUntilMs,
+        ingestLeaseToken: args.token,
+        updatedAtMs: now,
+      });
+    }
+
+    return {
+      acquired: true as const,
+      reason: null,
+      lastIngestAtMs: existing?.lastIngestAtMs ?? null,
+    };
+  },
+});
+
+export const finishIngest = internalMutation({
+  args: {
+    token: v.string(),
+    lastIngestAtMs: nullableNumberArg,
+    lastNewsCount: nullableNumberArg,
+    lastError: nullableStringArg,
+  },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("newsIngestState")
+      .withIndex("by_key", (q) => q.eq("key", "primary"))
+      .unique();
+
+    if (!existing) return { applied: false };
+
+    // If a newer ingest acquired the lease after this run expired, do not let
+    // the older run clear or overwrite the newer run's state.
+    if (
+      existing.ingestLeaseToken
+      && existing.ingestLeaseToken !== args.token
+    ) {
+      return { applied: false };
+    }
+
+    const now = Date.now();
+    await ctx.db.patch(existing._id, {
+      ...(args.lastIngestAtMs !== undefined ? { lastIngestAtMs: args.lastIngestAtMs } : {}),
+      ...(args.lastNewsCount !== undefined ? { lastNewsCount: args.lastNewsCount } : {}),
+      ...(args.lastError !== undefined ? { lastError: args.lastError } : {}),
+      ingestLeaseUntilMs: null,
+      ingestLeaseToken: null,
+      updatedAtMs: now,
+    });
+
+    return { applied: true };
+  },
+});
+
 export const markIngestState = internalMutation({
   args: {
     lastIngestAtMs: nullableNumberArg,
