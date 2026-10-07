@@ -198,6 +198,15 @@ export const archive = mutation({
       throw new Error("Journal not found");
     }
 
+    const access = await getProAccess(ctx, userId);
+    if (!access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before archiving the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be archived while you are on Free.",
+      );
+    }
+
     await ctx.db.patch(args.id, {
       status: "archived",
       updatedAtMs: Date.now(),
@@ -218,46 +227,66 @@ export const remove = mutation({
       throw new Error("Journal not found");
     }
 
-    let trades = 0;
-    let history = 0;
-    let sessions = 0;
+    const access = await getProAccess(ctx, userId);
+    if (!access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before deleting the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be deleted while you are on Free.",
+      );
+    }
 
+    // Whole-journal deletion must never strand R2 objects. Entries with stored
+    // screenshots already have an asset-aware deletion path, so block the
+    // destructive shortcut until those assets are removed through that path.
+    const attachment = await ctx.db
+      .query("tradeJournalAttachments")
+      .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+      .filter((q) => q.neq(q.field("status"), "deleted"))
+      .first();
+    if (attachment) {
+      throw new Error(
+        "This journal contains screenshots. Delete its screenshot entries first so storage can be cleaned safely.",
+      );
+    }
+
+    // Keep this mutation bounded. Large journals should be archived rather than
+    // risking an unbounded destructive transaction.
     const tradeRows = await ctx.db
       .query("tradingJournal")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of tradeRows) {
-      await ctx.db.delete(row._id);
-      trades += 1;
-    }
-
+      .take(201);
     const historyRows = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of historyRows) {
-      await ctx.db.delete(row._id);
-      history += 1;
-    }
-
+      .take(201);
     const sessionRows = await ctx.db
       .query("progressSessions")
       .withIndex("by_user_journal_date", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of sessionRows) {
-      await ctx.db.delete(row._id);
-      sessions += 1;
+      .take(201);
+    if (tradeRows.length > 200 || historyRows.length > 200 || sessionRows.length > 200) {
+      throw new Error(
+        "This journal is too large for immediate deletion. Archive it and contact support for a resumable deletion.",
+      );
     }
 
+    for (const row of tradeRows) await ctx.db.delete(row._id);
+    for (const row of historyRows) await ctx.db.delete(row._id);
+    for (const row of sessionRows) await ctx.db.delete(row._id);
     await ctx.db.delete(args.id);
 
-    return { success: true, trades, history, sessions };
+    return {
+      success: true,
+      trades: tradeRows.length,
+      history: historyRows.length,
+      sessions: sessionRows.length,
+    };
   },
 });
 
