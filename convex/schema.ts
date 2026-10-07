@@ -131,6 +131,7 @@ export default defineSchema({
     balance: v.number(),
     startingBalance: nullableNumber,
     status: v.optional(v.string()),
+    deletionRequestedAtMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
     /** Incremented whenever a manual trade changes; used to validate analytics snapshots. */
@@ -199,6 +200,7 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_trade", ["tradeId"])
+    .index("by_journal", ["journalId", "createdAtMs"])
     .index("by_user_updated", ["userId", "updatedAtMs"]),
 
   tradeJournalAttachments: defineTable({
