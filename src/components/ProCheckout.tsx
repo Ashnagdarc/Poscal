@@ -248,6 +248,9 @@ export function ProCheckout({
                 <p className="mt-1 text-muted-foreground">
                   {autoRenewState.brand ?? "Payment method"}
                   {autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}.
+                  {autoRenewState.amount
+                    ? ` ${money(autoRenewState.amount)} per renewal.`
+                    : ""}
                   {autoRenewState.nextChargeAt
                     ? ` Next charge is scheduled for ${autoRenewState.nextChargeAt.toLocaleDateString()}.`
                     : ""}
@@ -299,6 +302,7 @@ export function ProCheckout({
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
                 Auto-renew is {autoRenewState.enabled ? "on" : "off"}
+                {autoRenewState.amount ? ` at ${money(autoRenewState.amount)} per renewal` : ""}
                 {autoRenewState.last4 ? ` for the method ending ${autoRenewState.last4}` : ""}.
               </p>
               {(autoRenewState.enabled || autoRenewState.last4) && (
@@ -433,9 +437,12 @@ export function ProCheckout({
                   onChange={(e) => setAutoRenewRequested(e.target.checked)}
                 />
                 <span>
-                  Automatically renew this {plan} plan using this Paystack payment method.
-                  You can turn auto-renew off before the next charge. Auto-renew only activates
-                  if Paystack returns a verified reusable authorization.
+                  Automatically renew this {plan} plan for {money(PRICES[plan])} per renewal
+                  using this Paystack payment method. Your current discount, if any, applies only
+                  to this purchase. You can turn auto-renew off before the next charge. If the
+                  standard renewal price changes, Poscal will require fresh consent instead of
+                  charging the new amount automatically. Auto-renew only activates if Paystack
+                  returns a verified reusable authorization.
                 </span>
               </label>
               <label className="flex items-start gap-2 text-xs text-muted-foreground">
