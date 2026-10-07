@@ -114,13 +114,15 @@ const Terms = () => {
             Pro features are included during beta. Payments begin only when Poscal ends beta and enables billing.
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>A monthly or yearly purchase pays for one calendar month or year. There is no automatic renewal or automatic charge.</li>
-            <li>A renewal extends any remaining paid access. Discounts apply to the quoted purchase only.</li>
+            <li>A monthly or yearly purchase pays for one calendar month or year. Auto-renew is off by default.</li>
+            <li>If you explicitly select auto-renew, and Paystack returns a verified reusable authorization, Poscal may automatically charge that saved Paystack authorization before the current paid period expires. A successful renewal extends the existing paid period, so renewing early does not shorten access.</li>
+            <li>You can turn auto-renew off before the next charge. Disabling auto-renew stops Poscal from initiating future scheduled charges. A charge already submitted to Paystack before cancellation may still complete.</li>
+            <li>If an automatic renewal is financially ambiguous because of a timeout, Poscal verifies the existing payment reference before any later retry. Failed automatic renewals may be retried a limited number of times before auto-renew is disabled.</li>
+            <li>Discount codes apply only to the quoted purchase unless the offer expressly says otherwise. Automatic renewals use the then-current standard price for the selected plan, subject to advance notice of price changes where required.</li>
             <li>At expiry, Free limits apply. Existing journals, notes and uploads remain readable; extra journals become read-only.</li>
-            <li>Payments are processed by Paystack and access starts after server verification. Keep your payment reference for support.</li>
-            <li>For a payment issue or refund request, contact info@poscalfx.com with your payment reference. Refunds and disputes may affect paid access.</li>
-            <li>Prices may change with advance notice</li>
-            <li>Pro features may be modified or discontinued</li>
+            <li>Payments are processed by Paystack and access starts only after server verification. Keep your payment reference for support.</li>
+            <li>For a payment issue or refund request, contact info@poscalfx.com with your payment reference. Refunds, reversals and disputes may affect paid access.</li>
+            <li>Pro features may be modified or discontinued.</li>
           </ul>
         </section>
 
