@@ -1244,7 +1244,7 @@ describe("production billing hardening", () => {
 
 describe("account deletion cleanup", () => {
   it("allows the selected Free journal to enter cleanup only after explicit account deletion starts", async () => {
-    const { user } = await setup(false);
+    const { user } = await setup(true);
     const journal = await user.mutation(api.tradingJournals.create, {
       name: "Free journal",
       currency: "USD",
