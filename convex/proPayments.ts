@@ -43,6 +43,7 @@ export const startCheckout = action({
     code: v.optional(v.string()),
     returnTo: v.optional(v.string()),
     reminders: v.boolean(),
+    autoRenew: v.optional(v.boolean()),
   },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
@@ -61,6 +62,7 @@ export const startCheckout = action({
             orderId: order._id,
             product: "poscal_pro",
             policyVersion: 1,
+            autoRenewRequested: order.autoRenewRequested === true,
           }),
           // No plan code: Paystack plan codes override the quoted amount.
         });
@@ -162,7 +164,8 @@ export const reconcileOrder = internalAction({
         failure.status === 404 &&
         !order.accessCode &&
         !order.grantEndMs &&
-        ["initializing", "review"].includes(order.status) &&
+        (["initializing", "review"].includes(order.status) ||
+          (order.source === "auto_renew" && order.status === "pending")) &&
         Date.now() - order.createdAtMs > 2 * 60_000 &&
         !order.reviewReason?.startsWith("refund.") &&
         !order.reviewReason?.startsWith("charge.dispute")
@@ -183,6 +186,77 @@ export const reconcileOrder = internalAction({
       financialChecked,
       financialHoldDigest: order.financialHoldDigest,
     });
+    return null;
+  },
+});
+
+export const chargeAutoRenew = internalAction({
+  args: { id: v.id("proAccounts") },
+  returns: v.null(),
+  handler: async (ctx, args): Promise<null> => {
+    if (!(await ctx.runMutation(internal.proBilling.claimAutoRenew, args)))
+      return null;
+
+    const mode = process.env.PRO_PAYMENT_MODE;
+    if (mode !== "test" && mode !== "live") return null;
+
+    const account = await ctx.runQuery(internal.proBilling.getAutoRenewAccount, args);
+    if (
+      !account ||
+      account.autoRenewEnabled !== true ||
+      !account.autoRenewAuthorizationCode ||
+      !account.autoRenewEmail ||
+      !account.autoRenewPlan
+    )
+      return null;
+
+    const order: Doc<"proOrders"> = await ctx.runMutation(
+      internal.proBilling.prepareAutoRenewOrder,
+      args,
+    );
+
+    try {
+      const charged = await paystack("/transaction/charge_authorization", {
+        authorization_code: account.autoRenewAuthorizationCode,
+        email: account.autoRenewEmail,
+        amount: String(order.amount),
+        currency: order.currency,
+        reference: order.reference,
+        metadata: JSON.stringify({
+          orderId: order._id,
+          product: "poscal_pro",
+          policyVersion: 1,
+          source: "auto_renew",
+        }),
+      });
+
+      // The immediate charge response is never authoritative for entitlements.
+      // Requery the transaction by our immutable reference before granting access.
+      await ctx.scheduler.runAfter(
+        charged?.reference === order.reference ? 0 : 2 * 60_000,
+        internal.proPayments.reconcileOrder,
+        { id: order._id },
+      );
+    } catch {
+      // A timeout is financially ambiguous. Keep the same order/reference and
+      // verify it before any retry, so we cannot double-debit the customer.
+      await ctx.scheduler.runAfter(
+        2 * 60_000,
+        internal.proPayments.reconcileOrder,
+        { id: order._id },
+      );
+    }
+    return null;
+  },
+});
+
+export const runAutoRenewDue = internalAction({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx): Promise<null> => {
+    const ids = await ctx.runQuery(internal.proBilling.dueAutoRenewAccounts, {});
+    for (const id of ids)
+      await ctx.scheduler.runAfter(0, internal.proPayments.chargeAutoRenew, { id });
     return null;
   },
 });
