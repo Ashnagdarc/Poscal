@@ -1015,3 +1015,123 @@ describe("billing policy", () => {
     ).toBe(false);
   });
 });
+
+
+describe("production billing hardening", () => {
+  it("keeps an already verified grant active when the runtime payment mode changes", async () => {
+    const { t, user, userId } = await setup();
+    const now = Date.now();
+    await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        updatedAtMs: now,
+      }),
+    );
+
+    vi.stubEnv("PRO_PAYMENT_MODE", "live");
+    expect((await user.query(api.proBilling.entitlements, {}))!.paid).toBe(true);
+  });
+
+  it("cannot rotate the Free journal by deleting the current Free journal", async () => {
+    const { t, user } = await setup(false);
+    const first = await user.mutation(api.tradingJournals.create, {
+      name: "First",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    await user.mutation(api.tradingJournals.create, {
+      name: "Second",
+      currency: "USD",
+      startingBalance: 10000,
+    });
+    await t.run((ctx) =>
+      ctx.db.insert("appSettings", {
+        key: PRO_LOCK_KEY,
+        valueBoolean: true,
+        updatedAtMs: Date.now(),
+      }),
+    );
+
+    expect((await user.query(api.proBilling.entitlements, {}))!.freeJournalId).toBe(
+      first!._id,
+    );
+    await expect(
+      user.mutation(api.tradingJournals.remove, { id: first!._id }),
+    ).rejects.toThrow("Choose your one Free journal");
+  });
+
+  it("only enables auto-renew from a verified reusable Paystack authorization", async () => {
+    const { t, user } = await setup();
+    const { order } = await user.mutation(internal.proBilling.prepareOrder, {
+      plan: "monthly",
+      reminders: false,
+      returnTo: "/journal",
+      autoRenew: true,
+    });
+
+    await t.mutation(internal.proBilling.recordVerification, {
+      id: order._id,
+      transaction: {
+        ...verified(order),
+        authorization: {
+          authorization_code: "AUTH_fixture",
+          signature: "SIG_fixture",
+          reusable: true,
+          channel: "card",
+          last4: "4081",
+          card_type: "visa",
+          bank: "TEST BANK",
+          exp_month: "12",
+          exp_year: "2030",
+          country_code: "NG",
+        },
+      },
+      mode: "test",
+    });
+
+    expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew).toMatchObject({
+      enabled: true,
+      plan: "monthly",
+      last4: "4081",
+    });
+
+    await user.mutation(api.proBilling.setAutoRenew, { enabled: false });
+    expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew.enabled).toBe(
+      false,
+    );
+  });
+
+  it("billing kill switch blocks due auto-renew claims", async () => {
+    const { t, user, userId } = await setup();
+    const now = Date.now();
+    const accountId = await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        autoRenewEnabled: true,
+        autoRenewPlan: "monthly",
+        autoRenewAuthorizationCode: "AUTH_fixture",
+        autoRenewEmail: "trader@example.com",
+        autoRenewSignature: "SIG_fixture",
+        autoRenewNextChargeAtMs: now - 1,
+        updatedAtMs: now,
+      }),
+    );
+    const setting = await t.run((ctx) =>
+      ctx.db
+        .query("appSettings")
+        .withIndex("by_key", (q) => q.eq("key", PRO_LOCK_KEY))
+        .unique(),
+    );
+    await t.run((ctx) => ctx.db.patch(setting!._id, { valueBoolean: false }));
+
+    expect(
+      await t.mutation(internal.proBilling.claimAutoRenew, { id: accountId }),
+    ).toBe(false);
+
+    expect((await user.query(api.proBilling.entitlements, {}))!.beta).toBe(true);
+  });
+});
