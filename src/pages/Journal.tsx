@@ -11,7 +11,7 @@ import { JournalSwitcher } from "@/components/journal/JournalSwitcher";
 import { JournalTour } from "@/components/journal/JournalTour";
 import { LogTradeChoiceSheet } from "@/components/journal/LogTradeChoiceSheet";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
-import { ResultsCalendar } from "@/components/journal/ResultsCalendar";
+import { ResultsCalendar, ResultsLegend } from "@/components/journal/ResultsCalendar";
 import { PageHeader } from "@/components/PageHeader";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
@@ -330,12 +330,14 @@ const Journal = () => {
                 </section>
 
                 <section
-                  className="overflow-hidden rounded-2xl bg-secondary px-4 py-4 sm:px-5"
+                  className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4"
                   data-tour-id="journal-results"
                 >
-                  <div className="mb-3 flex items-center justify-between">
-                    <h2 className="text-sm font-semibold tracking-tight text-foreground">Calendar</h2>
-                    <span className="text-[11px] text-muted-foreground">Tap a day</span>
+                  <div className="mb-3">
+                    <h2 className="text-base font-bold text-foreground">Results Calendar</h2>
+                    <p className="text-xs text-muted-foreground">
+                      Tap a day to view results and open that journal.
+                    </p>
                   </div>
                   <ResultsCalendar
                     month={calendarMonth}
@@ -347,6 +349,7 @@ const Journal = () => {
                     summaries={resultDaySummaries}
                     today={today}
                   />
+                  <ResultsLegend />
                 </section>
 
                 <button
