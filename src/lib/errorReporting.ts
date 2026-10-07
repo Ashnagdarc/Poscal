@@ -1,3 +1,5 @@
+import { CONSENT_CHANGED_EVENT, hasConsent } from "@/lib/consent";
+
 type ErrorContext = Record<string, unknown>;
 
 type SentryLike = {
@@ -9,6 +11,7 @@ let sentryInitialized = false;
 let sentryModule: SentryLike | null = null;
 
 async function ensureSentry(): Promise<SentryLike | null> {
+  if (!hasConsent("analytics")) return null;
   const dsn = import.meta.env.VITE_SENTRY_DSN as string | undefined;
   if (!dsn) return null;
   if (sentryModule) return sentryModule;
@@ -48,6 +51,12 @@ export function reportError(error: unknown, context?: ErrorContext): void {
 
 export function initErrorReporting(): void {
   void ensureSentry();
+
+  if (typeof window !== "undefined") {
+    window.addEventListener(CONSENT_CHANGED_EVENT, () => {
+      if (hasConsent("analytics")) void ensureSentry();
+    });
+  }
 
   if (typeof window === "undefined") return;
 
