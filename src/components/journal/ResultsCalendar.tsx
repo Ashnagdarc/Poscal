@@ -65,6 +65,32 @@ export const ResultsCalendar = ({
               : "bg-transparent text-foreground [&>span]:ring-1 [&>span]:ring-brand/70",
         }}
       />
+
+      <div
+        className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-border/60 pt-3 text-[10px] text-muted-foreground sm:text-[11px]"
+        aria-label="Calendar color guide"
+      >
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-emerald-500" />
+          Win
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-red-500" />
+          Loss
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-slate-500" />
+          Breakeven
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-amber-400" />
+          Journal only
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="size-2 rounded-full bg-brand" />
+          Open trade
+        </span>
+      </div>
     </div>
   );
 };
