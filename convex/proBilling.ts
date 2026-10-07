@@ -73,6 +73,9 @@ async function accountFor(ctx: MutationCtx, userId: Id<"users">) {
     .withIndex("by_user", (q) => q.eq("userId", userId))
     .unique();
   if (existing) return existing;
+  if (!(await ctx.db.get(userId))) {
+    throw new Error("Billing account owner no longer exists");
+  }
   const id = await ctx.db.insert("proAccounts", {
     userId,
     expiresAtMs: 0,
@@ -472,6 +475,17 @@ export const recordVerification = internalMutation({
     const order = await ctx.db.get(args.id);
     if (!order) return null;
     const now = Date.now();
+    if (!(await ctx.db.get(order.userId))) {
+      await ctx.db.patch(order._id, {
+        verificationLeaseUntilMs: 0,
+        status: "review",
+        reviewReason:
+          "Account was deleted before payment reconciliation completed. Operator review/refund may be required.",
+        nextCheckAtMs: CLOSED,
+        updatedAtMs: now,
+      });
+      return null;
+    }
     const data = args.transaction;
     const checks = order.checks + 1;
     const retryAt =
@@ -798,6 +812,7 @@ export const recordVerification = internalMutation({
 });
 
 async function recomputeEntitlement(ctx: MutationCtx, userId: Id<"users">) {
+  if (!(await ctx.db.get(userId))) return;
   const orders = await ctx.db
     .query("proOrders")
     .withIndex("by_user_created", (q) => q.eq("userId", userId))
