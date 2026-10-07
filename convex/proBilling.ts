@@ -621,47 +621,50 @@ export const recordVerification = internalMutation({
         authorization.signature.length > 3;
 
       const renewalPatch =
-        canEnableAutoRenew
+        order.source === "auto_renew" && account.autoRenewEnabled
           ? {
-              autoRenewEnabled: true,
-              autoRenewPlan: order.plan,
-              autoRenewAuthorizationCode: authorization!.authorization_code!,
-              autoRenewEmail: order.email,
-              autoRenewSignature: authorization!.signature!,
-              autoRenewChannel: authorization!.channel ?? "card",
-              autoRenewLast4: authorization!.last4,
-              autoRenewBrand:
-                authorization!.brand ?? authorization!.card_type,
-              autoRenewBank: authorization!.bank,
-              autoRenewExpMonth: authorization!.exp_month,
-              autoRenewExpYear: authorization!.exp_year,
-              autoRenewCountryCode: authorization!.country_code,
               autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
               autoRenewFailureCount: 0,
               autoRenewLeaseUntilMs: 0,
-              autoRenewConsentAtMs: now,
-              autoRenewConsentVersion: 1,
+              autoRenewOrderId: undefined,
             }
-          : account.autoRenewEnabled &&
-              (order.source === "auto_renew" || order.source === "checkout") &&
-              !order.autoRenewRequested
+          : canEnableAutoRenew
             ? {
+                autoRenewEnabled: true,
+                autoRenewPlan: order.plan,
+                autoRenewAuthorizationCode: authorization!.authorization_code!,
+                autoRenewEmail: order.email,
+                autoRenewSignature: authorization!.signature!,
+                autoRenewChannel: authorization!.channel ?? "card",
+                autoRenewLast4: authorization!.last4,
+                autoRenewBrand:
+                  authorization!.brand ?? authorization!.card_type,
+                autoRenewBank: authorization!.bank,
+                autoRenewExpMonth: authorization!.exp_month,
+                autoRenewExpYear: authorization!.exp_year,
+                autoRenewCountryCode: authorization!.country_code,
                 autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
                 autoRenewFailureCount: 0,
                 autoRenewLeaseUntilMs: 0,
-                autoRenewOrderId:
-                  order.source === "auto_renew"
-                    ? undefined
-                    : account.autoRenewOrderId,
+                autoRenewConsentAtMs: now,
+                autoRenewConsentVersion: 1,
               }
-            : order.autoRenewRequested
+            : order.source === "checkout" &&
+                account.autoRenewEnabled &&
+                !order.autoRenewRequested
               ? {
-                  autoRenewEnabled: false,
-                  autoRenewNextChargeAtMs: undefined,
+                  autoRenewNextChargeAtMs: Math.max(now + 60_000, end - 24 * 3600_000),
+                  autoRenewFailureCount: 0,
                   autoRenewLeaseUntilMs: 0,
-                  autoRenewOrderId: undefined,
                 }
-              : {};
+              : order.autoRenewRequested
+                ? {
+                    autoRenewEnabled: false,
+                    autoRenewNextChargeAtMs: undefined,
+                    autoRenewLeaseUntilMs: 0,
+                    autoRenewOrderId: undefined,
+                  }
+                : {};
 
       await ctx.db.patch(account._id, {
         expiresAtMs: end,
