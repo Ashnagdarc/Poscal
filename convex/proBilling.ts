@@ -282,6 +282,9 @@ export const prepareOrder = internalMutation({
       throw new Error("Beta is open. Payments are switched off.");
     if (!gatewayReady()) throw new Error("Checkout is temporarily unavailable");
     const user = await ctx.db.get(userId);
+    if (user?.accountDeletionRequestedAtMs) {
+      throw new Error("Account deletion is in progress. Checkout is unavailable.");
+    }
     if (!user?.email) throw new Error("Add an email address before paying");
     const account = await accountFor(ctx, userId);
     if (account.activeOrderId) {
@@ -488,12 +491,14 @@ export const recordVerification = internalMutation({
     const order = await ctx.db.get(args.id);
     if (!order) return null;
     const now = Date.now();
-    if (!(await ctx.db.get(order.userId))) {
+    const owner = await ctx.db.get(order.userId);
+    if (!owner || owner.accountDeletionRequestedAtMs) {
       await ctx.db.patch(order._id, {
         verificationLeaseUntilMs: 0,
         status: "review",
-        reviewReason:
-          "Account was deleted before payment reconciliation completed. Operator review/refund may be required.",
+        reviewReason: owner
+          ? "Account deletion started before payment reconciliation completed. Operator review/refund may be required."
+          : "Account was deleted before payment reconciliation completed. Operator review/refund may be required.",
         nextCheckAtMs: CLOSED,
         updatedAtMs: now,
       });
@@ -1011,7 +1016,12 @@ export const setAutoRenew = mutation({
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     const account = await accountFor(ctx, userId);
+    const owner = await ctx.db.get(userId);
     const now = Date.now();
+
+    if (owner?.accountDeletionRequestedAtMs) {
+      throw new Error("Account deletion is in progress.");
+    }
 
     if (!args.enabled) {
       await ctx.db.patch(account._id, {
