@@ -1098,9 +1098,19 @@ describe("production billing hardening", () => {
     });
 
     await user.mutation(api.proBilling.setAutoRenew, { enabled: false });
-    expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew.enabled).toBe(
-      false,
+    expect((await user.query(api.proBilling.entitlements, {}))!.autoRenew).toMatchObject({
+      enabled: false,
+      last4: null,
+      brand: null,
+    });
+    const account = await t.run((ctx) =>
+      ctx.db
+        .query("proAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .unique(),
     );
+    expect(account?.autoRenewAuthorizationCode).toBeUndefined();
+    expect(account?.autoRenewSignature).toBeUndefined();
   });
 
   it("keeps auto-renew enabled after a verified scheduled renewal", async () => {
