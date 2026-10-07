@@ -32,6 +32,13 @@ interface SubscriptionContextType {
   lockedJournalIds: string[];
   freeJournalId: string | null;
   canChooseFreeJournal: boolean;
+  autoRenew: {
+    enabled: boolean;
+    plan: "monthly" | "yearly" | null;
+    nextChargeAt: Date | null;
+    last4: string | null;
+    brand: string | null;
+  };
   checkFeatureAccess: (feature: string) => boolean;
   refreshSubscription: () => Promise<void>;
   daysUntilExpiry: number | null;
@@ -106,6 +113,15 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
         : [],
     freeJournalId: access?.freeJournalId ?? null,
     canChooseFreeJournal: !!access?.canChooseFreeJournal,
+    autoRenew: {
+      enabled: access?.autoRenew.enabled ?? false,
+      plan: access?.autoRenew.plan ?? null,
+      nextChargeAt: access?.autoRenew.nextChargeAtMs
+        ? new Date(access.autoRenew.nextChargeAtMs)
+        : null,
+      last4: access?.autoRenew.last4 ?? null,
+      brand: access?.autoRenew.brand ?? null,
+    },
     checkFeatureAccess: (feature) =>
       isAuthenticated &&
       (feature === "export_csv" ||
