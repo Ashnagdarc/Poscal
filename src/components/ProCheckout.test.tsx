@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   order: null as any,
   start: vi.fn(),
   verify: vi.fn(),
+  setAutoRenew: vi.fn(),
   query: vi.fn(),
   resume: vi.fn(),
 }));
@@ -15,7 +16,17 @@ vi.mock("@/contexts/AuthContext", () => ({
   useAuth: () => ({ user: { id: "trader" } }),
 }));
 vi.mock("@/contexts/SubscriptionContext", () => ({
-  useSubscription: () => ({ isPaid: false, expiresAt: null }),
+  useSubscription: () => ({
+    isPaid: false,
+    expiresAt: null,
+    autoRenew: {
+      enabled: false,
+      plan: null,
+      nextChargeAt: null,
+      last4: null,
+      brand: null,
+    },
+  }),
 }));
 vi.mock("convex/react", () => ({
   useQuery: (reference: any) =>
@@ -26,6 +37,7 @@ vi.mock("convex/react", () => ({
     getFunctionName(reference).includes("startCheckout")
       ? mocks.start
       : mocks.verify,
+  useMutation: () => mocks.setAutoRenew,
   useConvex: () => ({ query: mocks.query }),
   usePaginatedQuery: () => ({ results: [], status: "Exhausted" }),
 }));
@@ -47,6 +59,7 @@ beforeEach(() => {
   mocks.query.mockReset();
   mocks.resume.mockReset();
   mocks.verify.mockReset().mockResolvedValue(null);
+  mocks.setAutoRenew.mockReset().mockResolvedValue(null);
 });
 describe("Pro checkout", () => {
   it("shows included beta access and never offers a payment button", () => {
