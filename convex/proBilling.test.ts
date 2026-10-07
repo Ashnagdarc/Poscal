@@ -1103,6 +1103,42 @@ describe("production billing hardening", () => {
     );
   });
 
+  it("keeps auto-renew enabled after a verified scheduled renewal", async () => {
+    const { t, user, userId } = await setup();
+    const now = Date.now();
+    const accountId = await t.run((ctx) =>
+      ctx.db.insert("proAccounts", {
+        userId,
+        expiresAtMs: now + 86400_000,
+        paymentMode: "test",
+        autoRenewEnabled: true,
+        autoRenewPlan: "monthly",
+        autoRenewAuthorizationCode: "AUTH_fixture",
+        autoRenewEmail: "trader@example.com",
+        autoRenewSignature: "SIG_fixture",
+        autoRenewNextChargeAtMs: now - 1,
+        autoRenewFailureCount: 0,
+        updatedAtMs: now,
+      }),
+    );
+
+    const order = await t.mutation(internal.proBilling.prepareAutoRenewOrder, {
+      id: accountId,
+    });
+    await t.mutation(internal.proBilling.recordVerification, {
+      id: order._id,
+      transaction: verified(order),
+      mode: "test",
+    });
+
+    const access = await user.query(api.proBilling.entitlements, {});
+    expect(access!.autoRenew.enabled).toBe(true);
+    expect(access!.autoRenew.nextChargeAtMs).toBeGreaterThan(now);
+    const account = await t.run((ctx) => ctx.db.get(accountId));
+    expect(account!.autoRenewOrderId).toBeUndefined();
+    expect(account!.autoRenewFailureCount).toBe(0);
+  });
+
   it("billing kill switch blocks due auto-renew claims", async () => {
     const { t, user, userId } = await setup();
     const now = Date.now();
