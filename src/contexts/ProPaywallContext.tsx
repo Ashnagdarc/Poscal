@@ -3,9 +3,9 @@ import { useLocation } from "react-router-dom";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { ProCheckout } from "@/components/ProCheckout";
 const Context = createContext<(feature?: string) => void>(() => {});
@@ -13,7 +13,7 @@ export function ProPaywallProvider({ children }: { children: ReactNode }) {
   const [feature, setFeature] = useState<string | null>(null);
   const location = useLocation();
   return (
-    <Context.Provider value={(reason = "More with Pro") => setFeature(reason)}>
+    <Context.Provider value={(reason = "Poscal Pro") => setFeature(reason)}>
       {children}
       <Dialog
         open={feature !== null}
@@ -21,15 +21,14 @@ export function ProPaywallProvider({ children }: { children: ReactNode }) {
           if (!open) setFeature(null);
         }}
       >
-        <DialogContent className="max-h-[90dvh] max-w-md overflow-y-auto rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{feature}</DialogTitle>
-            <DialogDescription>
-              Keep your data and unlock more room with Poscal Pro.
-            </DialogDescription>
+        <DialogContent className="max-h-[92dvh] max-w-md gap-0 overflow-y-auto rounded-3xl border bg-background p-0">
+          <DialogHeader className="sr-only">
+            <DialogTitle>{feature ?? "Poscal Pro"}</DialogTitle>
+            <DialogDescription>Choose a Poscal Pro plan.</DialogDescription>
           </DialogHeader>
           {feature !== null && (
             <ProCheckout
+              presentation="sheet"
               returnTo={`${location.pathname}${location.search}`}
               onCheckoutOpen={() => setFeature(null)}
             />

@@ -1,4 +1,5 @@
 import { ProPaywallProvider } from "@/contexts/ProPaywallContext";
+import { ProLaunchPrompt } from "@/components/ProLaunchPrompt";
 import { ConsentBanner } from "@/components/ConsentBanner";
 import { CONSENT_CHANGED_EVENT, hasConsent } from "@/lib/consent";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -219,7 +220,10 @@ const App = () => (
                   <FontProvider>
                     <CurrencyProvider>
                       <JournalProvider>
-                        <ProPaywallProvider><AppContent /></ProPaywallProvider>
+                        <ProPaywallProvider>
+                          <ProLaunchPrompt />
+                          <AppContent />
+                        </ProPaywallProvider>
                       </JournalProvider>
                     </CurrencyProvider>
                   </FontProvider>

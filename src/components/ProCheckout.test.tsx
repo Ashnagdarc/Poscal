@@ -85,7 +85,9 @@ describe("Pro checkout", () => {
       accessCode: "saved-code",
     });
     mount();
-    const button = screen.getByRole("button", { name: "Pay ₦2,500" });
+    const button = screen.getByRole("button", {
+      name: "Continue with Annual · ₦25,000",
+    });
     fireEvent.click(button);
     fireEvent.click(button);
     expect(mocks.start).toHaveBeenCalledTimes(1);
@@ -96,6 +98,23 @@ describe("Pro checkout", () => {
         expect.any(Object),
       ),
     );
+  });
+  it("keeps both billing choices obvious and updates the checkout action", () => {
+    mount();
+    expect(
+      screen.getByRole("radio", { name: /Annual.*₦25,000/ }),
+    ).toBeChecked();
+    const monthly = screen.getByRole("radio", {
+      name: /Monthly.*₦2,500/,
+    });
+    expect(monthly).not.toBeChecked();
+    fireEvent.click(monthly);
+    expect(monthly).toBeChecked();
+    expect(
+      screen.getByRole("button", {
+        name: "Continue with Monthly · ₦2,500",
+      }),
+    ).toBeInTheDocument();
   });
   it("a popup success callback requests verification but does not claim activation", async () => {
     mocks.order = {

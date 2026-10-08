@@ -9,6 +9,7 @@ type UserAvatarProps = {
   src?: string | null;
   size?: "sm" | "md" | "lg";
   className?: string;
+  pro?: boolean;
 };
 
 const SIZE_CLASS = {
@@ -45,6 +46,7 @@ export const UserAvatar = ({
   src,
   size = "md",
   className,
+  pro = false,
 }: UserAvatarProps) => {
   const initials = getInitials(name, email);
   const imageSrc = resolveMediaUrl(src);
@@ -61,7 +63,9 @@ export const UserAvatar = ({
         "relative flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand/15 font-semibold text-brand",
         SIZE_CLASS[size],
         className,
+        pro && "rounded-full ring-2 ring-[#E0B84A] ring-offset-2 ring-offset-background",
       )}
+      title={pro ? "Pro" : undefined}
       aria-hidden={showImage || initials ? undefined : true}
     >
       {showImage ? (

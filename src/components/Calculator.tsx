@@ -21,6 +21,7 @@ import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/contexts/SubscriptionContext";
 import { saveJournalEntry } from "@/lib/calculatorHistory";
 import { createJournalEntry } from "@/lib/convexJournal";
 import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
@@ -98,6 +99,7 @@ export const Calculator = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { user } = useAuth();
+  const { isPaid } = useSubscription();
   const { activeJournalId } = useJournal();
   const [brokerSnapshot, setBrokerSnapshot] = useState<BrokerProfileSnapshot | null>(null);
   const [accountBalance, setAccountBalance] = useState("");
@@ -649,6 +651,7 @@ export const Calculator = () => {
               name={user?.full_name}
               email={user?.email}
               src={user?.avatar_url}
+              pro={isPaid}
               className="rounded-xl"
             />
           </button>

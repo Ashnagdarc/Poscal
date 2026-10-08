@@ -8,9 +8,6 @@
  * @module
  */
 
-import type * as proBilling from "../proBilling.js";
-import type * as proPayments from "../proPayments.js";
-import type * as proHttp from "../proHttp.js";
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as admin from "../admin.js";
@@ -20,11 +17,16 @@ import type * as authSettings from "../authSettings.js";
 import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as journalCalendar from "../journalCalendar.js";
+import type * as journalTradeFacts from "../journalTradeFacts.js";
+import type * as journalTradeStats from "../journalTradeStats.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_economicEventMerge from "../lib/economicEventMerge.js";
 import type * as lib_emailVerificationPolicy from "../lib/emailVerificationPolicy.js";
 import type * as lib_ffCalendarFeed from "../lib/ffCalendarFeed.js";
 import type * as lib_notificationStaging from "../lib/notificationStaging.js";
+import type * as lib_proAccess from "../lib/proAccess.js";
+import type * as lib_proValidators from "../lib/proValidators.js";
 import type * as lib_profileOwnership from "../lib/profileOwnership.js";
 import type * as lib_sessionInvalidation from "../lib/sessionInvalidation.js";
 import type * as lib_tradeValidation from "../lib/tradeValidation.js";
@@ -38,11 +40,14 @@ import type * as notificationsHttp from "../notificationsHttp.js";
 import type * as notificationsNode from "../notificationsNode.js";
 import type * as prices from "../prices.js";
 import type * as pricesHttp from "../pricesHttp.js";
+import type * as proBilling from "../proBilling.js";
+import type * as proHttp from "../proHttp.js";
+import type * as proPayments from "../proPayments.js";
 import type * as profiles from "../profiles.js";
 import type * as progressSessions from "../progressSessions.js";
 import type * as status from "../status.js";
-import type * as tradingJournal from "../tradingJournal.js";
 import type * as tradeJournalAttachments from "../tradeJournalAttachments.js";
+import type * as tradingJournal from "../tradingJournal.js";
 import type * as tradingJournals from "../tradingJournals.js";
 import type * as users from "../users.js";
 import type * as welcomeEmail from "../welcomeEmail.js";
@@ -56,9 +61,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
-  proBilling: typeof proBilling;
-  proPayments: typeof proPayments;
-  proHttp: typeof proHttp;
   admin: typeof admin;
   auth: typeof auth;
   authRateLimit: typeof authRateLimit;
@@ -66,11 +68,16 @@ declare const fullApi: ApiFromModules<{
   calculatorHistory: typeof calculatorHistory;
   crons: typeof crons;
   http: typeof http;
+  journalCalendar: typeof journalCalendar;
+  journalTradeFacts: typeof journalTradeFacts;
+  journalTradeStats: typeof journalTradeStats;
   "lib/auth": typeof lib_auth;
   "lib/economicEventMerge": typeof lib_economicEventMerge;
   "lib/emailVerificationPolicy": typeof lib_emailVerificationPolicy;
   "lib/ffCalendarFeed": typeof lib_ffCalendarFeed;
   "lib/notificationStaging": typeof lib_notificationStaging;
+  "lib/proAccess": typeof lib_proAccess;
+  "lib/proValidators": typeof lib_proValidators;
   "lib/profileOwnership": typeof lib_profileOwnership;
   "lib/sessionInvalidation": typeof lib_sessionInvalidation;
   "lib/tradeValidation": typeof lib_tradeValidation;
@@ -84,11 +91,14 @@ declare const fullApi: ApiFromModules<{
   notificationsNode: typeof notificationsNode;
   prices: typeof prices;
   pricesHttp: typeof pricesHttp;
+  proBilling: typeof proBilling;
+  proHttp: typeof proHttp;
+  proPayments: typeof proPayments;
   profiles: typeof profiles;
   progressSessions: typeof progressSessions;
   status: typeof status;
-  tradingJournal: typeof tradingJournal;
   tradeJournalAttachments: typeof tradeJournalAttachments;
+  tradingJournal: typeof tradingJournal;
   tradingJournals: typeof tradingJournals;
   users: typeof users;
   welcomeEmail: typeof welcomeEmail;

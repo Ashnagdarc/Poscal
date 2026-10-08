@@ -1,21 +1,18 @@
-import { useState, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   User as UserIcon,
   Mail,
-  Calendar,
+  ChevronRight,
   LogOut,
-  Settings as SettingsIcon,
-  Crown,
-  Bell,
   Download,
   Upload,
   Trash2,
-  Shield,
   Camera,
   Loader2,
+  Pencil,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -33,11 +30,14 @@ import {
   downloadCsv,
   tradesToCsv,
 } from "@/lib/exportJournalCsv";
-import { parseAndValidateJournalCsv } from "@/lib/importJournalCsv";
+import { parseAndValidateJournalImport } from "@/lib/importJournalCsv";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CalendarDaysIcon } from "@/components/ui/calendar-days";
+import { ReceiptIcon } from "@/components/ui/receipt";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
 import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
+import { cn } from "@/lib/utils";
 
 interface Profile {
   id: string;
@@ -62,21 +62,15 @@ const Profile = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const { subscriptionTier, expiresAt: proExpiry } = useSubscription();
+  const { subscriptionTier, expiresAt: proExpiry, isPaid } = useSubscription();
   const subscriptionExpiry = proExpiry?.toISOString() ?? null;
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
     try {
       const data = await usersApi.getProfile();
@@ -89,13 +83,17 @@ const Profile = () => {
           created_at: data.created_at || new Date().toISOString(),
         });
         setFullName(data.full_name || "");
-        
       }
     } catch (error) {
-      logger.error('Error fetching profile:', error);
+      logger.error("Error fetching profile:", error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
 
   const handleExportData = async () => {
     if (!user || isExporting) return;
@@ -118,7 +116,9 @@ const Profile = () => {
     } catch (error) {
       logger.error("CSV export failed", error);
       toast.error(
-        error instanceof Error ? error.message : "Could not export trades. Try again.",
+        error instanceof Error
+          ? error.message
+          : "Could not export trades. Try again.",
       );
     } finally {
       setIsExporting(false);
@@ -128,7 +128,7 @@ const Profile = () => {
   const handleImportCsvClick = () => {
     if (!user || isImporting) return;
     if (!checkFeatureAccess("import_csv")) {
-      toast.info("CSV import is a Poscal Pro feature.");
+      toast.info("MT5 and CSV import is a Poscal Pro feature.");
       navigate("/pro?returnTo=/profile");
       return;
     }
@@ -140,7 +140,9 @@ const Profile = () => {
     csvInputRef.current?.click();
   };
 
-  const handleImportCsvFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImportCsvFile = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
     const file = event.target.files?.[0];
     event.target.value = "";
     if (!file || !user || !activeJournalId || isImporting) return;
@@ -148,9 +150,12 @@ const Profile = () => {
     setIsImporting(true);
     try {
       const text = await file.text();
-      const { validTrades, errors } = parseAndValidateJournalCsv(text);
+      const { validTrades, errors, source } = parseAndValidateJournalImport(
+        text,
+        { fileName: file.name },
+      );
       if (validTrades.length === 0) {
-        toast.error(errors[0] ?? "No valid trades found in CSV.");
+        toast.error(errors[0] ?? "No valid trades found in this file.");
         return;
       }
 
@@ -165,17 +170,19 @@ const Profile = () => {
 
       if (errors.length > 0) {
         toast.warning(
-          `Imported ${validTrades.length} trade${validTrades.length === 1 ? "" : "s"}; skipped ${errors.length} row${errors.length === 1 ? "" : "s"}.`,
+          `Imported ${validTrades.length} ${source === "mt5" ? "MT5 " : ""}trade${validTrades.length === 1 ? "" : "s"}; skipped ${errors.length} row${errors.length === 1 ? "" : "s"}.`,
         );
       } else {
         toast.success(
-          `Imported ${validTrades.length} trade${validTrades.length === 1 ? "" : "s"}.`,
+          `Imported ${validTrades.length} ${source === "mt5" ? "MT5 " : ""}trade${validTrades.length === 1 ? "" : "s"}.`,
         );
       }
     } catch (error) {
-      logger.error("CSV import failed", error);
+      logger.error("Trade import failed", error);
       toast.error(
-        error instanceof Error ? error.message : "Could not import trades. Try again.",
+        error instanceof Error
+          ? error.message
+          : "Could not import trades. Try again.",
       );
     } finally {
       setIsImporting(false);
@@ -206,9 +213,11 @@ const Profile = () => {
           },
           body: JSON.stringify({ confirmation: "DELETE" }),
         });
-        const result = (await response.json().catch(() => null)) as
-          | { success?: boolean; done?: boolean; message?: string }
-          | null;
+        const result = (await response.json().catch(() => null)) as {
+          success?: boolean;
+          done?: boolean;
+          message?: string;
+        } | null;
 
         if (!response.ok && response.status !== 202) {
           throw new Error(
@@ -233,7 +242,9 @@ const Profile = () => {
     } catch (error) {
       console.error("[profile] Account deletion failed", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete account. Please try again.",
+        error instanceof Error
+          ? error.message
+          : "Failed to delete account. Please try again.",
       );
     } finally {
       setIsDeletingAccount(false);
@@ -258,7 +269,9 @@ const Profile = () => {
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-      toast.error(`Image is too large (${sizeMB}MB). Please choose an image under 2MB.`);
+      toast.error(
+        `Image is too large (${sizeMB}MB). Please choose an image under 2MB.`,
+      );
       return;
     }
 
@@ -266,15 +279,17 @@ const Profile = () => {
     try {
       const resp = await uploadsApi.uploadAvatar(file);
       setProfile((current) =>
-        current
-          ? { ...current, avatar_url: resp.avatar_url }
-          : current,
+        current ? { ...current, avatar_url: resp.avatar_url } : current,
       );
       toast.success("Avatar updated successfully!");
       await fetchProfile();
     } catch (error) {
       logger.error("Avatar upload error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to upload avatar. Please try again.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to upload avatar. Please try again.",
+      );
     } finally {
       setIsUploadingAvatar(false);
       if (fileInputRef.current) {
@@ -285,17 +300,24 @@ const Profile = () => {
 
   const handleSave = async () => {
     if (!user) return;
-    
+
     setIsSaving(true);
     try {
       await usersApi.updateProfile({ full_name: fullName });
       toast.success("Profile updated");
       setIsEditing(false);
-      fetchProfile();
+      await fetchProfile();
     } catch (error) {
+      logger.error("Profile update failed", error);
       toast.error("Failed to update profile");
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
+  };
+
+  const handleCancelEdit = () => {
+    setFullName(profile?.full_name || "");
+    setIsEditing(false);
   };
 
   const handleLogout = async () => {
@@ -312,24 +334,27 @@ const Profile = () => {
     });
   };
 
+  const planLabel = subscriptionTier === "free" ? "Free" : "Pro";
+  const memberSince = profile?.created_at
+    ? formatDate(profile.created_at)
+    : "—";
+
   if (isLoading) {
     return (
-      <div className="flex min-h-full flex-col bg-background pb-6">
-        <header className="pt-12 pb-6 px-6 flex items-center justify-between">
-          <Skeleton className="w-10 h-10 rounded-xl" />
-          <Skeleton className="w-20 h-6" />
-          <Skeleton className="w-10 h-10 rounded-xl" />
-        </header>
-        <main className="flex-1 px-6 space-y-6">
-          <div className="flex flex-col items-center">
-            <Skeleton className="w-24 h-24 rounded-full" />
-            <Skeleton className="w-32 h-8 mt-4" />
-            <Skeleton className="w-48 h-5 mt-2" />
+      <div className="flex min-h-full flex-col bg-background">
+        <header className="px-6 pb-4 pt-[max(2rem,env(safe-area-inset-top))]">
+          <div className="mx-auto flex w-full max-w-2xl items-center justify-between">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <Skeleton className="h-6 w-20" />
+            <Skeleton className="h-10 w-10 rounded-full" />
           </div>
-          <div className="space-y-3">
-            <Skeleton className="h-20 w-full rounded-2xl" />
-            <Skeleton className="h-20 w-full rounded-2xl" />
-            <Skeleton className="h-20 w-full rounded-2xl" />
+        </header>
+        <main className="mx-auto w-full max-w-2xl flex-1 space-y-5 px-6 pb-10">
+          <Skeleton className="h-72 w-full rounded-[1.75rem]" />
+          <Skeleton className="h-36 w-full rounded-2xl" />
+          <div className="grid grid-cols-2 gap-3">
+            <Skeleton className="h-28 rounded-2xl" />
+            <Skeleton className="h-28 rounded-2xl" />
           </div>
         </main>
       </div>
@@ -337,265 +362,386 @@ const Profile = () => {
   }
 
   return (
-    <div className="flex min-h-full flex-col bg-background pb-6">
-      {/* Header */}
-      <header className="pt-12 pb-6 px-6 flex items-center justify-between animate-fade-in">
-        <button
-          onClick={() => navigate(-1)}
-          className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-        >
-          <ArrowLeft className="w-5 h-5 text-foreground" />
-        </button>
-        <h1 className="text-xl font-bold text-foreground">Profile</h1>
-        <button
-          onClick={() => navigate("/settings")}
-          className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center transition-all duration-200 active:scale-95"
-        >
-          <SettingsIcon className="w-5 h-5 text-foreground" />
-        </button>
+    <div className="flex min-h-full flex-col bg-background">
+      <header className="sticky top-0 z-30 border-b border-border/40 bg-background/85 px-6 pb-4 pt-[max(2rem,env(safe-area-inset-top))] backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-2xl items-center justify-between animate-fade-in">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary/80 text-foreground transition-colors hover:bg-secondary active:scale-95"
+            aria-label="Go back"
+          >
+            <ArrowLeft className="h-5 w-5" aria-hidden="true" />
+          </button>
+          <div className="text-center">
+            <h1 className="font-display text-lg font-semibold text-foreground">
+              Profile
+            </h1>
+            <p className="text-[11px] text-muted-foreground">
+              Account and data
+            </p>
+          </div>
+          <span className="h-10 w-10" aria-hidden="true" />
+        </div>
       </header>
 
-      {/* Profile Content */}
-      <main className="flex-1 animate-slide-up space-y-6 px-6 pb-6">
-        {/* Avatar Section */}
-        <div className="flex flex-col items-center">
-          <div className="relative">
-            {isUploadingAvatar ? (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-secondary">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-2xl flex-1 animate-slide-up space-y-5 px-6 py-5 pb-10"
+      >
+        <section
+          aria-labelledby="profile-name"
+          className="overflow-hidden rounded-[1.75rem] border border-border/60 bg-secondary/35"
+        >
+          <div className="px-5 pb-6 pt-7 text-center">
+            <div className="relative mx-auto w-fit">
+              <div className="rounded-full border border-brand/50 p-1.5">
+                {isUploadingAvatar ? (
+                  <div className="flex h-24 w-24 items-center justify-center rounded-full bg-secondary">
+                    <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  </div>
+                ) : (
+                  <UserAvatar
+                    size="lg"
+                    name={profile?.full_name || user?.full_name}
+                    email={profile?.email || user?.email}
+                    src={profile?.avatar_url || user?.avatar_url}
+                    pro={isPaid}
+                  />
+                )}
               </div>
-            ) : (
-              <UserAvatar
-                size="lg"
-                name={profile?.full_name || user?.full_name}
-                email={profile?.email || user?.email}
-                src={profile?.avatar_url || user?.avatar_url}
-              />
-            )}
-            <button
-              type="button"
-              onClick={handleAvatarClick}
-              disabled={isUploadingAvatar}
-              className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-brand text-brand-foreground transition-all active:scale-95 disabled:opacity-50"
-              aria-label="Upload profile photo"
-            >
-              <Camera className="h-4 w-4" />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarChange}
-              className="hidden"
-            />
-          </div>
-          <h2 className="mt-4 text-2xl font-bold text-foreground">
-            {profile?.full_name || "Trader"}
-          </h2>
-          <p className="text-muted-foreground">{profile?.email || user?.email}</p>
-          <p className="mt-1 text-xs text-muted-foreground">Tap the camera to update your photo</p>
-          
-          {/* Subscription Badge */}
-          {subscriptionTier !== 'free' && (
-            <div className="mt-3 flex items-center gap-1 bg-gradient-to-r from-amber-500 to-yellow-500 text-black px-3 py-1 rounded-full text-sm font-semibold">
-              <Crown className="w-4 h-4" />
-              {'Pro'}
-              {subscriptionExpiry && (
-                <span className="text-xs ml-1">
-                  • Expires {new Date(subscriptionExpiry).toLocaleDateString()}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Profile Info */}
-        <div className="space-y-3">
-          <div className="bg-secondary rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <UserIcon className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Full Name</span>
-            </div>
-            {isEditing ? (
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={isUploadingAvatar}
+                className="absolute bottom-0 right-0 flex h-9 w-9 items-center justify-center rounded-full border-4 border-secondary bg-brand text-brand-foreground transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+                aria-label="Upload profile photo"
+              >
+                <Camera className="h-4 w-4" aria-hidden="true" />
+              </button>
               <input
-                type="text"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full h-12 px-4 bg-background text-foreground text-lg font-medium rounded-xl border-0 outline-none"
-                placeholder="Enter your name"
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarChange}
+                className="hidden"
               />
-            ) : (
-              <p className="text-lg font-medium text-foreground">
-                {profile?.full_name || "Not set"}
-              </p>
-            )}
-          </div>
-
-          <div className="bg-secondary rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <Mail className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Email</span>
             </div>
-            <p className="text-lg font-medium text-foreground">
+
+            <h2
+              id="profile-name"
+              className="mt-4 font-display text-2xl font-bold tracking-tight text-foreground"
+            >
+              {profile?.full_name || "Trader"}
+            </h2>
+            <p className="mt-1 break-all text-sm text-muted-foreground">
               {profile?.email || user?.email}
             </p>
           </div>
 
-          <div className="bg-secondary rounded-2xl p-4">
-            <div className="flex items-center gap-3 mb-2">
-              <Calendar className="w-5 h-5 text-muted-foreground" />
-              <span className="text-sm text-muted-foreground">Member Since</span>
+          <div className="grid grid-cols-2 border-t border-border/50 bg-background/20">
+            <div className="flex items-center justify-center gap-3 px-4 py-4">
+              <ReceiptIcon
+                aria-hidden="true"
+                size={20}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand/10 text-brand"
+              />
+              <div className="text-left">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Account
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {planLabel}
+                </p>
+                {subscriptionExpiry ? (
+                  <p className="text-[10px] text-muted-foreground">
+                    Until {new Date(subscriptionExpiry).toLocaleDateString()}
+                  </p>
+                ) : null}
+              </div>
             </div>
-            <p className="text-lg font-medium text-foreground">
-              {profile?.created_at ? formatDate(profile.created_at) : "—"}
-            </p>
+            <div className="flex items-center justify-center gap-3 border-l border-border/50 px-4 py-4">
+              <CalendarDaysIcon
+                aria-hidden="true"
+                size={20}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground"
+              />
+              <div className="text-left">
+                <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                  Member since
+                </p>
+                <p className="text-sm font-semibold text-foreground">
+                  {memberSince}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        {/* Preferences Section */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-sm font-semibold text-muted-foreground px-2">PREFERENCES</h3>
-
-          <button
-            onClick={() => navigate("/settings")}
-            className="flex w-full items-center justify-between rounded-2xl bg-secondary p-4 transition-colors hover:bg-secondary/80"
-          >
-            <div className="flex items-center gap-3">
-              <SettingsIcon className="h-5 w-5 text-muted-foreground" />
-              <div className="text-left">
-                <span className="text-sm font-medium text-foreground">Appearance</span>
-                <p className="text-xs text-muted-foreground">Theme and display settings</p>
-              </div>
+        <section aria-labelledby="account-details-heading">
+          <div className="mb-2 flex items-center justify-between px-1">
+            <div>
+              <h3
+                id="account-details-heading"
+                className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+              >
+                Account details
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground/70">
+                Your public profile information
+              </p>
             </div>
-            <span className="text-xs font-medium text-brand">Open Settings</span>
-          </button>
-
-          <button
-            onClick={() => navigate("/settings")}
-            className="flex w-full items-center justify-between rounded-2xl bg-secondary p-4 transition-colors hover:bg-secondary/80"
-          >
-            <div className="flex items-center gap-3">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              <div className="text-left">
-                <span className="text-sm font-medium text-foreground">Notifications</span>
-                <p className="text-xs text-muted-foreground">Push and calendar alerts in Settings</p>
-              </div>
-            </div>
-            <span className="text-xs font-medium text-brand">Open Settings</span>
-          </button>
-        </div>
-
-        {/* Account Actions */}
-        <div className="space-y-3 pt-2">
-          <h3 className="text-sm font-semibold text-muted-foreground px-2">ACCOUNT</h3>
-
-          <input
-            ref={csvInputRef}
-            type="file"
-            accept=".csv,text/csv"
-            className="hidden"
-            onChange={(event) => void handleImportCsvFile(event)}
-          />
-
-          {/* Export Data Button */}
-          <button
-            type="button"
-            onClick={() => void handleExportData()}
-            disabled={isExporting || isImporting}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-foreground transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
-          >
-            {isExporting ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Download className="h-5 w-5" />
-            )}
-            {isExporting ? "Exporting…" : "Export Trading Data"}
-          </button>
-
-          <button
-            type="button"
-            onClick={handleImportCsvClick}
-            disabled={isImporting || isExporting}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-secondary font-semibold text-foreground transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
-          >
-            {isImporting ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Upload className="h-5 w-5" />
-            )}
-            {isImporting ? "Importing…" : "Import Trading CSV"}
-          </button>
-
-          {/* Change Password Button */}
-          <button
-            onClick={() => navigate("/settings")}
-            className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
-          >
-            <Shield className="w-5 h-5" />
-            Security Settings
-          </button>
-        </div>
-
-        {/* Edit Profile Buttons */}
-        <div className="space-y-3 pt-4">
-          {isEditing ? (
-            <div className="flex gap-3">
+            {!isEditing ? (
               <button
-                onClick={() => setIsEditing(false)}
-                className="flex-1 h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
+                type="button"
+                onClick={() => setIsEditing(true)}
+                className="inline-flex h-9 items-center gap-1.5 rounded-full bg-secondary px-3 text-xs font-semibold text-foreground transition-colors hover:bg-secondary/80"
+              >
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                Edit
+              </button>
+            ) : null}
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-secondary/35">
+            <div className="flex items-center gap-3 px-4 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
+                <UserIcon className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Full name</p>
+                {isEditing ? (
+                  <input
+                    type="text"
+                    value={fullName}
+                    onChange={(event) => setFullName(event.target.value)}
+                    className="mt-1 h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm font-medium text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-brand"
+                    placeholder="Enter your name"
+                    aria-label="Full name"
+                  />
+                ) : (
+                  <p className="truncate text-sm font-semibold text-foreground">
+                    {profile?.full_name || "Not set"}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 border-t border-border/50 px-4 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
+                <Mail className="h-5 w-5" aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs text-muted-foreground">Email</p>
+                <p className="break-all text-sm font-semibold text-foreground">
+                  {profile?.email || user?.email}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {isEditing ? (
+            <div className="mt-3 grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={handleCancelEdit}
+                disabled={isSaving}
+                className="h-11 rounded-xl bg-secondary text-sm font-semibold text-foreground transition-transform active:scale-[0.98] disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleSave}
-                disabled={isSaving}
-                className="flex-1 h-12 bg-foreground text-background font-semibold rounded-xl transition-all duration-200 active:scale-[0.98] disabled:opacity-50"
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={isSaving || !fullName.trim()}
+                className="h-11 rounded-xl bg-foreground text-sm font-semibold text-background transition-transform active:scale-[0.98] disabled:opacity-50"
               >
-                {isSaving ? "Saving..." : "Save"}
+                {isSaving ? "Saving…" : "Save changes"}
               </button>
             </div>
-          ) : (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="w-full h-12 bg-secondary text-foreground font-semibold rounded-xl transition-all duration-200 active:scale-[0.98]"
+          ) : null}
+        </section>
+
+        <section aria-labelledby="trading-data-heading">
+          <div className="mb-2 px-1">
+            <h3
+              id="trading-data-heading"
+              className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground"
             >
-              Edit Profile
+              Trading data
+            </h3>
+          </div>
+
+          <input
+            ref={csvInputRef}
+            type="file"
+            accept=".csv,.tsv,.txt,.html,.htm,text/csv,text/tab-separated-values,text/plain,text/html"
+            className="hidden"
+            onChange={(event) => void handleImportCsvFile(event)}
+          />
+
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-secondary/35">
+            <button
+              type="button"
+              onClick={() => void handleExportData()}
+              disabled={isExporting || isImporting}
+              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-secondary/50 active:scale-[0.99] disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
+                  {isExporting ? (
+                    <Loader2
+                      className="h-5 w-5 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Download className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {isExporting ? "Exporting…" : "Export data"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Download trades as CSV
+                  </p>
+                </div>
+              </div>
+              <ChevronRight
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={handleImportCsvClick}
+              disabled={isImporting || isExporting}
+              className="flex w-full items-center justify-between gap-3 border-t border-border/50 px-4 py-4 text-left transition-colors hover:bg-secondary/50 active:scale-[0.99] disabled:opacity-50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
+                  {isImporting ? (
+                    <Loader2
+                      className="h-5 w-5 animate-spin"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Upload className="h-5 w-5" aria-hidden="true" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    {isImporting ? "Importing…" : "Import trades"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    MT5 history or Poscal CSV
+                  </p>
+                </div>
+              </div>
+              <ChevronRight
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </section>
+
+        <section aria-labelledby="account-access-heading">
+          <div className="mb-2 px-1">
+            <h3
+              id="account-access-heading"
+              className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground"
+            >
+              Account access
+            </h3>
+          </div>
+
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-secondary/35">
+            <button
+              type="button"
+              onClick={() => void handleLogout()}
+              className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left transition-colors hover:bg-secondary/50"
+            >
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
+                  <LogOut className="h-[18px] w-[18px]" aria-hidden="true" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Sign out
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    End this session
+                  </p>
+                </div>
+              </div>
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-muted-foreground"
+                aria-hidden="true"
+              />
+            </button>
+          </div>
+        </section>
+
+        <section aria-labelledby="danger-zone-heading">
+          <div className="mb-2 px-1">
+            <h3
+              id="danger-zone-heading"
+              className="text-xs font-semibold uppercase tracking-[0.16em] text-destructive/70"
+            >
+              Danger zone
+            </h3>
+          </div>
 
           <button
-            onClick={handleLogout}
-            className="w-full h-12 bg-destructive/10 text-destructive font-semibold rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-[0.98]"
-          >
-            <LogOut className="w-5 h-5" />
-            Sign Out
-          </button>
-
-          {/* Delete Account Button */}
-          <button
+            type="button"
             onClick={handleDeleteAccount}
             disabled={isDeletingAccount}
-            className={`w-full h-12 rounded-xl flex items-center justify-center gap-2 font-semibold transition-all duration-200 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 ${
+            className={cn(
+              "flex w-full items-center justify-between gap-3 rounded-2xl border px-4 py-4 text-left transition-colors active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50",
               showDeleteConfirm
-                ? 'bg-red-500/20 text-red-500'
-                : 'bg-destructive/5 text-destructive/60 hover:bg-destructive/10'
-            }`}
+                ? "border-destructive/40 bg-destructive/15 text-destructive"
+                : "border-destructive/15 bg-destructive/5 text-destructive/80 hover:bg-destructive/10",
+            )}
           >
-            <Trash2 className="w-5 h-5" />
-            {isDeletingAccount
-              ? "Deleting..."
-              : showDeleteConfirm
-                ? "Confirm Delete Account?"
-                : "Delete Account"}
+            <div className="flex items-center gap-3">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-destructive/10">
+                {isDeletingAccount ? (
+                  <Loader2
+                    className="h-[18px] w-[18px] animate-spin"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Trash2 className="h-[18px] w-[18px]" aria-hidden="true" />
+                )}
+              </div>
+              <div>
+                <p className="text-sm font-semibold">
+                  {isDeletingAccount
+                    ? "Deleting account…"
+                    : showDeleteConfirm
+                      ? "Confirm account deletion"
+                      : "Delete account"}
+                </p>
+                <p className="text-xs opacity-70">
+                  {showDeleteConfirm
+                    ? "Tap once more to permanently delete"
+                    : "Permanently remove all Poscal data"}
+                </p>
+              </div>
+            </div>
+            <ChevronRight className="h-4 w-4 shrink-0" aria-hidden="true" />
           </button>
-          {showDeleteConfirm && (
-            <p className="text-xs text-red-500/70 text-center">
-              Permanently deletes journals, trades, history, and your login. This cannot be undone.
-            </p>
-          )}
-        </div>
-      </main>
 
+          {showDeleteConfirm ? (
+            <p className="px-3 pt-2 text-center text-xs leading-relaxed text-destructive/70">
+              Permanently deletes journals, trades, history, and your login.
+              This cannot be undone.
+            </p>
+          ) : null}
+        </section>
+      </main>
     </div>
   );
 };

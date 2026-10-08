@@ -7,11 +7,32 @@ import {
   usePaginatedQuery,
 } from "convex/react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Check, Loader2, Lock, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  Loader2,
+  LockKeyhole,
+  Tag,
+} from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
 import { Button } from "@/components/ui/button";
+import {
+  ChartLineIcon,
+  type ChartLineIconHandle,
+} from "@/components/ui/chart-line";
+import {
+  FileStackIcon,
+  type FileStackIconHandle,
+} from "@/components/ui/file-stack";
+import {
+  SwitchCameraIcon,
+  type SwitchCameraIconHandle,
+} from "@/components/ui/switch-camera";
+import { cn } from "@/lib/utils";
 import { PRICES, safeReturnTo, type ProPlan } from "../../shared/proPolicy";
 
 const money = (amount: number) =>
@@ -20,6 +41,7 @@ const money = (amount: number) =>
     currency: "NGN",
     maximumFractionDigits: 0,
   }).format(amount / 100);
+
 const message = (error: unknown) => {
   if (!(error instanceof Error))
     return "We could not complete this request. Your payment reference is safe.";
@@ -32,12 +54,52 @@ const message = (error: unknown) => {
   );
 };
 
+function ToggleRow({
+  checked,
+  disabled,
+  label,
+  description,
+  onChange,
+}: {
+  checked: boolean;
+  disabled?: boolean;
+  label: string;
+  description: string;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-4 px-4 py-3.5 first:border-b first:border-border/60 has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50">
+      <span className="min-w-0">
+        <span className="block text-[15px] font-medium text-foreground">
+          {label}
+        </span>
+        <span className="mt-0.5 block text-[13px] leading-relaxed text-muted-foreground">
+          {description}
+        </span>
+      </span>
+      <input
+        type="checkbox"
+        className="peer sr-only"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span
+        aria-hidden
+        className="relative h-6 w-10 shrink-0 rounded-full bg-foreground/15 transition-colors duration-200 after:absolute after:left-0.5 after:top-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-transform after:duration-200 peer-checked:bg-brand peer-checked:after:translate-x-4 peer-focus-visible:ring-2 peer-focus-visible:ring-brand/40 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-background"
+      />
+    </label>
+  );
+}
+
 export function ProCheckout({
   returnTo,
   onCheckoutOpen,
+  presentation = "page",
 }: {
   returnTo?: string;
   onCheckoutOpen?: () => void;
+  presentation?: "page" | "sheet";
 }) {
   const { user } = useAuth();
   const { isPaid, expiresAt, autoRenew: autoRenewState } = useSubscription();
@@ -61,8 +123,9 @@ export function ProCheckout({
   const start = useAction(api.proPayments.startCheckout);
   const verify = useAction(api.proPayments.checkPayment);
   const setAutoRenew = useMutation(api.proBilling.setAutoRenew);
-  const [plan, setPlan] = useState<ProPlan>("monthly");
+  const [plan, setPlan] = useState<ProPlan>("yearly");
   const [code, setCode] = useState("");
+  const [showCode, setShowCode] = useState(false);
   const [quote, setQuote] = useState<{
     amount: number;
     code: string | null;
@@ -73,6 +136,9 @@ export function ProCheckout({
   const [error, setError] = useState("");
   const clickLock = useRef(false);
   const mounted = useRef(true);
+  const journalIconRef = useRef<FileStackIconHandle>(null);
+  const tradesIconRef = useRef<ChartLineIconHandle>(null);
+  const screenshotsIconRef = useRef<SwitchCameraIconHandle>(null);
   const destination = safeReturnTo(
     order?.returnTo ??
       returnTo ??
@@ -203,346 +269,516 @@ export function ProCheckout({
         <Loader2 className="animate-spin" aria-label="Loading plans" />
       </div>
     );
+  const sheet = presentation === "sheet";
+  const buying = !configuration.beta && order?.status !== "paid";
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="mb-2 flex items-center gap-2 text-brand">
-          <Sparkles size={20} />
-          <span className="text-sm font-semibold">Poscal Pro</span>
-        </div>
-        <h1 className="text-2xl font-bold">More room for your trading.</h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Five journals, unlimited new trades and notebooks, full analytics and
-          500 screenshots within 1 GB.
-        </p>
-      </div>
-      {configuration.beta ? (
-        <div className="rounded-2xl border border-brand/30 bg-brand/10 p-5">
-          <h2 className="font-semibold">Included during beta</h2>
-          <p className="mt-2 text-sm text-muted-foreground">
-            Pro features are open. Payments are switched off until the admin
-            ends beta.
-          </p>
-          <Button className="mt-4 w-full" onClick={() => navigate(destination)}>
-            Continue using Poscal
-          </Button>
-        </div>
-      ) : order?.status === "paid" ? (
-        <div
-          className="rounded-2xl border border-green-500/30 p-5"
-          role="status"
+    <div
+      className={cn(
+        "pro-checkout",
+        sheet ? "px-5 pb-6 pt-10" : "animate-fade-in",
+      )}
+    >
+      {buying && !sheet && (
+        <nav
+          className="flex items-center justify-between"
+          aria-label="Checkout navigation"
         >
-          <Check className="mb-2 text-green-500" />
-          <h2 className="font-semibold">Payment confirmed</h2>
-          <p className="mt-2 text-sm">
-            {isPaid
-              ? "Your Pro access is active. Your notes and uploads are ready."
-              : "This paid period has ended. Your existing data remains available."}
-          </p>
-          {isPaid && (
-            <div className="mt-3 rounded-xl bg-secondary p-3 text-xs">
-              <p className="font-medium">
-                Auto-renew {autoRenewState.enabled ? "on" : "off"}
-              </p>
-              {autoRenewState.enabled ? (
-                <p className="mt-1 text-muted-foreground">
-                  {autoRenewState.brand ?? "Payment method"}
-                  {autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}.
-                  {autoRenewState.amount
-                    ? ` ${money(autoRenewState.amount)} per renewal.`
-                    : ""}
-                  {autoRenewState.nextChargeAt
-                    ? ` Next charge is scheduled for ${autoRenewState.nextChargeAt.toLocaleDateString()}.`
-                    : ""}
-                </p>
-              ) : (
-                <p className="mt-1 text-muted-foreground">
-                  You will not be charged again automatically.
-                </p>
-              )}
-              {autoRenewState.enabled && (
-                <button
-                  type="button"
-                  className="mt-2 underline"
-                  disabled={busy}
-                  onClick={() => {
-                    setBusy(true);
-                    setError("");
-                    void setAutoRenew({ enabled: false })
-                      .catch((err) => setError(message(err)))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  Turn off auto-renew
-                </button>
-              )}
-            </div>
-          )}
-          <Button className="mt-4 w-full" onClick={() => navigate(destination)}>
-            Continue where you left off
-          </Button>
-          <Button
-            variant="outline"
-            className="mt-2 w-full"
-            onClick={() => {
-              setReference(undefined);
-              navigate(`/pro?returnTo=${encodeURIComponent(destination)}`);
-            }}
+          <button
+            type="button"
+            className="-ml-2 flex min-h-11 items-center gap-1.5 rounded-full px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            onClick={() => navigate(destination)}
           >
-            Renew Pro
-          </Button>
-        </div>
-      ) : (
-        <>
-          {isPaid && (
-            <div className="rounded-xl bg-secondary p-3 text-sm">
-              <p>
-                Pro active until {expiresAt?.toLocaleDateString()}. A renewal
-                extends your existing access.
-              </p>
-              <p className="mt-2 text-xs text-muted-foreground">
-                Auto-renew is {autoRenewState.enabled ? "on" : "off"}
-                {autoRenewState.amount ? ` at ${money(autoRenewState.amount)} per renewal` : ""}
-                {autoRenewState.last4 ? ` for the method ending ${autoRenewState.last4}` : ""}.
-              </p>
-              {(autoRenewState.enabled || autoRenewState.last4) && (
-                <button
-                  type="button"
-                  className="mt-2 text-xs font-medium underline"
-                  disabled={busy}
-                  onClick={() => {
-                    setBusy(true);
-                    setError("");
-                    void setAutoRenew({
-                      enabled: !autoRenewState.enabled,
-                      plan: autoRenewState.plan ?? plan,
-                    })
-                      .catch((err) => setError(message(err)))
-                      .finally(() => setBusy(false));
-                  }}
-                >
-                  {autoRenewState.enabled ? "Turn off auto-renew" : "Turn on auto-renew"}
-                </button>
-              )}
-            </div>
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20">
+              <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            Back
+          </button>
+          <button
+            type="button"
+            className="-mr-2 min-h-11 rounded-full px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+            onClick={() => navigate(destination)}
+          >
+            Skip
+          </button>
+        </nav>
+      )}
+      {buying && (
+        <header
+          className={cn(
+            "mb-7 text-left",
+            sheet ? "mt-2" : "mt-[clamp(3rem,10vh,5.5rem)]",
           )}
-          {openOrder ? (
-            <div
-              className="rounded-2xl border border-border bg-secondary/50 p-4"
-              role="status"
+        >
+          <p className="text-[17px] font-semibold tracking-[-0.015em] text-foreground">
+            Subscribe to Poscal Pro
+          </p>
+          <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
+            Unlock{" "}
+            <span
+              className="inline-flex items-baseline gap-1 whitespace-nowrap"
+              onMouseEnter={() => journalIconRef.current?.startAnimation()}
+              onMouseLeave={() => journalIconRef.current?.stopAnimation()}
             >
-              <h2 className="font-semibold">
-                {order.status === "review"
-                  ? "Payment needs checking"
-                  : "Checkout in progress"}
-              </h2>
-              <p className="mt-2 text-sm text-muted-foreground">
-                We verify payments before activating Pro. If you have already
-                been debited, do not pay again.
-              </p>
-              <p className="mt-2 text-sm capitalize">
-                {order.plan} · {money(order.amount)}
-              </p>
-              <p className="mt-3 break-all font-mono text-xs">
-                {order.reference}
-              </p>
-              <Button
-                variant="outline"
-                className="mt-3"
-                disabled={busy}
-                onClick={() => {
-                  setError("");
-                  void verify({ reference: order.reference }).catch((err) =>
-                    setError(message(err)),
-                  );
-                }}
-              >
-                Check payment status
-              </Button>
-              {order.checkoutUrl && order.status === "pending" && (
-                <a className="ml-3 text-sm underline" href={order.checkoutUrl}>
-                  Open secure checkout
-                </a>
-              )}
-            </div>
-          ) : (
-            <>
-              {order &&
-                ["failed", "abandoned", "reversed"].includes(order.status) && (
-                  <p
-                    className="rounded-xl bg-secondary p-3 text-sm"
-                    role="status"
-                  >
-                    Payment {order.status}. Reference: {order.reference}. If
-                    your bank debited you, check this payment before starting
-                    another.
+              <FileStackIcon
+                ref={journalIconRef}
+                className="inline-flex translate-y-[0.08em] align-middle"
+                size={31}
+                aria-hidden
+              />
+              five journals
+            </span>
+            ,{" "}
+            <span
+              className="inline-flex items-baseline gap-1 whitespace-nowrap"
+              onMouseEnter={() => tradesIconRef.current?.startAnimation()}
+              onMouseLeave={() => tradesIconRef.current?.stopAnimation()}
+            >
+              <ChartLineIcon
+                ref={tradesIconRef}
+                className="inline-flex translate-y-[0.08em] align-middle"
+                size={31}
+                aria-hidden
+              />
+              unlimited trades
+            </span>
+            ,{" "}
+            <span
+              className="inline-flex items-baseline gap-1 whitespace-nowrap"
+              onMouseEnter={() => screenshotsIconRef.current?.startAnimation()}
+              onMouseLeave={() => screenshotsIconRef.current?.stopAnimation()}
+            >
+              <SwitchCameraIcon
+                ref={screenshotsIconRef}
+                className="inline-flex translate-y-[0.08em] align-middle"
+                size={31}
+                aria-hidden
+              />
+              500 screenshots
+            </span>{" "}
+            and more.
+          </h1>
+        </header>
+      )}
+      <div className="space-y-4">
+        {configuration.beta ? (
+          <div className="rounded-2xl border border-brand/30 bg-brand/10 p-5">
+            <h2 className="font-semibold">Included during beta</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Pro features are open. Payments are switched off until the admin
+              ends beta.
+            </p>
+            <Button
+              className="mt-4 w-full"
+              onClick={() => navigate(destination)}
+            >
+              Continue using Poscal
+            </Button>
+          </div>
+        ) : order?.status === "paid" ? (
+          <div
+            className="rounded-2xl border border-green-500/30 p-5"
+            role="status"
+          >
+            <Check className="mb-2 text-green-500" />
+            <h2 className="font-semibold">Payment confirmed</h2>
+            <p className="mt-2 text-sm">
+              {isPaid
+                ? "Your Pro access is active. Your notes and uploads are ready."
+                : "This paid period has ended. Your existing data remains available."}
+            </p>
+            {isPaid && (
+              <div className="mt-3 rounded-xl bg-secondary p-3 text-xs">
+                <p className="font-medium">
+                  Auto-renew {autoRenewState.enabled ? "on" : "off"}
+                </p>
+                {autoRenewState.enabled ? (
+                  <p className="mt-1 text-muted-foreground">
+                    {autoRenewState.brand ?? "Payment method"}
+                    {autoRenewState.last4
+                      ? ` ending ${autoRenewState.last4}`
+                      : ""}
+                    .
+                    {autoRenewState.amount
+                      ? ` ${money(autoRenewState.amount)} per renewal.`
+                      : ""}
+                    {autoRenewState.nextChargeAt
+                      ? ` Next charge is scheduled for ${autoRenewState.nextChargeAt.toLocaleDateString()}.`
+                      : ""}
+                  </p>
+                ) : (
+                  <p className="mt-1 text-muted-foreground">
+                    You will not be charged again automatically.
                   </p>
                 )}
-              <div className="grid grid-cols-2 gap-3">
-                {(["monthly", "yearly"] as const).map((option) => (
+                {autoRenewState.enabled && (
                   <button
                     type="button"
-                    key={option}
-                    aria-pressed={plan === option}
+                    className="mt-2 underline"
                     disabled={busy}
                     onClick={() => {
-                      setPlan(option);
-                      setQuote(null);
+                      setBusy(true);
+                      setError("");
+                      void setAutoRenew({ enabled: false })
+                        .catch((err) => setError(message(err)))
+                        .finally(() => setBusy(false));
                     }}
-                    className={`rounded-2xl border p-4 text-left ${plan === option ? "border-brand bg-brand/10" : "border-border"}`}
                   >
-                    <span className="block text-sm capitalize">{option}</span>
-                    <strong className="mt-2 block text-xl">
-                      {money(PRICES[option])}
-                    </strong>
-                    <span className="text-xs text-muted-foreground">
-                      {option === "yearly"
-                        ? "Save ₦5,000 per year"
-                        : "One calendar month"}
-                    </span>
+                    Turn off auto-renew
                   </button>
-                ))}
+                )}
               </div>
-              <div className="flex gap-2">
-                <input
-                  aria-label="Discount code"
-                  placeholder="Discount or early-bird code"
-                  disabled={busy}
-                  className="min-w-0 flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm"
-                  value={code}
-                  maxLength={32}
-                  onChange={(e) => {
-                    setCode(e.target.value);
-                    setQuote(null);
-                  }}
-                />
-                <Button
-                  variant="outline"
-                  disabled={busy || !user || !code.trim()}
-                  onClick={() => void applyCode()}
-                >
-                  Apply
-                </Button>
-              </div>
-              {quote?.code && (
-                <p className="text-sm text-brand">
-                  {quote.code} applied. Total: {money(quote.amount)}. Discount
-                  applies to this purchase.
-                </p>
-              )}
-              <label className="flex items-start gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={autoRenewRequested}
-                  onChange={(e) => setAutoRenewRequested(e.target.checked)}
-                />
-                <span>
-                  Automatically renew this {plan} plan for {money(PRICES[plan])} per renewal
-                  using this Paystack payment method. Your current discount, if any, applies only
-                  to this purchase. You can turn auto-renew off before the next charge. If the
-                  standard renewal price changes, Poscal will require fresh consent instead of
-                  charging the new amount automatically. Auto-renew only activates if Paystack
-                  returns a verified reusable authorization.
-                </span>
-              </label>
-              <label className="flex items-start gap-2 text-xs text-muted-foreground">
-                <input
-                  type="checkbox"
-                  checked={reminders}
-                  onChange={(e) => setReminders(e.target.checked)}
-                />
-                Email me once if I leave this checkout unfinished.
-              </label>
-            </>
-          )}
-          <Button
-            className="h-12 w-full rounded-xl"
-            disabled={
-              busy ||
-              !configuration.ready ||
-              (openOrder && !order.accessCode) ||
-              order?.status === "review"
-            }
-            onClick={() => void checkout()}
-          >
-            {busy ? (
-              <Loader2 className="mr-2 animate-spin" size={16} />
-            ) : (
-              <Lock className="mr-2" size={16} />
             )}
-            {openOrder
-              ? "Resume secure checkout"
-              : user
-                ? `Pay ${money(quote?.amount ?? PRICES[plan])}`
-                : "Sign in to continue"}
-          </Button>
-          {!configuration.ready && (
-            <p className="text-sm text-muted-foreground">
-              Checkout is temporarily unavailable. Your data remains safe.
-            </p>
-          )}
-          <p className="text-center text-xs text-muted-foreground">
-            Payment details are handled by Paystack. Auto-renew is off by default
-            and only starts when you explicitly select it.
-          </p>
-        </>
-      )}
-      {user && history.results.length > 0 && (
-        <section className="space-y-2 border-t pt-4">
-          <h2 className="text-sm font-semibold">Payment history</h2>
-          {history.results.map((payment) => (
-            <button
-              type="button"
-              key={payment.id}
-              className="flex w-full items-start justify-between gap-3 rounded-xl bg-secondary p-3 text-left text-xs"
+            <Button
+              className="mt-4 w-full"
+              onClick={() => navigate(destination)}
+            >
+              Continue where you left off
+            </Button>
+            <Button
+              variant="outline"
+              className="mt-2 w-full"
               onClick={() => {
-                setReference(payment.reference);
-                navigate(
-                  `/pro?reference=${encodeURIComponent(payment.reference)}`,
-                  { replace: true },
-                );
+                setReference(undefined);
+                navigate(`/pro?returnTo=${encodeURIComponent(destination)}`);
               }}
             >
-              <span className="break-all">
-                {payment.reference}
-                <span className="mt-1 block text-muted-foreground">
-                  {new Date(payment.createdAtMs).toLocaleDateString()} ·{" "}
-                  {payment.plan}
-                </span>
-              </span>
-              <span>
-                {money(payment.amount)}
-                <span className="mt-1 block capitalize">{payment.status}</span>
-              </span>
-            </button>
-          ))}
-          {history.status === "CanLoadMore" && (
-            <Button variant="outline" onClick={() => history.loadMore(10)}>
-              Older payments
+              Renew Pro
             </Button>
-          )}
-        </section>
-      )}
-      {error && (
-        <p
-          role="alert"
-          className="rounded-xl border border-destructive/30 p-3 text-sm text-destructive"
-        >
-          {error}
-        </p>
-      )}
-      {!configuration.beta && (
-        <p className="text-xs text-muted-foreground">
-          Free includes 1 editable journal, 15 new entries each UTC month and 5
-          screenshots within 10 MB. Existing data stays readable.{" "}
-          <a
-            className="underline"
-            href={`mailto:info@poscalfx.com?subject=${encodeURIComponent(`Poscal Pro payment ${order?.reference ?? ""}`)}`}
+          </div>
+        ) : (
+          <>
+            {isPaid && (
+              <p className="px-1 text-[13px] leading-relaxed text-muted-foreground">
+                Pro is active until {expiresAt?.toLocaleDateString()}. This
+                purchase extends your access. Auto-renew is{" "}
+                {autoRenewState.enabled ? "on" : "off"}.
+                {(autoRenewState.enabled || autoRenewState.last4) && (
+                  <button
+                    type="button"
+                    className="ml-1 font-medium text-foreground underline underline-offset-2"
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true);
+                      setError("");
+                      void setAutoRenew({
+                        enabled: !autoRenewState.enabled,
+                        plan: autoRenewState.plan ?? plan,
+                      })
+                        .catch((err) => setError(message(err)))
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    Manage renewal
+                  </button>
+                )}
+              </p>
+            )}
+            {openOrder ? (
+              <div
+                className="rounded-2xl border border-border bg-secondary/50 p-4"
+                role="status"
+              >
+                <h2 className="font-semibold">
+                  {order.status === "review"
+                    ? "Payment needs checking"
+                    : "Checkout in progress"}
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  We verify payments before activating Pro. If you have already
+                  been debited, do not pay again.
+                </p>
+                <p className="mt-2 text-sm capitalize">
+                  {order.plan} · {money(order.amount)}
+                </p>
+                <p className="mt-3 break-all font-mono text-xs">
+                  {order.reference}
+                </p>
+                <Button
+                  variant="outline"
+                  className="mt-3"
+                  disabled={busy}
+                  onClick={() => {
+                    setError("");
+                    void verify({ reference: order.reference }).catch((err) =>
+                      setError(message(err)),
+                    );
+                  }}
+                >
+                  Check payment status
+                </Button>
+                {order.checkoutUrl && order.status === "pending" && (
+                  <a
+                    className="ml-3 text-sm underline"
+                    href={order.checkoutUrl}
+                  >
+                    Open secure checkout
+                  </a>
+                )}
+              </div>
+            ) : (
+              <>
+                {order &&
+                  ["failed", "abandoned", "reversed"].includes(
+                    order.status,
+                  ) && (
+                    <p
+                      className="rounded-xl bg-secondary p-3 text-sm"
+                      role="status"
+                    >
+                      Payment {order.status}. Reference: {order.reference}. If
+                      your bank debited you, check this payment before starting
+                      another.
+                    </p>
+                  )}
+                <section aria-labelledby="billing-plan-heading">
+                  <div className="mb-3 flex items-end justify-between px-1">
+                    <h2
+                      id="billing-plan-heading"
+                      className="text-[15px] font-semibold text-foreground"
+                    >
+                      Choose a plan
+                    </h2>
+                    <p className="text-sm text-muted-foreground">
+                      Two simple options
+                    </p>
+                  </div>
+                  <div
+                    className="space-y-2"
+                    role="radiogroup"
+                    aria-label="Billing plan"
+                  >
+                    {(["yearly", "monthly"] as const).map((option) => {
+                      const selected = option === plan;
+                      const yearly = option === "yearly";
+                      return (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={selected}
+                          key={option}
+                          disabled={busy}
+                          onClick={() => {
+                            setPlan(option);
+                            setQuote(null);
+                          }}
+                          className={cn(
+                            "relative flex min-h-[6.25rem] w-full items-center gap-3 rounded-[1.4rem] border px-4 py-4 text-left transition-[background-color,border-color,transform] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40 disabled:opacity-60",
+                            selected
+                              ? "border-brand/60 bg-brand/[0.08]"
+                              : "border-transparent bg-secondary/70 hover:bg-secondary",
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors",
+                              selected
+                                ? "border-brand bg-brand text-brand-foreground"
+                                : "border-muted-foreground/40 bg-background/40",
+                            )}
+                            aria-hidden
+                          >
+                            {selected && <Check className="h-3.5 w-3.5" />}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className="flex items-center gap-2">
+                              <span className="text-[17px] font-semibold tracking-[-0.015em]">
+                                {yearly ? "Annual" : "Monthly"}
+                              </span>
+                              {yearly && (
+                                <span className="rounded-full bg-brand px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.04em] text-brand-foreground">
+                                  Best value
+                                </span>
+                              )}
+                            </span>
+                            <span className="mt-1 block text-sm leading-snug text-muted-foreground">
+                              {yearly
+                                ? `${money(Math.round(PRICES.yearly / 12))}/month equivalent · Save ₦5,000`
+                                : "Pay month to month · No annual commitment"}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right">
+                            <span className="block text-[1.35rem] font-semibold leading-none tracking-[-0.03em]">
+                              {money(PRICES[option])}
+                            </span>
+                            <span className="mt-1.5 block text-xs text-muted-foreground">
+                              per {yearly ? "year" : "month"}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+                {showCode ? (
+                  <div className="flex gap-2 rounded-xl border border-border/70 p-2">
+                    <input
+                      aria-label="Discount code"
+                      placeholder="Promotion code"
+                      disabled={busy}
+                      className="min-w-0 flex-1 bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground/70"
+                      value={code}
+                      maxLength={32}
+                      onChange={(e) => {
+                        setCode(e.target.value);
+                        setQuote(null);
+                      }}
+                    />
+                    <Button
+                      variant="outline"
+                      className="rounded-lg"
+                      disabled={busy || !user || !code.trim()}
+                      onClick={() => void applyCode()}
+                    >
+                      Apply
+                    </Button>
+                  </div>
+                ) : null}
+                {quote?.code && (
+                  <p className="text-center text-sm font-medium text-brand">
+                    {quote.code} applied · {money(quote.amount)}
+                  </p>
+                )}
+              </>
+            )}
+            <Button
+              className="group h-16 w-full rounded-[1.25rem] bg-foreground text-[17px] font-semibold text-background shadow-[0_16px_38px_-26px_hsl(var(--foreground)/0.9)] transition-transform duration-200 hover:scale-[0.995] hover:bg-foreground/90 active:scale-[0.985]"
+              disabled={
+                busy ||
+                !configuration.ready ||
+                (openOrder && !order.accessCode) ||
+                order?.status === "review"
+              }
+              onClick={() => void checkout()}
+            >
+              {busy ? (
+                <Loader2 className="mr-2 animate-spin" size={16} />
+              ) : null}
+              {openOrder
+                ? "Resume secure checkout"
+                : user
+                  ? `Continue with ${plan === "yearly" ? "Annual" : "Monthly"} · ${money(quote?.amount ?? PRICES[plan])}`
+                  : "Sign in to continue"}
+              {!busy && !openOrder && (
+                <span className="ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-background/15 bg-background/10 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                  <ArrowUpRight className="h-4 w-4" aria-hidden />
+                </span>
+              )}
+            </Button>
+            {!configuration.ready && (
+              <p className="text-sm text-muted-foreground">
+                Checkout is temporarily unavailable. Your data remains safe.
+              </p>
+            )}
+            {!openOrder && (
+              <div className="flex min-h-11 items-center justify-center text-sm font-medium text-muted-foreground">
+                <button
+                  type="button"
+                  className="flex min-h-11 items-center gap-1.5 rounded-full px-3 transition-colors hover:bg-secondary/60 hover:text-foreground"
+                  onClick={() => setShowCode((current) => !current)}
+                >
+                  <Tag className="h-3.5 w-3.5" aria-hidden />
+                  {showCode ? "Hide promo code" : "Add promo code"}
+                </button>
+              </div>
+            )}
+            {!openOrder && (
+              <details className="group text-center text-sm text-muted-foreground">
+                <summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-1.5 rounded-full px-3 font-medium transition-colors marker:hidden hover:bg-secondary/60 hover:text-foreground">
+                  Renewal &amp; reminders
+                  <ChevronDown
+                    className="h-3.5 w-3.5 transition-transform group-open:rotate-180"
+                    aria-hidden
+                  />
+                </summary>
+                <div className="mt-3 overflow-hidden rounded-[1.15rem] border border-border/70 bg-card/40 text-left">
+                  <ToggleRow
+                    checked={autoRenewRequested}
+                    disabled={busy}
+                    label="Automatic renewal"
+                    description={`Renew at ${money(PRICES[plan])}. Off by default.`}
+                    onChange={setAutoRenewRequested}
+                  />
+                  <ToggleRow
+                    checked={reminders}
+                    disabled={busy}
+                    label="Checkout reminder"
+                    description="Email me if I leave this unfinished."
+                    onChange={setReminders}
+                  />
+                </div>
+              </details>
+            )}
+            <p className="flex items-center justify-center gap-1.5 text-center text-sm text-muted-foreground/90">
+              <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
+              Paystack-secured checkout · Cancel renewal anytime
+            </p>
+          </>
+        )}
+        {user && history.results.length > 0 && (
+          <details className="group text-center">
+            <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[13px] font-medium text-muted-foreground transition-colors marker:hidden hover:text-foreground">
+              Payment history
+              <ChevronDown
+                className="h-3 w-3 transition-transform group-open:rotate-180"
+                aria-hidden
+              />
+            </summary>
+            <section className="mt-3 space-y-2 rounded-2xl border border-border/60 bg-card/35 p-2 text-left">
+              {history.results.map((payment) => (
+                <button
+                  type="button"
+                  key={payment.id}
+                  className="flex w-full items-start justify-between gap-3 rounded-xl bg-secondary/70 p-3 text-left text-xs transition-colors hover:bg-secondary"
+                  onClick={() => {
+                    setReference(payment.reference);
+                    navigate(
+                      `/pro?reference=${encodeURIComponent(payment.reference)}`,
+                      { replace: true },
+                    );
+                  }}
+                >
+                  <span className="break-all">
+                    {payment.reference}
+                    <span className="mt-1 block text-muted-foreground">
+                      {new Date(payment.createdAtMs).toLocaleDateString()} ·{" "}
+                      {payment.plan}
+                    </span>
+                  </span>
+                  <span>
+                    {money(payment.amount)}
+                    <span className="mt-1 block capitalize">
+                      {payment.status}
+                    </span>
+                  </span>
+                </button>
+              ))}
+              {history.status === "CanLoadMore" && (
+                <Button variant="outline" onClick={() => history.loadMore(10)}>
+                  Older payments
+                </Button>
+              )}
+            </section>
+          </details>
+        )}
+        {error && (
+          <p
+            role="alert"
+            className="rounded-xl border border-destructive/30 p-3 text-sm text-destructive"
           >
-            Payment support
-          </a>
-        </p>
-      )}
+            {error}
+          </p>
+        )}
+        {!configuration.beta && (
+          <p className="text-center text-[13px] text-muted-foreground">
+            <a
+              className="underline"
+              href={`mailto:info@poscalfx.com?subject=${encodeURIComponent(`Poscal Pro payment ${order?.reference ?? ""}`)}`}
+            >
+              Payment support
+            </a>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
