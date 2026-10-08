@@ -1,16 +1,6 @@
 {
   "buildCommand": "node scripts/vercel-build.mjs",
   "outputDirectory": "dist",
-  "crons": [
-    {
-      "path": "/api/scheduled-expiry",
-      "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/scheduled-reminder",
-      "schedule": "0 4 * * *"
-    }
-  ],
   "rewrites": [
     {
       "source": "/api/(.*)",

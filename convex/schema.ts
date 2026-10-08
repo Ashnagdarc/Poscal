@@ -9,6 +9,76 @@ const nullableAny = v.optional(v.union(v.any(), v.null()));
 
 export default defineSchema({
   ...authTables,
+  // Canonical Pro billing. Legacy fields below are read-only migration inputs.
+  proAccounts: defineTable({
+    userId: v.id("users"), expiresAtMs: v.number(), legacyExpiresAtMs: v.optional(v.number()), legacyPaymentMode: v.optional(v.union(v.literal("live"), v.literal("test"))), paymentMode: v.optional(v.union(v.literal("live"), v.literal("test"))), hasPaidBefore: v.optional(v.boolean()),
+    activeOrderId: v.optional(v.id("proOrders")),
+    freeJournalId: v.optional(v.id("tradingAccounts")),
+    freeJournalChosen: v.optional(v.boolean()),
+    autoRenewEnabled: v.optional(v.boolean()),
+    autoRenewPlan: v.optional(v.union(v.literal("monthly"), v.literal("yearly"))),
+    autoRenewAmount: v.optional(v.number()),
+    autoRenewPolicyVersion: v.optional(v.number()),
+    autoRenewAuthorizationCode: v.optional(v.string()),
+    autoRenewEmail: v.optional(v.string()),
+    autoRenewSignature: v.optional(v.string()),
+    autoRenewChannel: v.optional(v.string()),
+    autoRenewLast4: v.optional(v.string()),
+    autoRenewBrand: v.optional(v.string()),
+    autoRenewBank: v.optional(v.string()),
+    autoRenewExpMonth: v.optional(v.string()),
+    autoRenewExpYear: v.optional(v.string()),
+    autoRenewCountryCode: v.optional(v.string()),
+    autoRenewNextChargeAtMs: v.optional(v.number()),
+    autoRenewFailureCount: v.optional(v.number()),
+    autoRenewLeaseUntilMs: v.optional(v.number()),
+    autoRenewConsentAtMs: v.optional(v.number()),
+    autoRenewConsentVersion: v.optional(v.number()),
+    autoRenewOrderId: v.optional(v.id("proOrders")),
+    updatedAtMs: v.number(),
+  }).index("by_user", ["userId"]).index("by_expiry", ["expiresAtMs"])
+    .index("by_auto_renew_due", ["autoRenewEnabled", "autoRenewNextChargeAtMs"]),
+  proOrders: defineTable({
+    userId: v.id("users"), email: v.string(), reference: v.string(),
+    plan: v.union(v.literal("monthly"), v.literal("yearly")), mode: v.union(v.literal("live"), v.literal("test")),
+    amount: v.number(), baseAmount: v.number(), currency: v.literal("NGN"),
+    status: v.union(v.literal("initializing"), v.literal("pending"), v.literal("paid"), v.literal("failed"), v.literal("abandoned"), v.literal("review"), v.literal("reversed")),
+    couponId: v.optional(v.id("proCoupons")), couponCode: v.optional(v.string()), couponReservationActive: v.optional(v.boolean()),
+    returnTo: v.string(), reminders: v.boolean(),
+    source: v.optional(v.union(v.literal("checkout"), v.literal("auto_renew"))),
+    autoRenewRequested: v.optional(v.boolean()),
+    accessCode: v.optional(v.string()), checkoutUrl: v.optional(v.string()),
+    providerTransactionId: v.optional(v.string()), providerStatus: v.optional(v.string()),
+    paidAtMs: v.optional(v.number()), activatedAtMs: v.optional(v.number()), grantStartMs: v.optional(v.number()), grantEndMs: v.optional(v.number()),
+    lastCheckedAtMs: v.optional(v.number()), nextCheckAtMs: v.number(), checks: v.number(),
+    verificationLeaseUntilMs: v.optional(v.number()), reviewReason: v.optional(v.string()), financialHoldDigest: v.optional(v.string()),
+    createdAtMs: v.number(), updatedAtMs: v.number(),
+  }).index("by_reference", ["reference"]).index("by_user_created", ["userId", "createdAtMs"])
+    .index("by_due", ["nextCheckAtMs"]).index("by_status_created", ["status", "createdAtMs"])
+    .index("by_provider_id", ["providerTransactionId"]).index("by_user_coupon", ["userId", "couponId"]),
+  proCoupons: defineTable({
+    code: v.string(), percentOff: v.number(), enabled: v.boolean(),
+    validUntilMs: v.number(), maxUses: v.number(), reservedUses: v.number(), redeemedUses: v.number(),
+    firstPurchaseOnly: v.boolean(), betaUsersOnly: v.boolean(), betaCutoffMs: v.number(),
+    plan: v.optional(v.union(v.literal("monthly"), v.literal("yearly"))),
+    createdAtMs: v.number(), createdBy: v.id("users"),
+  }).index("by_code", ["code"]),
+  proLegacyPayments: defineTable({
+    sourceId: v.string(), source: v.any(), reference: v.string(),
+    verification: v.union(v.literal("verified"), v.literal("rejected")),
+    verifiedExpiresAtMs: v.optional(v.number()), archivedAtMs: v.number(), actor: v.id("users"),
+  }).index("by_source", ["sourceId"]).index("by_reference", ["reference"]),
+  proUsage: defineTable({
+    userId: v.id("users"), month: v.string(), entriesCreated: v.number(),
+  }).index("by_user_month", ["userId", "month"]),
+  proWebhookEvents: defineTable({
+    digest: v.string(), event: v.string(), reference: v.optional(v.string()),
+    orderId: v.optional(v.id("proOrders")), providerId: v.optional(v.string()), createdAtMs: v.number(),
+    // Only identifiers are persisted, never card/bank authorization data.
+  }).index("by_digest", ["digest"]),
+  proBillingAudit: defineTable({
+    actor: v.id("users"), action: v.string(), detail: v.string(), createdAtMs: v.number(),
+  }).index("by_created", ["createdAtMs"]),
   users: defineTable({
     name: nullableString,
     fullName: nullableString,
@@ -26,6 +96,7 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     subscriptionTier: v.optional(v.string()),
     subscriptionExpiresAtMs: nullableNumber,
+    accountDeletionRequestedAtMs: nullableNumber,
   })
     .index("email", ["email"])
     .index("phone", ["phone"]),
@@ -63,12 +134,14 @@ export default defineSchema({
     balance: v.number(),
     startingBalance: nullableNumber,
     status: v.optional(v.string()),
+    deletionRequestedAtMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
     /** Incremented whenever a manual trade changes; used to validate analytics snapshots. */
     statsVersion: v.optional(v.number()),
   })
     .index("by_user", ["userId"])
+    .index("by_user_status", ["userId", "status"])
     .index("by_external_id", ["externalId"]),
 
   tradingJournal: defineTable({
@@ -130,6 +203,7 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_trade", ["tradeId"])
+    .index("by_journal", ["journalId", "createdAtMs"])
     .index("by_user_updated", ["userId", "updatedAtMs"]),
 
   tradeJournalAttachments: defineTable({
@@ -149,6 +223,7 @@ export default defineSchema({
     updatedAtMs: v.number(),
   })
     .index("by_trade_role", ["tradeId", "role", "sortOrder"])
+    .index("by_journal", ["journalId", "createdAtMs"])
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_user_status_created", ["userId", "status", "createdAtMs"])
     .index("by_status_created", ["status", "createdAtMs"]),

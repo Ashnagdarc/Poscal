@@ -7,7 +7,7 @@ export default defineConfig({
     globals: true,
     setupFiles: './src/test/setup.ts',
     css: true,
-    include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.{test,spec}.{ts,tsx}'],
+    include: ['src/**/*.{test,spec}.{ts,tsx}', 'api/**/*.{test,spec}.{ts,tsx}', 'convex/**/*.test.ts'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json'],
@@ -19,7 +19,11 @@ export default defineConfig({
         'src/lib/journalReducers.ts',
         'src/lib/calculatorModeSync.ts',
         'src/components/ProtectedRoute.tsx',
-        'api/_lib/paystackWebhookCore.ts',
+        'shared/proPolicy.ts',
+        'convex/lib/proAccess.ts',
+        'convex/proBilling.ts',
+        'convex/proPayments.ts',
+        'src/components/ProCheckout.tsx',
       ],
       thresholds: {
         lines: 70,

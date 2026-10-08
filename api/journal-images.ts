@@ -169,6 +169,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   } catch (error) {
     const message = error instanceof Error ? error.message : "Journal image request failed";
     console.error("[journal-images]", message);
+    const proMessage = /PRO_REQUIRED: [^\n]*/.exec(message)?.[0];
+    if (proMessage) return res.status(403).json({ success: false, message: proMessage });
     return res.status(errorStatus(message)).json({ success: false, message });
   }
 }

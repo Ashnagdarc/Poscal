@@ -1,3 +1,4 @@
+import { getProAccess } from "./lib/proAccess";
 import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
@@ -21,6 +22,7 @@ export const viewer = query({
       return null;
     }
 
+    const pro = await getProAccess(ctx, userId);
     // Privileged fields only from own profile — never fall back to a foreign email match.
     const profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
 
@@ -31,12 +33,9 @@ export const viewer = query({
       avatarUrl: user.avatarUrl ?? user.image ?? profile?.avatarUrl ?? null,
       emailVerified: user.emailVerificationTime !== undefined,
       role: profile?.role ?? user.role ?? "user",
-      // Prefer profile payment fields (same as viewerProfile) so SubscriptionContext
-      // can reuse this query without changing paid-lock / expiry behavior.
-      paymentStatus: profile?.paymentStatus ?? user.paymentStatus ?? "free",
-      subscriptionTier: profile?.subscriptionTier ?? user.subscriptionTier ?? "free",
-      subscriptionExpiresAtMs:
-        profile?.subscriptionExpiresAtMs ?? user.subscriptionExpiresAtMs ?? null,
+      paymentStatus: pro.paid ? "paid" : "free",
+      subscriptionTier: pro.paid ? "pro" : "free",
+      subscriptionExpiresAtMs: pro.expiresAtMs,
       createdAt: user._creationTime,
     };
   },
@@ -55,6 +54,7 @@ export const viewerProfile = query({
       return null;
     }
 
+    const pro = await getProAccess(ctx, userId);
     const profile = await findOwnedOrOrphanProfile(ctx.db, userId, user.email);
     const avatarUrl =
       profile?.avatarUrl ??
@@ -69,10 +69,9 @@ export const viewerProfile = query({
         full_name: profile.fullName ?? user.fullName ?? user.name ?? null,
         avatar_url: avatarUrl,
         role: profile.role ?? user.role ?? "user",
-        payment_status: profile.paymentStatus ?? user.paymentStatus ?? "free",
-        subscription_tier: profile.subscriptionTier ?? user.subscriptionTier ?? "free",
-        subscription_expires_at:
-          profile.subscriptionExpiresAtMs ?? user.subscriptionExpiresAtMs ?? null,
+        payment_status: pro.paid ? "paid" : "free",
+        subscription_tier: pro.paid ? "pro" : "free",
+        subscription_expires_at: pro.expiresAtMs,
         created_at: profile.createdAtMs ?? user._creationTime,
         timezone: profile.timezone ?? null,
         default_risk_percent: profile.defaultRiskPercent ?? null,
@@ -88,9 +87,9 @@ export const viewerProfile = query({
       full_name: user.fullName ?? user.name ?? null,
       avatar_url: avatarUrl,
       role: user.role ?? "user",
-      payment_status: user.paymentStatus ?? "free",
-      subscription_tier: user.subscriptionTier ?? "free",
-      subscription_expires_at: user.subscriptionExpiresAtMs ?? null,
+      payment_status: pro.paid ? "paid" : "free",
+      subscription_tier: pro.paid ? "pro" : "free",
+      subscription_expires_at: pro.expiresAtMs,
       created_at: user._creationTime,
       timezone: null,
       default_risk_percent: null,
@@ -155,9 +154,7 @@ export const markJournalTourCompleted = mutation({
       fullName: user.fullName ?? user.name ?? null,
       avatarUrl: user.avatarUrl ?? user.image ?? null,
       role: user.role ?? "user",
-      paymentStatus: user.paymentStatus ?? "free",
-      subscriptionTier: user.subscriptionTier ?? "free",
-      subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+
       journalTourCompletedAtMs: now,
       createdAtMs: now,
       updatedAtMs: now,
@@ -321,9 +318,7 @@ export const saveAvatar = mutation({
         avatarUrl,
         avatarStorageId: args.storageId,
         role: user.role ?? "user",
-        paymentStatus: user.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? "free",
-        subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+
         createdAtMs: Date.now(),
         updatedAtMs: Date.now(),
       });
@@ -404,6 +399,52 @@ export const revokeAllSessions = mutation({
 });
 
 /**
+ * Start resumable account deletion. The marker lets asset-aware cleanup remove
+ * the selected Free journal without turning that exception into a normal
+ * journal-rotation path.
+ */
+export const beginAccountDeletion = mutation({
+  args: { confirmation: v.literal("DELETE") },
+  returns: v.null(),
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const user = await ctx.db.get(userId);
+    if (!user) throw new Error("User not found");
+    const now = Date.now();
+    await ctx.db.patch(userId, {
+      accountDeletionRequestedAtMs: now,
+    });
+
+    const proAccount = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (proAccount) {
+      await ctx.db.patch(proAccount._id, {
+        autoRenewEnabled: false,
+        autoRenewAmount: undefined,
+        autoRenewPolicyVersion: undefined,
+        autoRenewNextChargeAtMs: undefined,
+        autoRenewLeaseUntilMs: 0,
+        autoRenewOrderId: undefined,
+        autoRenewAuthorizationCode: undefined,
+        autoRenewEmail: undefined,
+        autoRenewSignature: undefined,
+        autoRenewChannel: undefined,
+        autoRenewLast4: undefined,
+        autoRenewBrand: undefined,
+        autoRenewBank: undefined,
+        autoRenewExpMonth: undefined,
+        autoRenewExpYear: undefined,
+        autoRenewCountryCode: undefined,
+        updatedAtMs: now,
+      });
+    }
+    return null;
+  },
+});
+
+/**
  * Hard-delete the authenticated user's Poscal data + auth records (GDPR-style).
  * Irreversible. Client must sign out after success.
  */
@@ -421,6 +462,37 @@ export const deleteAccount = mutation({
       throw new Error("User not found");
     }
 
+    const deletionStartedAt = user.accountDeletionRequestedAtMs ?? 0;
+    if (
+      !deletionStartedAt ||
+      Date.now() - deletionStartedAt > 60 * 60_000
+    ) {
+      throw new Error(
+        "Account deletion session expired. Start account deletion again.",
+      );
+    }
+
+    const [remainingJournal, remainingTrade, remainingAttachment] =
+      await Promise.all([
+        ctx.db
+          .query("tradingAccounts")
+          .withIndex("by_user", (q) => q.eq("userId", userId))
+          .first(),
+        ctx.db
+          .query("tradingJournal")
+          .withIndex("by_user_created", (q) => q.eq("userId", userId))
+          .first(),
+        ctx.db
+          .query("tradeJournalAttachments")
+          .withIndex("by_user_created", (q) => q.eq("userId", userId))
+          .first(),
+      ]);
+    if (remainingJournal || remainingTrade || remainingAttachment) {
+      throw new Error(
+        "Account assets must be cleaned through the resumable deletion flow before deleting the account.",
+      );
+    }
+
     const counts = {
       trades: 0,
       history: 0,
@@ -428,6 +500,9 @@ export const deleteAccount = mutation({
       journals: 0,
       push: 0,
       payments: 0,
+      proUsage: 0,
+      proAccount: 0,
+      storageUsage: 0,
       notifications: 0,
       authSessions: 0,
       authAccounts: 0,
@@ -486,6 +561,36 @@ export const deleteAccount = mutation({
     for (const row of paymentRows) {
       await ctx.db.delete(row._id);
       counts.payments += 1;
+    }
+
+    // Disable and remove the live entitlement/auto-renew record before the
+    // user disappears. Historical Pro orders remain as financial evidence,
+    // but reusable Paystack authorization tokens must not survive deletion.
+    const proAccount = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (proAccount) {
+      await ctx.db.delete(proAccount._id);
+      counts.proAccount += 1;
+    }
+
+    const usageRows = await ctx.db
+      .query("proUsage")
+      .withIndex("by_user_month", (q) => q.eq("userId", userId))
+      .collect();
+    for (const row of usageRows) {
+      await ctx.db.delete(row._id);
+      counts.proUsage += 1;
+    }
+
+    const storageUsage = await ctx.db
+      .query("userStorageUsage")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (storageUsage) {
+      await ctx.db.delete(storageUsage._id);
+      counts.storageUsage += 1;
     }
 
     const notificationRows = await ctx.db

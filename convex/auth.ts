@@ -42,9 +42,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           email,
           ...(rawName ? { name: rawName, fullName: rawName } : {}),
           role: "user",
-          paymentStatus: "free",
-          subscriptionTier: "free",
-          subscriptionExpiresAtMs: null,
+
           avatarUrl: null,
           image: null,
         };
@@ -105,10 +103,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         fullName: user.fullName ?? user.name ?? avatarSource?.fullName ?? null,
         avatarUrl,
         role: user.role ?? privilegeSource?.role ?? "user",
-        paymentStatus: user.paymentStatus ?? privilegeSource?.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? privilegeSource?.subscriptionTier ?? "free",
-        subscriptionExpiresAtMs:
-          user.subscriptionExpiresAtMs ?? privilegeSource?.subscriptionExpiresAtMs ?? null,
+
         updatedAtMs: Date.now(),
       };
 
@@ -125,10 +120,7 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           ...payload,
           // Preserve orphan display fields; do not import their paid/admin state.
           role: privilegeSource?.role ?? user.role ?? "user",
-          paymentStatus: privilegeSource?.paymentStatus ?? user.paymentStatus ?? "free",
-          subscriptionTier: privilegeSource?.subscriptionTier ?? user.subscriptionTier ?? "free",
-          subscriptionExpiresAtMs:
-            privilegeSource?.subscriptionExpiresAtMs ?? user.subscriptionExpiresAtMs ?? null,
+
         });
         if (byUserId && byUserId._id !== orphanLegacy._id) {
           await db.delete(byUserId._id);

@@ -1,3 +1,4 @@
+import { assertEditableJournal } from "./lib/proAccess";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
@@ -105,6 +106,7 @@ export const upsertDay = mutation({
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
+    await assertEditableJournal(ctx, userId, args.journalId);
 
     const noteCap = 8_000;
     if (args.preMarketNotes && args.preMarketNotes.length > noteCap) {

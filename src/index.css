@@ -255,3 +255,12 @@ html[data-font="markets"] {
     line-height: 1.64;
   }
 }
+
+/* A focused, system-native type treatment for the checkout flow. */
+.pro-checkout,
+.pro-checkout h1,
+.pro-checkout h2,
+.pro-checkout h3,
+.pro-checkout .font-display {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+}

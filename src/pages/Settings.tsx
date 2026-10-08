@@ -8,16 +8,12 @@ import {
   FileText,
   Globe,
   LogOut,
-  Lock,
   Mail,
   Megaphone,
   Palette,
   RotateCcw,
   RefreshCw,
-  Settings as SettingsIcon,
-  Shield,
   Smartphone,
-  Sparkles,
   Trash2,
   Type,
   User,
@@ -26,7 +22,6 @@ import {
 import { useMutation, useQuery } from "convex/react";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
-import { useActionError } from "@/contexts/ActionErrorContext";
 import { useAppFont } from "@/contexts/useAppFont";
 import { useCurrency, ACCOUNT_CURRENCIES } from "@/contexts/CurrencyContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -34,17 +29,21 @@ import { PageHeader } from "@/components/PageHeader";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { LaptopMinimalCheckIcon } from "@/components/ui/laptop-minimal-check";
+import { LockKeyholeIcon } from "@/components/ui/lock-keyhole";
+import { ReceiptIcon } from "@/components/ui/receipt";
+import { SettingsIcon as AnimatedSettingsIcon } from "@/components/ui/settings";
+import { ShieldCheckIcon } from "@/components/ui/shield-check";
 import { useHaptics } from "@/hooks/use-haptics";
 import { usePWAInstall } from "@/hooks/use-pwa-install";
 import { usePWAUpdate } from "@/hooks/use-pwa-update";
 import { NotificationSettings } from "@/components/NotificationSettings";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
-import { featureFlagApi, preferencesApi, subscriptionApi } from "@/lib/api";
-import { isPaymentsEnabled } from "@/lib/paymentsConfig";
+import { preferencesApi } from "@/lib/api";
 import { clearJournalEntries } from "@/lib/calculatorHistory";
 import { clearSensitiveLocalStorage } from "@/lib/privacyCleanup";
+import { hasConsent } from "@/lib/consent";
 import type { AppFontId } from "@/lib/fonts";
 import { COMMON_TIMEZONES, detectBrowserTimeZone } from "@/lib/timezones";
 import { cn } from "@/lib/utils";
@@ -54,40 +53,26 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   if (!(error instanceof Error)) return fallback;
   const message = error.message.trim();
   if (
-    !message
-    || /VITE_|RESEND_|VAPID_|API_KEY|PaystackPop|Convex client|Request ID|@convex|\.ts:|\.js:/i.test(message)
-    || message.length > 160
+    !message ||
+    /VITE_|RESEND_|VAPID_|API_KEY|PaystackPop|Convex client|Request ID|@convex|\.ts:|\.js:/i.test(
+      message,
+    ) ||
+    message.length > 160
   ) {
     return fallback;
   }
   return message;
 };
 
-const getSubscriptionLabel = ({
-  isPaid,
-  isTrial,
-  subscriptionTier,
-}: {
-  isPaid: boolean;
-  isTrial: boolean;
-  subscriptionTier: string;
-}) => {
-  if (isTrial) return "Trial";
-  if (isPaid) return subscriptionTier === "pro" ? "Pro" : "Premium";
-  return "Free";
-};
-
 const Settings = () => {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
-  const { showErrorFromUnknown } = useActionError();
-  const { isPaid, isTrial, subscriptionTier, expiresAt, refreshSubscription } = useSubscription();
+  const { isPaid, hasPro, expiresAt, isBeta } = useSubscription();
   const { isAdmin } = useAdmin();
   const { fontId, options: fontOptions, setFontId } = useAppFont();
   const sessionSummary = useQuery(api.users.sessionSummary, user ? {} : "skip");
   const revokeOtherSessions = useMutation(api.users.revokeOtherSessions);
   const revokeAllSessions = useMutation(api.users.revokeAllSessions);
-  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [defaultRisk, setDefaultRisk] = useState("1");
   const [hapticsEnabled, setHapticsEnabled] = useState(true);
   const [showCurrencyPicker, setShowCurrencyPicker] = useState(false);
@@ -98,21 +83,22 @@ const Settings = () => {
   const [isSavingTimezone, setIsSavingTimezone] = useState(false);
   const { lightTap, isSupported } = useHaptics();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
-  const { updateAvailable, isUpdating, updateApp, checkForUpdate } = usePWAUpdate();
+  const { updateAvailable, isUpdating, updateApp, checkForUpdate } =
+    usePWAUpdate();
   const { currency, setCurrency } = useCurrency();
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [isRestoringPurchase, setIsRestoringPurchase] = useState(false);
   const [showClearHistoryConfirm, setShowClearHistoryConfirm] = useState(false);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showRevokeOtherConfirm, setShowRevokeOtherConfirm] = useState(false);
   const [showRevokeAllConfirm, setShowRevokeAllConfirm] = useState(false);
   const [isRevokingSessions, setIsRevokingSessions] = useState(false);
-  const supportsHaptics = typeof isSupported === "function" ? isSupported() : !!isSupported;
+  const supportsHaptics =
+    typeof isSupported === "function" ? isSupported() : !!isSupported;
 
-  const subscriptionLabel = getSubscriptionLabel({ isPaid, isTrial, subscriptionTier });
-  const isPremium = isPaid || isTrial;
+  const subscriptionLabel = isBeta ? "Beta access" : isPaid ? "Pro" : "Free";
 
   useEffect(() => {
+    if (!hasConsent("preferences")) return;
     const savedRisk = localStorage.getItem("defaultRisk");
     if (savedRisk) setDefaultRisk(savedRisk);
 
@@ -132,12 +118,16 @@ const Settings = () => {
         if (!mounted || !prefs) return;
         if (prefs.timezone) {
           setTimezone(prefs.timezone);
-          localStorage.setItem("preferredTimezone", prefs.timezone);
+          if (hasConsent("preferences")) {
+            localStorage.setItem("preferredTimezone", prefs.timezone);
+          }
         }
         if (prefs.default_risk_percent != null) {
           const risk = String(prefs.default_risk_percent);
           setDefaultRisk(risk);
-          localStorage.setItem("defaultRisk", risk);
+          if (hasConsent("preferences")) {
+            localStorage.setItem("defaultRisk", risk);
+          }
         }
       } catch {
         // Keep local defaults
@@ -147,31 +137,6 @@ const Settings = () => {
       mounted = false;
     };
   }, [user?.id]);
-
-  useEffect(() => {
-    if (isAdmin) {
-      (async () => {
-        try {
-          const enabled = await featureFlagApi.getPaidLock();
-          setPaidLockEnabled(enabled);
-        } catch (err) {
-          console.error("Could not fetch paid lock flag", err);
-        }
-      })();
-    }
-  }, [isAdmin]);
-
-  const togglePaidLockFromSettings = async () => {
-    try {
-      const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
-      setPaidLockEnabled(!!updatedState);
-      toast.success(updatedState ? "Paid lock enabled" : "Paid lock disabled");
-    } catch (err: unknown) {
-      console.error("togglePaidLockFromSettings error", err);
-      toast.error(getErrorMessage(err, "Failed to toggle paid lock"));
-    }
-  };
 
   const handleFontChange = async (nextFont: AppFontId) => {
     if (nextFont === fontId || isSavingFont) return;
@@ -193,13 +158,17 @@ const Settings = () => {
   const toggleHaptics = () => {
     const newValue = !hapticsEnabled;
     setHapticsEnabled(newValue);
-    localStorage.setItem("hapticsEnabled", String(newValue));
+    if (hasConsent("preferences")) {
+      localStorage.setItem("hapticsEnabled", String(newValue));
+    }
     if (newValue) lightTap();
   };
 
   const handleRiskChange = (value: string) => {
     setDefaultRisk(value);
-    localStorage.setItem("defaultRisk", value);
+    if (hasConsent("preferences")) {
+      localStorage.setItem("defaultRisk", value);
+    }
     lightTap();
     if (user) {
       void preferencesApi
@@ -215,18 +184,24 @@ const Settings = () => {
     setIsSavingTimezone(true);
     const previous = timezone;
     setTimezone(nextZone);
-    localStorage.setItem("preferredTimezone", nextZone);
+    if (hasConsent("preferences")) {
+      localStorage.setItem("preferredTimezone", nextZone);
+    }
     try {
       if (user) {
         await preferencesApi.update({ timezone: nextZone });
       }
-      const label = COMMON_TIMEZONES.find((zone) => zone.id === nextZone)?.label ?? nextZone;
+      const label =
+        COMMON_TIMEZONES.find((zone) => zone.id === nextZone)?.label ??
+        nextZone;
       toast.success(`Timezone set to ${label}`);
       setShowTimezonePicker(false);
       lightTap();
     } catch {
       setTimezone(previous);
-      localStorage.setItem("preferredTimezone", previous);
+      if (hasConsent("preferences")) {
+        localStorage.setItem("preferredTimezone", previous);
+      }
       toast.error("Could not update timezone");
     } finally {
       setIsSavingTimezone(false);
@@ -325,43 +300,25 @@ const Settings = () => {
     }
   };
 
-  const handleRestorePurchase = async () => {
-    if (!user?.id) {
-      toast.error("Please sign in to restore purchases.");
-      navigate("/signin");
-      return;
-    }
-
-    setIsRestoringPurchase(true);
-    try {
-      const result = await subscriptionApi.restorePurchase({ userId: user.id });
-      if (!result?.success) {
-        throw new Error(result?.message || "No eligible purchase found.");
-      }
-
-      await refreshSubscription();
-      const tier = result?.data?.tier || "premium";
-      toast.success(`Purchase restored successfully (${tier}).`);
-    } catch (error: unknown) {
-      showErrorFromUnknown(error, {
-        title: "Restore failed",
-        fallbackMessage: "We couldn’t restore your purchase. Try again or contact support.",
-        code: "RESTORE",
-      });
-    } finally {
-      setIsRestoringPurchase(false);
-    }
-  };
-
   return (
     <div className="flex min-h-full flex-col bg-background">
       <PageHeader
         title="Settings"
         subtitle="Preferences and account"
-        icon={<SettingsIcon className="h-5 w-5" />}
+        icon={
+          <AnimatedSettingsIcon
+            aria-hidden="true"
+            data-animated-icon="settings"
+            size={20}
+            className="flex h-full w-full items-center justify-center"
+          />
+        }
       />
 
-      <main id="main-content" className="mx-auto w-full max-w-2xl flex-1 animate-slide-up space-y-6 px-6 py-2 pb-8 md:max-w-3xl">
+      <main
+        id="main-content"
+        className="mx-auto w-full max-w-2xl flex-1 animate-slide-up space-y-6 px-6 py-2 pb-8 md:max-w-3xl"
+      >
         {/* Account hero */}
         <section>
           {user ? (
@@ -376,23 +333,26 @@ const Settings = () => {
                   name={user.full_name}
                   email={user.email}
                   src={user.avatar_url}
+                  pro={isPaid}
                   className="rounded-2xl"
                 />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-display text-lg font-semibold text-foreground">
                     {user.full_name || user.email?.split("@")[0] || "Account"}
                   </p>
-                  <p className="truncate text-sm text-muted-foreground">{user.email}</p>
+                  <p className="truncate text-sm text-muted-foreground">
+                    {user.email}
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
                     <Badge
-                      variant={isPremium ? "default" : "secondary"}
+                      variant={hasPro ? "default" : "secondary"}
                       className="rounded-full text-[10px] uppercase tracking-wide"
                     >
                       {subscriptionLabel}
                     </Badge>
                     {expiresAt && (
                       <span className="text-xs text-muted-foreground">
-                        Renews {expiresAt.toLocaleDateString()}
+                        Expires {expiresAt.toLocaleDateString()}
                       </span>
                     )}
                   </div>
@@ -419,7 +379,14 @@ const Settings = () => {
             <SettingsSection title="Security" />
             <SettingsGroup>
               <SettingsRow
-                icon={<Smartphone className="h-4 w-4" />}
+                icon={
+                  <LaptopMinimalCheckIcon
+                    aria-hidden="true"
+                    data-animated-icon="other-devices"
+                    size={16}
+                    className="flex h-full w-full items-center justify-center"
+                  />
+                }
                 title="Sign out other devices"
                 subtitle={
                   sessionSummary == null
@@ -432,7 +399,14 @@ const Settings = () => {
                 showChevron
               />
               <SettingsRow
-                icon={<Shield className="h-4 w-4 text-destructive" />}
+                icon={
+                  <ShieldCheckIcon
+                    aria-hidden="true"
+                    data-animated-icon="sign-out-everywhere"
+                    size={16}
+                    className="flex h-full w-full items-center justify-center text-destructive"
+                  />
+                }
                 iconClassName="bg-destructive/10"
                 title="Sign out everywhere"
                 subtitle="Ends every session, including this device"
@@ -441,7 +415,14 @@ const Settings = () => {
                 showChevron
               />
               <SettingsRow
-                icon={<Lock className="h-4 w-4" />}
+                icon={
+                  <LockKeyholeIcon
+                    aria-hidden="true"
+                    data-animated-icon="reset-password"
+                    size={16}
+                    className="flex h-full w-full items-center justify-center"
+                  />
+                }
                 title="Reset password"
                 subtitle="Email a code, then set a new password (signs out other devices)"
                 onClick={() => navigate("/forgot-password")}
@@ -452,57 +433,35 @@ const Settings = () => {
           </section>
         ) : null}
 
-        {/* Subscription — restore always available; checkout only when payments enabled */}
-        {user && !isPremium ? (
+        {user && (
           <section>
-            <SettingsSection title="Subscription" />
-            <div className="overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-secondary/40 to-secondary/20">
-              {isPaymentsEnabled() && paidLockEnabled ? (
-                <div className="px-5 py-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-brand" />
-                    <h3 className="font-semibold text-foreground">Unlock Premium</h3>
-                  </div>
-                  <p className="mb-4 text-sm text-muted-foreground">
-                    Get calendar alerts, advanced journal analytics, and more.
-                  </p>
-                  <Button
-                    className="w-full rounded-xl bg-brand text-brand-foreground hover:bg-brand/90"
-                    onClick={() => navigate("/upgrade?tier=premium&redirectPath=/settings")}
-                  >
-                    View plans
-                  </Button>
-                </div>
-              ) : (
-                <div className="px-5 py-5">
-                  <div className="mb-3 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-brand" />
-                    <h3 className="font-semibold text-foreground">Subscription</h3>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    {isPaymentsEnabled()
-                      ? "Restore a previous purchase if your access did not sync."
-                      : "Checkout is paused. Restore a previous purchase if you already paid."}
-                  </p>
-                </div>
-              )}
-              <div className="border-t border-border/40 bg-background/30">
-                <SettingsRow
-                  icon={<RotateCcw className="h-4 w-4" />}
-                  title="Restore purchase"
-                  subtitle="Recover an existing subscription"
-                  onClick={handleRestorePurchase}
-                  trailing={
-                    <span className="text-xs text-muted-foreground">
-                      {isRestoringPurchase ? "Restoring…" : "Run"}
-                    </span>
-                  }
-                  className="rounded-none border-0 bg-transparent hover:bg-background/40"
-                />
-              </div>
-            </div>
+            <SettingsSection title="Poscal Pro" />
+            <SettingsGroup>
+              <SettingsRow
+                icon={
+                  <ReceiptIcon
+                    aria-hidden="true"
+                    data-animated-icon="poscal-pro"
+                    size={16}
+                    className="flex h-full w-full items-center justify-center"
+                  />
+                }
+                title={
+                  isBeta
+                    ? "Pro features included during beta"
+                    : isPaid
+                      ? "Manage Poscal Pro"
+                      : "Explore Poscal Pro"
+                }
+                subtitle={
+                  isBeta ? "Payments are switched off" : "Plans and receipts"
+                }
+                onClick={() => navigate("/pro?returnTo=/settings")}
+                showChevron
+              />
+            </SettingsGroup>
           </section>
-        ) : null}
+        )}
 
         {/* Admin */}
         {isAdmin && (
@@ -527,22 +486,18 @@ const Settings = () => {
                 trailing={<AdminBadge />}
               />
               <SettingsRow
-                icon={<Lock className="h-4 w-4" />}
-                title="Paid features lock"
-                subtitle="Restrict premium pages for free users"
-                trailing={
-                  <Button
-                    size="sm"
-                    variant={paidLockEnabled ? "default" : "outline"}
-                    className="h-8 rounded-lg text-xs"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void togglePaidLockFromSettings();
-                    }}
-                  >
-                    {paidLockEnabled ? "On" : "Off"}
-                  </Button>
+                icon={
+                  <LockKeyholeIcon
+                    aria-hidden="true"
+                    data-animated-icon="admin-billing"
+                    size={16}
+                    className="flex h-full w-full items-center justify-center"
+                  />
                 }
+                title="Pro billing controls"
+                subtitle="Beta switch, discounts and tracked payments"
+                onClick={() => navigate("/admin/billing")}
+                showChevron
               />
               <div className="border-t border-border/40">
                 <button
@@ -558,7 +513,8 @@ const Settings = () => {
                   />
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-muted-foreground">
-                      {fontOptions.find((option) => option.id === fontId)?.label ?? "Markets"}
+                      {fontOptions.find((option) => option.id === fontId)
+                        ?.label ?? "Markets"}
                     </span>
                     <AdminBadge />
                     <ChevronRight
@@ -599,11 +555,15 @@ const Settings = () => {
                             >
                               {option.sample}
                             </p>
-                            <p className="mt-2 text-sm font-semibold">{option.label}</p>
+                            <p className="mt-2 text-sm font-semibold">
+                              {option.label}
+                            </p>
                             <p
                               className={cn(
                                 "mt-0.5 text-xs",
-                                isActive ? "opacity-80" : "text-muted-foreground",
+                                isActive
+                                  ? "opacity-80"
+                                  : "text-muted-foreground",
                               )}
                             >
                               {option.subtitle}
@@ -681,7 +641,9 @@ const Settings = () => {
                         <p
                           className={cn(
                             "mt-0.5 text-xs",
-                            currency.code === curr.code ? "opacity-80" : "text-muted-foreground",
+                            currency.code === curr.code
+                              ? "opacity-80"
+                              : "text-muted-foreground",
                           )}
                         >
                           {curr.name}
@@ -706,7 +668,8 @@ const Settings = () => {
                 />
                 <div className="flex items-center gap-2">
                   <span className="max-w-[9rem] truncate text-sm font-medium text-muted-foreground">
-                    {COMMON_TIMEZONES.find((zone) => zone.id === timezone)?.label ?? timezone}
+                    {COMMON_TIMEZONES.find((zone) => zone.id === timezone)
+                      ?.label ?? timezone}
                   </span>
                   <ChevronRight
                     className={cn(
@@ -719,7 +682,8 @@ const Settings = () => {
               {showTimezonePicker && (
                 <div className="border-t border-border/40 bg-background/40 px-5 pb-4 pt-3">
                   <p className="mb-2 text-[11px] text-muted-foreground">
-                    Formats trade dates and day buckets. Session rollups stay on UTC market hours.
+                    Formats trade dates and day buckets. Session rollups stay on
+                    UTC market hours.
                   </p>
                   <div className="grid max-h-56 grid-cols-1 gap-2 overflow-y-auto">
                     {COMMON_TIMEZONES.map((zone) => (
@@ -742,7 +706,9 @@ const Settings = () => {
                         <p
                           className={cn(
                             "mt-0.5 text-xs",
-                            timezone === zone.id ? "opacity-80" : "text-muted-foreground",
+                            timezone === zone.id
+                              ? "opacity-80"
+                              : "text-muted-foreground",
                           )}
                         >
                           {zone.id}
@@ -757,7 +723,11 @@ const Settings = () => {
             <SettingsRow
               icon={<Smartphone className="h-4 w-4" />}
               title="Haptic feedback"
-              subtitle={supportsHaptics ? "Vibration on interactions" : "Audio feedback active"}
+              subtitle={
+                supportsHaptics
+                  ? "Vibration on interactions"
+                  : "Audio feedback active"
+              }
               trailing={
                 <SettingsToggle
                   enabled={hapticsEnabled}
@@ -780,7 +750,14 @@ const Settings = () => {
             )}
 
             <SettingsRow
-              icon={<RefreshCw className={cn("h-4 w-4", (isCheckingUpdate || isUpdating) && "animate-spin")} />}
+              icon={
+                <RefreshCw
+                  className={cn(
+                    "h-4 w-4",
+                    (isCheckingUpdate || isUpdating) && "animate-spin",
+                  )}
+                />
+              }
               title="Update app"
               subtitle={
                 updateAvailable
@@ -794,7 +771,11 @@ const Settings = () => {
               }}
               trailing={
                 <span className="text-xs font-medium text-muted-foreground">
-                  {isUpdating || isCheckingUpdate ? "Updating…" : updateAvailable ? "Update" : "Check"}
+                  {isUpdating || isCheckingUpdate
+                    ? "Updating…"
+                    : updateAvailable
+                      ? "Update"
+                      : "Check"}
                 </span>
               }
               className="border-t border-border/40"
@@ -876,7 +857,14 @@ const Settings = () => {
               className="border-t border-border/40"
             />
             <SettingsRow
-              icon={<Shield className="h-4 w-4" />}
+              icon={
+                <ShieldCheckIcon
+                  aria-hidden="true"
+                  data-animated-icon="privacy"
+                  size={16}
+                  className="flex h-full w-full items-center justify-center"
+                />
+              }
               title="Privacy policy"
               onClick={() => window.open("/privacy", "_blank")}
               showChevron
@@ -899,8 +887,12 @@ const Settings = () => {
         )}
 
         <footer className="space-y-1 pb-8 pt-2 text-center">
-          <p className="text-xs text-muted-foreground">Poscal · Position Size Calculator</p>
-          <p className="text-[11px] text-muted-foreground/60">Officially sponsored by MandeFX</p>
+          <p className="text-xs text-muted-foreground">
+            Poscal · Position Size Calculator
+          </p>
+          <p className="text-[11px] text-muted-foreground/60">
+            Officially sponsored by MandeFX
+          </p>
         </footer>
       </main>
 
@@ -934,7 +926,9 @@ const Settings = () => {
         isOpen={showRevokeOtherConfirm}
         onClose={() => !isRevokingSessions && setShowRevokeOtherConfirm(false)}
         onConfirm={() => {
-          void handleRevokeOtherSessions().then(() => setShowRevokeOtherConfirm(false));
+          void handleRevokeOtherSessions().then(() =>
+            setShowRevokeOtherConfirm(false),
+          );
         }}
         title="Sign out other devices?"
         description="Other phones and browsers will need your email and password again. This device stays signed in. Your trades and journals are not deleted."
@@ -947,11 +941,15 @@ const Settings = () => {
         isOpen={showRevokeAllConfirm}
         onClose={() => !isRevokingSessions && setShowRevokeAllConfirm(false)}
         onConfirm={() => {
-          void handleSignOutEverywhere().then(() => setShowRevokeAllConfirm(false));
+          void handleSignOutEverywhere().then(() =>
+            setShowRevokeAllConfirm(false),
+          );
         }}
         title="Sign out everywhere?"
         description="Every session, including this one, will end. You will need to sign in again. Your trades and journals are not deleted."
-        confirmText={isRevokingSessions ? "Signing out…" : "Sign out everywhere"}
+        confirmText={
+          isRevokingSessions ? "Signing out…" : "Sign out everywhere"
+        }
         cancelText="Cancel"
         variant="destructive"
       />
@@ -1009,7 +1007,9 @@ function SettingsRowContent({
       </div>
       <div className="min-w-0 text-left">
         <p className="font-medium text-foreground">{title}</p>
-        {subtitle ? <p className="text-xs text-muted-foreground">{subtitle}</p> : null}
+        {subtitle ? (
+          <p className="text-xs text-muted-foreground">{subtitle}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -1046,7 +1046,9 @@ function SettingsRow({
       />
       <div className="flex shrink-0 items-center gap-2">
         {trailing}
-        {showChevron ? <ChevronRight className="h-4 w-4 text-muted-foreground" /> : null}
+        {showChevron ? (
+          <ChevronRight className="h-4 w-4 text-muted-foreground" />
+        ) : null}
       </div>
     </>
   );

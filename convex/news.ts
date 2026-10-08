@@ -187,9 +187,7 @@ export const setNewsAlertsEnabled = mutation({
         fullName: user.fullName ?? user.name ?? null,
         avatarUrl: user.avatarUrl ?? user.image ?? null,
         role: user.role ?? "user",
-        paymentStatus: user.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? "free",
-        subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+
         newsAlertsEnabled: args.enabled,
         createdAtMs: now,
         updatedAtMs: now,

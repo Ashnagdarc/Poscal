@@ -65,13 +65,6 @@ addAuthInterceptor(serverlessApi);
 addErrorInterceptor(api);
 addErrorInterceptor(serverlessApi);
 
-interface FeatureFlagResponse {
-  success: boolean;
-  key: string;
-  enabled: boolean;
-  message?: string;
-}
-
 const parseFeatureFlagError = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
     const status = err.response?.status;
@@ -83,30 +76,6 @@ const parseFeatureFlagError = (err: unknown): string => {
 };
 
 export const featureFlagApi = {
-  getPaidLock: async (): Promise<boolean> => {
-    try {
-      logger.log('[feature-flag] Fetching paid lock status from Convex...');
-      const enabled = await convexClient.query(convexApi.admin.getPaidLock, {});
-      logger.log('[feature-flag] Paid lock status:', enabled);
-      return !!enabled;
-    } catch (err) {
-      logger.error('[feature-flag] Error:', err);
-      throw new Error(parseFeatureFlagError(err));
-    }
-  },
-
-  setPaidLock: async (enabled: boolean): Promise<boolean> => {
-    try {
-      logger.log('[feature-flag] Setting paid lock to:', enabled);
-      await getAuthenticatedConvexClient().mutation(convexApi.admin.setPaidLock, { enabled });
-      logger.log('[feature-flag] Update success');
-      return !!enabled;
-    } catch (err) {
-      logger.error('[feature-flag] Update error:', err);
-      throw new Error(parseFeatureFlagError(err));
-    }
-  },
-
   getAppFont: async (): Promise<string> => {
     try {
       const fontId = await convexClient.query(convexApi.admin.getAppFont, {});
@@ -322,44 +291,6 @@ export const tradesApi = {
 };
 
 // Subscription API
-export const subscriptionApi = {
-  getDetails: async (): Promise<any> => {
-    const { data } = await api.get('/payments/subscription');
-    return data;
-  },
-
-  getEntitlements: async (): Promise<any> => {
-    const { data } = await api.get('/payments/entitlements');
-    return data;
-  },
-
-  checkFeatureAccess: async (feature: string): Promise<boolean> => {
-    const { data } = await api.get(`/payments/feature-access/${feature}`);
-    return data.hasAccess;
-  },
-
-  verifyPayment: async (payload: {
-    reference: string;
-  }): Promise<any> => {
-    const { data } = await serverlessApi.post('/api/verify-payment', payload, {
-      headers: {
-        Authorization: `Bearer ${getStoredConvexAuthToken() ?? ''}`,
-      },
-    });
-    return data;
-  },
-
-  restorePurchase: async (payload: { userId: string }): Promise<any> => {
-    const { data } = await serverlessApi.post('/api/restore-purchase', payload, {
-      headers: {
-        Authorization: `Bearer ${getStoredConvexAuthToken() ?? ''}`,
-      },
-    });
-    return data;
-  },
-};
-
-// Push Notifications API
 export const notificationsApi = {
   // Get user's push subscriptions
   getSubscriptions: async (): Promise<any[]> => {

@@ -1,3 +1,6 @@
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useProPaywall } from "@/contexts/ProPaywallContext";
+import { ProAccessBanner } from "@/components/ProAccessBanner";
 import { useMemo, useState } from "react";
 import { ArrowLeft, BookOpen, Clock3, Plus } from "lucide-react";
 import { useNavigate, useParams } from "react-router-dom";
@@ -29,6 +32,8 @@ const prettyDate = (dateKey: string) =>
 const DayJournal = () => {
   const { dateKey = "" } = useParams<{ dateKey: string }>();
   const navigate = useNavigate();
+  const { hasPro, usage } = useSubscription();
+  const openPro = useProPaywall();
   const { activeJournal } = useJournal();
   const { data: loadedTrades = [] } = useTradesQuery();
   const addTradeMutation = useAddTradeMutation();
@@ -99,6 +104,7 @@ const DayJournal = () => {
       </header>
 
       <main className="mx-auto w-full max-w-3xl space-y-4 px-4 py-5 sm:px-6">
+        <ProAccessBanner journalId={activeJournal?.id} />
         <section className="rounded-2xl bg-secondary p-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -117,7 +123,7 @@ const DayJournal = () => {
 
           <button
             type="button"
-            onClick={() => setShowChooser(true)}
+            onClick={() => (activeJournal?.isReadOnly || (!hasPro && usage.entries >= 15) ? openPro("Add more trades and notebooks") : setShowChooser(true))}
             className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-bold text-brand-foreground transition active:scale-[0.99]"
           >
             <Plus className="h-4 w-4" />

@@ -1,8 +1,12 @@
+import { ProPaywallProvider } from "@/contexts/ProPaywallContext";
+import { ProLaunchPrompt } from "@/components/ProLaunchPrompt";
+import { ConsentBanner } from "@/components/ConsentBanner";
+import { CONSENT_CHANGED_EVENT, hasConsent } from "@/lib/consent";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import { Suspense, useEffect, useRef } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { ActionErrorProvider } from "@/contexts/ActionErrorContext";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { CurrencyProvider } from "@/contexts/CurrencyContext";
@@ -30,7 +34,8 @@ const TradeNotebook = lazyWithRetry(() => import("./pages/TradeNotebook"));
 const DayJournal = lazyWithRetry(() => import("./pages/DayJournal"));
 const Settings = lazyWithRetry(() => import("./pages/Settings"));
 const News = lazyWithRetry(() => import("./pages/News"));
-const Upgrade = lazyWithRetry(() => import("./pages/Upgrade"));
+const Pro = lazyWithRetry(() => import("./pages/Pro"));
+const AdminBilling = lazyWithRetry(() => import("./pages/AdminBilling"));
 const UserManagement = lazyWithRetry(() => import("./pages/UserManagement"));
 const AdminUpdates = lazyWithRetry(() => import("./pages/AdminUpdates"));
 const AdminIngestorHealth = lazyWithRetry(() => import("./pages/AdminIngestorHealth"));
@@ -51,6 +56,34 @@ const PushEnablePrompt = lazyWithRetry(() =>
 );
 
 const queryClient = new QueryClient();
+
+const ConsentAwareAnalytics = () => {
+  const [enabled, setEnabled] = useState(() => hasConsent("analytics"));
+
+  useEffect(() => {
+    const refresh = () => setEnabled(hasConsent("analytics"));
+    window.addEventListener(CONSENT_CHANGED_EVENT, refresh);
+    return () => window.removeEventListener(CONSENT_CHANGED_EVENT, refresh);
+  }, []);
+
+  if (!enabled) return null;
+
+  return (
+    <Analytics
+      beforeSend={(event) => {
+        try {
+          const url = new URL(event.url);
+          for (const key of ["reference", "trxref", "access_code", "token", "returnTo", "redirectPath"]) {
+            url.searchParams.delete(key);
+          }
+          return { ...event, url: url.toString() };
+        } catch {
+          return event;
+        }
+      }}
+    />
+  );
+};
 
 const AppContent = () => {
   const location = useLocation();
@@ -102,26 +135,29 @@ const AppContent = () => {
           <Route path="/signup" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
-          <Route path="/journal" element={<ProtectedRoute requiresPremium>{<Journal />}</ProtectedRoute>} />
+          <Route path="/journal" element={<ProtectedRoute>{<Journal />}</ProtectedRoute>} />
           <Route
             path="/journal/trade/:tradeId"
-            element={<ProtectedRoute requiresPremium>{<TradeNotebook />}</ProtectedRoute>}
+            element={<ProtectedRoute>{<TradeNotebook />}</ProtectedRoute>}
           />
           <Route
             path="/journal/day/:dateKey"
-            element={<ProtectedRoute requiresPremium>{<DayJournal />}</ProtectedRoute>}
+            element={<ProtectedRoute>{<DayJournal />}</ProtectedRoute>}
           />
           <Route
             path="/history"
-            element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>}
+            element={<ProtectedRoute>{<Navigate to="/journal" replace />}</ProtectedRoute>}
           />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-          <Route path="/pricing" element={<Upgrade />} />
-          <Route path="/upgrade" element={<Upgrade />} />
+          <Route path="/pricing" element={<Pro />} />
+          <Route path="/pro" element={<Pro />} />
+          <Route path="/pro/return" element={<Pro />} />
+          <Route path="/admin/billing" element={<ProtectedRoute requiresAdmin><AdminBilling /></ProtectedRoute>} />
+          <Route path="/upgrade" element={<Pro />} />
           <Route
             path="/calendar"
             element={
-              <ProtectedRoute requiresPremium>
+              <ProtectedRoute>
                 <News />
               </ProtectedRoute>
             }
@@ -184,7 +220,10 @@ const App = () => (
                   <FontProvider>
                     <CurrencyProvider>
                       <JournalProvider>
-                        <AppContent />
+                        <ProPaywallProvider>
+                          <ProLaunchPrompt />
+                          <AppContent />
+                        </ProPaywallProvider>
                       </JournalProvider>
                     </CurrencyProvider>
                   </FontProvider>
@@ -192,7 +231,8 @@ const App = () => (
               </PushNotificationsProvider>
             </AuthProvider>
           </BrowserRouter>
-          <Analytics />
+          <ConsentAwareAnalytics />
+          <ConsentBanner />
         </ActionErrorProvider>
       </ErrorBoundary>
     </TooltipProvider>

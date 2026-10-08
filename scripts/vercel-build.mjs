@@ -16,12 +16,62 @@ const run = (command, args, env = process.env) => {
   return result.status ?? 1;
 };
 
+// Verify before any backend deployment, so a test failure cannot remove APIs
+// from the running app while leaving the previous frontend in production.
+run("npm", ["run", "gate:fx"]);
+if (process.exitCode) process.exit(process.exitCode);
+
+if (process.env.VERCEL_ENV === "preview") {
+  // Billing previews reuse Poscal's isolated Convex development deployment.
+  // This deliberately avoids disposable Convex preview deployments and
+  // never falls back to the production backend.
+  const devDeploymentName = "valuable-axolotl-815";
+  const devConvexUrl = `https://${devDeploymentName}.convex.cloud`;
+  const devDeployKey = (process.env.CONVEX_DEV_DEPLOY_KEY || "").trim();
+
+  if (devDeployKey) {
+    if (
+      !devDeployKey.startsWith(`dev:${devDeploymentName}|`)
+    ) {
+      console.error(
+        "[convex-preview] CONVEX_DEV_DEPLOY_KEY must be scoped to valuable-axolotl-815.",
+      );
+      process.exit(1);
+    }
+    console.log(
+      "[convex-preview] pushing branch functions to isolated dev backend",
+      devDeploymentName,
+    );
+    run(
+      "npx",
+      ["convex", "dev", "--once"],
+      { ...process.env, CONVEX_DEPLOY_KEY: devDeployKey },
+    );
+    if (process.exitCode) process.exit(process.exitCode);
+  } else {
+    console.warn(
+      "[convex-preview] CONVEX_DEV_DEPLOY_KEY is not configured; frontend will build against the existing dev backend without pushing branch functions.",
+    );
+  }
+
+  console.log(
+    "[convex-preview] building against isolated dev backend",
+    devConvexUrl,
+  );
+  run("npm", ["run", "build"], {
+    ...process.env,
+    VITE_CONVEX_URL: devConvexUrl,
+  });
+  process.exit(process.exitCode ?? 0);
+}
 if (process.env.VERCEL_ENV !== "production") {
-  run("npm", ["run", "gate:fx"]);
-  if (process.exitCode) process.exit(process.exitCode);
   run("npm", ["run", "build"]);
   process.exit(process.exitCode ?? 0);
 }
+
+// Compile once before deploying. Convex's --cmd below rebuilds with its exact URL.
+run("npm", ["run", "build"]);
+if (process.exitCode) process.exit(process.exitCode);
 
 const deploymentName = "helpful-sturgeon-546";
 const token = (process.env.CONVEX_DEPLOY_TOKEN || "").trim();
@@ -59,7 +109,7 @@ run(
     "--cmd-url-env-var-name",
     "VITE_CONVEX_URL",
     "--cmd",
-    "npm run gate:fx && npm run build",
+    "npm run build",
   ],
   { ...process.env, CONVEX_DEPLOY_KEY: deployKey },
 );

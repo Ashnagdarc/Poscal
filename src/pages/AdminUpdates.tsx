@@ -6,7 +6,6 @@ import {
   Megaphone,
   Calendar,
   Bell,
-  Lock,
   Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -29,7 +28,7 @@ import { logger } from '@/lib/logger';
 import { useAdmin } from '@/hooks/use-admin';
 import { toast } from 'sonner';
 import { format, formatDistanceToNow } from 'date-fns';
-import { featureFlagApi, appUpdatesApi, notificationsApi } from '@/lib/api';
+import { appUpdatesApi, notificationsApi } from '@/lib/api';
 
 interface AppUpdate {
   id: string;
@@ -44,7 +43,6 @@ const AdminUpdates = () => {
   const { isAdmin, loading: adminLoading } = useAdmin();
   const [updates, setUpdates] = useState<AppUpdate[]>([]);
   const [loading, setLoading] = useState(true);
-  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
   const [formData, setFormData] = useState({
     title: '',
@@ -73,30 +71,8 @@ const AdminUpdates = () => {
   useEffect(() => {
     if (isAdmin) {
       fetchUpdates();
-      fetchPaidLock();
     }
   }, [isAdmin]);
-
-  const fetchPaidLock = async () => {
-    try {
-      const enabled = await featureFlagApi.getPaidLock();
-      setPaidLockEnabled(!!enabled);
-    } catch (err) {
-      console.error('fetchPaidLock error', err);
-    }
-  };
-
-  const togglePaidLock = async () => {
-    try {
-      const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
-      setPaidLockEnabled(!!updatedState);
-      toast.success(updatedState ? 'Paid lock enabled' : 'Paid lock disabled');
-    } catch (err: unknown) {
-      console.error('togglePaidLock error', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to toggle paid lock');
-    }
-  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -192,29 +168,7 @@ const AdminUpdates = () => {
 
       <main className="mx-auto max-w-2xl space-y-6 px-6 md:max-w-3xl">
         {/* Admin control */}
-        <section className="overflow-hidden rounded-2xl border border-border/50 bg-secondary/50">
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10">
-                <Lock className="h-4.5 w-4.5 text-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">Paid features lock</p>
-                <p className="text-xs text-muted-foreground">
-                  Restrict premium pages for non-subscribers
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant={paidLockEnabled ? 'default' : 'outline'}
-              onClick={togglePaidLock}
-              className="shrink-0 rounded-xl"
-            >
-              {paidLockEnabled ? 'Enabled' : 'Disabled'}
-            </Button>
-          </div>
-        </section>
+        <Button variant="outline" onClick={() => navigate("/admin/billing")}>Pro billing controls</Button>
 
         {/* Stats */}
         <section className="grid grid-cols-3 gap-3">

@@ -17,7 +17,6 @@ import {
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 const nullableAnyArg = v.optional(v.union(v.any(), v.null()));
-const PAID_LOCK_KEY = "signals_paid_lock_enabled";
 const APP_FONT_KEY = "app_font";
 const INGESTOR_HEALTH_KEY = "primary";
 const APP_FONT_IDS = ["classic", "markets"] as const;
@@ -56,48 +55,6 @@ export const requireAdminForInternal = internalMutation({
   handler: async (ctx) => {
     await requireAdmin(ctx);
     return { success: true };
-  },
-});
-
-export const getPaidLock = query({
-  args: {},
-  handler: async (ctx) => {
-    const row = await ctx.db
-      .query("appSettings")
-      .withIndex("by_key", (q) => q.eq("key", PAID_LOCK_KEY))
-      .unique();
-
-    return row?.valueBoolean ?? false;
-  },
-});
-
-export const setPaidLock = mutation({
-  args: {
-    enabled: v.boolean(),
-  },
-  handler: async (ctx, args) => {
-    const { userId } = await requireAdmin(ctx);
-    const existing = await ctx.db
-      .query("appSettings")
-      .withIndex("by_key", (q) => q.eq("key", PAID_LOCK_KEY))
-      .unique();
-
-    const payload = {
-      key: PAID_LOCK_KEY,
-      valueBoolean: args.enabled,
-      valueString: null,
-      valueNumber: null,
-      updatedAtMs: Date.now(),
-      updatedByUserId: userId,
-    };
-
-    if (existing) {
-      await ctx.db.patch(existing._id, payload);
-    } else {
-      await ctx.db.insert("appSettings", payload);
-    }
-
-    return args.enabled;
   },
 });
 
@@ -151,6 +108,8 @@ export const listUsers = query({
     await requireAdmin(ctx);
     const rows = await ctx.db.query("profiles").collect();
 
+    const accounts = await ctx.db.query("proAccounts").take(5000);
+    const byUser = new Map(accounts.map(account => [String(account.userId), account]));
     return rows
       .sort((a, b) => b.createdAtMs - a.createdAtMs)
       .map((row) => ({
@@ -160,8 +119,8 @@ export const listUsers = query({
         is_admin: isElevatedRole(row.role ?? "user"),
         account_type: row.role ?? "user",
         created_at: new Date(row.createdAtMs).toISOString(),
-        subscription_tier: row.subscriptionTier ?? "free",
-        subscription_end: row.subscriptionExpiresAtMs ? new Date(row.subscriptionExpiresAtMs).toISOString() : null,
+        subscription_tier: (byUser.get(row.externalUserId)?.expiresAtMs ?? 0) > Date.now() ? "pro" : "free",
+        subscription_end: byUser.get(row.externalUserId)?.expiresAtMs ? new Date(byUser.get(row.externalUserId)!.expiresAtMs).toISOString() : null,
       }));
   },
 });
@@ -502,209 +461,5 @@ export const queueNotification = mutation({
     });
 
     return { success: true, tag, data: args.data ?? null };
-  },
-});
-
-/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer (never secret-in-args). */
-export const listExpiringSubscriptions = internalQuery({
-  args: {
-    fromMs: v.number(),
-    toMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const profiles = await ctx.db
-      .query("profiles")
-      .withIndex("by_payment_expires", (q) =>
-        q
-          .eq("paymentStatus", "paid")
-          .gte("subscriptionExpiresAtMs", args.fromMs)
-          .lte("subscriptionExpiresAtMs", args.toMs),
-      )
-      .collect();
-
-    return profiles.map((profile) => ({
-      userId: profile.externalUserId,
-      email: profile.email,
-      fullName: profile.fullName ?? null,
-      subscriptionExpiresAtMs: profile.subscriptionExpiresAtMs ?? null,
-    }));
-  },
-});
-
-/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer. */
-export const expireSubscriptionsBefore = internalMutation({
-  args: {
-    beforeMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const now = Date.now();
-    const profiles = await ctx.db
-      .query("profiles")
-      .withIndex("by_payment_expires", (q) =>
-        q.eq("paymentStatus", "paid").lt("subscriptionExpiresAtMs", args.beforeMs),
-      )
-      .collect();
-    let expiredCount = 0;
-
-    for (const profile of profiles) {
-      await ctx.db.patch(profile._id, {
-        paymentStatus: "free",
-        subscriptionTier: "free",
-        updatedAtMs: now,
-      });
-
-      const user = await ctx.db.get(profile.externalUserId as any);
-      if (user) {
-        await ctx.db.patch(profile.externalUserId as any, {
-          paymentStatus: "free",
-          subscriptionTier: "free",
-        });
-      }
-
-      expiredCount += 1;
-    }
-
-    return { success: true, expiredCount };
-  },
-});
-
-/** Server-only — call via paymentHttp with PAYMENT_SYNC_SECRET bearer. */
-export const syncSubscriptionFromPayment = internalMutation({
-  args: {
-    userId: v.string(),
-    reference: v.string(),
-    tier: v.string(),
-    amount: v.number(),
-    currency: v.string(),
-    status: v.string(),
-    expiresAtMs: nullableNumberArg,
-    paidAtMs: v.number(),
-    metadata: nullableAnyArg,
-  },
-  handler: async (ctx, args) => {
-    const existingRecord = await ctx.db
-      .query("paymentRecords")
-      .withIndex("by_reference", (q) => q.eq("reference", args.reference))
-      .unique();
-
-    const now = Date.now();
-    const normalizedTier =
-      args.tier === "monthly" || args.tier === "yearly" ? "premium" : args.tier;
-    const payload = {
-      userId: args.userId,
-      reference: args.reference,
-      tier: normalizedTier,
-      amount: args.amount,
-      currency: args.currency,
-      status: args.status,
-      expiresAtMs: args.expiresAtMs ?? null,
-      paidAtMs: args.paidAtMs,
-      metadata: args.metadata ?? null,
-      updatedAtMs: now,
-    };
-
-    if (existingRecord) {
-      await ctx.db.patch(existingRecord._id, payload);
-    } else {
-      await ctx.db.insert("paymentRecords", {
-        ...payload,
-        createdAtMs: now,
-      });
-    }
-
-    const user = await ctx.db.get(args.userId as Id<"users">);
-    if (user) {
-      await ctx.db.patch(user._id, {
-        paymentStatus: args.status === "success" ? "paid" : user.paymentStatus ?? "free",
-        subscriptionTier: normalizedTier,
-        subscriptionExpiresAtMs: args.expiresAtMs ?? null,
-      });
-    }
-
-    const profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
-      .first();
-
-    if (profile) {
-      await ctx.db.patch(profile._id, {
-        paymentStatus: args.status === "success" ? "paid" : profile.paymentStatus ?? "free",
-        subscriptionTier: normalizedTier,
-        subscriptionExpiresAtMs: args.expiresAtMs ?? null,
-        updatedAtMs: now,
-      });
-    }
-
-    return { success: true };
-  },
-});
-
-export const restoreLatestPaymentForUser = mutation({
-  args: {
-    userId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const actorId = await getAuthUserId(ctx);
-    if (!actorId || actorId !== args.userId) {
-      throw new Error("Not authenticated");
-    }
-
-    const rows = await ctx.db
-      .query("paymentRecords")
-      .withIndex("by_user_paid", (q) => q.eq("userId", args.userId))
-      .order("desc")
-      .take(1);
-
-    const payment = rows[0];
-    if (!payment || payment.status !== "success") {
-      return { success: false, message: "No eligible purchase found." };
-    }
-
-    const now = Date.now();
-    if (
-      payment.expiresAtMs != null
-      && Number.isFinite(payment.expiresAtMs)
-      && payment.expiresAtMs <= now
-    ) {
-      return { success: false, message: "Latest purchase has expired." };
-    }
-
-    // Normalize legacy plan-period tiers (monthly/yearly) to product tier.
-    const restoredTier =
-      payment.tier === "monthly" || payment.tier === "yearly"
-        ? "premium"
-        : payment.tier;
-
-    const user = await ctx.db.get(args.userId as any);
-    if (user) {
-      await ctx.db.patch(args.userId as any, {
-        paymentStatus: "paid",
-        subscriptionTier: restoredTier,
-        subscriptionExpiresAtMs: payment.expiresAtMs ?? null,
-      });
-    }
-
-    const profile = await ctx.db
-      .query("profiles")
-      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
-      .first();
-
-    if (profile) {
-      await ctx.db.patch(profile._id, {
-        paymentStatus: "paid",
-        subscriptionTier: restoredTier,
-        subscriptionExpiresAtMs: payment.expiresAtMs ?? null,
-        updatedAtMs: now,
-      });
-    }
-
-    return {
-      success: true,
-      message: "Purchase restored",
-      data: {
-        tier: restoredTier,
-        expiry: payment.expiresAtMs ? new Date(payment.expiresAtMs).toISOString() : null,
-      },
-    };
   },
 });

@@ -1,3 +1,6 @@
+import { useSubscription } from "@/contexts/SubscriptionContext";
+import { useProPaywall } from "@/contexts/ProPaywallContext";
+import { ProAccessBanner } from "@/components/ProAccessBanner";
 import { useEffect, useMemo, useState } from "react";
 import { BookOpen, Clock3, Plus, Trash2 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
@@ -60,6 +63,8 @@ const formatPnl = (value: number | null | undefined) => {
 
 const Journal = () => {
   const navigate = useNavigate();
+  const { hasPro, usage } = useSubscription();
+  const openPro = useProPaywall();
   const { user } = useAuth();
   const { showErrorFromUnknown } = useActionError();
   const {
@@ -158,6 +163,7 @@ const Journal = () => {
   }, [user?.id]);
 
   const openLogChooser = () => {
+    if (activeJournal?.isReadOnly || (!hasPro && usage.entries >= 15)) { openPro("Add more trades and notebooks"); return; }
     setTradeToEdit(null);
     setIsLogTradeChooserOpen(true);
   };
@@ -265,6 +271,7 @@ const Journal = () => {
       />
 
       <main id="main-content" className="mx-auto w-full max-w-2xl flex-1 px-4 py-4 sm:px-6 md:max-w-3xl">
+        <ProAccessBanner journalId={activeJournal?.id} />
         {isJournalsLoading ? (
           <div className="space-y-3">
             <Skeleton className="h-24 w-full rounded-2xl" />
@@ -394,6 +401,7 @@ const Journal = () => {
                   onLoadMoreTrades={loadMoreTrades}
                   onAddTrade={openLogChooser}
                   onEditTrade={(trade) => {
+                    if (activeJournal?.isReadOnly) { openPro("Edit this journal"); return; }
                     setTradeToEdit(trade);
                     setOpenNotebookAfterManualSave(false);
                     setIsTradeSheetOpen(true);
