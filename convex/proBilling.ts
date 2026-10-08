@@ -76,10 +76,7 @@ export function gatewayReady() {
   return (
     (productionOrigin ? mode === "live" : mode === "test") &&
     key.startsWith(mode === "live" ? "sk_live_" : "sk_test_") &&
-    /^https:\/\/[^/]+$/.test(origin) &&
-    !!process.env.RESEND_API_KEY &&
-    !!process.env.VAPID_PUBLIC_KEY &&
-    !!process.env.VAPID_PRIVATE_KEY
+    /^https:\/\/[^/]+$/.test(origin)
   );
 }
 
@@ -1265,7 +1262,7 @@ export const setEnabled = mutation({
         throw new Error("Confirm the end of beta and Free limits first");
       if (!gatewayReady())
         throw new Error(
-          "Configure and test the gateway, email and push credentials before launch",
+          "Configure and test the Paystack gateway before launch",
         );
       const legacy = await ctx.db.query("paymentRecords").take(1);
       if (legacy.length)
