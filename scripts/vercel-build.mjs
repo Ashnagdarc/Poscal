@@ -23,9 +23,37 @@ if (process.exitCode) process.exit(process.exitCode);
 
 if (process.env.VERCEL_ENV === "preview") {
   // Billing previews reuse Poscal's isolated Convex development deployment.
-  // This deliberately avoids creating disposable Convex preview deployments
-  // and never falls back to the production backend.
-  const devConvexUrl = "https://valuable-axolotl-815.convex.cloud";
+  // This deliberately avoids disposable Convex preview deployments and
+  // never falls back to the production backend.
+  const devDeploymentName = "valuable-axolotl-815";
+  const devConvexUrl = `https://${devDeploymentName}.convex.cloud`;
+  const devDeployKey = (process.env.CONVEX_DEV_DEPLOY_KEY || "").trim();
+
+  if (devDeployKey) {
+    if (
+      !devDeployKey.startsWith(`dev:${devDeploymentName}|`)
+    ) {
+      console.error(
+        "[convex-preview] CONVEX_DEV_DEPLOY_KEY must be scoped to valuable-axolotl-815.",
+      );
+      process.exit(1);
+    }
+    console.log(
+      "[convex-preview] pushing branch functions to isolated dev backend",
+      devDeploymentName,
+    );
+    run(
+      "npx",
+      ["convex", "dev", "--once"],
+      { ...process.env, CONVEX_DEPLOY_KEY: devDeployKey },
+    );
+    if (process.exitCode) process.exit(process.exitCode);
+  } else {
+    console.warn(
+      "[convex-preview] CONVEX_DEV_DEPLOY_KEY is not configured; frontend will build against the existing dev backend without pushing branch functions.",
+    );
+  }
+
   console.log(
     "[convex-preview] building against isolated dev backend",
     devConvexUrl,
