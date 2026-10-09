@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
 import { formatTradePrice } from "@/lib/pairFormat";
+import { buildJournalTradeEditPatch } from "@/lib/journalTradeEditPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   deleteJournalEntry,
@@ -356,10 +357,10 @@ const TradeNotebook = () => {
 
     setIsSavingTradeDetails(true);
     try {
-      const updated = await updateJournalEntry(user.id, trade.id, {
-        ...input,
-        journal_type: "structured",
-      });
+      const changes = buildJournalTradeEditPatch(trade, input);
+      const updated = Object.keys(changes).length > 0
+        ? await updateJournalEntry(user.id, trade.id, changes)
+        : trade;
       setTrade((current) => ({
         ...updated,
         entry_reason: current?.entry_reason ?? null,

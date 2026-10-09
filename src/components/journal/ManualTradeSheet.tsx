@@ -279,10 +279,22 @@ export const ManualTradeSheet = ({
     setPairError(null);
     setPairSuggestion(null);
 
+    const previousExecutionUnchanged =
+      trade?.journal_type !== "notebook_draft"
+      && trade != null
+      && canonicalizePairSymbol(trade.pair) === pair
+      && toDirection(trade.direction) === form.direction
+      && trade.status === form.status
+      && (trade.entry_price ?? null) === parsePriceInput(form.entry_price)
+      && (trade.exit_price ?? null) === (isClosed ? parsePriceInput(form.exit_price) : null)
+      && (trade.position_size ?? null) === parsePriceInput(form.position_size);
+
     const pnlValue = isClosed
       ? pnlOverride !== null
         ? parsePriceInput(pnlOverride)
-        : estimatedPnl
+        : previousExecutionUnchanged
+          ? trade?.pnl ?? null
+          : estimatedPnl
       : null;
     if (pnlValue != null && Math.abs(pnlValue) > 1_000_000) {
       toast.error("P&L looks unrealistic — check the amount");
@@ -308,14 +320,19 @@ export const ManualTradeSheet = ({
       pnl: pnlValue,
       notes: form.notes.trim() || null,
       tags: form.tags.trim() || null,
-      market_condition: null,
-      entry_date: form.entry_date ? new Date(`${form.entry_date}T12:00:00`).toISOString() : new Date().toISOString(),
-      exit_date:
-        isClosed && form.exit_date
-          ? new Date(`${form.exit_date}T12:00:00`).toISOString()
-          : isClosed
-            ? new Date().toISOString()
-            : null,
+      market_condition: trade?.market_condition ?? null,
+      entry_date: form.entry_date
+        ? trade?.journal_type !== "notebook_draft" && trade && toInputDate(trade.entry_date) === form.entry_date
+          ? trade.entry_date
+          : new Date(`${form.entry_date}T12:00:00`).toISOString()
+        : trade?.journal_type !== "notebook_draft" && trade ? trade.entry_date : new Date().toISOString(),
+      exit_date: !isClosed
+        ? null
+        : form.exit_date
+          ? trade?.journal_type !== "notebook_draft" && trade && toInputDate(trade.exit_date) === form.exit_date
+            ? trade.exit_date ?? null
+            : new Date(`${form.exit_date}T12:00:00`).toISOString()
+          : trade?.journal_type !== "notebook_draft" && trade ? trade.exit_date ?? null : new Date().toISOString(),
     });
   };
 
