@@ -295,7 +295,7 @@ export const ManualTradeSheet = ({
         : previousExecutionUnchanged
           ? trade?.pnl ?? null
           : estimatedPnl
-      : null;
+      : trade?.status === form.status ? trade?.pnl ?? null : null;
     if (pnlValue != null && Math.abs(pnlValue) > 1_000_000) {
       toast.error("P&L looks unrealistic — check the amount");
       return;
@@ -312,7 +312,7 @@ export const ManualTradeSheet = ({
       direction: form.direction,
       status: form.status,
       entry_price: parsePriceInput(form.entry_price),
-      exit_price: isClosed ? parsePriceInput(form.exit_price) : null,
+      exit_price: isClosed ? parsePriceInput(form.exit_price) : trade?.status === form.status ? trade?.exit_price ?? null : null,
       stop_loss: parsePriceInput(form.stop_loss),
       take_profit: parsePriceInput(form.take_profit),
       position_size: parsePriceInput(form.position_size),
@@ -327,7 +327,7 @@ export const ManualTradeSheet = ({
           : new Date(`${form.entry_date}T12:00:00`).toISOString()
         : trade?.journal_type !== "notebook_draft" && trade ? trade.entry_date : new Date().toISOString(),
       exit_date: !isClosed
-        ? null
+        ? trade?.status === form.status ? trade?.exit_date ?? null : null
         : form.exit_date
           ? trade?.journal_type !== "notebook_draft" && trade && toInputDate(trade.exit_date) === form.exit_date
             ? trade.exit_date ?? null
