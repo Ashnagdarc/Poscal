@@ -58,6 +58,21 @@ describe("broker profile resolver", () => {
     });
   });
 
+  it("uses a specifically selected broker's quote digits without changing pip size", () => {
+    const resolved = resolveBrokerProfile(snapshot, "test-broker", "GBP/USD");
+    expect(resolved?.override?.quoteDigits).toBe(5);
+    const spec = calculatePositionSize({
+      symbol: "GBP/USD",
+      accountBalance: 2000,
+      riskPercent: 1,
+      stopLossPips: 50,
+      instrumentSpecOverride: resolved?.override,
+    }).spec;
+    expect(spec?.quoteDigits).toBe(5);
+    expect(spec?.pipSize).toBe(0.0001);
+    expect(spec?.pipValuePerStandardLot).toBeCloseTo(10);
+  });
+
   it("keeps Poscal fallback when the broker entry has only a symbol name", () => {
     const resolved = resolveBrokerProfile(snapshot, "test-broker", "XAU/USD");
     expect(resolved?.brokerSymbol).toBe("GOLD");

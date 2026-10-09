@@ -1,13 +1,21 @@
 import type { InstrumentSpec } from "./instrumentSpecs";
 
+/** Quote digits describe a price, not the size or monetary value of a pip. */
 export function getPriceDecimals(spec: InstrumentSpec): number {
+  if (Number.isInteger(spec.quoteDigits) && spec.quoteDigits! >= 0 && spec.quoteDigits! <= 12) {
+    return spec.quoteDigits!;
+  }
+  // Non-catalogue overrides may supply fractional tick sizes such as 0.25.
+  // Do not use pipSize to infer how many digits a quote needs.
   if (spec.symbol === "XAG/USD") return 3;
-  if (spec.symbol === "XAU/USD") return 2;
-  if (spec.assetClass === "crypto") return 2;
-  if (spec.pipSize >= 1) return 0;
-  if (spec.pipSize >= 0.1) return 1;
-  if (spec.pipSize >= 0.01) return 2;
-  return 4;
+  if (spec.symbol === "XAU/USD" || spec.assetClass === "crypto") return 2;
+  for (let digits = 0; digits <= 12; digits += 1) {
+    const scaledTick = spec.tickSize * 10 ** digits;
+    if (Math.abs(scaledTick - Math.round(scaledTick)) < 1e-7) {
+      return digits;
+    }
+  }
+  return 12;
 }
 
 export function roundPipsFromPriceDistance(distance: number, spec: InstrumentSpec): number {

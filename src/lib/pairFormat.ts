@@ -25,13 +25,14 @@ export function getPairPriceDecimals(symbol: string): number {
   const spec = getInstrumentSpec(pair) ?? getInstrumentSpecBySymbol(pair);
   if (spec) return getPriceDecimals(spec);
 
-  if (pair.includes("JPY")) return 2;
+  if (pair.endsWith("/JPY")) return 3;
   if (pair.includes("XAG")) return 3;
   if (pair.includes("XAU") || pair.includes("BTC") || pair.includes("ETH")) return 2;
   if (pair.includes("US30") || pair.includes("US100") || pair.includes("US500") || pair.includes("NAS100")) {
     return 0;
   }
-  return 4;
+  // Unknown/custom broker instruments must not silently lose entered digits.
+  return 8;
 }
 
 export function pricePlaceholderForPair(symbol: string): string {
@@ -39,10 +40,12 @@ export function pricePlaceholderForPair(symbol: string): string {
   const decimals = getPairPriceDecimals(pair);
 
   if (decimals === 0) return "39500";
+  if (pair.includes("US30") || pair.includes("US100") || pair.includes("US500")) return "39500.00";
   if (pair.includes("XAU")) return "2650.50";
   if (pair.includes("XAG")) return "28.450";
-  if (pair.includes("JPY")) return "150.25";
+  if (pair.endsWith("/JPY")) return "150.250";
   if (pair.includes("BTC")) return "64000.00";
+  if (decimals === 5) return "1.08500";
   if (decimals === 3) return "1.085";
   if (decimals === 2) return "1.09";
   if (decimals === 1) return "1.1";
@@ -55,8 +58,8 @@ export function priceStepForPair(symbol: string): string {
   return (1 / 10 ** decimals).toFixed(decimals);
 }
 
-/** Keep typing fluid while capping fractional digits to the pair format. */
-export function sanitizePriceInput(raw: string, maxDecimals: number, allowNegative = false): string {
+/** Sanitize numeric input. Manual historical prices can preserve broker-specific excess digits. */
+export function sanitizePriceInput(raw: string, maxDecimals: number, allowNegative = false, preserveExtraDecimals = false): string {
   const negative = allowNegative && raw.trim().startsWith("-");
   const cleaned = raw.replace(/[^\d.]/g, "");
   if (!cleaned) return negative ? "-" : "";
@@ -70,9 +73,9 @@ export function sanitizePriceInput(raw: string, maxDecimals: number, allowNegati
     const fraction = cleaned
       .slice(firstDot + 1)
       .replace(/\./g, "")
-      .slice(0, Math.max(0, maxDecimals));
+      .slice(0, preserveExtraDecimals ? undefined : Math.max(0, maxDecimals));
 
-    if (maxDecimals <= 0) {
+    if (maxDecimals <= 0 && !preserveExtraDecimals) {
       next = whole;
     } else if (cleaned.endsWith(".") && fraction.length === 0) {
       next = `${whole}.`;
@@ -87,6 +90,16 @@ export function sanitizePriceInput(raw: string, maxDecimals: number, allowNegati
 export function formatPriceForPair(value: number | null | undefined, symbol: string): string {
   if (value == null || !Number.isFinite(value)) return "";
   return value.toFixed(getPairPriceDecimals(symbol));
+}
+
+/** Present a historical execution without rounding away previously recorded digits. */
+export function formatTradePrice(value: number | null | undefined, symbol: string): string {
+  if (value == null || !Number.isFinite(value)) return "";
+  return value.toLocaleString("en-US", {
+    useGrouping: false,
+    minimumFractionDigits: Math.min(12, getPairPriceDecimals(symbol)),
+    maximumFractionDigits: 12,
+  });
 }
 
 export function parsePriceInput(value: string): number | null {

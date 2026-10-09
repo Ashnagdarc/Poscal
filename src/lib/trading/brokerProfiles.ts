@@ -109,13 +109,19 @@ export const resolveBrokerProfile = (
     hasSizingData = true;
   }
 
+  // Quote digits are descriptive broker metadata, not sizing economics.
+  // Do not infer tickSize or pipSize from digits alone.
+  const hasPrecisionData =
+    Number.isInteger(profile.digits) && profile.digits! >= 0 && profile.digits! <= 12;
+  if (hasPrecisionData) override.quoteDigits = profile.digits;
+
   return {
     brokerSlug,
     brokerName: broker.name,
     platform: broker.platform,
     brokerSymbol: profile.symbol ?? null,
     profile,
-    override: hasSizingData ? override : null,
+    override: hasSizingData || hasPrecisionData ? override : null,
     hasSizingData,
   };
 };
