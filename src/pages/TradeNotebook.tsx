@@ -4,6 +4,8 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { ManualTradeSheet } from "@/components/journal/ManualTradeSheet";
+import { formatTradePrice } from "@/lib/pairFormat";
+import { buildJournalTradeEditPatch } from "@/lib/journalTradeEditPatch";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
   deleteJournalEntry,
@@ -102,12 +104,9 @@ const clearLocalDraft = (tradeId: string) => {
   }
 };
 
-const formatPrice = (value: number | null | undefined) => {
+const formatPrice = (value: number | null | undefined, symbol: string) => {
   if (value == null || !Number.isFinite(value)) return "—";
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: value >= 100 ? 2 : 4,
-    maximumFractionDigits: value >= 100 ? 2 : 5,
-  });
+  return formatTradePrice(value, symbol);
 };
 
 const formatDate = (value?: string | null) => {
@@ -358,10 +357,10 @@ const TradeNotebook = () => {
 
     setIsSavingTradeDetails(true);
     try {
-      const updated = await updateJournalEntry(user.id, trade.id, {
-        ...input,
-        journal_type: "structured",
-      });
+      const changes = buildJournalTradeEditPatch(trade, input);
+      const updated = Object.keys(changes).length > 0
+        ? await updateJournalEntry(user.id, trade.id, changes)
+        : trade;
       setTrade((current) => ({
         ...updated,
         entry_reason: current?.entry_reason ?? null,
@@ -648,19 +647,19 @@ const TradeNotebook = () => {
             <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 text-sm sm:grid-cols-3">
               <div>
                 <p className="text-xs text-muted-foreground">Entry</p>
-                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.entry_price)}</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.entry_price, trade.pair)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Stop loss</p>
-                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.stop_loss)}</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.stop_loss, trade.pair)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Take profit</p>
-                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.take_profit)}</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.take_profit, trade.pair)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Exit</p>
-                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.exit_price)}</p>
+                <p className="mt-1 font-semibold text-foreground">{formatPrice(trade.exit_price, trade.pair)}</p>
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">Position size</p>

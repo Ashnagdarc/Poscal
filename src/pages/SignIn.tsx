@@ -104,17 +104,10 @@ const SignIn = () => {
       return;
     }
 
-    if (password.length < 10) {
-      const message = "Password must be at least 10 characters";
-      setFormError(message);
-      toast.error(message, { duration: 5000 });
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      const { error, signedIn } = await signIn(email, password);
+      const { error, signedIn } = await signIn(email.trim().toLowerCase(), password);
 
       if (error) {
         setFormError(error);
@@ -138,7 +131,7 @@ const SignIn = () => {
       navigate(returnTo, { replace: true });
     } catch (err: unknown) {
       void err;
-      const message = "Invalid email or password";
+      const message = "Could not sign in right now. Please try again or reset your password.";
       setFormError(message);
       toast.error(message, { duration: 6000 });
     } finally {
@@ -202,7 +195,6 @@ const SignIn = () => {
           }}
           placeholder="Enter your password"
           autoComplete="current-password"
-          minLength={10}
           showPassword={showPassword}
           onTogglePassword={() => setShowPassword((current) => !current)}
         />

@@ -27,7 +27,6 @@ import type { JournalTrade } from "@/lib/convexJournal";
 import type { ManualTradeInput } from "@/hooks/queries/use-trades-query";
 import {
   canonicalizePairSymbol,
-  formatPriceForPair,
   getPairPriceDecimals,
   parsePriceInput,
   pricePlaceholderForPair,
@@ -177,10 +176,10 @@ export const ManualTradeSheet = ({
         status: trade.status,
         entry_date: toInputDate(trade.entry_date),
         exit_date: toInputDate(trade.exit_date),
-        entry_price: formatPriceForPair(trade.entry_price, pair),
-        exit_price: formatPriceForPair(trade.exit_price, pair),
-        stop_loss: formatPriceForPair(trade.stop_loss, pair),
-        take_profit: formatPriceForPair(trade.take_profit, pair),
+        entry_price: numberToFormValue(trade.entry_price),
+        exit_price: numberToFormValue(trade.exit_price),
+        stop_loss: numberToFormValue(trade.stop_loss),
+        take_profit: numberToFormValue(trade.take_profit),
         position_size: numberToFormValue(trade.position_size),
         risk_percent: numberToFormValue(trade.risk_percent),
         pnl: numberToFormValue(trade.pnl),
@@ -203,7 +202,9 @@ export const ManualTradeSheet = ({
   ) => {
     setForm((current) => ({
       ...current,
-      [field]: sanitizePriceInput(raw, getPairPriceDecimals(current.pair)),
+      // A journal is a historical record. Do not truncate quotes from brokers
+      // whose precision differs from the catalogue default.
+      [field]: sanitizePriceInput(raw, getPairPriceDecimals(current.pair), false, true),
     }));
   };
 
@@ -217,7 +218,7 @@ export const ManualTradeSheet = ({
       }
       return {
         ...current,
-        [field]: formatPriceForPair(parsed, current.pair),
+        [field]: current[field].endsWith(".") ? current[field].slice(0, -1) : current[field],
       };
     });
   };
@@ -229,22 +230,8 @@ export const ManualTradeSheet = ({
         return current.pair === pair ? current : { ...current, pair };
       }
 
-      return {
-        ...current,
-        pair,
-        entry_price: current.entry_price
-          ? formatPriceForPair(parsePriceInput(current.entry_price), pair)
-          : "",
-        exit_price: current.exit_price
-          ? formatPriceForPair(parsePriceInput(current.exit_price), pair)
-          : "",
-        stop_loss: current.stop_loss
-          ? formatPriceForPair(parsePriceInput(current.stop_loss), pair)
-          : "",
-        take_profit: current.take_profit
-          ? formatPriceForPair(parsePriceInput(current.take_profit), pair)
-          : "",
-      };
+      // Switching instruments must not silently round existing execution prices.
+      return { ...current, pair };
     });
 
     if (!pair.trim()) {
@@ -292,11 +279,23 @@ export const ManualTradeSheet = ({
     setPairError(null);
     setPairSuggestion(null);
 
+    const previousExecutionUnchanged =
+      trade?.journal_type !== "notebook_draft"
+      && trade != null
+      && canonicalizePairSymbol(trade.pair) === pair
+      && toDirection(trade.direction) === form.direction
+      && trade.status === form.status
+      && (trade.entry_price ?? null) === parsePriceInput(form.entry_price)
+      && (trade.exit_price ?? null) === (isClosed ? parsePriceInput(form.exit_price) : null)
+      && (trade.position_size ?? null) === parsePriceInput(form.position_size);
+
     const pnlValue = isClosed
       ? pnlOverride !== null
         ? parsePriceInput(pnlOverride)
-        : estimatedPnl
-      : null;
+        : previousExecutionUnchanged
+          ? trade?.pnl ?? null
+          : estimatedPnl
+      : trade?.status === form.status ? trade?.pnl ?? null : null;
     if (pnlValue != null && Math.abs(pnlValue) > 1_000_000) {
       toast.error("P&L looks unrealistic — check the amount");
       return;
@@ -313,7 +312,7 @@ export const ManualTradeSheet = ({
       direction: form.direction,
       status: form.status,
       entry_price: parsePriceInput(form.entry_price),
-      exit_price: isClosed ? parsePriceInput(form.exit_price) : null,
+      exit_price: isClosed ? parsePriceInput(form.exit_price) : trade?.status === form.status ? trade?.exit_price ?? null : null,
       stop_loss: parsePriceInput(form.stop_loss),
       take_profit: parsePriceInput(form.take_profit),
       position_size: parsePriceInput(form.position_size),
@@ -321,14 +320,19 @@ export const ManualTradeSheet = ({
       pnl: pnlValue,
       notes: form.notes.trim() || null,
       tags: form.tags.trim() || null,
-      market_condition: null,
-      entry_date: form.entry_date ? new Date(`${form.entry_date}T12:00:00`).toISOString() : new Date().toISOString(),
-      exit_date:
-        isClosed && form.exit_date
-          ? new Date(`${form.exit_date}T12:00:00`).toISOString()
-          : isClosed
-            ? new Date().toISOString()
-            : null,
+      market_condition: trade?.market_condition ?? null,
+      entry_date: form.entry_date
+        ? trade?.journal_type !== "notebook_draft" && trade && toInputDate(trade.entry_date) === form.entry_date
+          ? trade.entry_date
+          : new Date(`${form.entry_date}T12:00:00`).toISOString()
+        : trade?.journal_type !== "notebook_draft" && trade ? trade.entry_date : new Date().toISOString(),
+      exit_date: !isClosed
+        ? trade?.status === form.status ? trade?.exit_date ?? null : null
+        : form.exit_date
+          ? trade?.journal_type !== "notebook_draft" && trade && toInputDate(trade.exit_date) === form.exit_date
+            ? trade.exit_date ?? null
+            : new Date(`${form.exit_date}T12:00:00`).toISOString()
+          : trade?.journal_type !== "notebook_draft" && trade ? trade.exit_date ?? null : new Date().toISOString(),
     });
   };
 
@@ -460,6 +464,9 @@ export const ManualTradeSheet = ({
               </p>
             </div>
 
+            <p className="text-[11px] text-muted-foreground">
+              Common quote precision: {priceDecimals} decimals. Your recorded price will not be rounded.
+            </p>
             <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <div className="space-y-2">
                 <Label htmlFor="entry-price">Entry</Label>

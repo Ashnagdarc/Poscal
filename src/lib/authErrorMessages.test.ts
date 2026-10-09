@@ -29,6 +29,27 @@ describe("toSafeAuthErrorMessage", () => {
     ).toBe("Too many attempts. Please wait and try again.");
   });
 
+  it("preserves genuine invalid-credentials responses", () => {
+    expect(toSafeAuthErrorMessage(new Error("Invalid credentials"), "fallback")).toBe(
+      "Invalid email or password",
+    );
+  });
+
+  it("does not disguise generic authentication/provider errors as incorrect credentials", () => {
+    expect(
+      toSafeAuthErrorMessage(
+        new Error("AuthError: internal provider failure\\nRequest ID: abc"),
+        "Could not sign in right now.",
+      ),
+    ).toBe("Could not sign in right now.");
+    expect(
+      toSafeAuthErrorMessage(
+        new Error("Failed to authenticate due to provider timeout\\nRequest ID: xyz"),
+        "Could not sign in right now.",
+      ),
+    ).toBe("Could not sign in right now.");
+  });
+
   it("strips Convex request noise", () => {
     expect(
       toSafeAuthErrorMessage(

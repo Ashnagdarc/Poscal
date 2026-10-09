@@ -16,8 +16,29 @@ describe("calculatorModeSync", () => {
       takeProfitPips: 40,
     });
 
-    expect(prices.stopLossPrice).toBe("1.0980");
-    expect(prices.takeProfitPrice).toBe("1.1040");
+    expect(prices.stopLossPrice).toBe("1.09800");
+    expect(prices.takeProfitPrice).toBe("1.10400");
+  });
+
+  it("calculates fractional GBP/USD pipettes without dropping the fifth digit", () => {
+    const gbpUsd = getInstrumentSpec("GBP/USD")!;
+    const result = pipsToPrices({
+      spec: gbpUsd,
+      direction: "buy",
+      entryPrice: 1.32245,
+      stopLossPips: 10.5,
+      takeProfitPips: 15.3,
+    });
+    expect(gbpUsd.pipSize).toBe(0.0001);
+    expect(gbpUsd.tickSize).toBeCloseTo(0.00001, 10);
+    expect(result.stopLossPrice).toBe("1.32140");
+    expect(result.takeProfitPrice).toBe("1.32398");
+    expect(pricesToPips({
+      spec: gbpUsd,
+      entryPrice: 1.32245,
+      stopLossPrice: 1.3214,
+      takeProfitPrice: 1.32398,
+    }).stopLossPips).toBe(10.5);
   });
 
   it("converts prices back to equivalent pips", () => {

@@ -32,7 +32,7 @@ const ForgotPassword = () => {
     setIsLoading(false);
 
     if (error) {
-      // Soft-fail config / Resend outage: clear message, stay on request step.
+      // Soft-fail config / email-provider outage: clear message, stay on request step.
       setRequestError(error);
       toast.error(error, { duration: 7000 });
       return;
