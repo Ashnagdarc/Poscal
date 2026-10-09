@@ -75,8 +75,8 @@ describe("Pro checkout", () => {
     mocks.paid = true;
     mocks.expiresAt = new Date("2027-10-08T12:00:00Z");
     mount();
-    expect(screen.getByRole("heading", { name: "Hey boss, Daniel!" })).toBeInTheDocument();
-    expect(screen.getByText("Poscal Pro · Active")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Hey boss, Daniel\./ })).toBeInTheDocument();
+    expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("8 Oct 2027")).toBeInTheDocument();
     expect(screen.queryByText("Choose a plan")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Extend access" }));
@@ -92,13 +92,13 @@ describe("Pro checkout", () => {
     mocks.paid = true;
     mocks.fullName = "";
     mount();
-    expect(screen.getByRole("heading", { name: "Hey boss!" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Hey boss\./ })).toBeInTheDocument();
   });
   it("keeps active status visible while a renewal payment needs review", () => {
     mocks.paid = true;
     mocks.order = { reference: "ppro_pending", status: "review", plan: "yearly", amount: 2500000 };
     mount();
-    expect(screen.getByRole("heading", { name: "Hey boss, Daniel!" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /Hey boss, Daniel\./ })).toBeInTheDocument();
     expect(screen.queryByText("Choose a plan")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Review payment" }));
     expect(screen.getByText("Payment needs checking")).toBeInTheDocument();

@@ -14,7 +14,6 @@ import {
   ChevronLeft,
   Loader2,
   LockKeyhole,
-  Sparkles,
   Tag,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -161,7 +160,7 @@ export function ProCheckout({
       undefined,
   );
   const firstName = user?.full_name?.trim().split(/\s+/)[0]?.slice(0, 32);
-  const greeting = firstName ? `Hey boss, ${firstName}!` : "Hey boss!";
+  const greeting = firstName ? `Hey boss, ${firstName}.` : "Hey boss.";
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -357,7 +356,7 @@ export function ProCheckout({
           </p>
           {isPaid ? (
             <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
-              More time in the Pro lounge.
+              Keep your Pro access.
             </h1>
           ) : (
             <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
@@ -408,114 +407,135 @@ export function ProCheckout({
           )}
         </header>
       )}
+      {activeMemberView && (
+        <header
+          className={cn(
+            "mb-8 text-left",
+            sheet ? "mt-2" : "mt-[clamp(3rem,10vh,5.5rem)]",
+          )}
+        >
+          <p className="text-[17px] font-semibold tracking-[-0.015em] text-foreground">
+            Poscal Pro
+          </p>
+          <h1
+            id="pro-member-heading"
+            className="mt-2 break-words text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]"
+          >
+            {greeting}
+            <br />
+            You&apos;re already in.
+          </h1>
+          <p className="mt-7 text-[13px] leading-relaxed text-muted-foreground">
+            Your Pro access is active. No need to buy it twice (we checked).
+          </p>
+        </header>
+      )}
       <div className="space-y-4">
         {activeMemberView ? (
-          <section
-            className={cn(
-              "relative overflow-hidden rounded-[1.75rem] border border-brand/30 bg-brand/[0.08] p-5 sm:p-6",
-              !sheet && "mt-[clamp(3rem,10vh,5.5rem)]",
-            )}
-            aria-labelledby="pro-member-heading"
-          >
-            <div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-brand/15 blur-3xl" aria-hidden />
-            <div className="relative">
-              <div className="flex items-center justify-between gap-3">
-                <span className="inline-flex items-center gap-2 rounded-full border border-brand/25 bg-background/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.09em] text-foreground">
-                  <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
-                  Poscal Pro · Active
-                </span>
-                <Sparkles className="h-5 w-5 text-brand" aria-hidden />
-              </div>
-              <h1 id="pro-member-heading" className="mt-7 break-words text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
-                {greeting}
-              </h1>
-              <p className="mt-3 max-w-[34ch] text-[15px] leading-relaxed text-muted-foreground">
-                You&apos;re already on the list. The velvet rope practically opened itself.
+          <section aria-labelledby="membership-heading">
+            {reference && order?.status === "paid" && (
+              <p className="mb-4 text-sm font-medium text-brand" role="status">
+                Payment confirmed. Your Pro access is active.
               </p>
-              {reference && order?.status === "paid" && (
-                <p className="mt-3 text-sm font-medium text-brand" role="status">Payment confirmed. Your Pro access is active.</p>
-              )}
-              {openOrder && (
-                <div className="mt-5 rounded-xl border border-border/70 bg-background/75 p-4" role="status">
-                  <p className="text-sm font-semibold text-foreground">
-                    {order.status === "review" ? "Your payment needs checking" : "Your extension is in progress"}
-                  </p>
-                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Your current Pro access is still active. If you&apos;ve already been debited, check this payment before trying again.
-                  </p>
-                  <button
-                    type="button"
-                    className="mt-2 text-sm font-medium text-foreground underline underline-offset-4"
-                    onClick={() => setShowPlans(true)}
-                  >
-                    Review payment
-                  </button>
-                </div>
-              )}
-
-              <div className="mt-7 rounded-2xl border border-border/60 bg-background/75 p-4">
-                <h2 className="text-sm font-semibold text-foreground">Your membership</h2>
-                <dl className="mt-3 divide-y divide-border/50 text-sm">
-                  <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
-                    <dt className="text-muted-foreground">Status</dt>
-                    <dd className="font-semibold text-brand">Active</dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 py-2">
-                    <dt className="text-muted-foreground">Access until</dt>
-                    <dd className="text-right font-medium text-foreground">{expiresAt ? membershipDate(expiresAt) : "Active now"}</dd>
-                  </div>
-                  <div className="flex items-center justify-between gap-3 py-2 last:pb-0">
-                    <dt className="text-muted-foreground">Auto-renew</dt>
-                    <dd className="text-right font-medium text-foreground">{autoRenewState.enabled ? "On" : "Off"}</dd>
-                  </div>
-                </dl>
-                {autoRenewState.enabled ? (
-                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                    {autoRenewState.brand ?? "Payment method"}{autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}
-                    {autoRenewState.amount ? ` · ${money(autoRenewState.amount)} per renewal` : ""}
-                    {autoRenewState.nextChargeAt ? ` · Next charge ${membershipDate(autoRenewState.nextChargeAt)}` : ""}
-                  </p>
-                ) : (
-                  <p className="mt-3 text-xs text-muted-foreground">No automatic charges. Your access stays active until the date above.</p>
-                )}
-                {(autoRenewState.enabled || (!configuration.beta && autoRenewState.last4)) && (
-                  <button
-                    type="button"
-                    className="mt-3 text-sm font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
-                    disabled={busy}
-                    onClick={() => {
-                      setBusy(true);
-                      setError("");
-                      void setAutoRenew({ enabled: !autoRenewState.enabled, plan: autoRenewState.plan ?? plan })
-                        .catch((err) => setError(message(err)))
-                        .finally(() => setBusy(false));
-                    }}
-                  >
-                    Turn {autoRenewState.enabled ? "off" : "on"} auto-renew
-                  </button>
-                )}
-              </div>
-
-              <Button
-                className="mt-5 h-12 w-full rounded-xl"
-                onClick={() => {
-                  onCheckoutOpen?.();
-                  navigate(destination);
-                }}
-              >
-                Continue using Poscal
-                <ArrowUpRight className="ml-2 h-4 w-4" aria-hidden />
-              </Button>
-              {!configuration.beta && !openOrder && (
+            )}
+            {openOrder && (
+              <div className="mb-6 rounded-[1.15rem] bg-secondary/70 p-4" role="status">
+                <p className="text-sm font-semibold text-foreground">
+                  {order.status === "review"
+                    ? "Your payment needs checking"
+                    : "Your extension is in progress"}
+                </p>
+                <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                  Your current access is safe. If you were debited, check this payment before trying again.
+                </p>
                 <button
                   type="button"
-                  className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-medium text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                  className="mt-3 text-sm font-medium text-foreground underline underline-offset-4"
                   onClick={() => setShowPlans(true)}
                 >
-                  Extend access
+                  Review payment
                 </button>
-              )}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between border-b border-border/70 pb-3">
+              <h2 id="membership-heading" className="text-[15px] font-semibold text-foreground">
+                Your membership
+              </h2>
+              <span className="inline-flex items-center gap-1.5 text-[13px] font-medium text-brand">
+                <span className="h-1.5 w-1.5 rounded-full bg-brand" aria-hidden />
+                Active
+              </span>
             </div>
+            <dl className="divide-y divide-border/60 text-sm">
+              <div className="flex items-center justify-between gap-3 py-4">
+                <dt className="text-muted-foreground">Access until</dt>
+                <dd className="text-right font-medium text-foreground">
+                  {expiresAt ? membershipDate(expiresAt) : "Active now"}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3 py-4">
+                <dt className="text-muted-foreground">Auto-renew</dt>
+                <dd className="text-right font-medium text-foreground">
+                  {autoRenewState.enabled ? "On" : "Off"}
+                </dd>
+              </div>
+            </dl>
+            {autoRenewState.enabled ? (
+              <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
+                {autoRenewState.brand ?? "Payment method"}
+                {autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}
+                {autoRenewState.amount ? ` · ${money(autoRenewState.amount)} per renewal` : ""}
+                {autoRenewState.nextChargeAt
+                  ? ` · Next charge ${membershipDate(autoRenewState.nextChargeAt)}`
+                  : ""}
+              </p>
+            ) : (
+              <p className="mt-1 text-[13px] text-muted-foreground">
+                No automatic charges. Your access remains active until the date above.
+              </p>
+            )}
+            {(autoRenewState.enabled || (!configuration.beta && autoRenewState.last4)) && (
+              <button
+                type="button"
+                className="mt-3 text-[13px] font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  setError("");
+                  void setAutoRenew({
+                    enabled: !autoRenewState.enabled,
+                    plan: autoRenewState.plan ?? plan,
+                  })
+                    .catch((err) => setError(message(err)))
+                    .finally(() => setBusy(false));
+                }}
+              >
+                Turn {autoRenewState.enabled ? "off" : "on"} auto-renew
+              </button>
+            )}
+
+            <Button
+              className="group mt-8 h-16 w-full rounded-[1.25rem] bg-foreground text-[17px] font-semibold text-background shadow-[0_16px_38px_-26px_hsl(var(--foreground)/0.9)] transition-transform duration-200 hover:scale-[0.995] hover:bg-foreground/90 active:scale-[0.985]"
+              onClick={() => {
+                onCheckoutOpen?.();
+                navigate(destination);
+              }}
+            >
+              Continue using Poscal
+              <span className="ml-2 flex h-7 w-7 items-center justify-center rounded-full border border-background/15 bg-background/10 transition-transform duration-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5">
+                <ArrowUpRight className="h-4 w-4" aria-hidden />
+              </span>
+            </Button>
+            {!configuration.beta && !openOrder && (
+              <button
+                type="button"
+                className="mt-2 flex min-h-11 w-full items-center justify-center rounded-full px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-secondary/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                onClick={() => setShowPlans(true)}
+              >
+                Extend access
+              </button>
+            )}
           </section>
         ) : configuration.beta ? (
           <div className="rounded-2xl border border-brand/30 bg-brand/10 p-5">
