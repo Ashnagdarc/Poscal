@@ -15,6 +15,16 @@ describe("estimateTradePnl", () => {
     ).toBe(100);
   });
 
+  it("calculates GBP/USD fractional-pip gross P&L", () => {
+    expect(estimateTradePnl({
+      pair: "GBP/USD",
+      direction: "short",
+      entryPrice: 1.32245,
+      exitPrice: 1.32240,
+      lots: 1,
+    })).toBe(5);
+  });
+
   it("flips the result for a short", () => {
     expect(
       estimateTradePnl({
