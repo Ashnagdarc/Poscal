@@ -15,6 +15,35 @@ The October 9 login hotfix removed the sign-in-only 10-character password check,
 which was wrongly rejecting existing passwords before server authentication.
 **Keep 10-character rules for registration and password changes**, not sign-in.
 
+## Verified read-only Vercel source recovery
+
+The connected Vercel file-content action truncates large source files. Do not
+copy its partial base64 output. To retrieve complete source without
+reconstructing Brevo provider identifiers from memory:
+
+1. On a machine with the official Vercel CLI and project access, run
+   `npx vercel login` (do not send anyone a Vercel token).
+2. Check out branch `fix/production-auth-signin-recovery`.
+3. Run `node scripts/recover-vercel-production-auth.mjs`.
+4. The script requests only the 11 pinned Oct 9 production auth source files
+   using Vercel's authenticated deployment-file API. It verifies SHA-1 hashes
+   against the live deployment before writing anything.
+5. The verified files are saved **outside** the Git repository, by default
+   to `~/poscal-brevo-recovery-2026-10-09`. The script refuses to overwrite
+   an existing directory and never deploys or changes environment variables.
+6. Review each file for embedded secrets, then copy only verified auth files
+   into the dedicated recovery branch. Run
+   `node scripts/check-production-brevo-parity.mjs` and compare all other
+   runtime code/config against the production source manifest.
+7. Keep this PR in draft until production-source parity and end-to-end
+   account flows pass. Merge the separate quotation-precision PR only after
+   the live auth baseline is versioned and deployment-safe.
+
+If the Vercel API cannot return a complete file, use the **original local
+checkout** that created the successful October 9 CLI deployment; validate it
+with the same parity gate. Do not reconstruct auth files from memory.
+Do not upload credentials, a user database, or a production `.env` file.
+
 ## Required exact source
 
 The live **production** baseline is Vercel
