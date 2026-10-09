@@ -14,6 +14,7 @@ import {
   ChevronLeft,
   Loader2,
   LockKeyhole,
+  Sparkles,
   Tag,
 } from "lucide-react";
 import { api } from "../../convex/_generated/api";
@@ -41,6 +42,13 @@ const money = (amount: number) =>
     currency: "NGN",
     maximumFractionDigits: 0,
   }).format(amount / 100);
+
+const membershipDate = (date: Date) =>
+  new Intl.DateTimeFormat("en-NG", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 
 const message = (error: unknown) => {
   if (!(error instanceof Error))
@@ -102,7 +110,12 @@ export function ProCheckout({
   presentation?: "page" | "sheet";
 }) {
   const { user } = useAuth();
-  const { isPaid, expiresAt, autoRenew: autoRenewState } = useSubscription();
+  const {
+    isPaid,
+    isLoading: subscriptionLoading,
+    expiresAt,
+    autoRenew: autoRenewState,
+  } = useSubscription();
   const location = useLocation();
   const navigate = useNavigate();
   const client = useConvex();
@@ -133,6 +146,7 @@ export function ProCheckout({
   const [reminders, setReminders] = useState(false);
   const [autoRenewRequested, setAutoRenewRequested] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [showPlans, setShowPlans] = useState(false);
   const [error, setError] = useState("");
   const clickLock = useRef(false);
   const mounted = useRef(true);
@@ -146,6 +160,8 @@ export function ProCheckout({
       params.get("redirectPath") ??
       undefined,
   );
+  const firstName = user?.full_name?.trim().split(/\s+/)[0]?.slice(0, 32);
+  const greeting = firstName ? `Hey boss, ${firstName}!` : "Hey boss!";
   useEffect(() => {
     mounted.current = true;
     return () => {
@@ -156,6 +172,10 @@ export function ProCheckout({
   const paymentReference = order?.reference;
   const openOrder =
     !!order && ["initializing", "pending", "review"].includes(order.status);
+
+  useEffect(() => {
+    if (isPaid && reference && order?.status === "paid") setShowPlans(false);
+  }, [isPaid, reference, order?.status]);
 
   useEffect(() => {
     if (!viewerId || !paymentReference || !openOrder) return;
@@ -263,14 +283,18 @@ export function ProCheckout({
     }
   };
 
-  if (!configuration)
+  if (!configuration || subscriptionLoading)
     return (
       <div className="flex justify-center p-8">
         <Loader2 className="animate-spin" aria-label="Loading plans" />
       </div>
     );
   const sheet = presentation === "sheet";
-  const buying = !configuration.beta && order?.status !== "paid";
+  const activeMemberView = isPaid && !showPlans;
+  const buying =
+    !configuration.beta &&
+    !activeMemberView &&
+    (order?.status !== "paid" || showPlans);
   return (
     <div
       className={cn(
@@ -278,7 +302,7 @@ export function ProCheckout({
         sheet ? "px-5 pb-6 pt-10" : "animate-fade-in",
       )}
     >
-      {buying && !sheet && (
+      {(buying || activeMemberView) && !sheet && (
         <nav
           className="flex items-center justify-between"
           aria-label="Checkout navigation"
@@ -286,21 +310,36 @@ export function ProCheckout({
           <button
             type="button"
             className="-ml-2 flex min-h-11 items-center gap-1.5 rounded-full px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            onClick={() => navigate(destination)}
+            onClick={() => {
+              if (isPaid && showPlans) setShowPlans(false);
+              else navigate(destination);
+            }}
           >
             <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted-foreground/20">
               <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
             </span>
             Back
           </button>
-          <button
-            type="button"
-            className="-mr-2 min-h-11 rounded-full px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
-            onClick={() => navigate(destination)}
-          >
-            Skip
-          </button>
+          {buying && !isPaid && (
+            <button
+              type="button"
+              className="-mr-2 min-h-11 rounded-full px-2 text-[15px] font-medium text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+              onClick={() => navigate(destination)}
+            >
+              Skip
+            </button>
+          )}
         </nav>
+      )}
+      {isPaid && showPlans && sheet && (
+        <button
+          type="button"
+          className="-ml-2 mb-4 flex min-h-11 items-center gap-1 rounded-full px-2 text-sm font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+          onClick={() => setShowPlans(false)}
+        >
+          <ChevronLeft className="h-4 w-4" aria-hidden />
+          Back to membership
+        </button>
       )}
       {buying && (
         <header
@@ -310,9 +349,18 @@ export function ProCheckout({
           )}
         >
           <p className="text-[17px] font-semibold tracking-[-0.015em] text-foreground">
-            Subscribe to Poscal Pro
+            {isPaid
+              ? openOrder
+                ? "Your Pro renewal"
+                : "Extend your Pro access"
+              : "Subscribe to Poscal Pro"}
           </p>
-          <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
+          {isPaid ? (
+            <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
+              More time in the Pro lounge.
+            </h1>
+          ) : (
+            <h1 className="mt-2 text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
             Unlock{" "}
             <span
               className="inline-flex items-baseline gap-1 whitespace-nowrap"
@@ -356,11 +404,120 @@ export function ProCheckout({
               500 screenshots
             </span>{" "}
             and more.
-          </h1>
+            </h1>
+          )}
         </header>
       )}
       <div className="space-y-4">
-        {configuration.beta ? (
+        {activeMemberView ? (
+          <section
+            className={cn(
+              "relative overflow-hidden rounded-[1.75rem] border border-brand/30 bg-brand/[0.08] p-5 sm:p-6",
+              !sheet && "mt-[clamp(3rem,10vh,5.5rem)]",
+            )}
+            aria-labelledby="pro-member-heading"
+          >
+            <div className="pointer-events-none absolute -right-12 -top-16 h-48 w-48 rounded-full bg-brand/15 blur-3xl" aria-hidden />
+            <div className="relative">
+              <div className="flex items-center justify-between gap-3">
+                <span className="inline-flex items-center gap-2 rounded-full border border-brand/25 bg-background/70 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.09em] text-foreground">
+                  <span className="h-2 w-2 rounded-full bg-brand" aria-hidden />
+                  Poscal Pro · Active
+                </span>
+                <Sparkles className="h-5 w-5 text-brand" aria-hidden />
+              </div>
+              <h1 id="pro-member-heading" className="mt-7 break-words text-[2.35rem] font-semibold leading-[1.08] tracking-[-0.052em] text-foreground sm:text-[2.65rem]">
+                {greeting}
+              </h1>
+              <p className="mt-3 max-w-[34ch] text-[15px] leading-relaxed text-muted-foreground">
+                You&apos;re already on the list. The velvet rope practically opened itself.
+              </p>
+              {reference && order?.status === "paid" && (
+                <p className="mt-3 text-sm font-medium text-brand" role="status">Payment confirmed. Your Pro access is active.</p>
+              )}
+              {openOrder && (
+                <div className="mt-5 rounded-xl border border-border/70 bg-background/75 p-4" role="status">
+                  <p className="text-sm font-semibold text-foreground">
+                    {order.status === "review" ? "Your payment needs checking" : "Your extension is in progress"}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Your current Pro access is still active. If you&apos;ve already been debited, check this payment before trying again.
+                  </p>
+                  <button
+                    type="button"
+                    className="mt-2 text-sm font-medium text-foreground underline underline-offset-4"
+                    onClick={() => setShowPlans(true)}
+                  >
+                    Review payment
+                  </button>
+                </div>
+              )}
+
+              <div className="mt-7 rounded-2xl border border-border/60 bg-background/75 p-4">
+                <h2 className="text-sm font-semibold text-foreground">Your membership</h2>
+                <dl className="mt-3 divide-y divide-border/50 text-sm">
+                  <div className="flex items-center justify-between gap-3 py-2 first:pt-0">
+                    <dt className="text-muted-foreground">Status</dt>
+                    <dd className="font-semibold text-brand">Active</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-2">
+                    <dt className="text-muted-foreground">Access until</dt>
+                    <dd className="text-right font-medium text-foreground">{expiresAt ? membershipDate(expiresAt) : "Active now"}</dd>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 py-2 last:pb-0">
+                    <dt className="text-muted-foreground">Auto-renew</dt>
+                    <dd className="text-right font-medium text-foreground">{autoRenewState.enabled ? "On" : "Off"}</dd>
+                  </div>
+                </dl>
+                {autoRenewState.enabled ? (
+                  <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+                    {autoRenewState.brand ?? "Payment method"}{autoRenewState.last4 ? ` ending ${autoRenewState.last4}` : ""}
+                    {autoRenewState.amount ? ` · ${money(autoRenewState.amount)} per renewal` : ""}
+                    {autoRenewState.nextChargeAt ? ` · Next charge ${membershipDate(autoRenewState.nextChargeAt)}` : ""}
+                  </p>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">No automatic charges. Your access stays active until the date above.</p>
+                )}
+                {(autoRenewState.enabled || (!configuration.beta && autoRenewState.last4)) && (
+                  <button
+                    type="button"
+                    className="mt-3 text-sm font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
+                    disabled={busy}
+                    onClick={() => {
+                      setBusy(true);
+                      setError("");
+                      void setAutoRenew({ enabled: !autoRenewState.enabled, plan: autoRenewState.plan ?? plan })
+                        .catch((err) => setError(message(err)))
+                        .finally(() => setBusy(false));
+                    }}
+                  >
+                    Turn {autoRenewState.enabled ? "off" : "on"} auto-renew
+                  </button>
+                )}
+              </div>
+
+              <Button
+                className="mt-5 h-12 w-full rounded-xl"
+                onClick={() => {
+                  onCheckoutOpen?.();
+                  navigate(destination);
+                }}
+              >
+                Continue using Poscal
+                <ArrowUpRight className="ml-2 h-4 w-4" aria-hidden />
+              </Button>
+              {!configuration.beta && !openOrder && (
+                <button
+                  type="button"
+                  className="mt-2 flex min-h-11 w-full items-center justify-center rounded-xl text-sm font-medium text-muted-foreground transition-colors hover:bg-background/50 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
+                  onClick={() => setShowPlans(true)}
+                >
+                  Extend access
+                </button>
+              )}
+            </div>
+          </section>
+        ) : configuration.beta ? (
           <div className="rounded-2xl border border-brand/30 bg-brand/10 p-5">
             <h2 className="font-semibold">Included during beta</h2>
             <p className="mt-2 text-sm text-muted-foreground">
@@ -374,7 +531,7 @@ export function ProCheckout({
               Continue using Poscal
             </Button>
           </div>
-        ) : order?.status === "paid" ? (
+        ) : order?.status === "paid" && !showPlans ? (
           <div
             className="rounded-2xl border border-green-500/30 p-5"
             role="status"
@@ -449,28 +606,7 @@ export function ProCheckout({
           <>
             {isPaid && (
               <p className="px-1 text-[13px] leading-relaxed text-muted-foreground">
-                Pro is active until {expiresAt?.toLocaleDateString()}. This
-                purchase extends your access. Auto-renew is{" "}
-                {autoRenewState.enabled ? "on" : "off"}.
-                {(autoRenewState.enabled || autoRenewState.last4) && (
-                  <button
-                    type="button"
-                    className="ml-1 font-medium text-foreground underline underline-offset-2"
-                    disabled={busy}
-                    onClick={() => {
-                      setBusy(true);
-                      setError("");
-                      void setAutoRenew({
-                        enabled: !autoRenewState.enabled,
-                        plan: autoRenewState.plan ?? plan,
-                      })
-                        .catch((err) => setError(message(err)))
-                        .finally(() => setBusy(false));
-                    }}
-                  >
-                    Manage renewal
-                  </button>
-                )}
+                Your Pro access is active until {expiresAt ? membershipDate(expiresAt) : "your current period ends"}. This purchase extends that access.
               </p>
             )}
             {openOrder ? (

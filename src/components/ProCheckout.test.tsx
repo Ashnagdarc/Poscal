@@ -5,6 +5,10 @@ import { getFunctionName } from "convex/server";
 import { ProCheckout } from "./ProCheckout";
 const mocks = vi.hoisted(() => ({
   beta: false,
+  paid: false,
+  subscriptionLoading: false,
+  fullName: "Daniel Samuel",
+  expiresAt: null as Date | null,
   order: null as any,
   start: vi.fn(),
   verify: vi.fn(),
@@ -13,12 +17,13 @@ const mocks = vi.hoisted(() => ({
   resume: vi.fn(),
 }));
 vi.mock("@/contexts/AuthContext", () => ({
-  useAuth: () => ({ user: { id: "trader" } }),
+  useAuth: () => ({ user: { id: "trader", full_name: mocks.fullName } }),
 }));
 vi.mock("@/contexts/SubscriptionContext", () => ({
   useSubscription: () => ({
-    isPaid: false,
-    expiresAt: null,
+    isPaid: mocks.paid,
+    isLoading: mocks.subscriptionLoading,
+    expiresAt: mocks.expiresAt,
     autoRenew: {
       enabled: false,
       plan: null,
@@ -54,6 +59,10 @@ const mount = () =>
   );
 beforeEach(() => {
   mocks.beta = false;
+  mocks.paid = false;
+  mocks.subscriptionLoading = false;
+  mocks.fullName = "Daniel Samuel";
+  mocks.expiresAt = null;
   mocks.order = null;
   mocks.start.mockReset();
   mocks.query.mockReset();
@@ -62,6 +71,38 @@ beforeEach(() => {
   mocks.setAutoRenew.mockReset().mockResolvedValue(null);
 });
 describe("Pro checkout", () => {
+  it("greets an active member with status instead of a purchase pitch", () => {
+    mocks.paid = true;
+    mocks.expiresAt = new Date("2027-10-08T12:00:00Z");
+    mount();
+    expect(screen.getByRole("heading", { name: "Hey boss, Daniel!" })).toBeInTheDocument();
+    expect(screen.getByText("Poscal Pro · Active")).toBeInTheDocument();
+    expect(screen.getByText("8 Oct 2027")).toBeInTheDocument();
+    expect(screen.queryByText("Choose a plan")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Extend access" }));
+    expect(screen.getByText("Choose a plan")).toBeInTheDocument();
+  });
+  it("waits for membership status before showing checkout", () => {
+    mocks.subscriptionLoading = true;
+    mount();
+    expect(screen.getByLabelText("Loading plans")).toBeInTheDocument();
+    expect(screen.queryByText("Choose a plan")).not.toBeInTheDocument();
+  });
+  it("uses a friendly fallback when the member has no profile name", () => {
+    mocks.paid = true;
+    mocks.fullName = "";
+    mount();
+    expect(screen.getByRole("heading", { name: "Hey boss!" })).toBeInTheDocument();
+  });
+  it("keeps active status visible while a renewal payment needs review", () => {
+    mocks.paid = true;
+    mocks.order = { reference: "ppro_pending", status: "review", plan: "yearly", amount: 2500000 };
+    mount();
+    expect(screen.getByRole("heading", { name: "Hey boss, Daniel!" })).toBeInTheDocument();
+    expect(screen.queryByText("Choose a plan")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review payment" }));
+    expect(screen.getByText("Payment needs checking")).toBeInTheDocument();
+  });
   it("shows included beta access and never offers a payment button", () => {
     mocks.beta = true;
     mount();
