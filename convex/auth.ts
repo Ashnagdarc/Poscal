@@ -3,18 +3,18 @@ import { convexAuth } from "@convex-dev/auth/server";
 import { ConvexError } from "convex/values";
 
 import { internal } from "./_generated/api";
-import { ResendOTP } from "./ResendOTP";
-import { ResendOTPPasswordReset } from "./ResendOTPPasswordReset";
+import { BrevoOTP } from "./BrevoOTP";
+import { BrevoOTPPasswordReset } from "./BrevoOTPPasswordReset";
 import { isEmailVerificationRequired } from "./lib/emailVerificationPolicy";
 
 const MIN_PASSWORD_LENGTH = 10;
 
 /*
- * Email verification kill-switch (Resend free tier):
+ * Email verification rollout switch:
  * - Default OFF via REQUIRE_EMAIL_VERIFICATION unset/false → no Password `verify`
  *   provider; sign-up/sign-in issue sessions without OTP (OTP code paths stay in repo).
  * - Set REQUIRE_EMAIL_VERIFICATION=true (or "1") in Convex env + redeploy to re-enable
- *   hard verification (MC-010) after paid Resend.
+ *   hard verification (MC-010) after Brevo is configured and tested.
  *   npx convex env set REQUIRE_EMAIL_VERIFICATION true
  */
 const requireEmailVerification = isEmailVerificationRequired();
@@ -22,10 +22,10 @@ const requireEmailVerification = isEmailVerificationRequired();
 export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
   providers: [
     Password({
-      reset: ResendOTPPasswordReset,
+      reset: BrevoOTPPasswordReset,
       // Only attach when hard gate is ON. Convex Auth Password treats any `verify`
       // provider as mandatory for sign-up / unverified sign-in (blocks session until OTP).
-      ...(requireEmailVerification ? { verify: ResendOTP } : {}),
+      ...(requireEmailVerification ? { verify: BrevoOTP } : {}),
       validatePasswordRequirements: (password: string) => {
         if (typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
           throw new ConvexError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
@@ -61,7 +61,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       const email = user.email.trim().toLowerCase();
 
       // Credentials sign-up only. Sign-in and a later verification pass set existingUserId.
-      if (args.existingUserId === null && args.type === "credentials") {
+      if (
+        !requireEmailVerification
+        && args.existingUserId === null
+        && args.type === "credentials"
+      ) {
         const rawName = (user.fullName ?? user.name ?? "").trim();
         await ctx.scheduler.runAfter(0, internal.welcomeEmail.sendWelcome, {
           email,
