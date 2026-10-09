@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as BrevoOTP from "../BrevoOTP.js";
+import type * as BrevoOTPPasswordReset from "../BrevoOTPPasswordReset.js";
 import type * as ResendOTP from "../ResendOTP.js";
 import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as admin from "../admin.js";
@@ -17,7 +19,12 @@ import type * as authSettings from "../authSettings.js";
 import type * as calculatorHistory from "../calculatorHistory.js";
 import type * as crons from "../crons.js";
 import type * as http from "../http.js";
+import type * as journalCalendar from "../journalCalendar.js";
+import type * as journalTradeFacts from "../journalTradeFacts.js";
+import type * as journalTradeStats from "../journalTradeStats.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_authProfilePrivileges from "../lib/authProfilePrivileges.js";
+import type * as lib_brevoEmail from "../lib/brevoEmail.js";
 import type * as lib_economicEventMerge from "../lib/economicEventMerge.js";
 import type * as lib_emailVerificationPolicy from "../lib/emailVerificationPolicy.js";
 import type * as lib_ffCalendarFeed from "../lib/ffCalendarFeed.js";
@@ -39,6 +46,7 @@ import type * as pricesHttp from "../pricesHttp.js";
 import type * as profiles from "../profiles.js";
 import type * as progressSessions from "../progressSessions.js";
 import type * as status from "../status.js";
+import type * as tradeJournalAttachments from "../tradeJournalAttachments.js";
 import type * as tradingJournal from "../tradingJournal.js";
 import type * as tradingJournals from "../tradingJournals.js";
 import type * as users from "../users.js";
@@ -51,6 +59,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  BrevoOTP: typeof BrevoOTP;
+  BrevoOTPPasswordReset: typeof BrevoOTPPasswordReset;
   ResendOTP: typeof ResendOTP;
   ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   admin: typeof admin;
@@ -60,7 +70,12 @@ declare const fullApi: ApiFromModules<{
   calculatorHistory: typeof calculatorHistory;
   crons: typeof crons;
   http: typeof http;
+  journalCalendar: typeof journalCalendar;
+  journalTradeFacts: typeof journalTradeFacts;
+  journalTradeStats: typeof journalTradeStats;
   "lib/auth": typeof lib_auth;
+  "lib/authProfilePrivileges": typeof lib_authProfilePrivileges;
+  "lib/brevoEmail": typeof lib_brevoEmail;
   "lib/economicEventMerge": typeof lib_economicEventMerge;
   "lib/emailVerificationPolicy": typeof lib_emailVerificationPolicy;
   "lib/ffCalendarFeed": typeof lib_ffCalendarFeed;
@@ -82,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   profiles: typeof profiles;
   progressSessions: typeof progressSessions;
   status: typeof status;
+  tradeJournalAttachments: typeof tradeJournalAttachments;
   tradingJournal: typeof tradingJournal;
   tradingJournals: typeof tradingJournals;
   users: typeof users;
