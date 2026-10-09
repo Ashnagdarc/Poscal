@@ -1,14 +1,19 @@
 #!/usr/bin/env node
 /**
- * One-time 2026-10-09 production-source parity gate.
- * SHA-1 values are content IDs from the Vercel live deployment,
- * dpl_HzDqNJPgwhUKTuovf3cpKrvzs2H1, not credentials.
+ * Production auth-source integrity gate.
+ * All paths except convex/auth.ts match the Oct 9 live Vercel source
+ * dpl_HzDqNJPgwhUKTuovf3cpKrvzs2H1 exactly (SHA-1 content IDs, not keys).
+ *
+ * convex/auth.ts is intentionally changed to fix verified-user privilege
+ * demotion. Old live SHA-1: 31aca3184c8afa451c43f4ef6bf62d99070e91f7.
+ * New reviewed SHA-1 below pins the replacement. Do not silently accept both
+ * hashes: the old code can overwrite a linked admin profile with "user".
  */
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 const expected = {
-  "convex/auth.ts": "31aca3184c8afa451c43f4ef6bf62d99070e91f7",
+  "convex/auth.ts": "32dbefc654829d901ea8d3bfd55034e0704f137d",
   "convex/authRateLimit.ts": "16ab58de2954478eb955f968432b944fed546ce2",
   "convex/BrevoOTP.ts": "5045b4a179b8a2f8632de0532d7662f4e648fabd",
   "convex/BrevoOTPPasswordReset.ts": "6b1ab328c5ccf04117ce6833059a861eeb7348e2",
@@ -36,7 +41,7 @@ for (const [path, expectedSha] of Object.entries(expected)) {
 }
 if (mismatches) {
   console.error("[brevo-parity] Refusing production build:", mismatches, "mismatches.");
-  console.error("[brevo-parity] Restore exact Oct 9 production auth files before deploying.");
+  console.error("[brevo-parity] Restore the protected Brevo source and reviewed auth role-sync fix.");
   process.exit(1);
 }
-console.log("[brevo-parity] Live Brevo auth source hashes match.");
+console.log("[brevo-parity] Brevo live hashes and reviewed auth-role fix verified.");

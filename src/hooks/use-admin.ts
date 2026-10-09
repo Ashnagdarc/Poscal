@@ -1,35 +1,12 @@
-import { useState, useEffect } from 'react';
-import { useAuthToken } from '@convex-dev/auth/react';
-import { useAuth } from '@/contexts/AuthContext';
-import { getUserProfile } from '@/lib/convexProfiles';
+import { useAuth } from "@/contexts/AuthContext";
 
+/**
+ * The authenticated viewer query is already reactive and returns the
+ * ID-linked profile role. A second token-gated request used to temporarily
+ * report non-admin while the auth token refreshed after verification.
+ */
 export const useAdmin = () => {
-  const { user } = useAuth();
-  const authToken = useAuthToken();
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!user) {
-        setIsAdmin(false);
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const profile = await getUserProfile(user, authToken);
-        setIsAdmin(profile.role === 'admin' || profile.role === 'super_admin');
-      } catch (err) {
-        console.error('Error checking admin status:', err);
-        setIsAdmin(false);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    checkAdminStatus();
-  }, [authToken, user]);
-
+  const { user, loading } = useAuth();
+  const isAdmin = user?.role === "admin" || user?.role === "super_admin";
   return { isAdmin, loading };
 };

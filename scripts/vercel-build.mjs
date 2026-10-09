@@ -18,11 +18,11 @@ const run = (command, args) => {
 };
 
 if (process.env.VERCEL_ENV === "production") {
-  // Remove this ONE-TIME hash baseline only after the live auth source is
-  // reconciled to main and an independently reviewed replacement gate exists.
-  // Fail closed: do not deploy the older Resend verification UI to users.
+  // Fail closed if a live Brevo file or the deliberately reviewed Convex
+  // auth-role reconciliation source diverges. Backend deployment remains a
+  // separate explicit release; Vercel only builds frontend assets.
   run("node", ["scripts/check-production-brevo-parity.mjs"]);
-  console.log("[release] Brevo production source verified; Convex deploy is disabled.");
+  console.log("[release] Brevo source integrity verified; Convex deploy is disabled.");
 }
 
 run("npm", ["run", "gate:fx"]);

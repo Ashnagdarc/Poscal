@@ -43,6 +43,8 @@ export interface User {
   full_name: string | null;
   avatar_url: string | null;
   email_verified: boolean;
+  /** Same server-authoritative role as users.viewer (reactive Convex query). */
+  role?: string | null;
 }
 
 export interface ViewerSubscription {
@@ -65,6 +67,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         full_name: viewer.fullName ?? null,
         avatar_url: viewer.avatarUrl ?? null,
         email_verified: viewer.emailVerified,
+        role: viewer.role ?? "user",
       }
     : null;
 

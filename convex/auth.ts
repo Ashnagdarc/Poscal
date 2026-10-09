@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import { BrevoOTP } from "./BrevoOTP";
 import { BrevoOTPPasswordReset } from "./BrevoOTPPasswordReset";
 import { isEmailVerificationRequired } from "./lib/emailVerificationPolicy";
+import { canAdoptOrphanProfile, resolveOwnedProfilePrivileges } from "./lib/authProfilePrivileges";
 
 const MIN_PASSWORD_LENGTH = 10;
 
@@ -84,15 +85,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         .withIndex("by_email", (q: any) => q.eq("email", email))
         .first();
 
-      // Only adopt orphan email profiles (no other auth user bound). Never steal
-      // role/payment from a profile already linked to someone else (soft-verify risk).
-      const emailBoundTo = (byEmail?.externalUserId ?? "").trim();
-      const orphanLegacy =
-        byEmail
-        && byEmail._id !== byUserId?._id
-        && (!emailBoundTo || emailBoundTo === args.userId)
-          ? byEmail
-          : null;
+      // Never overwrite an ID-linked profile with a secondary email match.
+      // Rebinding an actual orphan does not import its admin/paid privileges.
+      const orphanLegacy = canAdoptOrphanProfile(args.userId, Boolean(byUserId), byEmail)
+        ? byEmail
+        : null;
 
       const avatarSource = orphanLegacy ?? byUserId;
       const avatarUrl =
@@ -101,18 +98,16 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         avatarSource?.avatarUrl ??
         null;
 
-      // Privileges come from the auth user / own profile only — not from email matches.
-      const privilegeSource = byUserId;
+      // An existing ID-linked profile is authoritative. Convex Auth can carry
+      // a stale "user"/"free" default after verification; never overwrite an
+      // owned admin/paid profile with those defaults.
+      const privileges = resolveOwnedProfilePrivileges(user, byUserId);
       const payload = {
         externalUserId: args.userId,
         email,
         fullName: user.fullName ?? user.name ?? avatarSource?.fullName ?? null,
         avatarUrl,
-        role: user.role ?? privilegeSource?.role ?? "user",
-        paymentStatus: user.paymentStatus ?? privilegeSource?.paymentStatus ?? "free",
-        subscriptionTier: user.subscriptionTier ?? privilegeSource?.subscriptionTier ?? "free",
-        subscriptionExpiresAtMs:
-          user.subscriptionExpiresAtMs ?? privilegeSource?.subscriptionExpiresAtMs ?? null,
+        ...privileges,
         updatedAtMs: Date.now(),
       };
 
@@ -127,20 +122,27 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (orphanLegacy) {
         await db.patch(orphanLegacy._id, {
           ...payload,
-          // Preserve orphan display fields; do not import their paid/admin state.
-          role: privilegeSource?.role ?? user.role ?? "user",
-          paymentStatus: privilegeSource?.paymentStatus ?? user.paymentStatus ?? "free",
-          subscriptionTier: privilegeSource?.subscriptionTier ?? user.subscriptionTier ?? "free",
-          subscriptionExpiresAtMs:
-            privilegeSource?.subscriptionExpiresAtMs ?? user.subscriptionExpiresAtMs ?? null,
+          // Source is the authenticated user, NOT the legacy email match.
         });
-        if (byUserId && byUserId._id !== orphanLegacy._id) {
-          await db.delete(byUserId._id);
-        }
         return;
       }
 
       if (byUserId) {
+        // Keep the auth-user mirror aligned with the canonical owned profile.
+        // Admin mutations write both records; auth verification must not
+        // silently demote an administrator or reset paid entitlements.
+        const userPrivilegePatch = {
+          ...(user.role !== privileges.role ? { role: privileges.role } : {}),
+          ...(user.paymentStatus !== privileges.paymentStatus
+            ? { paymentStatus: privileges.paymentStatus } : {}),
+          ...(user.subscriptionTier !== privileges.subscriptionTier
+            ? { subscriptionTier: privileges.subscriptionTier } : {}),
+          ...(user.subscriptionExpiresAtMs !== privileges.subscriptionExpiresAtMs
+            ? { subscriptionExpiresAtMs: privileges.subscriptionExpiresAtMs } : {}),
+        };
+        if (Object.keys(userPrivilegePatch).length > 0) {
+          await ctx.db.patch(args.userId, userPrivilegePatch);
+        }
         await db.patch(byUserId._id, {
           ...payload,
           avatarUrl: avatarUrl ?? byUserId.avatarUrl ?? null,
