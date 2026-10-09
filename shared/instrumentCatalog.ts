@@ -10,6 +10,8 @@ export interface InstrumentCatalogEntry {
   tickValueInProfitCurrency: number;
   /** User-facing pip/point unit. */
   pipSize: number;
+  /** Decimal places in the commonly quoted price. Independent of pip/tick economics. */
+  quoteDigits?: number;
   contractSize: number;
   minLot: number;
   maxLot: number;
@@ -27,14 +29,16 @@ function forexPair(symbol: string, displayName: string): InstrumentCatalogEntry 
   const [baseCurrency, quoteCurrency] = symbol.split("/");
   const isJpyQuote = quoteCurrency === "JPY";
   const pipSize = isJpyQuote ? 0.01 : 0.0001;
+  const tickSize = pipSize / 10;
 
   return {
     symbol,
     displayName,
     assetClass: "forex",
-    tickSize: pipSize,
-    tickValueInProfitCurrency: STANDARD_FX_CONTRACT * pipSize,
+    tickSize,
+    tickValueInProfitCurrency: STANDARD_FX_CONTRACT * tickSize,
     pipSize,
+    quoteDigits: isJpyQuote ? 3 : 5,
     contractSize: STANDARD_FX_CONTRACT,
     minLot: 0.01,
     maxLot: 100,
@@ -55,6 +59,7 @@ function cryptoCfd(symbol: string, displayName: string): InstrumentCatalogEntry 
     tickSize: 1,
     tickValueInProfitCurrency: 1,
     pipSize: 1,
+    quoteDigits: 2,
     contractSize: 1,
     minLot: 0.01,
     maxLot: 100,
@@ -74,6 +79,7 @@ function indexCfd(symbol: string, displayName: string): InstrumentCatalogEntry {
     tickSize: 1,
     tickValueInProfitCurrency: 1,
     pipSize: 1,
+    quoteDigits: 2,
     contractSize: 1,
     minLot: 0.01,
     maxLot: 100,
@@ -163,6 +169,7 @@ export const INSTRUMENT_CATALOG: Record<string, InstrumentCatalogEntry> = {
     tickSize: 0.01,
     tickValueInProfitCurrency: 1,
     pipSize: 0.1,
+    quoteDigits: 2,
     contractSize: 100,
     minLot: 0.01,
     maxLot: 100,
@@ -179,6 +186,7 @@ export const INSTRUMENT_CATALOG: Record<string, InstrumentCatalogEntry> = {
     tickSize: 0.01,
     tickValueInProfitCurrency: 50,
     pipSize: 0.01,
+    quoteDigits: 3,
     contractSize: 5000,
     minLot: 0.01,
     maxLot: 100,
@@ -236,12 +244,14 @@ export const INSTRUMENT_CATALOG: Record<string, InstrumentCatalogEntry> = {
     tickSize: 0.001,
     tickValueInProfitCurrency: 10,
     pipSize: 0.001,
+    quoteDigits: 3,
     contractSize: 10_000,
   }),
   "SOYBEAN/USD": commodityCfd("SOYBEAN/USD", "Soybeans / US Dollar", {
     tickSize: 0.25,
     tickValueInProfitCurrency: 12.5,
     pipSize: 0.25,
+    quoteDigits: 2,
     contractSize: 50,
   }),
   "IRON/USD": commodityCfd("IRON/USD", "Iron Ore / US Dollar", {
