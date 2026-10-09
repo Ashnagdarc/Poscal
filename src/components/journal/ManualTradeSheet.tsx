@@ -27,7 +27,6 @@ import type { JournalTrade } from "@/lib/convexJournal";
 import type { ManualTradeInput } from "@/hooks/queries/use-trades-query";
 import {
   canonicalizePairSymbol,
-  formatPriceForPair,
   getPairPriceDecimals,
   parsePriceInput,
   pricePlaceholderForPair,
@@ -177,10 +176,10 @@ export const ManualTradeSheet = ({
         status: trade.status,
         entry_date: toInputDate(trade.entry_date),
         exit_date: toInputDate(trade.exit_date),
-        entry_price: formatPriceForPair(trade.entry_price, pair),
-        exit_price: formatPriceForPair(trade.exit_price, pair),
-        stop_loss: formatPriceForPair(trade.stop_loss, pair),
-        take_profit: formatPriceForPair(trade.take_profit, pair),
+        entry_price: numberToFormValue(trade.entry_price),
+        exit_price: numberToFormValue(trade.exit_price),
+        stop_loss: numberToFormValue(trade.stop_loss),
+        take_profit: numberToFormValue(trade.take_profit),
         position_size: numberToFormValue(trade.position_size),
         risk_percent: numberToFormValue(trade.risk_percent),
         pnl: numberToFormValue(trade.pnl),
@@ -203,7 +202,9 @@ export const ManualTradeSheet = ({
   ) => {
     setForm((current) => ({
       ...current,
-      [field]: sanitizePriceInput(raw, getPairPriceDecimals(current.pair)),
+      // A journal is a historical record. Do not truncate quotes from brokers
+      // whose precision differs from the catalogue default.
+      [field]: sanitizePriceInput(raw, getPairPriceDecimals(current.pair), false, true),
     }));
   };
 
@@ -217,7 +218,7 @@ export const ManualTradeSheet = ({
       }
       return {
         ...current,
-        [field]: formatPriceForPair(parsed, current.pair),
+        [field]: current[field].endsWith(".") ? current[field].slice(0, -1) : current[field],
       };
     });
   };
@@ -229,22 +230,8 @@ export const ManualTradeSheet = ({
         return current.pair === pair ? current : { ...current, pair };
       }
 
-      return {
-        ...current,
-        pair,
-        entry_price: current.entry_price
-          ? formatPriceForPair(parsePriceInput(current.entry_price), pair)
-          : "",
-        exit_price: current.exit_price
-          ? formatPriceForPair(parsePriceInput(current.exit_price), pair)
-          : "",
-        stop_loss: current.stop_loss
-          ? formatPriceForPair(parsePriceInput(current.stop_loss), pair)
-          : "",
-        take_profit: current.take_profit
-          ? formatPriceForPair(parsePriceInput(current.take_profit), pair)
-          : "",
-      };
+      // Switching instruments must not silently round existing execution prices.
+      return { ...current, pair };
     });
 
     if (!pair.trim()) {
@@ -460,6 +447,9 @@ export const ManualTradeSheet = ({
               </p>
             </div>
 
+            <p className="text-[11px] text-muted-foreground">
+              Common quote precision: {priceDecimals} decimals. Your recorded price will not be rounded.
+            </p>
             <div className="grid grid-cols-2 gap-3 [&>*]:min-w-0">
               <div className="space-y-2">
                 <Label htmlFor="entry-price">Entry</Label>
