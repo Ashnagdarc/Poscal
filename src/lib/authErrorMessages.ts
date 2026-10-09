@@ -1,5 +1,5 @@
 /**
- * Map Convex Auth / Resend internals to stable user-facing messages (AIS-008 / ETH-001).
+ * Map Convex Auth and email-provider internals to stable user-facing messages (AIS-008 / ETH-001).
  * Keep free of React so vitest can cover without Convex runtime.
  */
 
@@ -19,8 +19,6 @@ export function toSafeAuthErrorMessage(error: unknown, fallback: string): string
     || normalized.includes("no account")
     || normalized.includes("account not found")
     || normalized.includes("user not found")
-    || normalized.includes("autherror")
-    || normalized.includes("failed to authenticate")
   ) {
     return "Invalid email or password";
   }
