@@ -115,7 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } catch (error: unknown) {
       console.error('[auth] Sign in error:', error);
       return {
-        error: toSafeAuthErrorMessage(error, "Invalid email or password"),
+        error: toSafeAuthErrorMessage(error, "Could not sign in right now. Please try again or reset your password."),
         signedIn: false,
       };
     }
