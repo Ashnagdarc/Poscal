@@ -88,6 +88,21 @@ describe("historical journal Edit Trade patch", () => {
     });
   });
 
+  it("preserves cancelled-trade P&L and exit details when only notes change", () => {
+    const cancelled: JournalTrade = { ...trade, status: "cancelled", pnl: -16.25 };
+    const input: ManualTradeInput = {
+      ...form,
+      status: "cancelled",
+      pnl: -16.25,
+      notes: "Reviewed cancelled setup",
+      exit_date: cancelled.exit_date,
+      exit_price: cancelled.exit_price,
+    };
+    expect(buildJournalTradeEditPatch(cancelled, input)).toEqual({
+      notes: "Reviewed cancelled setup",
+    });
+  });
+
   it("keeps first-time structured edits of an empty notebook as a full save", () => {
     const draft: JournalTrade = { ...trade, journal_type: "notebook_draft" };
     expect(buildJournalTradeEditPatch(draft, form)).toEqual({
