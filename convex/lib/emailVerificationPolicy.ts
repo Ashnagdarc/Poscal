@@ -1,11 +1,11 @@
 /**
- * Soft email verification policy (Resend free-tier kill-switch).
+ * Email verification rollout switch.
  *
  * Convex env: REQUIRE_EMAIL_VERIFICATION
  *   unset / "0" / "false" / "no" → OFF (default): sessions + full app without OTP
  *   "1" / "true" / "yes"         → ON: Password `verify` + hard gates
  *
- * Flip for production after paid Resend:
+ * Flip after Brevo is authenticated, configured, and tested:
  *   npx convex env set REQUIRE_EMAIL_VERIFICATION true
  * Redeploy/restart Convex so Password provider re-reads env (auth config is load-time).
  */
@@ -19,7 +19,7 @@ function parseTruthyEnv(raw: string | undefined): boolean {
   return v === "1" || v === "true" || v === "yes" || v === "on";
 }
 
-/** Default OFF so free-tier OTP delivery failures cannot lock users out. */
+/** Default OFF so provider or configuration failures cannot lock users out. */
 export function isEmailVerificationRequired(): boolean {
   return parseTruthyEnv(process.env.REQUIRE_EMAIL_VERIFICATION);
 }
