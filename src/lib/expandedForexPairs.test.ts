@@ -105,9 +105,11 @@ describe("expanded 28-pair FX catalogue", () => {
 
     expect(spec.assetClass).toBe("forex");
     expect(spec.contractSize).toBe(100_000);
-    expect(spec.tickSize).toBe(expectedPipSize);
+    expect(spec.tickSize).toBeCloseTo(expectedPipSize / 10, 12);
+    expect(spec.quoteDigits).toBe(quote === "JPY" ? 3 : 5);
     expect(spec.pipSize).toBe(expectedPipSize);
-    expect(spec.tickValueInProfitCurrency).toBe(expectedNativePipValue);
+    expect(spec.tickValueInProfitCurrency).toBeCloseTo(expectedNativePipValue / 10, 10);
+    expect(spec.tickValueInProfitCurrency * (spec.pipSize / spec.tickSize)).toBeCloseTo(expectedNativePipValue, 10);
     expect(spec.profitCurrency).toBe(quote);
     expect(spec.minLot).toBe(0.01);
     expect(spec.lotStep).toBe(0.01);
