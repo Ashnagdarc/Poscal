@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "convex/react";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
+import { ShieldCheck } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { AuthFooter, AuthLayout } from "@/components/auth/AuthLayout";
 import { AuthField, authInputClassName } from "@/components/auth/AuthField";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { useAuth } from "@/contexts/AuthContext";
 import { isClientEmailVerificationRequired } from "@/lib/emailVerificationClient";
 import { api } from "../../convex/_generated/api";
@@ -20,13 +23,16 @@ const safeInternalPath = (value: string | null | undefined): string | null => {
   return value;
 };
 
-const RESEND_COOLDOWN_MS = 45_000;
+const EMAIL_RESEND_COOLDOWN_MS = 60_000;
 
 const VerifyEmail = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, loading, verifyEmail, resendVerification, signOut } = useAuth();
   const locationState = (location.state as VerifyLocationState | null) ?? null;
+  const linkedEmail = useMemo(() => {
+    return new URLSearchParams(location.search).get("email")?.trim().toLowerCase() ?? "";
+  }, [location.search]);
   // Convex REQUIRE_EMAIL_VERIFICATION is authoritative; Vite env is load-time fallback only.
   const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy, {});
   const requireEmailVerification =
@@ -34,7 +40,7 @@ const VerifyEmail = () => {
   const softMode = !requireEmailVerification;
 
   const [email, setEmail] = useState(
-    () => locationState?.email?.trim().toLowerCase() || user?.email || "",
+    () => locationState?.email?.trim().toLowerCase() || linkedEmail || user?.email || "",
   );
   const [code, setCode] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -50,10 +56,10 @@ const VerifyEmail = () => {
   }, [locationState?.returnTo]);
 
   useEffect(() => {
-    if (user?.email && !email) {
-      setEmail(user.email);
+    if (!email) {
+      setEmail(user?.email || linkedEmail);
     }
-  }, [user?.email, email]);
+  }, [user?.email, linkedEmail, email]);
 
   useEffect(() => {
     if (user?.email_verified) {
@@ -83,7 +89,7 @@ const VerifyEmail = () => {
       toast.error("Enter the email you signed up with");
       return;
     }
-    if (!trimmedCode || trimmedCode.length < 6) {
+    if (trimmedCode.length !== 8) {
       toast.error("Enter the 8-digit code from your email");
       return;
     }
@@ -125,7 +131,7 @@ const VerifyEmail = () => {
     setIsResending(true);
     const { error } = await resendVerification(trimmedEmail);
     setIsResending(false);
-    setResendAvailableAt(Date.now() + RESEND_COOLDOWN_MS);
+    setResendAvailableAt(Date.now() + EMAIL_RESEND_COOLDOWN_MS);
     setNowMs(Date.now());
 
     // Always neutral success style when possible (no account enumeration).
@@ -214,17 +220,43 @@ const VerifyEmail = () => {
           </AuthField>
 
           <AuthField id="verify-code" label="Verification code">
-            <input
+            <InputOTP
               id="verify-code"
-              type="text"
-              inputMode="numeric"
+              maxLength={8}
+              pattern={REGEXP_ONLY_DIGITS}
               autoComplete="one-time-code"
               value={code}
-              onChange={(event) => setCode(event.target.value)}
-              placeholder="8-digit code"
+              onChange={setCode}
               required
-              className={authInputClassName}
-            />
+              aria-label="8-digit verification code"
+              containerClassName="justify-center rounded-2xl border border-border bg-secondary/45 px-2 py-4 transition-colors focus-within:border-brand focus-within:bg-background focus-within:ring-2 focus-within:ring-brand/20"
+            >
+              <InputOTPGroup>
+                {[0, 1, 2, 3].map((index) => (
+                  <InputOTPSlot
+                    key={index}
+                    index={index}
+                    className="h-11 w-9 border-border bg-background text-base font-semibold tabular-nums sm:w-10"
+                  />
+                ))}
+              </InputOTPGroup>
+              <span aria-hidden="true" className="text-sm font-medium text-muted-foreground/70">
+                –
+              </span>
+              <InputOTPGroup>
+                {[4, 5, 6, 7].map((index) => (
+                  <InputOTPSlot
+                    key={index}
+                    index={index}
+                    className="h-11 w-9 border-border bg-background text-base font-semibold tabular-nums sm:w-10"
+                  />
+                ))}
+              </InputOTPGroup>
+            </InputOTP>
+            <p className="mt-2.5 flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+              <ShieldCheck className="h-3.5 w-3.5 text-brand" aria-hidden="true" />
+              Secure code · expires in 15 minutes
+            </p>
           </AuthField>
 
           <button
@@ -256,14 +288,6 @@ const VerifyEmail = () => {
           </button>
         </form>
       )}
-
-      {!softMode ? (
-        <p className="pt-2 text-center text-xs leading-relaxed text-muted-foreground">
-          Codes expire after a short time. Local/dev builds need{" "}
-          <span className="font-medium text-foreground/80">RESEND_API_KEY</span> (or{" "}
-          <span className="font-medium text-foreground/80">AUTH_RESEND_KEY</span>) in Convex env.
-        </p>
-      ) : null}
 
       {user ? (
         <button
