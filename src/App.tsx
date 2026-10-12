@@ -14,6 +14,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { SkipLink } from "@/components/SkipLink";
 import Index from "./pages/Index";
 import { Analytics } from "@vercel/analytics/react";
+import { GoogleAnalytics } from "@/components/GoogleAnalytics";
 import { BottomNav } from "@/components/BottomNav";
 import { PWAUpdateBanner } from "@/components/PWAUpdateBanner";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
@@ -178,6 +179,7 @@ const App = () => (
         <ActionErrorProvider>
           <Sonner />
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+            <GoogleAnalytics />
             <AuthProvider>
               <PushNotificationsProvider>
                 <SubscriptionProvider>
