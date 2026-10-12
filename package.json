@@ -22,7 +22,8 @@
     "convex:codegen": "convex codegen",
     "convex:data": "convex data",
     "convex:export": "convex export",
-    "gate:fx": "npx eslint shared/instrumentCatalog.ts src/lib/instrumentSpecs.ts src/lib/constants.ts src/lib/supportedPairs.ts convex/lib/tradeValidation.ts src/components/CurrencyGrid.tsx src/lib/expandedForexPairs.test.ts src/lib/allInstrumentsLotSize.test.ts src/lib/instrumentParity.test.ts src/lib/trading/volume.ts src/lib/trading/volume.test.ts src/lib/positionSizeCalculator.ts && npm run typecheck && npm run test"
+    "gate:fx": "npx eslint shared/instrumentCatalog.ts src/lib/instrumentSpecs.ts src/lib/constants.ts src/lib/supportedPairs.ts convex/lib/tradeValidation.ts src/components/CurrencyGrid.tsx src/lib/expandedForexPairs.test.ts src/lib/allInstrumentsLotSize.test.ts src/lib/instrumentParity.test.ts src/lib/trading/volume.ts src/lib/trading/volume.test.ts src/lib/positionSizeCalculator.ts && npm run typecheck && npm run test",
+    "test:backend": "vitest run --config vitest.convex.config.ts"
   },
   "dependencies": {
     "@convex-dev/auth": "^0.0.94",
@@ -103,6 +104,7 @@
     "smol-toml": ">=1.6.1"
   },
   "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
     "@eslint/js": "^9.32.0",
     "@playwright/test": "^1.62.1",
     "@tailwindcss/typography": "^0.5.16",
@@ -117,6 +119,7 @@
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.16",
     "autoprefixer": "^10.4.21",
+    "convex-test": "^0.0.61",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",

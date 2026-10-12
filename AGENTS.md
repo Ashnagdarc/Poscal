@@ -11,3 +11,7 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+For changes to storage, journal queries, analytics, caching, uploads or service
+boundaries, read `docs/BETA_ARCHITECTURE_RULES.md`. Preserve live user data and
+distinguish proposed improvements from deployed behavior.

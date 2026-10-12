@@ -48,6 +48,7 @@ type JournalTab = "overview" | "insights" | "charts";
 
 interface JournalAnalyticsTabsProps {
   trades: JournalTrade[];
+  requireServerAnalytics?: boolean;
   calculatorResults?: JournalEntry[];
   isLoading: boolean;
   activeTab: JournalTab;
@@ -382,6 +383,7 @@ export const JournalAnalyticsTabs = ({
   isLoadingMoreTrades = false,
   onLoadMoreTrades,
   serverPerformance = null,
+  requireServerAnalytics = false,
 }: JournalAnalyticsTabsProps) => {
   void _calculatorResults;
   const { currency } = useCurrency();
@@ -423,15 +425,15 @@ export const JournalAnalyticsTabs = ({
       avgWin,
       avgLoss,
       avgWinLossRatio: avgWin !== null && avgLoss !== null && avgLoss > 0 ? avgWin / avgLoss : null,
-      bestTrade: serverStats.bestTrade,
-      worstTrade: serverStats.worstTrade,
+      bestTrade: serverStats.orderedMetricsStale ? null : serverStats.bestTrade,
+      worstTrade: serverStats.orderedMetricsStale ? null : serverStats.worstTrade,
       avgR: serverStats.rCount > 0 ? serverStats.rSum / serverStats.rCount : null,
       expectancy: serverStats.closedWithPnl > 0
         ? serverStats.totalPnl / serverStats.closedWithPnl
         : null,
-      maxDrawdown: serverStats.maxDrawdown,
-      maxConsecutiveWins: serverStats.maxConsecutiveWins,
-      maxConsecutiveLosses: serverStats.maxConsecutiveLosses,
+      maxDrawdown: serverStats.orderedMetricsStale ? null : serverStats.maxDrawdown,
+      maxConsecutiveWins: serverStats.orderedMetricsStale ? 0 : serverStats.maxConsecutiveWins,
+      maxConsecutiveLosses: serverStats.orderedMetricsStale ? 0 : serverStats.maxConsecutiveLosses,
     };
   }, [localStats, serverStats]);
   const localDailyPnl = useMemo(() => computeDailyPnl(trades, timeZone), [trades, timeZone]);
@@ -477,6 +479,24 @@ export const JournalAnalyticsTabs = ({
     );
   }
 
+  if (requireServerAnalytics && !serverStats) {
+    return (
+      <div className="space-y-4">
+        <p role="status" className="text-sm text-muted-foreground">Preparing lifetime totals. Your trade history is available below.</p>
+        <Button onClick={onAddTrade}>Add Trade</Button>
+        {visibleTrades.map((trade) => (
+          <TradeListItem key={trade.id} trade={trade} currencySymbol={currency.symbol}
+            timeZone={timeZone} onEdit={() => onEditTrade(trade)} onDelete={() => onDeleteTrade(trade)} />
+        ))}
+        {canLoadMoreTrades && onLoadMoreTrades ? (
+          <Button onClick={onLoadMoreTrades} disabled={isLoadingMoreTrades}>
+            {isLoadingMoreTrades ? "Loading…" : "Load older trades"}
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
@@ -516,10 +536,12 @@ export const JournalAnalyticsTabs = ({
           </TabsTrigger>
         </TabsList>
 
-        {trades.length === 0 ? (
+        {stats.totalTrades === 0 ? (
           <div className="mt-4">
             <EmptyState onAddTrade={onAddTrade} />
           </div>
+        ) : requireServerAnalytics && activeTab !== "overview" && !serverPerformance?.ready ? (
+          <p role="status" className="py-6 text-sm text-muted-foreground">Preparing complete performance history…</p>
         ) : (
           <>
             <TabsContent value="overview" className="mt-4 space-y-4">

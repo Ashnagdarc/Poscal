@@ -69,7 +69,15 @@ export const useJournalTradeFacts = ({
   selectedMonthKey,
   selectedDateKey,
   timeZone,
+  enabled: requested = true,
+  includeMonth = true,
+  includeMonthlyReturns = true,
+  includePerformance = true,
 }: {
+  enabled?: boolean;
+  includeMonth?: boolean;
+  includeMonthlyReturns?: boolean;
+  includePerformance?: boolean;
   calendarMonth: Date;
   selectedMonthKey?: string;
   selectedDateKey?: string;
@@ -79,7 +87,7 @@ export const useJournalTradeFacts = ({
   const { activeJournalId } = useJournal();
   const ensure = useMutation(anyApi.journalTradeFacts.ensureForJournal);
   const requestedVersion = useRef<string | null>(null);
-  const enabled = Boolean(user?.id && activeJournalId);
+  const enabled = Boolean(requested && user?.id && activeJournalId);
 
   const status = useQuery(
     anyApi.journalTradeFacts.getStatus,
@@ -103,11 +111,11 @@ export const useJournalTradeFacts = ({
     });
   }, [activeJournalId, enabled, ensure, status]);
 
-  const ready = Boolean(status?.ready);
+  const ready = Boolean(enabled && status?.ready);
 
   const month = useQuery(
     anyApi.journalTradeFacts.getMonthSummary,
-    ready && activeJournalId
+    ready && includeMonth && activeJournalId
       ? {
           journalId: activeJournalId,
           year: calendarMonth.getFullYear(),
@@ -119,7 +127,7 @@ export const useJournalTradeFacts = ({
 
   const monthlyReturns = useQuery(
     anyApi.journalTradeFacts.getMonthlyReturns,
-    ready && activeJournalId
+    ready && includeMonthlyReturns && activeJournalId
       ? {
           journalId: activeJournalId,
           timeZone: timeZone ?? null,
@@ -130,7 +138,7 @@ export const useJournalTradeFacts = ({
 
   const performance = useQuery(
     anyApi.journalTradeFacts.getPerformanceSummary,
-    ready && activeJournalId
+    ready && includePerformance && activeJournalId
       ? { journalId: activeJournalId, timeZone: timeZone ?? null }
       : "skip",
   ) as JournalPerformanceSummary | undefined;
@@ -180,7 +188,7 @@ export const useJournalTradeFacts = ({
     monthlyReturns: grid,
     selectedTrades,
     performanceSummary: performance?.ready ? performance : null,
-    isPerformanceLoading: Boolean(ready && performance === undefined),
+    isPerformanceLoading: Boolean(ready && includePerformance && performance === undefined),
     isSelectionLoading: Boolean(ready && (selectedMonthKey || selectedDateKey) && selection === undefined),
   };
 };

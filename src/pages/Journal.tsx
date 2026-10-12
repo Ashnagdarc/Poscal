@@ -24,7 +24,6 @@ import {
   useCreateNotebookDraftMutation,
   useDeleteTradeMutation,
   usePaginatedTradesQuery,
-  useTradesQuery,
   useUpdateTradeMutation,
   type ManualTradeInput,
 } from "@/hooks/queries/use-trades-query";
@@ -82,9 +81,9 @@ const Journal = () => {
   const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
   const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
 
-  const { data: manualTrades = [], isLoading: isManualTradesLoading } = useTradesQuery();
   const {
     data: paginatedManualTrades,
+    isLoading: isManualTradesLoading,
     canLoadMore: canLoadMoreTrades,
     isLoadingMore: isLoadingMoreTrades,
     loadMore: loadMoreTrades,
@@ -100,6 +99,9 @@ const Journal = () => {
     performanceSummary: tradePerformanceSummary,
   } = useJournalTradeFacts({
     calendarMonth,
+    enabled: pageSection === "trades" && journalTab !== "overview",
+    includeMonth: false,
+    includeMonthlyReturns: false,
     selectedMonthKey: undefined,
     selectedDateKey: undefined,
     timeZone: preferredTimeZone,
@@ -113,10 +115,6 @@ const Journal = () => {
   const today = useMemo(
     () => startOfDay(new Date(`${todayDateKey}T12:00:00`)),
     [todayDateKey],
-  );
-  const analyticsTrades = useMemo(
-    () => manualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
-    [manualTrades],
   );
   const analyticsFeedTrades = useMemo(
     () => paginatedManualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
@@ -164,20 +162,15 @@ const Journal = () => {
 
   const handleSaveManualTrade = async (tradeInput: ManualTradeInput) => {
     try {
-      const previousClosed = manualTrades.filter(
-        (trade) =>
-          trade.status === "closed"
-          && trade.pnl != null
-          && Number.isFinite(trade.pnl),
-      );
-      const previousTotalPnl = previousClosed.reduce((sum, trade) => sum + (trade.pnl as number), 0);
-      const editingClosedPnl =
+      const previousStats = !isTradeStatsBackfilling ? serverTradeStats : null;
+      const editingCounted = Boolean(
         tradeToEdit
+        && tradeToEdit.journal_type !== "notebook_draft"
         && tradeToEdit.status === "closed"
         && tradeToEdit.pnl != null
-        && Number.isFinite(tradeToEdit.pnl)
-          ? tradeToEdit.pnl
-          : 0;
+        && Number.isFinite(tradeToEdit.pnl),
+      );
+      const editingClosedPnl = editingCounted ? tradeToEdit!.pnl! : 0;
 
       let createdTrade: JournalTrade | null = null;
 
@@ -195,20 +188,20 @@ const Journal = () => {
         if (riskAlert) toast.warning(riskAlert.body);
       }
 
-      if (milestoneAlertsEnabled) {
+      if (milestoneAlertsEnabled && previousStats) {
         const nextClosedCount =
           tradeInput.status === "closed" && tradeInput.pnl != null && Number.isFinite(tradeInput.pnl)
-            ? previousClosed.length - (editingClosedPnl ? 1 : 0) + 1
-            : previousClosed.length - (editingClosedPnl ? 1 : 0);
+            ? previousStats.closedWithPnl - (editingCounted ? 1 : 0) + 1
+            : previousStats.closedWithPnl - (editingCounted ? 1 : 0);
         const nextTotalPnl =
           tradeInput.status === "closed" && tradeInput.pnl != null && Number.isFinite(tradeInput.pnl)
-            ? previousTotalPnl - editingClosedPnl + tradeInput.pnl
-            : previousTotalPnl - editingClosedPnl;
+            ? previousStats.totalPnl - editingClosedPnl + tradeInput.pnl
+            : previousStats.totalPnl - editingClosedPnl;
 
         const countAlert = evaluateTradeCountMilestone(nextClosedCount);
         if (countAlert) toast.message(countAlert.title, { description: countAlert.body });
 
-        const equityAlert = evaluateEquityMilestone(startingBalance, previousTotalPnl, nextTotalPnl);
+        const equityAlert = evaluateEquityMilestone(startingBalance, previousStats.totalPnl, nextTotalPnl);
         if (equityAlert) toast.message(equityAlert.title, { description: equityAlert.body });
       }
 
@@ -258,7 +251,7 @@ const Journal = () => {
             : pageSection === "today"
               ? "Log, review, and learn"
               : pageSection === "trades"
-                ? `${serverTradeStats?.totalTrades ?? analyticsTrades.length} trade${(serverTradeStats?.totalTrades ?? analyticsTrades.length) === 1 ? "" : "s"}`
+                ? serverTradeStats ? `${serverTradeStats.totalTrades} trade${serverTradeStats.totalTrades === 1 ? "" : "s"}` : "Your trades"
                 : "Charts, reasoning, and trade reviews"
         }
         icon={<BookOpen className="h-5 w-5" />}
@@ -379,7 +372,8 @@ const Journal = () => {
                 </section>
 
                 <JournalAnalyticsTabs
-                  trades={analyticsTrades}
+                  trades={analyticsFeedTrades}
+                  requireServerAnalytics
                   isLoading={isManualTradesLoading}
                   activeTab={journalTab}
                   onTabChange={setJournalTab}

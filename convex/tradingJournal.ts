@@ -2,8 +2,8 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { internalMutation, mutation, query } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 import { assertValidTradeFields } from "./lib/tradeValidation";
 import {
@@ -12,6 +12,8 @@ import {
   evaluateRiskAlert,
   evaluateTradeCountMilestone,
 } from "./lib/tradingAlerts";
+
+import { updateJournalStats, type TradeChange } from "./lib/updateJournalStats";
 
 type TradeStatus = "open" | "closed" | "cancelled";
 
@@ -72,9 +74,10 @@ const assertJournalOwned = async (
 
 
 const bumpJournalStatsVersion = async (
-  ctx: { db: any },
+  ctx: MutationCtx,
   userId: string,
   journalId: Id<"tradingAccounts"> | null | undefined,
+  changes: TradeChange[],
 ) => {
   if (!journalId) return;
   const journal = await ctx.db.get(journalId);
@@ -88,6 +91,8 @@ const bumpJournalStatsVersion = async (
     statsVersion: nextVersion,
     updatedAtMs: Date.now(),
   });
+
+  await updateJournalStats(ctx, userId, journalId, previousVersion, nextVersion, changes);
 
   // The trade-facts projection is synchronized before this helper is called.
   // When its backfill is already complete for the previous version, advance
@@ -664,7 +669,7 @@ export const createEntry = mutation({
     if (insertedTrade) {
       await syncTradeFact(ctx, insertedTrade);
     }
-    await bumpJournalStatsVersion(ctx, userId, args.journalId ?? null);
+    await bumpJournalStatsVersion(ctx, userId, args.journalId ?? null, [{ before: null, after: insertedTrade }]);
 
     await ctx.scheduler.runAfter(0, internal.tradingJournal.evaluateTradeAlerts, {
       userId,
@@ -761,7 +766,7 @@ export const updateEntry = mutation({
         );
 
       if (statsChanged) {
-        await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+        await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null, [{ before: existing, after: updatedTrade }]);
       }
     }
 
@@ -891,10 +896,10 @@ export const updateNotebook = mutation({
 });
 
 const deleteJournalEntryRows = async (
-  ctx: { db: any },
+  ctx: MutationCtx,
   userId: string,
   id: Id<"tradingJournal">,
-  existing: any,
+  existing: Doc<"tradingJournal">,
 ) => {
   const [notebook, attachments, usage] = await Promise.all([
     ctx.db
@@ -944,7 +949,7 @@ const deleteJournalEntryRows = async (
   await ctx.db.delete(id);
 
   if (existing.journalType !== "notebook_draft") {
-    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null);
+    await bumpJournalStatsVersion(ctx, userId, existing.journalId ?? null, [{ before: existing, after: null }]);
   }
 };
 
@@ -1048,7 +1053,7 @@ export const saveMany = mutation({
     }
     const ids = [];
     const now = Date.now();
-    const touchedJournalIds = new Set<Id<"tradingAccounts">>();
+    const journalChanges = new Map<Id<"tradingAccounts">, TradeChange[]>();
 
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
@@ -1079,11 +1084,15 @@ export const saveMany = mutation({
       if (insertedTrade) {
         await syncTradeFact(ctx, insertedTrade);
       }
-      if (item.journalId) touchedJournalIds.add(item.journalId);
+      if (item.journalId && insertedTrade) {
+        const changes = journalChanges.get(item.journalId) ?? [];
+        changes.push({ before: null, after: insertedTrade });
+        journalChanges.set(item.journalId, changes);
+      }
     }
 
-    for (const journalId of touchedJournalIds) {
-      await bumpJournalStatsVersion(ctx, userId, journalId);
+    for (const [journalId, changes] of journalChanges) {
+      await bumpJournalStatsVersion(ctx, userId, journalId, changes);
     }
 
     return ids;

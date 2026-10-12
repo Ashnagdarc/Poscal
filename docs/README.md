@@ -4,6 +4,9 @@ This folder now tracks the current Convex + Vercel + worker architecture.
 
 ## Read These First
 
+- [Beta Architecture Rules](./BETA_ARCHITECTURE_RULES.md)
+  - service boundaries, data limits, image handling and rollout requirements
+
 - [Architecture](./ARCHITECTURE.md)
   - current stack, source of truth, and data flow
 

@@ -195,6 +195,13 @@ export default defineSchema({
     userId: v.string(),
     journalId: v.id("tradingAccounts"),
     sourceVersion: v.number(),
+    orderedMetricsStale: v.optional(v.boolean()),
+    appendState: v.optional(v.object({
+      currentWinStreak: v.number(),
+      currentLossStreak: v.number(),
+      runningPnl: v.number(),
+      peakPnl: v.number(),
+    })),
     totalTrades: v.number(),
     openTrades: v.number(),
     closedTrades: v.number(),

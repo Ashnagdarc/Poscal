@@ -6,6 +6,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
 
 export type JournalTradeStatsSnapshot = {
+  orderedMetricsStale?: boolean;
   sourceVersion: number;
   totalTrades: number;
   openTrades: number;
