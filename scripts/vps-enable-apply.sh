@@ -24,8 +24,10 @@ services:
       VITE_CONVEX_SITE_URL: https://convex-http.poscalfx.com
       LISTEN_HOST: 127.0.0.1
       LISTEN_PORT: "23000"
+    # Optional secrets file (payments/R2). Created empty-safe below.
     env_file:
-      - .env.runtime
+      - path: .env.runtime
+        required: false
     restart: unless-stopped
     read_only: true
     security_opt: ["no-new-privileges:true"]
