@@ -1,0 +1,1 @@
+var e=`/assets/poscal-logo-light-D4HG9MOc.png`;export{e as t};

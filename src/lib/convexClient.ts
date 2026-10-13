@@ -9,8 +9,10 @@ if (!convexUrl) {
   throw new Error("App configuration is incomplete. Please contact support.");
 }
 
-export const convexReactClient = new ConvexReactClient(convexUrl);
-export const convexClient = new ConvexHttpClient(convexUrl);
+// Self-hosted VPS cutover uses a custom HTTPS origin (not *.convex.cloud).
+const clientOpts = { skipConvexDeploymentUrlCheck: true as const };
+export const convexReactClient = new ConvexReactClient(convexUrl, clientOpts);
+export const convexClient = new ConvexHttpClient(convexUrl, clientOpts);
 
 /** Keep the shared HTTP client in sync with Convex Auth (journal / progress / trades helpers). */
 export const syncSharedConvexHttpAuth = (token?: string | null) => {
@@ -22,7 +24,7 @@ export const syncSharedConvexHttpAuth = (token?: string | null) => {
 };
 
 export const createAuthenticatedConvexClient = (token?: string | null) => {
-  const client = new ConvexHttpClient(convexUrl);
+  const client = new ConvexHttpClient(convexUrl, clientOpts);
   if (token) {
     client.setAuth(token);
   }
