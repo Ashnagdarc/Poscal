@@ -16,7 +16,7 @@ const stats: JournalTradeStatsSnapshot = {
 const props = {
   trades: [], feedTrades: [], isLoading: false, activeTab: "overview" as const,
   onTabChange: vi.fn(), onAddTrade: vi.fn(), onEditTrade: vi.fn(), onDeleteTrade: vi.fn(),
-  requireServerAnalytics: true, canLoadMoreTrades: true, onLoadMoreTrades: vi.fn(),
+  canLoadMoreTrades: true, onLoadMoreTrades: vi.fn(),
 };
 
 describe("paginated journal analytics", () => {

@@ -117,7 +117,6 @@ export const adminUsersApi = {
     account_type: string | null;
     created_at: string;
     subscription_tier: string;
-    payment_status: string;
     subscription_end: string | null;
   }>> => {
     return await getAuthenticatedConvexClient().query(convexApi.admin.listUsers, {});
@@ -131,58 +130,6 @@ export const adminUsersApi = {
     return await getAuthenticatedConvexClient().mutation(convexApi.admin.setUserRole, {
       userId,
       isAdmin,
-    });
-  },
-
-  setSubscription: async (args: {
-    userId: string;
-    tier: "free" | "premium" | "pro";
-    paymentStatus: "free" | "paid" | "trial" | "expired";
-    expiresAtMs?: number | null;
-  }): Promise<{
-    id: string;
-    subscription_tier: string;
-    payment_status: string;
-    subscription_end: string | null;
-  }> => {
-    return await getAuthenticatedConvexClient().mutation(convexApi.admin.setUserSubscription, {
-      userId: args.userId,
-      tier: args.tier,
-      paymentStatus: args.paymentStatus,
-      expiresAtMs: args.expiresAtMs ?? null,
-    });
-  },
-};
-
-export const paymentsApi = {
-  listMine: async (): Promise<Array<{
-    id: string;
-    reference: string;
-    tier: string;
-    amount: number;
-    currency: string;
-    status: string;
-    expires_at: string | null;
-    paid_at: string;
-  }>> => {
-    return await getAuthenticatedConvexClient().query(convexApi.admin.listMyPaymentRecords, {});
-  },
-
-  listAll: async (args?: { userId?: string | null; limit?: number }): Promise<Array<{
-    id: string;
-    user_id: string;
-    reference: string;
-    tier: string;
-    amount: number;
-    currency: string;
-    status: string;
-    expires_at: string | null;
-    paid_at: string;
-    created_at: string;
-  }>> => {
-    return await getAuthenticatedConvexClient().query(convexApi.admin.listPaymentRecords, {
-      userId: args?.userId ?? null,
-      limit: args?.limit,
     });
   },
 };

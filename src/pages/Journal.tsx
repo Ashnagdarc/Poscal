@@ -380,7 +380,6 @@ const Journal = () => {
 
                 <JournalAnalyticsTabs
                   trades={analyticsFeedTrades}
-                  requireServerAnalytics
                   isLoading={isManualTradesLoading}
                   activeTab={journalTab}
                   onTabChange={setJournalTab}
