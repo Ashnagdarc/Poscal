@@ -1,12 +1,16 @@
 import { useState, useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  Activity,
   BarChart3,
+  Bell,
   ChevronRight,
   Coins,
+  CreditCard,
   Download,
   FileText,
   Globe,
+  History,
   LogOut,
   Lock,
   Mail,
@@ -17,7 +21,6 @@ import {
   Settings as SettingsIcon,
   Shield,
   Smartphone,
-  Sparkles,
   Trash2,
   Type,
   User,
@@ -458,15 +461,15 @@ const Settings = () => {
           </section>
         ) : null}
 
-        {/* Subscription — restore always available; checkout only when payments enabled */}
-        {user && !isPremium ? (
+        {/* Subscription — wall CTA only when paid lock is on; billing always available */}
+        {user ? (
           <section>
             <SettingsSection title="Subscription" />
-            <div className="overflow-hidden rounded-2xl border border-brand/20 bg-gradient-to-br from-brand/10 via-secondary/40 to-secondary/20">
-              {isPaymentsEnabled() && paidLockEnabled ? (
+            <div className="overflow-hidden rounded-2xl border border-brand/20 bg-secondary/40">
+              {!isPremium && isPaymentsEnabled() && paidLockEnabled ? (
                 <div className="px-5 py-5">
                   <div className="mb-3 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-brand" />
+                    <CreditCard className="h-5 w-5 text-brand" />
                     <h3 className="font-semibold text-foreground">Unlock Premium</h3>
                   </div>
                   <p className="mb-4 text-sm text-muted-foreground">
@@ -482,17 +485,29 @@ const Settings = () => {
               ) : (
                 <div className="px-5 py-5">
                   <div className="mb-3 flex items-center gap-2">
-                    <Sparkles className="h-5 w-5 text-brand" />
-                    <h3 className="font-semibold text-foreground">Subscription</h3>
+                    <CreditCard className="h-5 w-5 text-brand" />
+                    <h3 className="font-semibold text-foreground">
+                      {isPremium ? "Your plan" : "Subscription"}
+                    </h3>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {isPaymentsEnabled()
-                      ? "Restore a previous purchase if your access did not sync."
-                      : "Checkout is paused. Restore a previous purchase if you already paid."}
+                    {isPremium
+                      ? "Manage billing history and restore purchases."
+                      : isPaymentsEnabled()
+                        ? "Checkout is live. Premium pages stay open until an admin turns on the paid features lock."
+                        : "Checkout is paused. Restore a previous purchase if you already paid."}
                   </p>
                 </div>
               )}
               <div className="border-t border-border/40 bg-background/30">
+                <SettingsRow
+                  icon={<CreditCard className="h-4 w-4" />}
+                  title="Billing history"
+                  subtitle="Payments and restore"
+                  onClick={() => navigate("/billing")}
+                  showChevron
+                  className="rounded-none border-0 bg-transparent hover:bg-background/40"
+                />
                 <SettingsRow
                   icon={<RotateCcw className="h-4 w-4" />}
                   title="Restore purchase"
@@ -503,7 +518,7 @@ const Settings = () => {
                       {isRestoringPurchase ? "Restoring…" : "Run"}
                     </span>
                   }
-                  className="rounded-none border-0 bg-transparent hover:bg-background/40"
+                  className="rounded-none border-0 border-t border-border/40 bg-transparent hover:bg-background/40"
                 />
               </div>
             </div>
@@ -533,9 +548,36 @@ const Settings = () => {
                 trailing={<AdminBadge />}
               />
               <SettingsRow
+                icon={<CreditCard className="h-4 w-4 text-brand" />}
+                iconClassName="bg-brand/10"
+                title="Payment records"
+                subtitle="Paystack sync history"
+                onClick={() => navigate("/admin/payments")}
+                showChevron
+                trailing={<AdminBadge />}
+              />
+              <SettingsRow
+                icon={<Bell className="h-4 w-4 text-brand" />}
+                iconClassName="bg-brand/10"
+                title="Notification queue"
+                subtitle="Inspect push, email, and in-app jobs"
+                onClick={() => navigate("/admin/notifications")}
+                showChevron
+                trailing={<AdminBadge />}
+              />
+              <SettingsRow
+                icon={<Activity className="h-4 w-4 text-brand" />}
+                iconClassName="bg-brand/10"
+                title="Ingestor health"
+                subtitle="Price pipeline status"
+                onClick={() => navigate("/admin/ingestor-health")}
+                showChevron
+                trailing={<AdminBadge />}
+              />
+              <SettingsRow
                 icon={<Lock className="h-4 w-4" />}
                 title="Paid features lock"
-                subtitle="Restrict premium pages for free users"
+                subtitle="Payment wall — off until you turn it on"
                 trailing={
                   <Button
                     size="sm"
@@ -812,6 +854,15 @@ const Settings = () => {
         <section>
           <SettingsSection title="Notifications" />
           <SettingsGroup>
+            {user ? (
+              <SettingsRow
+                icon={<Bell className="h-4 w-4" />}
+                title="Inbox"
+                subtitle="In-app alerts and announcements"
+                onClick={() => navigate("/notifications")}
+                showChevron
+              />
+            ) : null}
             <NotificationSettings embedded />
           </SettingsGroup>
         </section>
@@ -820,7 +871,16 @@ const Settings = () => {
         <section>
           <SettingsSection title="Calculator" />
           <SettingsGroup>
-            <div className="px-5 py-4">
+            {user ? (
+              <SettingsRow
+                icon={<History className="h-4 w-4" />}
+                title="Saved calculations"
+                subtitle="Browse and reopen position sizes"
+                onClick={() => navigate("/calculator/history")}
+                showChevron
+              />
+            ) : null}
+            <div className={cn("px-5 py-4", user && "border-t border-border/40")}>
               <SettingsRowContent
                 icon={<BarChart3 className="h-4 w-4" />}
                 title="Default risk %"

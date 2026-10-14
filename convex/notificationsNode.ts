@@ -256,6 +256,7 @@ export const processPendingBatch = internalAction({
           continue;
         }
 
+        // in_app rows are inbox-only and filtered out of claimPendingBatch.
         throw new Error(`Unsupported notification channel: ${notification.channel}`);
       } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown notification processing error";

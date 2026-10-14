@@ -267,20 +267,36 @@ export const Calculator = () => {
     const entry = searchParams.get("entry");
     const sl = searchParams.get("stopLoss");
     const tp = searchParams.get("takeProfit");
+    const slPips = searchParams.get("stopLossPips");
+    const tpPips = searchParams.get("takeProfitPips");
+    const balance = searchParams.get("balance");
+    const risk = searchParams.get("risk");
     const orderType = searchParams.get("orderType");
 
-    if (!symbol || !sl) return;
+    if (!symbol) return;
+    if (!sl && !slPips) return;
 
     const normalizedSymbol = normalizePrefillSymbol(symbol);
     setSelectedPair({
       symbol: normalizedSymbol,
       pipDecimal: detectPipDecimal(normalizedSymbol),
     });
-    setCalculationMode("price");
-    setEntryPrice(entry ?? "");
-    setStopLossPrice(sl);
-    setTakeProfitPrice(tp ?? "");
     setTradeDirection(getDirectionFromOrderType(orderType));
+    if (balance) setAccountBalance(balance);
+    if (risk) setRiskPercent(parseFloat(risk) || riskPercent);
+
+    if (sl) {
+      setCalculationMode("price");
+      setEntryPrice(entry ?? "");
+      setStopLossPrice(sl);
+      setTakeProfitPrice(tp ?? "");
+      return;
+    }
+
+    setCalculationMode("pips");
+    if (entry) setEntryPrice(entry);
+    setStopLossPips(slPips ?? "");
+    setTakeProfitPips(tpPips ?? "");
   }, [searchParams]);
 
   const riskPresets = [0.5, 1, 2, 3];
@@ -416,8 +432,8 @@ export const Calculator = () => {
     const savedPotentialProfit =
       calculation.potentialProfitAccount > 0 ? calculation.potentialProfitAccount : null;
 
-    const source = searchParams.get("fromSignal") === "true" ? "signal" : "manual";
-    const signalId = searchParams.get("signalId");
+    const source = "manual" as const;
+    const signalId = null;
     const prefilledOrderType = normalizeOrderType(searchParams.get("orderType"));
     const orderType = prefilledOrderType ?? tradeDirection;
     // Persist entry whenever the user typed one (Price mode, or Pips mode for USD-base pairs).

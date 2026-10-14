@@ -161,6 +161,7 @@ export const listUsers = query({
         account_type: row.role ?? "user",
         created_at: new Date(row.createdAtMs).toISOString(),
         subscription_tier: row.subscriptionTier ?? "free",
+        payment_status: row.paymentStatus ?? "free",
         subscription_end: row.subscriptionExpiresAtMs ? new Date(row.subscriptionExpiresAtMs).toISOString() : null,
       }));
   },
@@ -490,18 +491,281 @@ export const queueNotification = mutation({
       throw new Error("Admin access required");
     }
 
+    const now = Date.now();
     const tag = args.tag ?? "general";
+
+    // Inbox row: pending = unread for the viewer (or broadcast when userId is null).
+    await ctx.db.insert("notificationQueue", {
+      userId: args.userId ?? null,
+      channel: "in_app",
+      title: args.title,
+      body: args.body,
+      status: "pending",
+      recipientEmail: null,
+      tag: `in_app-${tag}-${now}`,
+      data: args.data ?? null,
+      scheduledForMs: null,
+      processingStartedAtMs: null,
+      attempts: 0,
+      errorMessage: null,
+      createdAtMs: now,
+      updatedAtMs: now,
+    });
+
     await ctx.scheduler.runAfter(0, internal.notifications.enqueueDevicePushes, {
       userId: args.userId ?? null,
       title: args.title,
       body: args.body,
       tag,
-      deliveryKey: `${Date.now()}`,
+      deliveryKey: `${now}`,
       data: args.data ?? null,
       cursor: null,
     });
 
     return { success: true, tag, data: args.data ?? null };
+  },
+});
+
+const SUBSCRIPTION_TIERS = ["free", "premium", "pro"] as const;
+const PAYMENT_STATUSES = ["free", "paid", "trial", "expired"] as const;
+
+export const setUserSubscription = mutation({
+  args: {
+    userId: v.string(),
+    tier: v.union(
+      v.literal("free"),
+      v.literal("premium"),
+      v.literal("pro"),
+    ),
+    paymentStatus: v.union(
+      v.literal("free"),
+      v.literal("paid"),
+      v.literal("trial"),
+      v.literal("expired"),
+    ),
+    expiresAtMs: nullableNumberArg,
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const now = Date.now();
+
+    if (!(SUBSCRIPTION_TIERS as readonly string[]).includes(args.tier)) {
+      throw new Error("Invalid subscription tier");
+    }
+    if (!(PAYMENT_STATUSES as readonly string[]).includes(args.paymentStatus)) {
+      throw new Error("Invalid payment status");
+    }
+
+    const user = await ctx.db.get(args.userId as Id<"users">);
+    const profile = await ctx.db
+      .query("profiles")
+      .withIndex("by_external_user_id", (q) => q.eq("externalUserId", args.userId))
+      .first();
+
+    if (!user && !profile) {
+      throw new Error("User not found");
+    }
+
+    const expiresAtMs =
+      args.paymentStatus === "free" || args.paymentStatus === "expired"
+        ? null
+        : (args.expiresAtMs ?? null);
+
+    if (user) {
+      await ctx.db.patch(user._id, {
+        paymentStatus: args.paymentStatus,
+        subscriptionTier: args.tier,
+        subscriptionExpiresAtMs: expiresAtMs,
+      });
+    }
+
+    if (profile) {
+      await ctx.db.patch(profile._id, {
+        paymentStatus: args.paymentStatus,
+        subscriptionTier: args.tier,
+        subscriptionExpiresAtMs: expiresAtMs,
+        updatedAtMs: now,
+      });
+    }
+
+    return {
+      id: args.userId,
+      subscription_tier: args.tier,
+      payment_status: args.paymentStatus,
+      subscription_end: expiresAtMs ? new Date(expiresAtMs).toISOString() : null,
+    };
+  },
+});
+
+export const listPaymentRecords = query({
+  args: {
+    userId: nullableStringArg,
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 200);
+
+    const rows = args.userId
+      ? await ctx.db
+          .query("paymentRecords")
+          .withIndex("by_user_paid", (q) => q.eq("userId", args.userId!))
+          .order("desc")
+          .take(limit)
+      : await ctx.db.query("paymentRecords").order("desc").take(limit);
+
+    return rows.map((row) => ({
+      id: row._id,
+      user_id: row.userId,
+      reference: row.reference,
+      tier: row.tier,
+      amount: row.amount,
+      currency: row.currency,
+      status: row.status,
+      expires_at: row.expiresAtMs ? new Date(row.expiresAtMs).toISOString() : null,
+      paid_at: new Date(row.paidAtMs).toISOString(),
+      created_at: new Date(row.createdAtMs).toISOString(),
+    }));
+  },
+});
+
+export const listMyPaymentRecords = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return [];
+
+    const limit = Math.min(Math.max(args.limit ?? 50, 1), 100);
+    const rows = await ctx.db
+      .query("paymentRecords")
+      .withIndex("by_user_paid", (q) => q.eq("userId", userId))
+      .order("desc")
+      .take(limit);
+
+    return rows.map((row) => ({
+      id: row._id,
+      reference: row.reference,
+      tier: row.tier,
+      amount: row.amount,
+      currency: row.currency,
+      status: row.status,
+      expires_at: row.expiresAtMs ? new Date(row.expiresAtMs).toISOString() : null,
+      paid_at: new Date(row.paidAtMs).toISOString(),
+    }));
+  },
+});
+
+export const listNotificationQueue = query({
+  args: {
+    status: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("processing"),
+        v.literal("sent"),
+        v.literal("failed"),
+      ),
+    ),
+    channel: v.optional(
+      v.union(v.literal("push"), v.literal("email"), v.literal("in_app")),
+    ),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireAdmin(ctx);
+    const limit = Math.min(Math.max(args.limit ?? 80, 1), 200);
+
+    let rows;
+    if (args.status) {
+      rows = await ctx.db
+        .query("notificationQueue")
+        .withIndex("by_status_scheduled", (q) => q.eq("status", args.status!))
+        .order("desc")
+        .take(limit * 2);
+    } else {
+      rows = await ctx.db.query("notificationQueue").order("desc").take(limit * 2);
+    }
+
+    return rows
+      .filter((row) => (args.channel ? row.channel === args.channel : true))
+      .slice(0, limit)
+      .map((row) => ({
+        id: row._id,
+        user_id: row.userId ?? null,
+        channel: row.channel,
+        title: row.title,
+        body: row.body,
+        status: row.status,
+        tag: row.tag ?? null,
+        attempts: row.attempts,
+        error_message: row.errorMessage ?? null,
+        created_at: new Date(row.createdAtMs).toISOString(),
+        updated_at: new Date(row.updatedAtMs).toISOString(),
+      }));
+  },
+});
+
+export const listInAppNotifications = query({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await getVerifiedAuthUserId(ctx);
+    if (!userId) return [];
+
+    const limit = Math.min(Math.max(args.limit ?? 40, 1), 100);
+    const [mine, broadcasts] = await Promise.all([
+      ctx.db
+        .query("notificationQueue")
+        .withIndex("by_user_created", (q) => q.eq("userId", userId))
+        .order("desc")
+        .take(limit),
+      ctx.db
+        .query("notificationQueue")
+        .withIndex("by_user_created", (q) => q.eq("userId", null))
+        .order("desc")
+        .take(limit),
+    ]);
+
+    const combined = [...mine, ...broadcasts]
+      .filter((row) => row.channel === "in_app")
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      .slice(0, limit);
+
+    return combined.map((row) => ({
+      id: row._id,
+      title: row.title,
+      body: row.body,
+      tag: row.tag ?? null,
+      is_read: row.status === "sent",
+      created_at: new Date(row.createdAtMs).toISOString(),
+    }));
+  },
+});
+
+export const markInAppNotificationRead = mutation({
+  args: {
+    id: v.id("notificationQueue"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const row = await ctx.db.get(args.id);
+    if (!row || row.channel !== "in_app") {
+      throw new Error("Notification not found");
+    }
+    // Broadcast rows (userId null) are shared; clients mark those read locally.
+    if (!row.userId || row.userId !== userId) {
+      throw new Error("Notification not found");
+    }
+
+    await ctx.db.patch(args.id, {
+      status: "sent",
+      updatedAtMs: Date.now(),
+      errorMessage: null,
+    });
+
+    return { success: true };
   },
 });
 

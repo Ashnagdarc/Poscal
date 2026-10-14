@@ -10,7 +10,6 @@ export type PaymentStatus = 'free' | 'paid' | 'trial' | 'expired';
 // Feature access map - defines which tiers can access which features
 const FEATURE_ACCESS_MAP: Record<string, SubscriptionTier[]> = {
   journal_unlimited: ['premium', 'pro'],
-  signals_take: ['premium', 'pro'],
   news_feed: ['premium', 'pro'],
   history_unlimited: ['premium', 'pro'],
   export_csv: ['premium', 'pro'],

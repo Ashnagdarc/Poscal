@@ -1,6 +1,8 @@
 /**
  * Checkout / Paystack is off by default until explicitly re-enabled.
- * Set VITE_PAYMENTS_ENABLED=true in the Vite env when ready to sell again.
+ * Set VITE_PAYMENTS_ENABLED=true in the Vite env (e.g. Vercel Production) when
+ * checkout should be available. The payment wall itself is controlled separately
+ * by the admin "Paid features lock" flag and defaults to OFF.
  */
 
 function parseTruthyEnv(raw: string | undefined): boolean {

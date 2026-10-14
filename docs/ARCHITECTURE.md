@@ -13,7 +13,6 @@
 
 - User accounts: Convex auth
 - Profiles: Convex
-- Trading signals: Convex
 - Journal/history: Convex
 - Subscription state: Convex
 - Push subscription records: Convex

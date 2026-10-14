@@ -164,9 +164,10 @@ export const JournalSwitcher = () => {
       <Dialog open={limitOpen} onOpenChange={setLimitOpen}>
         <DialogContent className="max-w-sm border-border bg-background sm:rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Two journals for now</DialogTitle>
+            <DialogTitle>Journal limit reached</DialogTitle>
             <DialogDescription>
-              Each account can keep {journalLimit} journals. A paid version is coming soon, with room for up to 5 or 10 accounts.
+              This account can keep {journalLimit} journals
+              {journalLimit < 5 ? ". Upgrade to Premium for up to 5 journals." : "."}
             </DialogDescription>
           </DialogHeader>
           <button

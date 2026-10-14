@@ -34,7 +34,7 @@ function toJournalCreateToastMessage(error: unknown): string {
     return "Please sign in again to create a journal";
   }
   if (/journal limit reached/i.test(candidate)) {
-    return "You've reached the journal limit for this account. A paid version is coming soon, with room for up to 5 or 10 accounts.";
+    return "You've reached the journal limit for this account. Premium plans allow up to 5 journals.";
   }
   if (/journal name is required|account size must be/i.test(candidate)) {
     return candidate;

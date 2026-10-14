@@ -148,6 +148,7 @@ export const adminUsersApi = {
     account_type: string | null;
     created_at: string;
     subscription_tier: string;
+    payment_status: string;
     subscription_end: string | null;
   }>> => {
     return await getAuthenticatedConvexClient().query(convexApi.admin.listUsers, {});
@@ -161,6 +162,58 @@ export const adminUsersApi = {
     return await getAuthenticatedConvexClient().mutation(convexApi.admin.setUserRole, {
       userId,
       isAdmin,
+    });
+  },
+
+  setSubscription: async (args: {
+    userId: string;
+    tier: "free" | "premium" | "pro";
+    paymentStatus: "free" | "paid" | "trial" | "expired";
+    expiresAtMs?: number | null;
+  }): Promise<{
+    id: string;
+    subscription_tier: string;
+    payment_status: string;
+    subscription_end: string | null;
+  }> => {
+    return await getAuthenticatedConvexClient().mutation(convexApi.admin.setUserSubscription, {
+      userId: args.userId,
+      tier: args.tier,
+      paymentStatus: args.paymentStatus,
+      expiresAtMs: args.expiresAtMs ?? null,
+    });
+  },
+};
+
+export const paymentsApi = {
+  listMine: async (): Promise<Array<{
+    id: string;
+    reference: string;
+    tier: string;
+    amount: number;
+    currency: string;
+    status: string;
+    expires_at: string | null;
+    paid_at: string;
+  }>> => {
+    return await getAuthenticatedConvexClient().query(convexApi.admin.listMyPaymentRecords, {});
+  },
+
+  listAll: async (args?: { userId?: string | null; limit?: number }): Promise<Array<{
+    id: string;
+    user_id: string;
+    reference: string;
+    tier: string;
+    amount: number;
+    currency: string;
+    status: string;
+    expires_at: string | null;
+    paid_at: string;
+    created_at: string;
+  }>> => {
+    return await getAuthenticatedConvexClient().query(convexApi.admin.listPaymentRecords, {
+      userId: args?.userId ?? null,
+      limit: args?.limit,
     });
   },
 };
@@ -393,9 +446,45 @@ export const notificationsApi = {
     });
   },
 
-  // Get user's notifications
-  getNotifications: async (): Promise<any[]> => {
-    return [];
+  getNotifications: async (): Promise<Array<{
+    id: string;
+    title: string;
+    body: string;
+    tag: string | null;
+    is_read: boolean;
+    created_at: string;
+  }>> => {
+    return await getAuthenticatedConvexClient().query(convexApi.admin.listInAppNotifications, {});
+  },
+
+  markRead: async (id: string): Promise<void> => {
+    await getAuthenticatedConvexClient().mutation(convexApi.admin.markInAppNotificationRead, {
+      id: id as any,
+    });
+  },
+
+  listQueue: async (args?: {
+    status?: "pending" | "processing" | "sent" | "failed";
+    channel?: "push" | "email" | "in_app";
+    limit?: number;
+  }): Promise<Array<{
+    id: string;
+    user_id: string | null;
+    channel: string;
+    title: string;
+    body: string;
+    status: string;
+    tag: string | null;
+    attempts: number;
+    error_message: string | null;
+    created_at: string;
+    updated_at: string;
+  }>> => {
+    return await getAuthenticatedConvexClient().query(convexApi.admin.listNotificationQueue, {
+      status: args?.status,
+      channel: args?.channel,
+      limit: args?.limit,
+    });
   },
 
   // Queue a push notification (admin only)

@@ -15,3 +15,12 @@ Convex agent skills for common tasks can be installed by running
 For changes to storage, journal queries, analytics, caching, uploads or service
 boundaries, read `docs/BETA_ARCHITECTURE_RULES.md`. Preserve live user data and
 distinguish proposed improvements from deployed behavior.
+
+## Hosting (critical)
+
+- Frontend: Vercel and/or Openship **Poscal** project.
+- Backend + database: **self-hosted Convex on Openship VPS**
+  (`https://convex.poscalfx.com` / `https://convex-http.poscalfx.com`).
+- To push Convex functions, use self-hosted CLI env (not cloud):
+  `CONVEX_SELF_HOSTED_URL` + `CONVEX_SELF_HOSTED_ADMIN_KEY`, then `npx convex deploy`.
+- Never deploy with cloud `CONVEX_DEPLOY_KEY` / `*.convex.cloud`.

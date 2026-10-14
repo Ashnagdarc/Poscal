@@ -79,6 +79,31 @@ describe("notification delivery", () => {
     expect(classifyPushFailure(null)).toBe("retry");
   });
 
+  it("does not claim in_app inbox rows for the push/email worker", () => {
+    const inbox = row({
+      status: "pending",
+      channel: "in_app",
+      createdAtMs: 1,
+      scheduledForMs: null,
+    });
+    const push = row({
+      status: "pending",
+      channel: "push",
+      createdAtMs: 2,
+      scheduledForMs: now - 1,
+    });
+
+    const { claim } = selectClaimBatch({
+      pending: [inbox, push],
+      processing: [],
+      now,
+      limit: 10,
+      staleAfterMs: 60_000,
+    });
+
+    expect(claim).toEqual([push]);
+  });
+
   it("schedules a calendar alert for 15 minutes before the release", () => {
     const eventAt = now + 2 * 60 * 60 * 1000;
     const planned = planCalendarAlert(eventAt, now);

@@ -22,6 +22,7 @@ interface AdminUserRow {
   account_type: string | null;
   created_at: string;
   subscription_tier: string;
+  payment_status: string;
   subscription_end: string | null;
 }
 
@@ -57,6 +58,11 @@ const UserManagement = () => {
   const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
+  const [planUser, setPlanUser] = useState<AdminUserRow | null>(null);
+  const [planTier, setPlanTier] = useState<"free" | "premium" | "pro">("free");
+  const [planStatus, setPlanStatus] = useState<"free" | "paid" | "trial" | "expired">("free");
+  const [planDays, setPlanDays] = useState("30");
+  const [savingPlan, setSavingPlan] = useState(false);
 
   const fetchUsers = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -91,6 +97,61 @@ const UserManagement = () => {
       toast.success(updatedState ? "Paid lock enabled" : "Paid lock disabled");
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : "Failed to toggle paid lock");
+    }
+  };
+
+  const openPlanEditor = (user: AdminUserRow) => {
+    const tier =
+      user.subscription_tier === "pro"
+        ? "pro"
+        : user.subscription_tier === "premium"
+          ? "premium"
+          : "free";
+    const status =
+      user.payment_status === "paid" ||
+      user.payment_status === "trial" ||
+      user.payment_status === "expired"
+        ? user.payment_status
+        : "free";
+    setPlanUser(user);
+    setPlanTier(tier);
+    setPlanStatus(status === "free" && tier !== "free" ? "paid" : status);
+    setPlanDays("30");
+  };
+
+  const handleSavePlan = async () => {
+    if (!planUser) return;
+    setSavingPlan(true);
+    try {
+      const days = Math.max(1, parseInt(planDays, 10) || 30);
+      const expiresAtMs =
+        planStatus === "free" || planStatus === "expired"
+          ? null
+          : Date.now() + days * 24 * 60 * 60 * 1000;
+      const result = await adminUsersApi.setSubscription({
+        userId: planUser.id,
+        tier: planTier,
+        paymentStatus: planStatus,
+        expiresAtMs,
+      });
+      setUsers((prev) =>
+        prev.map((row) =>
+          row.id === planUser.id
+            ? {
+                ...row,
+                subscription_tier: result.subscription_tier,
+                payment_status: result.payment_status,
+                subscription_end: result.subscription_end,
+              }
+            : row,
+        ),
+      );
+      toast.success(`Updated plan for ${planUser.full_name || planUser.email}`);
+      setPlanUser(null);
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update plan");
+    } finally {
+      setSavingPlan(false);
     }
   };
 
@@ -355,32 +416,43 @@ const UserManagement = () => {
                       )}
                     </div>
                   </div>
-                  {user.id !== currentUser?.id && !isSuperAdminAccount(user) && (
-                    <div className="border-t border-border/40 bg-background/20 px-5 py-3">
-                      {user.is_admin ? (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-8 w-full rounded-lg text-xs"
-                          disabled={updatingUserId === user.id}
-                          onClick={() => handleSetAdmin(user, false)}
-                        >
-                          <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
-                          {updatingUserId === user.id ? "Updating…" : "Remove admin"}
-                        </Button>
-                      ) : (
-                        <Button
-                          size="sm"
-                          className="h-8 w-full rounded-lg bg-brand text-xs text-brand-foreground hover:bg-brand/90"
-                          disabled={updatingUserId === user.id}
-                          onClick={() => handleSetAdmin(user, true)}
-                        >
-                          <Shield className="mr-1.5 h-3.5 w-3.5" />
-                          {updatingUserId === user.id ? "Updating…" : "Make admin"}
-                        </Button>
+                  <div className="border-t border-border/40 bg-background/20 px-5 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 flex-1 rounded-lg text-xs"
+                        onClick={() => openPlanEditor(user)}
+                      >
+                        <Crown className="mr-1.5 h-3.5 w-3.5" />
+                        Set plan
+                      </Button>
+                      {user.id !== currentUser?.id && !isSuperAdminAccount(user) && (
+                        user.is_admin ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 flex-1 rounded-lg text-xs"
+                            disabled={updatingUserId === user.id}
+                            onClick={() => handleSetAdmin(user, false)}
+                          >
+                            <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
+                            {updatingUserId === user.id ? "Updating…" : "Remove admin"}
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="h-8 flex-1 rounded-lg bg-brand text-xs text-brand-foreground hover:bg-brand/90"
+                            disabled={updatingUserId === user.id}
+                            onClick={() => handleSetAdmin(user, true)}
+                          >
+                            <Shield className="mr-1.5 h-3.5 w-3.5" />
+                            {updatingUserId === user.id ? "Updating…" : "Make admin"}
+                          </Button>
+                        )
                       )}
                     </div>
-                  )}
+                  </div>
                 </article>
               ))}
             </div>
@@ -419,6 +491,89 @@ const UserManagement = () => {
           )}
         </section>
       </main>
+
+      {planUser && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-background/70 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-background p-5 shadow-none">
+            <h3 className="font-display text-lg font-semibold text-foreground">Set plan</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {planUser.full_name || planUser.email}
+            </p>
+            <div className="mt-4 space-y-3">
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tier
+                </p>
+                <div className="flex gap-2">
+                  {(["free", "premium", "pro"] as const).map((tier) => (
+                    <Button
+                      key={tier}
+                      size="sm"
+                      variant={planTier === tier ? "default" : "outline"}
+                      className="flex-1 rounded-lg capitalize"
+                      onClick={() => {
+                        setPlanTier(tier);
+                        if (tier === "free") setPlanStatus("free");
+                        else if (planStatus === "free") setPlanStatus("paid");
+                      }}
+                    >
+                      {tier}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Status
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {(["free", "paid", "trial", "expired"] as const).map((status) => (
+                    <Button
+                      key={status}
+                      size="sm"
+                      variant={planStatus === status ? "default" : "outline"}
+                      className="rounded-lg capitalize"
+                      onClick={() => setPlanStatus(status)}
+                    >
+                      {status}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              {(planStatus === "paid" || planStatus === "trial") && (
+                <div>
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Expires in (days)
+                  </p>
+                  <Input
+                    value={planDays}
+                    onChange={(e) => setPlanDays(e.target.value)}
+                    inputMode="numeric"
+                    className="h-11 rounded-xl"
+                  />
+                </div>
+              )}
+            </div>
+            <div className="mt-5 flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-xl"
+                onClick={() => setPlanUser(null)}
+                disabled={savingPlan}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 rounded-xl"
+                onClick={() => void handleSavePlan()}
+                disabled={savingPlan}
+              >
+                {savingPlan ? "Saving…" : "Save plan"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

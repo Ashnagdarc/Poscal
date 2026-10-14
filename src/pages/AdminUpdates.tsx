@@ -7,7 +7,6 @@ import {
   Calendar,
   Bell,
   Lock,
-  Sparkles,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
@@ -151,11 +150,16 @@ const AdminUpdates = () => {
 
   const toggleActive = async (id: string, currentStatus: boolean) => {
     try {
-      toast.info('Toggle active not yet implemented in backend');
-      fetchUpdates();
+      await appUpdatesApi.update(id, { is_active: !currentStatus });
+      setUpdates((prev) =>
+        prev.map((row) =>
+          row.id === id ? { ...row, is_active: !currentStatus } : row,
+        ),
+      );
+      toast.success(currentStatus ? 'Update hidden' : 'Update is live');
     } catch (error) {
       logger.error('Error toggling update:', error);
-      toast.error('Failed to update status');
+      toast.error(error instanceof Error ? error.message : 'Failed to update status');
     }
   };
 
@@ -308,7 +312,7 @@ const AdminUpdates = () => {
           ) : updates.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border/60 bg-secondary/30 px-6 py-12 text-center">
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-brand/10">
-                <Sparkles className="h-7 w-7 text-brand" />
+                <Megaphone className="h-7 w-7 text-brand" />
               </div>
               <h3 className="text-lg font-semibold text-foreground">No updates yet</h3>
               <p className="mx-auto mt-1 max-w-xs text-sm text-muted-foreground">

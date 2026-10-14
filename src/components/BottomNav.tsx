@@ -86,14 +86,22 @@ export const BottomNav = ({ persistent = false }: BottomNavProps) => {
 
   const activeIndex = navItems.findIndex(({ path }) => {
     if (path === "/") {
-      return location.pathname === "/" || location.pathname === "/calculator";
+      return (
+        location.pathname === "/"
+        || location.pathname === "/calculator"
+        || location.pathname.startsWith("/calculator/")
+      );
     }
     if (path === "/calendar") {
       return location.pathname === "/calendar" || location.pathname === "/news";
     }
     if (path === "/settings") {
       return (
-        location.pathname === "/settings" || location.pathname === "/profile"
+        location.pathname === "/settings"
+        || location.pathname === "/profile"
+        || location.pathname === "/billing"
+        || location.pathname === "/notifications"
+        || location.pathname.startsWith("/admin/")
       );
     }
     return location.pathname === path;

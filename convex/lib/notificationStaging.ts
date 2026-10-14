@@ -47,6 +47,11 @@ function byCreatedAt(left: QueueCandidate, right: QueueCandidate): number {
   return left.createdAtMs - right.createdAtMs;
 }
 
+/** in_app rows stay in the inbox; the push/email worker must not claim them. */
+export function isWorkerDeliverableChannel(channel?: NotificationChannel): boolean {
+  return channel !== "in_app";
+}
+
 /** Due rows are claimed in time order. Future rows stay pending until their time. */
 export function selectClaimBatch<T extends QueueCandidate>(input: {
   pending: T[];
@@ -55,9 +60,11 @@ export function selectClaimBatch<T extends QueueCandidate>(input: {
   limit: number;
   staleAfterMs: number;
 }): { claim: T[] } {
-  const due = input.pending.filter((row) => isDuePending(row, input.now)).sort(byCreatedAt);
+  const due = input.pending
+    .filter((row) => isWorkerDeliverableChannel(row.channel) && isDuePending(row, input.now))
+    .sort(byCreatedAt);
   const stale = input.processing
-    .filter((row) => isStaleProcessing(row, input.now, input.staleAfterMs))
+    .filter((row) => isWorkerDeliverableChannel(row.channel) && isStaleProcessing(row, input.now, input.staleAfterMs))
     .sort(byCreatedAt);
   return { claim: [...due, ...stale].slice(0, Math.max(0, input.limit)) };
 }

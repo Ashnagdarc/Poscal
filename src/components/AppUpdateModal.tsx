@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Sparkles } from 'lucide-react';
+import { Megaphone } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useNotifications } from '@/hooks/use-notifications';
@@ -74,7 +74,7 @@ export const AppUpdateModal = () => {
         <DialogHeader>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center">
-              <Sparkles className="w-5 h-5 text-primary" />
+              <Megaphone className="w-5 h-5 text-primary" />
             </div>
             <DialogTitle className="text-xl">{update.title}</DialogTitle>
           </div>

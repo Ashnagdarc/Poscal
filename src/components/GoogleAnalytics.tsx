@@ -22,7 +22,7 @@ function pagePath(pathname: string): string {
   if (pathname.startsWith("/journal/day/")) return "/journal/day/:dateKey";
   const routes = ["/", "/calculator", "/welcome", "/signin", "/signup",
     "/forgot-password", "/verify-email", "/journal", "/history", "/settings",
-    "/pricing", "/upgrade", "/calendar", "/news", "/signals", "/profile",
+    "/pricing", "/upgrade", "/calendar", "/news", "/profile", "/billing", "/notifications",
     "/terms", "/privacy", "/admin/users", "/admin/updates", "/admin/ingestor-health"];
   return routes.includes(pathname) ? pathname : "/404";
 }

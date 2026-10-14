@@ -35,6 +35,11 @@ const Upgrade = lazyWithRetry(() => import("./pages/Upgrade"));
 const UserManagement = lazyWithRetry(() => import("./pages/UserManagement"));
 const AdminUpdates = lazyWithRetry(() => import("./pages/AdminUpdates"));
 const AdminIngestorHealth = lazyWithRetry(() => import("./pages/AdminIngestorHealth"));
+const AdminPayments = lazyWithRetry(() => import("./pages/AdminPayments"));
+const AdminNotifications = lazyWithRetry(() => import("./pages/AdminNotifications"));
+const CalculatorHistory = lazyWithRetry(() => import("./pages/CalculatorHistory"));
+const Billing = lazyWithRetry(() => import("./pages/Billing"));
+const Notifications = lazyWithRetry(() => import("./pages/Notifications"));
 const Terms = lazyWithRetry(() => import("./pages/Terms"));
 const Privacy = lazyWithRetry(() => import("./pages/Privacy"));
 const NotFound = lazyWithRetry(() => import("./pages/NotFound"));
@@ -114,9 +119,15 @@ const AppContent = () => {
           />
           <Route
             path="/history"
-            element={<ProtectedRoute requiresPremium>{<Navigate to="/journal" replace />}</ProtectedRoute>}
+            element={<ProtectedRoute><Navigate to="/calculator/history" replace /></ProtectedRoute>}
+          />
+          <Route
+            path="/calculator/history"
+            element={<ProtectedRoute><CalculatorHistory /></ProtectedRoute>}
           />
           <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+          <Route path="/billing" element={<ProtectedRoute><Billing /></ProtectedRoute>} />
+          <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
           <Route path="/pricing" element={<Upgrade />} />
           <Route path="/upgrade" element={<Upgrade />} />
           <Route
@@ -128,7 +139,6 @@ const AppContent = () => {
             }
           />
           <Route path="/news" element={<Navigate to="/calendar" replace />} />
-          <Route path="/signals" element={<Navigate to="/calendar" replace />} />
           <Route
             path="/admin/users"
             element={
@@ -150,6 +160,22 @@ const AppContent = () => {
             element={
               <ProtectedRoute requiresAdmin>
                 <AdminIngestorHealth />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/payments"
+            element={
+              <ProtectedRoute requiresAdmin>
+                <AdminPayments />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/notifications"
+            element={
+              <ProtectedRoute requiresAdmin>
+                <AdminNotifications />
               </ProtectedRoute>
             }
           />

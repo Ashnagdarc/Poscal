@@ -157,14 +157,6 @@ Now stores:
 - `pnl` (calculated using actual pip values)
 - All other trade details
 
-### 3. Future: TakeSignalModal.tsx
-
-**TODO**: When users take signals, calculate and display:
-
-- Recommended position size based on risk %
-- Expected P&L for each TP level
-- Lot size in contracts/mini lots/micro lots
-
 ## Examples by Pair Type
 
 ### EUR/USD (Standard)
@@ -211,11 +203,8 @@ Your specific trade validates the system:
 ## Next Steps
 
 1. ✅ **Completed**: Core forex calculation library
-2. ✅ **Completed**: Integration in UpdateSignalModal for closing trades
-3. ✅ **Completed**: Database updated with correct position sizes and P&L
-4. 🔜 **TODO**: Add position size calculator to TakeSignalModal
-5. 🔜 **TODO**: Show expected P&L for each TP level
-6. 🔜 **TODO**: Add risk calculator widget in trading interface
+2. ✅ **Completed**: Calculator + journal integration for position size / P&L
+3. Trading signals UI was removed from the product; do not rebuild TakeSignal flows here.
 
 ## Technical Notes
 
