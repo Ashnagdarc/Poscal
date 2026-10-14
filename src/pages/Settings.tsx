@@ -309,15 +309,10 @@ const Settings = () => {
     setIsCheckingUpdate(true);
     try {
       const found = await checkForUpdate();
-      if (found || updateAvailable) {
-        toast.message("Updating Poscal…");
-        await updateApp();
-        return;
-      }
-
-      // No waiting worker — hard reload to pick up a fresh NetworkFirst shell.
-      toast.message("Refreshing Poscal…");
-      window.location.reload();
+      toast.message(found || updateAvailable ? "Updating Poscal…" : "Refreshing Poscal…");
+      // Always go through the cache-clearing refresh path. A bare reload can
+      // keep the previous SW shell and leave calculator copy looking "stuck".
+      await updateApp();
     } catch {
       toast.error("Could not update the app");
     } finally {

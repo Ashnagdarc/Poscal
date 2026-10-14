@@ -1,5 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { extractBuildSignatureFromHtml, pickIndexEntry } from "@/lib/appVersion";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import {
+  clearStaleAppShellCaches,
+  extractBuildSignatureFromHtml,
+  pickIndexEntry,
+} from "@/lib/appVersion";
 
 describe("extractBuildSignatureFromHtml", () => {
   it("collects hashed asset paths from an index shell", () => {
@@ -35,5 +39,49 @@ describe("pickIndexEntry", () => {
 
   it("returns null when no entry is present", () => {
     expect(pickIndexEntry("/assets/react-vendor-abc.js")).toBeNull();
+  });
+});
+
+describe("clearStaleAppShellCaches", () => {
+  const originalCaches = globalThis.caches;
+
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  afterEach(() => {
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      value: originalCaches,
+    });
+  });
+
+  it("deletes page, runtime, asset, and workbox precache shells", async () => {
+    const deleted: string[] = [];
+    Object.defineProperty(globalThis, "caches", {
+      configurable: true,
+      value: {
+        keys: vi.fn().mockResolvedValue([
+          "poscal-pages",
+          "poscal-static-runtime",
+          "poscal-assets-v28",
+          "workbox-precache-v2-https://poscalfx.com/",
+          "unrelated-cache",
+        ]),
+        delete: vi.fn(async (key: string) => {
+          deleted.push(key);
+          return true;
+        }),
+      },
+    });
+
+    await clearStaleAppShellCaches();
+
+    expect(deleted).toEqual([
+      "poscal-pages",
+      "poscal-static-runtime",
+      "poscal-assets-v28",
+      "workbox-precache-v2-https://poscalfx.com/",
+    ]);
   });
 });

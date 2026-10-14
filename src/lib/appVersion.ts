@@ -170,6 +170,34 @@ export function isUpdateDismissedForCurrentBuild(): boolean {
  */
 let forceRefreshInFlight: Promise<void> | null = null;
 
+/** Runtime caches that can keep a tab on an old index/shell after a deploy. */
+function isStaleShellCacheName(cacheName: string): boolean {
+  return (
+    cacheName === "poscal-pages"
+    || cacheName === "poscal-static-runtime"
+    || cacheName.startsWith("poscal-assets")
+    || cacheName.includes("workbox-precache")
+  );
+}
+
+/**
+ * Clear SW-backed shells so NetworkFirst cannot fall back to a previous
+ * index.html that still points at old hashed modules.
+ */
+export async function clearStaleAppShellCaches(): Promise<void> {
+  if (typeof caches === "undefined") return;
+  try {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter((key) => isStaleShellCacheName(key))
+        .map((key) => caches.delete(key).catch(() => false)),
+    );
+  } catch {
+    // ignore — navigation still proceeds
+  }
+}
+
 function cleanNavigationUrl(): string {
   try {
     const url = new URL(window.location.href);
@@ -216,28 +244,54 @@ export async function forceAppRefresh(): Promise<void> {
 
   forceRefreshInFlight = (async () => {
     clearBuildMismatchFlag();
-    dismissUpdateForCurrentBuild();
     try {
       localStorage.removeItem("poscal-pwa-pending-update");
     } catch {
       // ignore
     }
 
-    // 1) Ask any waiting worker to become active.
+    // 1) Ask any waiting worker to become active, and poke update checks so a
+    // just-deployed sw.js can move into waiting before we navigate.
     let hasWaiting = false;
     try {
       if ("serviceWorker" in navigator) {
         const registrations = await navigator.serviceWorker.getRegistrations();
         await Promise.all(
           registrations.map(async (registration) => {
-            if (registration.waiting) {
-              hasWaiting = true;
-              registration.waiting.postMessage({ type: "SKIP_WAITING" });
-            }
             try {
               await registration.update();
             } catch {
               // ignore
+            }
+            if (registration.waiting) {
+              hasWaiting = true;
+              registration.waiting.postMessage({ type: "SKIP_WAITING" });
+            } else if (registration.installing) {
+              // Give install a brief window to reach waiting, then SKIP_WAITING.
+              await new Promise<void>((resolve) => {
+                const worker = registration.installing;
+                if (!worker) {
+                  resolve();
+                  return;
+                }
+                const done = () => {
+                  worker.removeEventListener("statechange", onChange);
+                  window.clearTimeout(timeoutId);
+                  resolve();
+                };
+                const onChange = () => {
+                  if (worker.state === "installed" || worker.state === "activated" || worker.state === "redundant") {
+                    done();
+                  }
+                };
+                worker.addEventListener("statechange", onChange);
+                const timeoutId = window.setTimeout(done, 1_500);
+                if (worker.state === "installed" || worker.state === "activated") done();
+              });
+              if (registration.waiting) {
+                hasWaiting = true;
+                registration.waiting.postMessage({ type: "SKIP_WAITING" });
+              }
             }
           }),
         );
@@ -267,8 +321,15 @@ export async function forceAppRefresh(): Promise<void> {
       });
     }
 
-    // 3) Workbox owns its precache lifecycle. Deleting it here would leave the
-    // active worker without its offline app shell before the next navigation.
+    // 3) Drop stale shells even when no new worker was waiting. Otherwise
+    // NetworkFirst can time out and re-serve the previous index, so Update
+    // looks like it "failed" while the old calculator copy stays on screen.
+    await clearStaleAppShellCaches();
+
+    // Dismiss only after caches are cleared so a failed stay-on-old-build can
+    // still resurface the banner on the next version check.
+    dismissUpdateForCurrentBuild();
+
     // Always leave this document. No silent return paths.
     hardNavigateAway();
   })().finally(() => {

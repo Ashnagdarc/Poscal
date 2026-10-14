@@ -40,15 +40,22 @@ export const usePWAUpdate = () => {
     setUpdateAvailable(true);
   }, []);
 
-  const hideUpdate = useCallback(() => {
-    registrationRef.current = null;
+  const hideUpdate = useCallback((options?: { dismiss?: boolean }) => {
+    const shouldDismiss = options?.dismiss !== false;
+    // Keep registrationRef when only hiding the banner for an in-progress update
+    // so SKIP_WAITING can still reach the waiting worker.
+    if (shouldDismiss) {
+      registrationRef.current = null;
+    }
     try {
       localStorage.removeItem(PENDING_UPDATE_KEY);
     } catch {
       // ignore
     }
     clearBuildMismatchFlag();
-    dismissUpdateForCurrentBuild();
+    if (shouldDismiss) {
+      dismissUpdateForCurrentBuild();
+    }
     setUpdateAvailable(false);
   }, []);
 
@@ -227,8 +234,13 @@ export const usePWAUpdate = () => {
     setIsUpdating(true);
     userRequestedUpdateRef.current = true;
 
+    // Capture waiting worker before hiding UI — hideUpdate used to null the ref
+    // and dismiss the current build, so a stuck shell never showed Update again.
+    const knownRegistration = registrationRef.current;
+
     // Hide immediately — clicking Update should not leave a ghost banner after reload.
-    hideUpdate();
+    // Do not dismiss-for-build yet; forceAppRefresh does that after clearing caches.
+    hideUpdate({ dismiss: false });
 
     const stuckTimer = window.setTimeout(() => {
       setIsUpdating(false);
@@ -241,7 +253,7 @@ export const usePWAUpdate = () => {
 
     try {
       const registration =
-        registrationRef.current
+        knownRegistration
         ?? ("serviceWorker" in navigator
           ? (await navigator.serviceWorker.getRegistration("/")) ?? null
           : null);
