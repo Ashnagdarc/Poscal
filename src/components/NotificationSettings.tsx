@@ -28,6 +28,8 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
   const [newsAlertsLoading, setNewsAlertsLoading] = useState(false);
   const [riskAlertsEnabled, setRiskAlertsEnabled] = useState(true);
   const [milestoneAlertsEnabled, setMilestoneAlertsEnabled] = useState(true);
+  const [sessionAlertsEnabled, setSessionAlertsEnabled] = useState(true);
+  const [journalLogRemindersEnabled, setJournalLogRemindersEnabled] = useState(true);
   const [tradingAlertsLoading, setTradingAlertsLoading] = useState(false);
 
   useEffect(() => {
@@ -44,6 +46,8 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
         if (prefs) {
           setRiskAlertsEnabled(prefs.trading_risk_alerts_enabled);
           setMilestoneAlertsEnabled(prefs.trading_milestone_alerts_enabled);
+          setSessionAlertsEnabled(prefs.trading_session_alerts_enabled);
+          setJournalLogRemindersEnabled(prefs.journal_log_reminders_enabled);
         }
       } catch {
         // Defaults on
@@ -120,6 +124,34 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
     }
   };
 
+  const handleSessionAlertsToggle = async (enabled: boolean) => {
+    setTradingAlertsLoading(true);
+    setSessionAlertsEnabled(enabled);
+    try {
+      await preferencesApi.update({ tradingSessionAlertsEnabled: enabled });
+      toast.success(enabled ? 'Session alerts on' : 'Session alerts off');
+    } catch {
+      setSessionAlertsEnabled(!enabled);
+      toast.error('Could not update session alert preference');
+    } finally {
+      setTradingAlertsLoading(false);
+    }
+  };
+
+  const handleJournalLogRemindersToggle = async (enabled: boolean) => {
+    setTradingAlertsLoading(true);
+    setJournalLogRemindersEnabled(enabled);
+    try {
+      await preferencesApi.update({ journalLogRemindersEnabled: enabled });
+      toast.success(enabled ? 'Journal log reminders on' : 'Journal log reminders off');
+    } catch {
+      setJournalLogRemindersEnabled(!enabled);
+      toast.error('Could not update journal reminder preference');
+    } finally {
+      setTradingAlertsLoading(false);
+    }
+  };
+
   const newsToggle = user ? (
     <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
       <div>
@@ -167,6 +199,34 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
           disabled={tradingAlertsLoading}
           onCheckedChange={(checked) => void handleMilestoneAlertsToggle(checked)}
           aria-label="Toggle milestone alerts"
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">Session opens</p>
+          <p className="text-[11px] text-muted-foreground">
+            Asian, London, overlap, and New York opens (UTC)
+          </p>
+        </div>
+        <Switch
+          checked={isSubscribed && sessionAlertsEnabled}
+          disabled={tradingAlertsLoading || !isSubscribed}
+          onCheckedChange={(checked) => void handleSessionAlertsToggle(checked)}
+          aria-label="Toggle session open alerts"
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/50 px-3 py-2.5">
+        <div>
+          <p className="text-sm font-medium text-foreground">Journal log reminders</p>
+          <p className="text-[11px] text-muted-foreground">
+            Evening nudge at 8pm in your timezone if you have not logged yet
+          </p>
+        </div>
+        <Switch
+          checked={isSubscribed && journalLogRemindersEnabled}
+          disabled={tradingAlertsLoading || !isSubscribed}
+          onCheckedChange={(checked) => void handleJournalLogRemindersToggle(checked)}
+          aria-label="Toggle journal log reminders"
         />
       </div>
     </div>
@@ -248,7 +308,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
           <div>
             <p className="font-medium text-foreground">Notifications</p>
             <p className="text-xs text-muted-foreground">
-              Calendar, risk warnings, and account milestones
+              Calendar, sessions, journal reminders, risk, and milestones
             </p>
           </div>
         </div>
@@ -282,7 +342,7 @@ export const NotificationSettings = ({ embedded = false }: NotificationSettingsP
           Notifications
         </CardTitle>
         <CardDescription>
-          Calendar events, risk warnings when trades exceed your default risk %, and equity / trade-count milestones.
+          Calendar events, session opens, journal log reminders, risk warnings, and equity / trade-count milestones.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">{content}</CardContent>

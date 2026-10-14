@@ -67,6 +67,8 @@ export const updateViewerPreferences = mutation({
     defaultRiskPercent: nullableNumberArg,
     tradingRiskAlertsEnabled: v.optional(v.boolean()),
     tradingMilestoneAlertsEnabled: v.optional(v.boolean()),
+    tradingSessionAlertsEnabled: v.optional(v.boolean()),
+    journalLogRemindersEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
@@ -111,6 +113,12 @@ export const updateViewerPreferences = mutation({
     if (args.tradingMilestoneAlertsEnabled !== undefined) {
       patch.tradingMilestoneAlertsEnabled = args.tradingMilestoneAlertsEnabled;
     }
+    if (args.tradingSessionAlertsEnabled !== undefined) {
+      patch.tradingSessionAlertsEnabled = args.tradingSessionAlertsEnabled;
+    }
+    if (args.journalLogRemindersEnabled !== undefined) {
+      patch.journalLogRemindersEnabled = args.journalLogRemindersEnabled;
+    }
 
     if (existing) {
       await ctx.db.patch(existing._id, patch);
@@ -137,6 +145,10 @@ export const updateViewerPreferences = mutation({
         (patch.tradingRiskAlertsEnabled as boolean | undefined) ?? true,
       tradingMilestoneAlertsEnabled:
         (patch.tradingMilestoneAlertsEnabled as boolean | undefined) ?? true,
+      tradingSessionAlertsEnabled:
+        (patch.tradingSessionAlertsEnabled as boolean | undefined) ?? true,
+      journalLogRemindersEnabled:
+        (patch.journalLogRemindersEnabled as boolean | undefined) ?? true,
       createdAtMs: now,
       updatedAtMs: now,
     });

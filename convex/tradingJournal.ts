@@ -233,7 +233,9 @@ const queueUserAlert = async (
     }
   }
 
-  if (args.recipientEmail) {
+  // Prefer push when a device is registered. Dual-channel email was failing on
+  // unverified Resend domains and drowning the queue without helping delivery.
+  if (args.recipientEmail && !args.preferPush) {
     await ctx.db.insert("notificationQueue", {
       userId: args.userId,
       channel: "email",

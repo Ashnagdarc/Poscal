@@ -1,49 +1,72 @@
 import { listExpiringSubscriptionsHttp } from './_lib/paymentSyncClient.js';
 
-const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const PAYMENT_SYNC_SECRET = process.env.PAYMENT_SYNC_SECRET;
 const REMINDER_DAYS = 3;
+const DEFAULT_EMAIL_FROM = 'Poscal <noreply@mail.poscalfx.com>';
 
 // Vercel Scheduled Function entrypoint
 export const config = {
   schedule: '0 4 * * *', // 4am UTC daily
 };
 
+function parseEmailSender(value: string): { email: string; name?: string } {
+  const trimmed = value.trim();
+  const match = trimmed.match(/^(.+?)\s*<([^<>\s]+@[^<>\s]+)>$/);
+  if (match) {
+    return {
+      name: match[1].trim().replace(/^['"]|['"]$/g, ''),
+      email: match[2].trim().toLowerCase(),
+    };
+  }
+  return { email: trimmed.toLowerCase() };
+}
+
 async function sendReminderEmail(to: string, name: string | null, expiresAt: string | null) {
   const subject = 'Your Poscal subscription is expiring soon';
   const shortName = name || 'there';
   const expiresText = expiresAt ? new Date(expiresAt).toUTCString() : 'soon';
+  const text = `Hi ${shortName},\n\nYour Poscal subscription will expire on ${expiresText}.\n\nRenew at https://www.poscalfx.com/upgrade\n\nThanks — the Poscal team`;
   const html = `<p>Hi ${shortName},</p>
 <p>Your Poscal subscription will expire on <strong>${expiresText}</strong>.</p>
 <p>If you'd like to renew and keep access to Pro features, <a href="https://www.poscalfx.com/upgrade">upgrade now</a>.</p>
 <p>Thanks — the Poscal team</p>`;
 
-  if (!RESEND_API_KEY) {
-    return { success: false, error: 'RESEND_API_KEY is not configured' };
+  if (!BREVO_API_KEY) {
+    return { success: false, error: 'BREVO_API_KEY is not configured' };
   }
 
-  const from = process.env.EMAIL_FROM || 'Poscal <noreply@poscalfx.com>';
+  const from = process.env.EMAIL_FROM || DEFAULT_EMAIL_FROM;
+  const sender = parseEmailSender(from);
 
   try {
-    const resp = await fetch('https://api.resend.com/emails', {
+    const resp = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${RESEND_API_KEY}`,
+        accept: 'application/json',
+        'content-type': 'application/json',
+        'api-key': BREVO_API_KEY,
       },
-      body: JSON.stringify({ from, to, subject, html }),
+      body: JSON.stringify({
+        sender,
+        to: [{ email: to.trim().toLowerCase() }],
+        subject,
+        textContent: text,
+        htmlContent: html,
+        tags: ['subscription-reminder'],
+      }),
     });
 
     if (!resp.ok) {
       const txt = await resp.text();
-      console.error('Resend API returned error', resp.status, txt);
-      return { success: false, error: `resend_error_${resp.status}` };
+      console.error('Brevo API returned error', resp.status, txt);
+      return { success: false, error: `brevo_error_${resp.status}` };
     }
 
     const body = await resp.json();
-    return { success: true, id: body.id || null };
+    return { success: true, id: body.messageId || null };
   } catch (err: any) {
-    console.error('Failed to send reminder via Resend HTTP', err?.message || err);
+    console.error('Failed to send reminder via Brevo HTTP', err?.message || err);
     return { success: false, error: err?.message || String(err) };
   }
 }
@@ -70,15 +93,14 @@ export default async function handler(req: any, res: any) {
   }
 
   const due = expiring || [];
-  if (!RESEND_API_KEY && due.length > 0) {
+  if (!BREVO_API_KEY && due.length > 0) {
     return res.status(503).json({
       success: false,
-      message: 'RESEND_API_KEY is not configured; reminder emails were not sent',
+      message: 'BREVO_API_KEY is not configured; reminder emails were not sent',
       count: due.length,
     });
   }
 
-  // 2. Send reminder emails via Resend (if configured)
   const results: Array<any> = [];
   for (const user of due) {
     if (!user.email) {

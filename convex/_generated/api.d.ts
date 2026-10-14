@@ -32,6 +32,7 @@ import type * as lib_profileOwnership from "../lib/profileOwnership.js";
 import type * as lib_sessionInvalidation from "../lib/sessionInvalidation.js";
 import type * as lib_tradeValidation from "../lib/tradeValidation.js";
 import type * as lib_tradingAlerts from "../lib/tradingAlerts.js";
+import type * as lib_tradingSessionAlerts from "../lib/tradingSessionAlerts.js";
 import type * as lib_updateJournalStats from "../lib/updateJournalStats.js";
 import type * as lib_welcomeEmailCopy from "../lib/welcomeEmailCopy.js";
 import type * as news from "../news.js";
@@ -49,6 +50,7 @@ import type * as status from "../status.js";
 import type * as tradeJournalAttachments from "../tradeJournalAttachments.js";
 import type * as tradingJournal from "../tradingJournal.js";
 import type * as tradingJournals from "../tradingJournals.js";
+import type * as tradingSessionNotifications from "../tradingSessionNotifications.js";
 import type * as users from "../users.js";
 import type * as welcomeEmail from "../welcomeEmail.js";
 
@@ -83,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sessionInvalidation": typeof lib_sessionInvalidation;
   "lib/tradeValidation": typeof lib_tradeValidation;
   "lib/tradingAlerts": typeof lib_tradingAlerts;
+  "lib/tradingSessionAlerts": typeof lib_tradingSessionAlerts;
   "lib/updateJournalStats": typeof lib_updateJournalStats;
   "lib/welcomeEmailCopy": typeof lib_welcomeEmailCopy;
   news: typeof news;
@@ -100,6 +103,7 @@ declare const fullApi: ApiFromModules<{
   tradeJournalAttachments: typeof tradeJournalAttachments;
   tradingJournal: typeof tradingJournal;
   tradingJournals: typeof tradingJournals;
+  tradingSessionNotifications: typeof tradingSessionNotifications;
   users: typeof users;
   welcomeEmail: typeof welcomeEmail;
 }>;

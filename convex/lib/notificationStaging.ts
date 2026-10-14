@@ -4,6 +4,12 @@ export const CALENDAR_ALERT_LEAD_MS = 15 * 60 * 1000;
 /** A release that already started can still be announced inside this window. */
 export const CALENDAR_ALERT_GRACE_MS = 30 * 60 * 1000;
 
+/**
+ * How far ahead ingest may schedule calendar pushes.
+ * The free FF feed is this-week only; planCalendarAlert still sets scheduledForMs.
+ */
+export const CALENDAR_ALERT_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** One worker pass. A full pass schedules another so the rest still go out. */
 export const NOTIFICATION_BATCH_LIMIT = 50;
 

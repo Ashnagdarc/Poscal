@@ -47,6 +47,10 @@ export default defineSchema({
     defaultRiskPercent: nullableNumber,
     tradingRiskAlertsEnabled: v.optional(v.boolean()),
     tradingMilestoneAlertsEnabled: v.optional(v.boolean()),
+    /** London / NY / Asian session-open pushes. Default on when unset. */
+    tradingSessionAlertsEnabled: v.optional(v.boolean()),
+    /** Evening nudge to log trades. Default on when unset. */
+    journalLogRemindersEnabled: v.optional(v.boolean()),
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
   })

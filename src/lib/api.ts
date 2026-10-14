@@ -199,6 +199,8 @@ export type ViewerPreferences = {
   default_risk_percent: number | null;
   trading_risk_alerts_enabled: boolean;
   trading_milestone_alerts_enabled: boolean;
+  trading_session_alerts_enabled: boolean;
+  journal_log_reminders_enabled: boolean;
   news_alerts_enabled: boolean;
 };
 
@@ -211,6 +213,8 @@ export const preferencesApi = {
       default_risk_percent: profile.default_risk_percent ?? null,
       trading_risk_alerts_enabled: profile.trading_risk_alerts_enabled !== false,
       trading_milestone_alerts_enabled: profile.trading_milestone_alerts_enabled !== false,
+      trading_session_alerts_enabled: profile.trading_session_alerts_enabled !== false,
+      journal_log_reminders_enabled: profile.journal_log_reminders_enabled !== false,
       news_alerts_enabled: profile.news_alerts_enabled !== false,
     };
   },
@@ -220,6 +224,8 @@ export const preferencesApi = {
     defaultRiskPercent?: number | null;
     tradingRiskAlertsEnabled?: boolean;
     tradingMilestoneAlertsEnabled?: boolean;
+    tradingSessionAlertsEnabled?: boolean;
+    journalLogRemindersEnabled?: boolean;
   }) => {
     return await getAuthenticatedConvexClient().mutation(convexApi.profiles.updateViewerPreferences, updates);
   },

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Bell, Loader2 } from "lucide-react";
+import { AlertTriangle, Bell, CalendarDays, Loader2, Trophy } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -8,7 +8,6 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAuth } from "@/contexts/AuthContext";
@@ -19,8 +18,33 @@ import {
   shouldShowPushEnablePrompt,
   snoozePushPrompt,
 } from "@/lib/pushPrompt";
+import { cn } from "@/lib/utils";
 
 const OPEN_DELAY_MS = 900;
+
+const PREVIEW_NOTIFICATIONS = [
+  {
+    title: "USD Non-Farm Payrolls",
+    body: "High-impact event starts in 15 minutes",
+    time: "2m",
+    icon: CalendarDays,
+    iconClassName: "bg-brand/15 text-brand",
+  },
+  {
+    title: "Risk warning",
+    body: "Trade size exceeds your 1% risk limit",
+    time: "1h",
+    icon: AlertTriangle,
+    iconClassName: "bg-destructive/10 text-destructive",
+  },
+  {
+    title: "Journal milestone",
+    body: "You've logged 50 trades this month",
+    time: "2h",
+    icon: Trophy,
+    iconClassName: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+  },
+] as const;
 
 function isIosBrowser() {
   if (typeof navigator === "undefined") return false;
@@ -123,44 +147,105 @@ export const PushEnablePrompt = () => {
         if (!next) dismiss();
       }}
     >
-      <DialogContent className="max-w-md gap-5 sm:rounded-2xl">
-        <DialogHeader className="space-y-3 text-left">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand text-brand-foreground">
-            <Bell className="h-5 w-5" />
+      <DialogContent
+        className={cn(
+          "fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none",
+          "duration-300 data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-bottom-2",
+          "[&>button]:hidden",
+        )}
+      >
+        <div className="mx-auto flex h-full w-full max-w-md flex-col px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
+          <div className="flex flex-1 flex-col">
+            <div className="space-y-3 pt-2 animate-fade-in">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
+                <Bell className="h-5 w-5" strokeWidth={2.25} />
+              </div>
+              <DialogTitle className="font-display text-3xl font-bold tracking-tight text-foreground">
+                Get Notified
+              </DialogTitle>
+              <DialogDescription className="max-w-[18rem] text-base leading-relaxed text-muted-foreground">
+                Keep up with high-impact calendar events, risk alerts, and account updates from Poscal.
+              </DialogDescription>
+            </div>
+
+            <div className="relative flex flex-1 items-center justify-center py-8 animate-slide-up">
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-8 top-6 bottom-10 rounded-[2.75rem] border-[1.5px] border-border/70 bg-secondary/30"
+              >
+                <div className="mx-auto mt-3 h-5 w-24 rounded-full bg-border/60" />
+              </div>
+
+              <ul className="relative z-10 flex w-full flex-col gap-3 px-1">
+                {PREVIEW_NOTIFICATIONS.map((item, index) => {
+                  const Icon = item.icon;
+                  return (
+                    <li
+                      key={item.title}
+                      className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm animate-slide-up"
+                      style={{ animationDelay: `${80 + index * 70}ms` }}
+                    >
+                      <div
+                        className={cn(
+                          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
+                          item.iconClassName,
+                        )}
+                      >
+                        <Icon className="h-[18px] w-[18px]" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
+                          <span className="shrink-0 text-xs text-muted-foreground">{item.time}</span>
+                        </div>
+                        <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{item.body}</p>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
-          <DialogTitle className="font-display text-xl">Turn on push notifications</DialogTitle>
-          <DialogDescription className="text-sm leading-relaxed">
-            High-impact calendar events and account alerts can reach you even when Poscal is closed.
-          </DialogDescription>
-        </DialogHeader>
 
-        {blocked ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            Notifications are blocked for this browser. Allow them from the lock icon in the address bar, then come
-            back and turn them on.
-          </p>
-        ) : null}
+          <div className="space-y-3 pb-2 animate-fade-in" style={{ animationDelay: "180ms" }}>
+            {blocked ? (
+              <p className="text-center text-sm leading-relaxed text-muted-foreground">
+                Notifications are blocked for this browser. Allow them from the lock icon in the address bar, then come
+                back and turn them on.
+              </p>
+            ) : null}
 
-        {iosInstallHint && !blocked ? (
-          <p className="text-sm leading-relaxed text-muted-foreground">
-            On iPhone, add Poscal to your home screen first, open it from there, then turn notifications on.
-          </p>
-        ) : null}
+            {iosInstallHint && !blocked ? (
+              <p className="text-center text-sm leading-relaxed text-muted-foreground">
+                On iPhone, add Poscal to your home screen first, open it from there, then turn notifications on.
+              </p>
+            ) : null}
 
-        {attempted && lastError && !blocked ? (
-          <p className="text-sm leading-relaxed text-destructive">{lastError}</p>
-        ) : null}
+            {attempted && lastError && !blocked ? (
+              <p className="text-center text-sm leading-relaxed text-destructive">{lastError}</p>
+            ) : null}
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="ghost" onClick={dismiss}>
-            Not now
-          </Button>
-          {blocked ? null : (
-            <Button type="button" onClick={() => void enable()} disabled={loading}>
-              {loading ? <Loader2 className="animate-spin" /> : <Bell />}
-              Enable notifications
+            {blocked ? null : (
+              <Button
+                type="button"
+                onClick={() => void enable()}
+                disabled={loading}
+                className="h-14 w-full rounded-full bg-foreground text-base font-semibold text-background hover:bg-foreground/90"
+              >
+                {loading ? <Loader2 className="animate-spin" /> : null}
+                Turn On Notifications
+              </Button>
+            )}
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={dismiss}
+              className="h-11 w-full rounded-full text-base font-medium text-muted-foreground hover:bg-transparent hover:text-foreground"
+            >
+              Not Right Now
             </Button>
-          )}
+          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -60,17 +60,18 @@ describe("PushEnablePrompt", () => {
     });
 
     expect(screen.getByRole("dialog")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Turn on push notifications" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Enable notifications" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Get Notified" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Turn On Notifications" })).toBeInTheDocument();
+    expect(screen.getByText("USD Non-Farm Payrolls")).toBeInTheDocument();
   });
 
-  it("stays closed after Not now when the app returns to the foreground", async () => {
+  it("stays closed after Not Right Now when the app returns to the foreground", async () => {
     renderPrompt();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(900);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not Right Now" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 
     Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
@@ -87,7 +88,7 @@ describe("PushEnablePrompt", () => {
       await vi.advanceTimersByTimeAsync(900);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Enable notifications" }));
+    fireEvent.click(screen.getByRole("button", { name: "Turn On Notifications" }));
     await act(async () => {
       await Promise.resolve();
     });

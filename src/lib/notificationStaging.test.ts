@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  CALENDAR_ALERT_HORIZON_MS,
   CALENDAR_ALERT_LEAD_MS,
   NOTIFICATION_BATCH_LIMIT,
   SUBSCRIBER_ALERT_PAGE_SIZE,
@@ -106,5 +107,14 @@ describe("notification delivery", () => {
     });
     expect(planCalendarAlert(now - 2 * 60 * 60 * 1000, now)).toEqual({ action: "skip" });
     expect(SUBSCRIBER_ALERT_PAGE_SIZE).toBeLessThanOrEqual(40);
+  });
+
+  it("still schedules alerts for high-impact events later in the week", () => {
+    const inThreeDays = now + 3 * 24 * 60 * 60 * 1000;
+    expect(inThreeDays).toBeLessThan(now + CALENDAR_ALERT_HORIZON_MS);
+    expect(planCalendarAlert(inThreeDays, now)).toEqual({
+      action: "send",
+      scheduledForMs: inThreeDays - CALENDAR_ALERT_LEAD_MS,
+    });
   });
 });

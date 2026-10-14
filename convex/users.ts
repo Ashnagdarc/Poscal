@@ -78,6 +78,8 @@ export const viewerProfile = query({
         default_risk_percent: profile.defaultRiskPercent ?? null,
         trading_risk_alerts_enabled: profile.tradingRiskAlertsEnabled !== false,
         trading_milestone_alerts_enabled: profile.tradingMilestoneAlertsEnabled !== false,
+        trading_session_alerts_enabled: profile.tradingSessionAlertsEnabled !== false,
+        journal_log_reminders_enabled: profile.journalLogRemindersEnabled !== false,
         news_alerts_enabled: profile.newsAlertsEnabled !== false,
       };
     }
@@ -96,6 +98,8 @@ export const viewerProfile = query({
       default_risk_percent: null,
       trading_risk_alerts_enabled: true,
       trading_milestone_alerts_enabled: true,
+      trading_session_alerts_enabled: true,
+      journal_log_reminders_enabled: true,
       news_alerts_enabled: true,
     };
   },

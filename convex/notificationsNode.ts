@@ -117,6 +117,10 @@ function isRetryableNotificationError(message: string): boolean {
   if (/\b404\b|\b410\b/i.test(message)) {
     return false;
   }
+  // Permanent provider/config failures — retrying will not help until ops fixes sender/domain.
+  if (/domain is not verified|Resend request failed|VAPID keys are not configured/i.test(message)) {
+    return false;
+  }
   return true;
 }
 

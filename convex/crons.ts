@@ -21,4 +21,20 @@ crons.interval(
   { force: true },
 );
 
+// Session opens are on the UTC hour; a 1-minute tick keeps the 5-minute grace window.
+crons.interval(
+  "trading session open alerts",
+  { minutes: 1 },
+  internal.tradingSessionNotifications.enqueueDueSessionAlert,
+  {},
+);
+
+// Journal log reminders are timezone-local (20:00). Scan devices every 15 minutes.
+crons.interval(
+  "journal log reminders",
+  { minutes: 15 },
+  internal.tradingSessionNotifications.enqueueDueJournalLogReminders,
+  {},
+);
+
 export default crons;

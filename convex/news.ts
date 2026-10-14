@@ -5,7 +5,12 @@ import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireVerifiedAuthUserId } from "./lib/auth";
 import { economicEventWrite } from "./lib/economicEventMerge";
-import { planCalendarAlert, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
+import {
+  CALENDAR_ALERT_GRACE_MS,
+  CALENDAR_ALERT_HORIZON_MS,
+  planCalendarAlert,
+  SUBSCRIBER_ALERT_PAGE_SIZE,
+} from "./lib/notificationStaging";
 import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
@@ -540,6 +545,36 @@ export const markIngestState = internalMutation({
   },
 });
 
+/**
+ * Load high-impact events that should still get a 15-minute (or immediate) alert.
+ * Used after every ingest so patched weekly rows keep scheduling — not only first inserts.
+ */
+export const listUpcomingHighImpactForAlerts = internalQuery({
+  args: {
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const now = args.nowMs ?? Date.now();
+    const fromMs = now - CALENDAR_ALERT_GRACE_MS;
+    const toMs = now + CALENDAR_ALERT_HORIZON_MS;
+    const rows = await ctx.db
+      .query("economicEvents")
+      .withIndex("by_impact_scheduled", (q) =>
+        q.eq("impact", "high").gte("scheduledAtMs", fromMs).lte("scheduledAtMs", toMs),
+      )
+      .take(EVENT_LIST_CAP);
+
+    return rows
+      .filter((row) => planCalendarAlert(row.scheduledAtMs, now).action === "send")
+      .map((row) => ({
+        id: row._id,
+        event: row.event,
+        country: row.country,
+        scheduledAtMs: row.scheduledAtMs,
+      }));
+  },
+});
+
 export const queueHighImpactAlerts = internalMutation({
   args: {
     events: v.array(
@@ -590,7 +625,6 @@ export const queueHighImpactAlerts = internalMutation({
         cursor: args.cursor ?? null,
       });
 
-    const emailed = new Set<string>();
     let queued = 0;
     let recipients = 0;
     const body = `${item.country} · ${item.event}`.slice(0, 160);
@@ -611,57 +645,24 @@ export const queueHighImpactAlerts = internalMutation({
         .query("notificationQueue")
         .withIndex("by_tag", (q) => q.eq("tag", pushTag))
         .first();
-      if (!existingPush) {
-        await ctx.db.insert("notificationQueue", {
-          userId,
-          channel: "push",
-          title: "High-impact event",
-          body,
-          status: "pending",
-          recipientEmail: null,
-          tag: pushTag,
-          data: {
-            type: "news",
-            path: "/calendar",
-            eventId: item.id,
-            url: "/calendar",
-            subscriptionId: sub._id,
-          },
-          scheduledForMs: plan.scheduledForMs,
-          processingStartedAtMs: null,
-          attempts: 0,
-          errorMessage: null,
-          createdAtMs: now,
-          updatedAtMs: now,
-        });
-        queued += 1;
-        recipients += 1;
-      }
+      if (existingPush) continue;
 
-      const recipientEmail = profile?.email ?? null;
-      if (!recipientEmail || emailed.has(userId)) continue;
-      emailed.add(userId);
-
-      const emailTag = `calendar-email-${item.id}-${userId}`;
-      const existingEmail = await ctx.db
-        .query("notificationQueue")
-        .withIndex("by_tag", (q) => q.eq("tag", emailTag))
-        .first();
-      if (existingEmail) continue;
-
+      // Push-only: these recipients already opted into device push. Calendar email
+      // previously flooded the queue when the mail domain was unverified.
       await ctx.db.insert("notificationQueue", {
         userId,
-        channel: "email",
-        title: `High-impact: ${item.event.slice(0, 80)}`,
+        channel: "push",
+        title: "High-impact event",
         body,
         status: "pending",
-        recipientEmail,
-        tag: emailTag,
+        recipientEmail: null,
+        tag: pushTag,
         data: {
           type: "news",
           path: "/calendar",
           eventId: item.id,
           url: "/calendar",
+          subscriptionId: sub._id,
         },
         scheduledForMs: plan.scheduledForMs,
         processingStartedAtMs: null,
@@ -671,6 +672,7 @@ export const queueHighImpactAlerts = internalMutation({
         updatedAtMs: now,
       });
       queued += 1;
+      recipients += 1;
     }
 
     if (!page.isDone) {

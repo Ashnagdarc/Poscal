@@ -163,21 +163,15 @@ export const runIngest = internalAction({
         events: deduped,
       });
 
-      const now = Date.now();
-      const upcomingHighImpact = (upserted.inserted ?? []).filter((item) => {
-        if (item.impact !== "high") return false;
-        return item.scheduledAtMs >= now && item.scheduledAtMs <= now + 48 * 60 * 60 * 1000;
+      // Schedule from stored high-impact rows (insert or patch). Tag dedupe keeps repeats safe.
+      const upcomingHighImpact = await ctx.runQuery(internal.news.listUpcomingHighImpactForAlerts, {
+        nowMs: Date.now(),
       });
 
       let alertsQueued = 0;
       if (upcomingHighImpact.length > 0) {
         const queued = await ctx.runMutation(internal.news.queueHighImpactAlerts, {
-          events: upcomingHighImpact.map((item) => ({
-            id: item.id,
-            event: item.event,
-            country: item.country,
-            scheduledAtMs: item.scheduledAtMs,
-          })),
+          events: upcomingHighImpact,
         });
         // The mutation pages through subscribers and schedules the rest itself.
         alertsQueued = queued.queued;
