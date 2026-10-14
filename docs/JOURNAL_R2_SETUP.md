@@ -3,15 +3,26 @@
 The Trading Notebook keeps chart images in a private Cloudflare R2 bucket. Convex stores only
 attachment metadata, ownership and quota counters.
 
-## Required Vercel environment variables
+## Required environment variables
 
 Server-only. Do not prefix these with `VITE_`.
+
+Preferred names:
 
 - `R2_ACCOUNT_ID`
 - `R2_ACCESS_KEY_ID`
 - `R2_SECRET_ACCESS_KEY`
 - `R2_BUCKET_NAME=poscal-journal`
 - `R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com`
+
+Openship object-storage bindings (also accepted by the API):
+
+- `S3_ACCESS_KEY_ID`
+- `S3_SECRET_ACCESS_KEY`
+- `S3_BUCKET`
+- `S3_ENDPOINT`
+- `S3_REGION=auto`
+- `S3_FORCE_PATH_STYLE=true`
 
 The R2 credential should have Object Read & Write access only to `poscal-journal`.
 

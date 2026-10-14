@@ -48,4 +48,18 @@ describe("R2 SigV4 presigning", () => {
     expect(url.searchParams.get("X-Amz-Expires")).toBe("900");
     expect(url.searchParams.get("X-Amz-SignedHeaders")).toBe("host");
   });
+
+  it("accepts Openship S3_* object-storage bindings as R2 fallbacks", () => {
+    delete process.env.R2_ENDPOINT;
+    delete process.env.R2_BUCKET_NAME;
+    delete process.env.R2_ACCESS_KEY_ID;
+    delete process.env.R2_SECRET_ACCESS_KEY;
+    process.env.S3_ENDPOINT = "https://exampleaccount.r2.cloudflarestorage.com";
+    process.env.S3_BUCKET = "poscal-journal";
+    process.env.S3_ACCESS_KEY_ID = "test-access-key";
+    process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
+
+    const url = new URL(presignR2Object("HEAD", "journal/u/t/before/x.webp", 60));
+    expect(url.origin).toBe("https://exampleaccount.r2.cloudflarestorage.com");
+  });
 });

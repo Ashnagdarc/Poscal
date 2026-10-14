@@ -15,10 +15,19 @@ const amzDate = (date: Date) =>
 const dateStamp = (date: Date) => amzDate(date).slice(0, 8);
 
 const getConfig = () => {
-  const endpoint = (process.env.R2_ENDPOINT || "").trim().replace(/\/$/, "");
-  const bucket = (process.env.R2_BUCKET_NAME || "").trim();
-  const accessKeyId = (process.env.R2_ACCESS_KEY_ID || "").trim();
-  const secretAccessKey = (process.env.R2_SECRET_ACCESS_KEY || "").trim();
+  // Prefer R2_* (docs / cutover). Fall back to Openship object-storage S3_* bindings.
+  const endpoint = (
+    process.env.R2_ENDPOINT || process.env.S3_ENDPOINT || ""
+  ).trim().replace(/\/$/, "");
+  const bucket = (
+    process.env.R2_BUCKET_NAME || process.env.S3_BUCKET || ""
+  ).trim();
+  const accessKeyId = (
+    process.env.R2_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY_ID || ""
+  ).trim();
+  const secretAccessKey = (
+    process.env.R2_SECRET_ACCESS_KEY || process.env.S3_SECRET_ACCESS_KEY || ""
+  ).trim();
 
   if (!endpoint || !bucket || !accessKeyId || !secretAccessKey) {
     throw new Error("R2 is not configured");
