@@ -81,3 +81,5 @@ convex/_generated/ai/
 docs/audit/
 docs/security-audit-*/
 docs/PRODUCT_AUDIT_*
+
+.env.selfhosted

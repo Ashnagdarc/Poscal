@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Camera, Check, Clock3, Loader2, Pencil, Trash2, Upload } from "lucide-react";
+import { useAuthToken } from "@convex-dev/auth/react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -127,6 +128,7 @@ const TradeNotebook = () => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { user } = useAuth();
+  const authToken = useAuthToken();
 
   const [trade, setTrade] = useState<JournalTrade | null>(null);
   const [draft, setDraft] = useState<NotebookDraft>(emptyDraft);
@@ -188,7 +190,9 @@ const TradeNotebook = () => {
   }, [tradeId, user?.id]);
 
   useEffect(() => {
-    if (!tradeId || !user?.id) return;
+    // Chart images load through /api/journal-images with the JWT mirror.
+    // Wait for authToken so we do not race AuthProvider and silently empty the slots.
+    if (!tradeId || !user?.id || !authToken) return;
     let cancelled = false;
 
     void listJournalImages(tradeId)
@@ -198,15 +202,17 @@ const TradeNotebook = () => {
         setImageQuota(result.quota);
       })
       .catch((error) => {
-        if (!cancelled) {
-          console.error("[notebook] image metadata load failed", error);
-        }
+        if (cancelled) return;
+        console.error("[notebook] image metadata load failed", error);
+        toast.error(
+          error instanceof Error ? error.message : "Could not load chart images.",
+        );
       });
 
     return () => {
       cancelled = true;
     };
-  }, [tradeId, user?.id]);
+  }, [tradeId, user?.id, authToken]);
 
   const patch = useMemo<NotebookPatch>(() => ({
     journal_title: draft.journal_title.trim() || null,

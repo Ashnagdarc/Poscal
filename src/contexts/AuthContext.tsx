@@ -82,11 +82,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const session = user ? { access_token: "convex-auth" } : null;
   const loading = authLoading || (isAuthenticated && viewer === undefined);
 
-  // Mirror JWT in memory + sync shared ConvexHttpClient for lib helpers that don't use React hooks.
+  // Sync the in-memory JWT mirror during render so child effects (journal images,
+  // HTTP helpers) never race ahead of an empty token after auth resolves.
   // Do not persist a second localStorage copy (P-028).
+  setConvexAuthTokenMirror(authToken ?? null);
+  syncSharedConvexHttpAuth(authToken ?? null);
+
   useEffect(() => {
-    setConvexAuthTokenMirror(authToken ?? null);
-    syncSharedConvexHttpAuth(authToken ?? null);
     if (!authToken) {
       clearLegacyAuthMirrors();
     }
