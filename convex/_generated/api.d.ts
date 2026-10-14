@@ -10,8 +10,6 @@
 
 import type * as BrevoOTP from "../BrevoOTP.js";
 import type * as BrevoOTPPasswordReset from "../BrevoOTPPasswordReset.js";
-import type * as ResendOTP from "../ResendOTP.js";
-import type * as ResendOTPPasswordReset from "../ResendOTPPasswordReset.js";
 import type * as admin from "../admin.js";
 import type * as auth from "../auth.js";
 import type * as authRateLimit from "../authRateLimit.js";
@@ -61,8 +59,6 @@ import type {
 declare const fullApi: ApiFromModules<{
   BrevoOTP: typeof BrevoOTP;
   BrevoOTPPasswordReset: typeof BrevoOTPPasswordReset;
-  ResendOTP: typeof ResendOTP;
-  ResendOTPPasswordReset: typeof ResendOTPPasswordReset;
   admin: typeof admin;
   auth: typeof auth;
   authRateLimit: typeof authRateLimit;

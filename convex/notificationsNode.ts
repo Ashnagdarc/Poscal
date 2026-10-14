@@ -5,6 +5,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { sendBrevoEmail } from "./lib/brevoEmail";
 import { classifyPushFailure, NOTIFICATION_BATCH_LIMIT, shouldDrainAnotherBatch } from "./lib/notificationStaging";
 import { internalAction } from "./_generated/server";
 
@@ -70,29 +71,17 @@ async function sendEmail(
   body: string,
   html: string | null,
   fromEmail: string | null,
+  idempotencyKey: string,
 ) {
-  const resendApiKey = getRequiredEnv("RESEND_API_KEY");
-  const sender = fromEmail ?? getOptionalEnv("EMAIL_FROM") ?? "Poscal <noreply@poscalfx.com>";
-
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: `Bearer ${resendApiKey}`,
-    },
-    body: JSON.stringify({
-      from: sender,
-      to,
-      subject,
-      html: html ?? buildHtmlEmail(subject, body),
-      text: body,
-    }),
+  await sendBrevoEmail({
+    to,
+    subject,
+    text: body,
+    html: html ?? buildHtmlEmail(subject, body),
+    from: fromEmail,
+    idempotencySource: idempotencyKey,
+    tags: ["notification"],
   });
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    throw new Error(`Resend request failed: ${response.status} ${errorBody}`);
-  }
 }
 
 function configureWebPush() {
@@ -251,7 +240,7 @@ export const processPendingBatch = internalAction({
 
           const html = typeof notification.data?.html === "string" ? notification.data.html : null;
           const fromEmail = typeof notification.data?.fromEmail === "string" ? notification.data.fromEmail : null;
-          await sendEmail(recipientEmail, notification.title, notification.body, html, fromEmail);
+          await sendEmail(recipientEmail, notification.title, notification.body, html, fromEmail, `notification-${notification._id}`);
 
           await ctx.runMutation(internal.notifications.finalizeNotification, {
             id: notification._id,

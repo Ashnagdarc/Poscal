@@ -12,10 +12,10 @@ describe("toSafeAuthErrorMessage", () => {
     );
   });
 
-  it("maps Resend / mail not configured", () => {
+  it("maps Brevo / mail not configured", () => {
     expect(
       toSafeAuthErrorMessage(
-        new Error("Password reset email is not configured. Set RESEND_API_KEY"),
+        new Error("BREVO_API_KEY is not configured"),
         "fallback",
       ),
     ).toBe(

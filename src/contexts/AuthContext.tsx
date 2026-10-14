@@ -133,7 +133,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { error: null };
     } catch (error: unknown) {
       console.error("[auth] Password reset request error:", error);
-      // Soft: unknown email → null (no enumeration). Resend/key failures surface.
+      // Soft: unknown email → null (no enumeration). Provider/key failures surface.
       return { error: mapPasswordResetRequestError(error) };
     }
   };
@@ -183,7 +183,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       });
       return { error: null };
     } catch (error: unknown) {
-      console.error("[auth] Resend verification error:", error);
+      console.error("[auth] Verification email error:", error);
       // Neutral messaging where possible (AP enumeration-safe).
       return {
         error: toSafeAuthErrorMessage(

@@ -1,5 +1,5 @@
 /**
- * Map Convex Auth and email-provider internals to stable user-facing messages (AIS-008 / ETH-001).
+ * Map Convex Auth / email-provider internals to stable user-facing messages (AIS-008 / ETH-001).
  * Keep free of React so vitest can cover without Convex runtime.
  */
 
@@ -97,7 +97,7 @@ export function isMissingAccountAuthError(error: unknown): boolean {
 
 /**
  * Password-reset request: surface real mail/config failures; soft-succeed (null error)
- * when the address has no account so we avoid enumeration and avoid blocking UX on Resend.
+ * when the address has no account so we avoid enumeration and avoid blocking UX on mail delivery.
  */
 export function mapPasswordResetRequestError(error: unknown): string | null {
   if (isMissingAccountAuthError(error)) {

@@ -13,6 +13,8 @@ import {
   Camera,
   Loader2,
   Pencil,
+  ShieldAlert,
+  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useMutation } from "convex/react";
@@ -412,6 +414,21 @@ const Profile = () => {
             <p className="mt-1 break-all text-sm text-muted-foreground">
               {profile?.email || user?.email}
             </p>
+            <div
+              className={cn(
+                "mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
+                user?.email_verified
+                  ? "border-brand/25 bg-brand/10 text-brand"
+                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+              )}
+            >
+              {user?.email_verified ? (
+                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
+              ) : (
+                <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {user?.email_verified ? "Email verified" : "Email unverified"}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 border-t border-border/50 bg-background/20">
@@ -506,12 +523,22 @@ const Profile = () => {
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
                 <Mail className="h-5 w-5" aria-hidden="true" />
               </div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <p className="text-xs text-muted-foreground">Email</p>
                 <p className="break-all text-sm font-semibold text-foreground">
                   {profile?.email || user?.email}
                 </p>
               </div>
+              <span
+                className={cn(
+                  "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
+                  user?.email_verified
+                    ? "bg-brand/10 text-brand"
+                    : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                )}
+              >
+                {user?.email_verified ? "Verified" : "Unverified"}
+              </span>
             </div>
           </div>
 

@@ -55,7 +55,7 @@ const getErrorMessage = (error: unknown, fallback: string) => {
   const message = error.message.trim();
   if (
     !message
-    || /VITE_|RESEND_|VAPID_|API_KEY|PaystackPop|Convex client|Request ID|@convex|\.ts:|\.js:/i.test(message)
+    || /VITE_|RESEND_|BREVO_|VAPID_|API_KEY|PaystackPop|Convex client|Request ID|@convex|\.ts:|\.js:/i.test(message)
     || message.length > 160
   ) {
     return fallback;
@@ -389,6 +389,17 @@ const Settings = () => {
                       className="rounded-full text-[10px] uppercase tracking-wide"
                     >
                       {subscriptionLabel}
+                    </Badge>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "rounded-full text-[10px] uppercase tracking-wide",
+                        user.email_verified
+                          ? "border-brand/30 bg-brand/10 text-brand"
+                          : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+                      )}
+                    >
+                      {user.email_verified ? "Email verified" : "Email unverified"}
                     </Badge>
                     {expiresAt && (
                       <span className="text-xs text-muted-foreground">
