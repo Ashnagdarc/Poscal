@@ -3,8 +3,6 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { URL } from "node:url";
 
-import accountDelete from "../api/account-delete.ts";
-import journalBook from "../api/journal-book.ts";
 import journalEntry from "../api/journal-entry.ts";
 import journalImages from "../api/journal-images.ts";
 import paystackWebhook from "../api/paystack-webhook.ts";
@@ -75,8 +73,6 @@ const handlers: Record<string, ApiHandler> = {
   "/api/prices/multiple": pricesMultiple as ApiHandler,
   "/api/journal-images": journalImages as ApiHandler,
   "/api/journal-entry": journalEntry as ApiHandler,
-  "/api/journal-book": journalBook as ApiHandler,
-  "/api/account-delete": accountDelete as ApiHandler,
   "/api/paystack-webhook": paystackWebhook as ApiHandler,
 };
 
