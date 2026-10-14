@@ -1,3 +1,5 @@
+import { hasConsent } from "@/lib/consent";
+
 /**
  * App-wide font pairings. Admins can switch via Settings → Admin.
  * `markets` mirrors TradingView’s public site stack (in.tradingview.com).
@@ -45,6 +47,7 @@ export const applyAppFont = (fontId: AppFontId) => {
 };
 
 export const persistAppFontCache = (fontId: AppFontId) => {
+  if (!hasConsent("preferences")) return;
   try {
     localStorage.setItem(APP_FONT_STORAGE_KEY, fontId);
   } catch {
@@ -53,6 +56,7 @@ export const persistAppFontCache = (fontId: AppFontId) => {
 };
 
 export const readCachedAppFont = (): AppFontId => {
+  if (!hasConsent("preferences")) return DEFAULT_APP_FONT;
   try {
     return resolveAppFontId(localStorage.getItem(APP_FONT_STORAGE_KEY));
   } catch {

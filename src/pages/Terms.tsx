@@ -15,7 +15,7 @@ const Terms = () => {
           <ArrowLeft className="w-5 h-5 text-foreground" />
         </button>
         <h1 className="text-3xl font-bold text-foreground">Terms and Conditions</h1>
-        <p className="text-sm text-muted-foreground mt-1">Last updated: January 14, 2026</p>
+        <p className="text-sm text-muted-foreground mt-1">Last updated: October 7, 2026</p>
       </header>
 
       {/* Content */}
@@ -109,16 +109,20 @@ const Terms = () => {
         </section>
 
         <section>
-          <h2 className="text-xl font-semibold text-foreground mb-3">9. Premium Features and Subscriptions</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-3">9. Poscal Pro Payments</h2>
           <p className="text-muted-foreground leading-relaxed mb-2">
-            When premium features become available:
+            Pro features are included during beta. Payments begin only when Poscal ends beta and enables billing.
           </p>
           <ul className="list-disc list-inside text-muted-foreground leading-relaxed space-y-1 ml-4">
-            <li>Subscriptions will be billed on a recurring basis</li>
-            <li>You can cancel at any time before the next billing cycle</li>
-            <li>Refunds are subject to our refund policy</li>
-            <li>Prices may change with advance notice</li>
-            <li>Premium features may be modified or discontinued</li>
+            <li>A monthly or yearly purchase pays for one calendar month or year. Auto-renew is off by default.</li>
+            <li>If you explicitly select auto-renew, and Paystack returns a verified reusable authorization, Poscal may automatically charge that saved Paystack authorization before the current paid period expires. A successful renewal extends the existing paid period, so renewing early does not shorten access.</li>
+            <li>You can turn auto-renew off before the next charge. Disabling auto-renew stops Poscal from initiating future scheduled charges. A charge already submitted to Paystack before cancellation may still complete.</li>
+            <li>If an automatic renewal is financially ambiguous because of a timeout, Poscal verifies the existing payment reference before any later retry. Failed automatic renewals may be retried a limited number of times before auto-renew is disabled.</li>
+            <li>Discount codes apply only to the quoted purchase unless the offer expressly says otherwise. Automatic renewals use the then-current standard price for the selected plan, subject to advance notice of price changes where required.</li>
+            <li>At expiry, Free limits apply. Existing journals, notes and uploads remain readable; extra journals become read-only.</li>
+            <li>Payments are processed by Paystack and access starts only after server verification. Keep your payment reference for support.</li>
+            <li>For a payment issue or refund request, contact info@poscalfx.com with your payment reference. Refunds, reversals and disputes may affect paid access.</li>
+            <li>Pro features may be modified or discontinued.</li>
           </ul>
         </section>
 

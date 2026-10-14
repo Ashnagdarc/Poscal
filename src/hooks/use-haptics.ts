@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { useWebHaptics } from 'web-haptics/react';
 
 import { STORAGE_KEYS } from '@/lib/constants';
+import { hasConsent } from '@/lib/consent';
 
 type VibrationPattern = number | number[];
 
@@ -13,6 +14,7 @@ export const useHaptics = () => {
       return false;
     }
 
+    if (!hasConsent("preferences")) return true;
     return window.localStorage.getItem(STORAGE_KEYS.HAPTICS) !== 'false';
   }, []);
 

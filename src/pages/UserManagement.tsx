@@ -5,7 +5,7 @@ import { format } from "date-fns";
 import { toast } from "sonner";
 import { useAdmin } from "@/hooks/use-admin";
 import { useAuth } from "@/contexts/AuthContext";
-import { adminUsersApi, featureFlagApi } from "@/lib/api";
+import { adminUsersApi } from "@/lib/api";
 import { PageHeader } from "@/components/PageHeader";
 import { UserAvatar } from "@/components/UserAvatar";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +22,6 @@ interface AdminUserRow {
   account_type: string | null;
   created_at: string;
   subscription_tier: string;
-  payment_status: string;
   subscription_end: string | null;
 }
 
@@ -31,14 +30,13 @@ const USERS_PER_PAGE = 15;
 function getTierLabel(tier: string | null | undefined) {
   const normalized = (tier || "free").toLowerCase();
   if (normalized === "pro") return "Pro";
-  if (normalized === "premium") return "Premium";
   if (normalized === "trial") return "Trial";
   return "Free";
 }
 
 function getTierBadgeClass(tier: string | null | undefined) {
   const normalized = (tier || "free").toLowerCase();
-  if (normalized === "pro" || normalized === "premium") {
+  if (normalized === "pro") {
     return "bg-brand/15 text-brand border-brand/20";
   }
   if (normalized === "trial") {
@@ -55,14 +53,8 @@ const UserManagement = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [paidLockEnabled, setPaidLockEnabled] = useState<boolean | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-  const [planUser, setPlanUser] = useState<AdminUserRow | null>(null);
-  const [planTier, setPlanTier] = useState<"free" | "premium" | "pro">("free");
-  const [planStatus, setPlanStatus] = useState<"free" | "paid" | "trial" | "expired">("free");
-  const [planDays, setPlanDays] = useState("30");
-  const [savingPlan, setSavingPlan] = useState(false);
 
   const fetchUsers = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -76,82 +68,6 @@ const UserManagement = () => {
     } finally {
       setLoading(false);
       setRefreshing(false);
-    }
-  };
-
-  const fetchPaidLock = async () => {
-    try {
-      const enabled = await featureFlagApi.getPaidLock();
-      setPaidLockEnabled(!!enabled);
-    } catch (err) {
-      console.error("Could not fetch paid lock flag", err);
-      setPaidLockEnabled(false);
-    }
-  };
-
-  const togglePaidLock = async () => {
-    try {
-      const desiredState = !(paidLockEnabled ?? false);
-      const updatedState = await featureFlagApi.setPaidLock(desiredState);
-      setPaidLockEnabled(!!updatedState);
-      toast.success(updatedState ? "Paid lock enabled" : "Paid lock disabled");
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to toggle paid lock");
-    }
-  };
-
-  const openPlanEditor = (user: AdminUserRow) => {
-    const tier =
-      user.subscription_tier === "pro"
-        ? "pro"
-        : user.subscription_tier === "premium"
-          ? "premium"
-          : "free";
-    const status =
-      user.payment_status === "paid" ||
-      user.payment_status === "trial" ||
-      user.payment_status === "expired"
-        ? user.payment_status
-        : "free";
-    setPlanUser(user);
-    setPlanTier(tier);
-    setPlanStatus(status === "free" && tier !== "free" ? "paid" : status);
-    setPlanDays("30");
-  };
-
-  const handleSavePlan = async () => {
-    if (!planUser) return;
-    setSavingPlan(true);
-    try {
-      const days = Math.max(1, parseInt(planDays, 10) || 30);
-      const expiresAtMs =
-        planStatus === "free" || planStatus === "expired"
-          ? null
-          : Date.now() + days * 24 * 60 * 60 * 1000;
-      const result = await adminUsersApi.setSubscription({
-        userId: planUser.id,
-        tier: planTier,
-        paymentStatus: planStatus,
-        expiresAtMs,
-      });
-      setUsers((prev) =>
-        prev.map((row) =>
-          row.id === planUser.id
-            ? {
-                ...row,
-                subscription_tier: result.subscription_tier,
-                payment_status: result.payment_status,
-                subscription_end: result.subscription_end,
-              }
-            : row,
-        ),
-      );
-      toast.success(`Updated plan for ${planUser.full_name || planUser.email}`);
-      setPlanUser(null);
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : "Failed to update plan");
-    } finally {
-      setSavingPlan(false);
     }
   };
 
@@ -197,7 +113,6 @@ const UserManagement = () => {
     }
     if (isAdmin) {
       fetchUsers();
-      fetchPaidLock();
     }
   }, [isAdmin, adminLoading, navigate]);
 
@@ -215,11 +130,11 @@ const UserManagement = () => {
 
   const stats = useMemo(() => {
     const admins = users.filter((u) => u.is_admin).length;
-    const premium = users.filter((u) => {
+    const pro = users.filter((u) => {
       const tier = (u.subscription_tier || "free").toLowerCase();
       return tier !== "free";
     }).length;
-    return { total: users.length, admins, premium };
+    return { total: users.length, admins, pro };
   }, [users]);
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / USERS_PER_PAGE));
@@ -277,35 +192,12 @@ const UserManagement = () => {
       />
 
       <main className="mx-auto max-w-2xl space-y-6 px-6 md:max-w-3xl">
-        {/* Paid lock */}
-        <section className="overflow-hidden rounded-2xl border border-border/50 bg-secondary/50">
-          <div className="flex items-center justify-between gap-4 px-5 py-4">
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/10">
-                <Shield className="h-4 w-4 text-foreground" />
-              </div>
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">Paid features lock</p>
-                <p className="text-xs text-muted-foreground">
-                  Restrict premium pages for free users
-                </p>
-              </div>
-            </div>
-            <Button
-              size="sm"
-              variant={paidLockEnabled ? "default" : "outline"}
-              className="shrink-0 rounded-xl"
-              onClick={togglePaidLock}
-            >
-              {paidLockEnabled ? "Enabled" : "Disabled"}
-            </Button>
-          </div>
-        </section>
+        <Button variant="outline" onClick={() => navigate("/admin/billing")}>Pro billing controls</Button>
 
         {/* Stats */}
         <section className="grid grid-cols-3 gap-3">
           <StatPill label="Total" value={loading ? "—" : String(stats.total)} />
-          <StatPill label="Premium" value={loading ? "—" : String(stats.premium)} accent />
+          <StatPill label="Pro" value={loading ? "—" : String(stats.pro)} accent />
           <StatPill label="Admins" value={loading ? "—" : String(stats.admins)} />
         </section>
 
@@ -416,43 +308,32 @@ const UserManagement = () => {
                       )}
                     </div>
                   </div>
-                  <div className="border-t border-border/40 bg-background/20 px-5 py-3">
-                    <div className="flex flex-col gap-2 sm:flex-row">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 flex-1 rounded-lg text-xs"
-                        onClick={() => openPlanEditor(user)}
-                      >
-                        <Crown className="mr-1.5 h-3.5 w-3.5" />
-                        Set plan
-                      </Button>
-                      {user.id !== currentUser?.id && !isSuperAdminAccount(user) && (
-                        user.is_admin ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-8 flex-1 rounded-lg text-xs"
-                            disabled={updatingUserId === user.id}
-                            onClick={() => handleSetAdmin(user, false)}
-                          >
-                            <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
-                            {updatingUserId === user.id ? "Updating…" : "Remove admin"}
-                          </Button>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className="h-8 flex-1 rounded-lg bg-brand text-xs text-brand-foreground hover:bg-brand/90"
-                            disabled={updatingUserId === user.id}
-                            onClick={() => handleSetAdmin(user, true)}
-                          >
-                            <Shield className="mr-1.5 h-3.5 w-3.5" />
-                            {updatingUserId === user.id ? "Updating…" : "Make admin"}
-                          </Button>
-                        )
+                  {user.id !== currentUser?.id && !isSuperAdminAccount(user) && (
+                    <div className="border-t border-border/40 bg-background/20 px-5 py-3">
+                      {user.is_admin ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 w-full rounded-lg text-xs"
+                          disabled={updatingUserId === user.id}
+                          onClick={() => handleSetAdmin(user, false)}
+                        >
+                          <ShieldOff className="mr-1.5 h-3.5 w-3.5" />
+                          {updatingUserId === user.id ? "Updating…" : "Remove admin"}
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          className="h-8 w-full rounded-lg bg-brand text-xs text-brand-foreground hover:bg-brand/90"
+                          disabled={updatingUserId === user.id}
+                          onClick={() => handleSetAdmin(user, true)}
+                        >
+                          <Shield className="mr-1.5 h-3.5 w-3.5" />
+                          {updatingUserId === user.id ? "Updating…" : "Make admin"}
+                        </Button>
                       )}
                     </div>
-                  </div>
+                  )}
                 </article>
               ))}
             </div>
@@ -491,89 +372,6 @@ const UserManagement = () => {
           )}
         </section>
       </main>
-
-      {planUser && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-background/70 p-4 sm:items-center">
-          <div className="w-full max-w-md rounded-2xl border border-border bg-background p-5 shadow-none">
-            <h3 className="font-display text-lg font-semibold text-foreground">Set plan</h3>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {planUser.full_name || planUser.email}
-            </p>
-            <div className="mt-4 space-y-3">
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tier
-                </p>
-                <div className="flex gap-2">
-                  {(["free", "premium", "pro"] as const).map((tier) => (
-                    <Button
-                      key={tier}
-                      size="sm"
-                      variant={planTier === tier ? "default" : "outline"}
-                      className="flex-1 rounded-lg capitalize"
-                      onClick={() => {
-                        setPlanTier(tier);
-                        if (tier === "free") setPlanStatus("free");
-                        else if (planStatus === "free") setPlanStatus("paid");
-                      }}
-                    >
-                      {tier}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Status
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["free", "paid", "trial", "expired"] as const).map((status) => (
-                    <Button
-                      key={status}
-                      size="sm"
-                      variant={planStatus === status ? "default" : "outline"}
-                      className="rounded-lg capitalize"
-                      onClick={() => setPlanStatus(status)}
-                    >
-                      {status}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              {(planStatus === "paid" || planStatus === "trial") && (
-                <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Expires in (days)
-                  </p>
-                  <Input
-                    value={planDays}
-                    onChange={(e) => setPlanDays(e.target.value)}
-                    inputMode="numeric"
-                    className="h-11 rounded-xl"
-                  />
-                </div>
-              )}
-            </div>
-            <div className="mt-5 flex gap-2">
-              <Button
-                variant="outline"
-                className="flex-1 rounded-xl"
-                onClick={() => setPlanUser(null)}
-                disabled={savingPlan}
-              >
-                Cancel
-              </Button>
-              <Button
-                className="flex-1 rounded-xl"
-                onClick={() => void handleSavePlan()}
-                disabled={savingPlan}
-              >
-                {savingPlan ? "Saving…" : "Save plan"}
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

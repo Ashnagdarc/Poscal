@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -13,11 +13,8 @@ import {
   Camera,
   Loader2,
   Pencil,
-  ShieldAlert,
-  ShieldCheck,
 } from "lucide-react";
 import { toast } from "sonner";
-import { useMutation } from "convex/react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useJournal } from "@/contexts/JournalContext";
 import { useSubscription } from "@/contexts/SubscriptionContext";
@@ -34,14 +31,13 @@ import {
   tradesToCsv,
 } from "@/lib/exportJournalCsv";
 import { parseAndValidateJournalImport } from "@/lib/importJournalCsv";
-import { isPaymentsEnabled } from "@/lib/paymentsConfig";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarDaysIcon } from "@/components/ui/calendar-days";
 import { ReceiptIcon } from "@/components/ui/receipt";
 import { UserAvatar } from "@/components/UserAvatar";
 import { uploadsApi, usersApi } from "@/lib/api";
+import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
 import { cn } from "@/lib/utils";
-import { api } from "../../convex/_generated/api";
 
 interface Profile {
   id: string;
@@ -57,7 +53,6 @@ const Profile = () => {
   const { user, signOut } = useAuth();
   const { activeJournalId } = useJournal();
   const { checkFeatureAccess } = useSubscription();
-  const deleteAccount = useMutation(api.users.deleteAccount);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -67,21 +62,15 @@ const Profile = () => {
   const [isImporting, setIsImporting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isDeletingAccount, setIsDeletingAccount] = useState(false);
-  const [subscriptionTier, setSubscriptionTier] = useState<'free' | 'premium' | 'pro'>('free');
-  const [subscriptionExpiry, setSubscriptionExpiry] = useState<string | null>(null);
+  const { subscriptionTier, expiresAt: proExpiry, isPaid } = useSubscription();
+  const subscriptionExpiry = proExpiry?.toISOString() ?? null;
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (user) {
-      fetchProfile();
-    }
-  }, [user]);
-
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     if (!user) return;
-    
+
     setIsLoading(true);
     try {
       const data = await usersApi.getProfile();
@@ -94,30 +83,20 @@ const Profile = () => {
           created_at: data.created_at || new Date().toISOString(),
         });
         setFullName(data.full_name || "");
-        
-        // Try to get subscription info
-        if (data.subscription_tier) {
-          setSubscriptionTier(data.subscription_tier);
-        }
-        if (data.subscription_expires_at) {
-          setSubscriptionExpiry(data.subscription_expires_at);
-        }
       }
     } catch (error) {
-      logger.error('Error fetching profile:', error);
+      logger.error("Error fetching profile:", error);
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
-  };
+  }, [user]);
+
+  useEffect(() => {
+    void fetchProfile();
+  }, [fetchProfile]);
 
   const handleExportData = async () => {
     if (!user || isExporting) return;
-
-    // While checkout is paused, keep export available to signed-in users.
-    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
-      toast.info("CSV export is a premium feature.");
-      navigate("/upgrade?tier=premium&redirectPath=/profile");
-      return;
-    }
 
     setIsExporting(true);
     try {
@@ -137,7 +116,9 @@ const Profile = () => {
     } catch (error) {
       logger.error("CSV export failed", error);
       toast.error(
-        error instanceof Error ? error.message : "Could not export trades. Try again.",
+        error instanceof Error
+          ? error.message
+          : "Could not export trades. Try again.",
       );
     } finally {
       setIsExporting(false);
@@ -146,9 +127,9 @@ const Profile = () => {
 
   const handleImportCsvClick = () => {
     if (!user || isImporting) return;
-    if (isPaymentsEnabled() && !checkFeatureAccess("export_csv")) {
-      toast.info("CSV import is a premium feature.");
-      navigate("/upgrade?tier=premium&redirectPath=/profile");
+    if (!checkFeatureAccess("import_csv")) {
+      toast.info("MT5 and CSV import is a Poscal Pro feature.");
+      navigate("/pro?returnTo=/profile");
       return;
     }
     if (!activeJournalId) {
@@ -217,14 +198,53 @@ const Profile = () => {
     if (isDeletingAccount) return;
     setIsDeletingAccount(true);
     try {
-      await deleteAccount({ confirmation: "DELETE" });
+      const token = getConvexAuthTokenMirror();
+      if (!token) {
+        throw new Error("Your session is not ready. Please try again.");
+      }
+
+      let deleted = false;
+      for (let attempt = 0; attempt < 500; attempt += 1) {
+        const response = await fetch("/api/account-delete", {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ confirmation: "DELETE" }),
+        });
+        const result = (await response.json().catch(() => null)) as {
+          success?: boolean;
+          done?: boolean;
+          message?: string;
+        } | null;
+
+        if (!response.ok && response.status !== 202) {
+          throw new Error(
+            result?.message || `Account deletion failed (${response.status})`,
+          );
+        }
+        if (result?.done) {
+          deleted = true;
+          break;
+        }
+      }
+
+      if (!deleted) {
+        throw new Error(
+          "Account cleanup is larger than the automatic deletion window. Your deletion is resumable, so retrying will continue safely.",
+        );
+      }
+
       await signOut();
       toast.success("Your account and trading data have been deleted.");
       navigate("/welcome");
     } catch (error) {
       console.error("[profile] Account deletion failed", error);
       toast.error(
-        error instanceof Error ? error.message : "Failed to delete account. Please try again.",
+        error instanceof Error
+          ? error.message
+          : "Failed to delete account. Please try again.",
       );
     } finally {
       setIsDeletingAccount(false);
@@ -249,7 +269,9 @@ const Profile = () => {
     const maxSize = 2 * 1024 * 1024;
     if (file.size > maxSize) {
       const sizeMB = (file.size / 1024 / 1024).toFixed(2);
-      toast.error(`Image is too large (${sizeMB}MB). Please choose an image under 2MB.`);
+      toast.error(
+        `Image is too large (${sizeMB}MB). Please choose an image under 2MB.`,
+      );
       return;
     }
 
@@ -257,15 +279,17 @@ const Profile = () => {
     try {
       const resp = await uploadsApi.uploadAvatar(file);
       setProfile((current) =>
-        current
-          ? { ...current, avatar_url: resp.avatar_url }
-          : current,
+        current ? { ...current, avatar_url: resp.avatar_url } : current,
       );
       toast.success("Avatar updated successfully!");
       await fetchProfile();
     } catch (error) {
       logger.error("Avatar upload error:", error);
-      toast.error(error instanceof Error ? error.message : "Failed to upload avatar. Please try again.");
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Failed to upload avatar. Please try again.",
+      );
     } finally {
       setIsUploadingAvatar(false);
       if (fileInputRef.current) {
@@ -310,12 +334,10 @@ const Profile = () => {
     });
   };
 
-  const planLabel = subscriptionTier === "free"
-    ? "Free"
-    : subscriptionTier === "premium"
-      ? "Premium"
-      : "Pro";
-  const memberSince = profile?.created_at ? formatDate(profile.created_at) : "—";
+  const planLabel = subscriptionTier === "free" ? "Free" : "Pro";
+  const memberSince = profile?.created_at
+    ? formatDate(profile.created_at)
+    : "—";
 
   if (isLoading) {
     return (
@@ -384,6 +406,7 @@ const Profile = () => {
                     name={profile?.full_name || user?.full_name}
                     email={profile?.email || user?.email}
                     src={profile?.avatar_url || user?.avatar_url}
+                    pro={isPaid}
                   />
                 )}
               </div>
@@ -414,21 +437,6 @@ const Profile = () => {
             <p className="mt-1 break-all text-sm text-muted-foreground">
               {profile?.email || user?.email}
             </p>
-            <div
-              className={cn(
-                "mx-auto mt-3 inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold",
-                user?.email_verified
-                  ? "border-brand/25 bg-brand/10 text-brand"
-                  : "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-              )}
-            >
-              {user?.email_verified ? (
-                <ShieldCheck className="h-3.5 w-3.5" aria-hidden="true" />
-              ) : (
-                <ShieldAlert className="h-3.5 w-3.5" aria-hidden="true" />
-              )}
-              {user?.email_verified ? "Email verified" : "Email unverified"}
-            </div>
           </div>
 
           <div className="grid grid-cols-2 border-t border-border/50 bg-background/20">
@@ -523,22 +531,12 @@ const Profile = () => {
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-foreground/5 text-muted-foreground">
                 <Mail className="h-5 w-5" aria-hidden="true" />
               </div>
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0">
                 <p className="text-xs text-muted-foreground">Email</p>
                 <p className="break-all text-sm font-semibold text-foreground">
                   {profile?.email || user?.email}
                 </p>
               </div>
-              <span
-                className={cn(
-                  "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-wide",
-                  user?.email_verified
-                    ? "bg-brand/10 text-brand"
-                    : "bg-amber-500/10 text-amber-700 dark:text-amber-300",
-                )}
-              >
-                {user?.email_verified ? "Verified" : "Unverified"}
-              </span>
             </div>
           </div>
 

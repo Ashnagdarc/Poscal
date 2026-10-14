@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { hasConsent } from '@/lib/consent';
 
 export interface AccountCurrency {
   code: string;
@@ -30,6 +31,7 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
   const [currency, setCurrencyState] = useState<AccountCurrency>(ACCOUNT_CURRENCIES[0]);
 
   useEffect(() => {
+    if (!hasConsent("preferences")) return;
     const savedCurrency = localStorage.getItem('accountCurrency');
     if (!savedCurrency) return;
 
@@ -46,7 +48,9 @@ export const CurrencyProvider = ({ children }: { children: ReactNode }) => {
 
   const setCurrency = (newCurrency: AccountCurrency) => {
     setCurrencyState(newCurrency);
-    localStorage.setItem('accountCurrency', JSON.stringify(newCurrency));
+    if (hasConsent("preferences")) {
+      localStorage.setItem('accountCurrency', JSON.stringify(newCurrency));
+    }
   };
 
   return (

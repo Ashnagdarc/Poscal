@@ -135,9 +135,7 @@ export const updateViewerPreferences = mutation({
       fullName: user.fullName ?? user.name ?? null,
       avatarUrl: user.avatarUrl ?? user.image ?? null,
       role: user.role ?? "user",
-      paymentStatus: user.paymentStatus ?? "free",
-      subscriptionTier: user.subscriptionTier ?? "free",
-      subscriptionExpiresAtMs: user.subscriptionExpiresAtMs ?? null,
+
       newsAlertsEnabled: true,
       timezone: (patch.timezone as string | null | undefined) ?? null,
       defaultRiskPercent: (patch.defaultRiskPercent as number | null | undefined) ?? null,
@@ -168,9 +166,7 @@ export const updateByUserId = mutation({
     fullName: nullableStringArg,
     avatarUrl: nullableStringArg,
     role: nullableStringArg,
-    paymentStatus: nullableStringArg,
-    subscriptionTier: nullableStringArg,
-    subscriptionExpiresAtMs: v.optional(v.union(v.number(), v.null())),
+
   },
   handler: async () => {
     throw new Error("profiles:updateByUserId is disabled. Use users.updateViewerProfile.");
@@ -185,9 +181,7 @@ export const upsertFromAuth = mutation({
     fullName: nullableStringArg,
     avatarUrl: nullableStringArg,
     role: nullableStringArg,
-    paymentStatus: nullableStringArg,
-    subscriptionTier: nullableStringArg,
-    subscriptionExpiresAtMs: v.optional(v.union(v.number(), v.null())),
+
   },
   handler: async () => {
     throw new Error("profiles:upsertFromAuth is disabled. Profiles sync via auth callbacks.");

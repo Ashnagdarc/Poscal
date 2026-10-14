@@ -1,10 +1,11 @@
+import { assertEditableJournal, consumeEntryAllowance, getProAccess } from "./lib/proAccess";
 import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
-import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 import { assertValidTradeFields } from "./lib/tradeValidation";
 import {
   CLOSED_TRADE_ALERT_SCAN_LIMIT,
@@ -609,6 +610,7 @@ export const createNotebookDraft = mutation({
     const userId = await requireVerifiedAuthUserId(ctx);
     await assertJournalOwned(ctx, userId, args.journalId);
 
+    await consumeEntryAllowance(ctx, userId, args.journalId);
     const now = Date.now();
     const insertedId = await ctx.db.insert("tradingJournal", {
       userId,
@@ -658,6 +660,7 @@ export const createEntry = mutation({
     await assertJournalOwned(ctx, userId, args.journalId);
     assertValidTradeFields(args);
 
+    await consumeEntryAllowance(ctx, userId, args.journalId);
     const now = Date.now();
     const insertedId = await ctx.db.insert("tradingJournal", {
       ...args,
@@ -720,6 +723,7 @@ export const updateEntry = mutation({
       throw new Error("Journal entry is being deleted");
     }
 
+    await assertEditableJournal(ctx, userId, existing.journalId);
     const { id, ...rest } = args;
     const nextPair = rest.pair ?? existing.pair;
     const nextStatus = rest.status ?? existing.status;
@@ -807,6 +811,7 @@ export const updateNotebook = mutation({
       throw new Error("Trade is not attached to a journal");
     }
     await assertJournalOwned(ctx, userId, trade.journalId);
+    await assertEditableJournal(ctx, userId, trade.journalId);
 
     const existingNotebook = await ctx.db
       .query("tradeNotebooks")
@@ -958,7 +963,7 @@ const deleteJournalEntryRows = async (
 export const beginDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -986,7 +991,7 @@ export const beginDeleteEntry = mutation({
 export const cancelDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       return { success: true };
@@ -1003,7 +1008,7 @@ export const cancelDeleteEntry = mutation({
 export const finalizeDeleteEntry = mutation({
   args: { id: v.id("tradingJournal") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       return { success: true };
@@ -1014,6 +1019,18 @@ export const finalizeDeleteEntry = mutation({
 
     await deleteJournalEntryRows(ctx, userId, args.id, existing);
     return { success: true };
+  },
+});
+
+export const accountDeletionBatch = query({
+  args: {},
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const rows = await ctx.db
+      .query("tradingJournal")
+      .withIndex("by_user_created", (q) => q.eq("userId", userId))
+      .take(10);
+    return { tradeIds: rows.map((row) => row._id) };
   },
 });
 
@@ -1050,6 +1067,7 @@ export const saveMany = mutation({
   },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
+    if (!(await getProAccess(ctx, userId)).pro) throw new Error("PRO_REQUIRED: CSV import requires Poscal Pro");
     if (args.items.length > 100) {
       throw new Error("Batch too large (max 100 trades)");
     }
@@ -1059,6 +1077,7 @@ export const saveMany = mutation({
 
     for (const item of args.items) {
       await assertJournalOwned(ctx, userId, item.journalId);
+      await assertEditableJournal(ctx, userId, item.journalId);
       assertValidTradeFields(item);
 
       if (item.externalId) {
@@ -1074,6 +1093,7 @@ export const saveMany = mutation({
         }
       }
 
+      await consumeEntryAllowance(ctx, userId, item.journalId);
       const insertedId = await ctx.db.insert("tradingJournal", {
         ...item,
         userId,

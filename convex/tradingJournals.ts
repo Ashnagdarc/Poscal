@@ -1,49 +1,15 @@
+import { getProAccess, assertEditableJournal, getActiveJournals } from "./lib/proAccess";
 import { v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { getVerifiedAuthUserId, requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
 
-export const JOURNAL_LIMITS = {
-  free: 2,
-  premium: 5,
-  pro: 5,
-} as const;
-
-type SubscriptionTier = keyof typeof JOURNAL_LIMITS;
 type UserId = Id<"users">;
-
-const normalizeTier = (tier?: string | null): SubscriptionTier => {
-  if (tier === "premium" || tier === "pro") return tier;
-  // Legacy rows stored plan period as tier.
-  if (tier === "monthly" || tier === "yearly") return "premium";
-  return "free";
-};
-
-const resolveJournalLimit = (tier?: string | null) => JOURNAL_LIMITS[normalizeTier(tier)];
-
 const isActiveJournal = (status?: string | null) => status !== "archived";
-
-const countActiveJournals = async (ctx: { db: any }, userId: string) => {
-  const rows = (await ctx.db
-    .query("tradingAccounts")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as Doc<"tradingAccounts">[];
-  return rows.filter((row) => isActiveJournal(row.status)).length;
-};
-
-const getUserTier = async (ctx: { db: any }, userId: string) => {
-  const user = await ctx.db.get(userId as UserId);
-  const profile = await ctx.db
-    .query("profiles")
-    .withIndex("by_external_user_id", (q: any) => q.eq("externalUserId", userId))
-    .first();
-
-  return (profile?.subscriptionTier ?? user?.subscriptionTier ?? "free") as string;
-};
 
 export const listForUser = query({
   args: {
@@ -55,16 +21,17 @@ export const listForUser = query({
       return [];
     }
 
-    const rows = await ctx.db
+    const rows = args.includeArchived ? await ctx.db
       .query("tradingAccounts")
       .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
+      .take(100) : await getActiveJournals(ctx, userId);
 
+    const access = await getProAccess(ctx, userId);
     const filtered = args.includeArchived
       ? rows
       : rows.filter((row) => isActiveJournal(row.status));
 
-    return filtered.sort((a, b) => b.createdAtMs - a.createdAtMs);
+    return filtered.sort((a, b) => b.createdAtMs - a.createdAtMs).map(row => ({ ...row, isReadOnly: row.status === "archived" || access.lockedJournalIds.includes(row._id) }));
   },
 });
 
@@ -92,12 +59,9 @@ export const create = mutation({
       throw new Error("Currency must be a 3-letter code (e.g. USD)");
     }
 
-    // Tier is always server-derived — never accept client subscriptionTier.
-    const tier = await getUserTier(ctx, userId);
-    const limit = resolveJournalLimit(tier);
-    const activeCount = await countActiveJournals(ctx, userId);
-    if (activeCount >= limit) {
-      throw new Error(`Journal limit reached for ${normalizeTier(tier)} plan (${limit})`);
+    const access = await getProAccess(ctx, userId);
+    if (access.usage.journals >= access.limits.journals) {
+      throw new Error(`PRO_REQUIRED: Journal limit reached (${access.limits.journals}). Your existing journals are safe.`);
     }
 
     const now = Date.now();
@@ -142,9 +106,7 @@ export const create = mutation({
           fullName,
           avatarUrl: userDoc.avatarUrl ?? userDoc.image ?? null,
           role: userDoc.role,
-          paymentStatus: userDoc.paymentStatus,
-          subscriptionTier: userDoc.subscriptionTier,
-          subscriptionExpiresAtMs: userDoc.subscriptionExpiresAtMs ?? null,
+
           journalOnboardedAtMs: now,
           createdAtMs: now,
           updatedAtMs: now,
@@ -183,6 +145,7 @@ export const update = mutation({
       throw new Error("Journal not found");
     }
 
+    await assertEditableJournal(ctx, userId, args.id);
     const patch: Record<string, unknown> = {
       updatedAtMs: Date.now(),
     };
@@ -216,6 +179,16 @@ export const update = mutation({
       if (!ALLOWED_JOURNAL_STATUS.has(status)) {
         throw new Error("Invalid journal status");
       }
+      if (status === "archived") {
+        const access = await getProAccess(ctx, userId);
+        if (!access.pro && access.freeJournalId === args.id) {
+          throw new Error(
+            access.canChooseFreeJournal
+              ? "Choose your one Free journal before archiving the current Free journal."
+              : "PRO_REQUIRED: Your selected Free journal cannot be archived while you are on Free.",
+          );
+        }
+      }
       patch.status = status;
     }
 
@@ -235,6 +208,15 @@ export const archive = mutation({
       throw new Error("Journal not found");
     }
 
+    const access = await getProAccess(ctx, userId);
+    if (!access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before archiving the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be archived while you are on Free.",
+      );
+    }
+
     await ctx.db.patch(args.id, {
       status: "archived",
       updatedAtMs: Date.now(),
@@ -244,57 +226,279 @@ export const archive = mutation({
   },
 });
 
-export const remove = mutation({
-  args: {
-    id: v.id("tradingAccounts"),
+export const accountDeletionBooks = query({
+  args: {},
+  returns: v.array(v.id("tradingAccounts")),
+  handler: async (ctx) => {
+    const userId = await requireAuthUserId(ctx);
+    const user = await ctx.db.get(userId);
+    const deletionStartedAt = user?.accountDeletionRequestedAtMs ?? 0;
+    if (
+      !deletionStartedAt ||
+      Date.now() - deletionStartedAt > 60 * 60_000
+    ) {
+      throw new Error("Account deletion session is not active");
+    }
+    return (
+      await ctx.db
+        .query("tradingAccounts")
+        .withIndex("by_user", (q) => q.eq("userId", userId))
+        .take(10)
+    ).map((row) => row._id);
   },
+});
+
+export const beginRemove = mutation({
+  args: { id: v.id("tradingAccounts") },
   handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+    const userId = await requireAuthUserId(ctx);
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal not found");
     }
 
-    let trades = 0;
-    let history = 0;
-    let sessions = 0;
+    const access = await getProAccess(ctx, userId);
+    const user = await ctx.db.get(userId);
+    const deletionStartedAt = user?.accountDeletionRequestedAtMs ?? 0;
+    const deletingAccount =
+      deletionStartedAt > 0 && Date.now() - deletionStartedAt <= 60 * 60_000;
+    if (!deletingAccount && !access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before deleting the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be deleted while you are on Free.",
+      );
+    }
 
-    const tradeRows = await ctx.db
+    if (!existing.deletionRequestedAtMs) {
+      await ctx.db.patch(args.id, {
+        status: "archived",
+        deletionRequestedAtMs: Date.now(),
+        updatedAtMs: Date.now(),
+      });
+    }
+
+    return { success: true };
+  },
+});
+
+export const removeBatch = query({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const journal = await ctx.db.get(args.id);
+    if (!journal || journal.userId !== userId) throw new Error("Journal not found");
+    if (!journal.deletionRequestedAtMs)
+      throw new Error("Journal deletion has not been prepared");
+
+    const rows = await ctx.db
       .query("tradingJournal")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of tradeRows) {
-      await ctx.db.delete(row._id);
-      trades += 1;
+      .take(10);
+    return { tradeIds: rows.map((row) => row._id) };
+  },
+});
+
+export const cleanupRemoveBatch = mutation({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireAuthUserId(ctx);
+    const journal = await ctx.db.get(args.id);
+    if (!journal || journal.userId !== userId) return { done: true };
+    if (!journal.deletionRequestedAtMs)
+      throw new Error("Journal deletion has not been prepared");
+
+    const remainingTrade = await ctx.db
+      .query("tradingJournal")
+      .withIndex("by_user_journal_created", (q) =>
+        q.eq("userId", userId).eq("journalId", args.id),
+      )
+      .first();
+    if (remainingTrade) return { done: false };
+
+    // Entry deletion is responsible for R2 and notebook cleanup. Refuse to
+    // remove the parent if any child escaped that path.
+    const [attachment, notebook, fact] = await Promise.all([
+      ctx.db
+        .query("tradeJournalAttachments")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("tradeNotebooks")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("journalTradeFacts")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (attachment || notebook || fact) {
+      throw new Error(
+        "Journal child cleanup is incomplete. Retry deletion before removing the journal.",
+      );
     }
 
+    const [historyRows, sessionRows] = await Promise.all([
+      ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .take(50),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .take(50),
+    ]);
+    for (const row of historyRows) await ctx.db.delete(row._id);
+    for (const row of sessionRows) await ctx.db.delete(row._id);
+
+    const [historyLeft, sessionsLeft] = await Promise.all([
+      ctx.db
+        .query("calculatorHistory")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+      ctx.db
+        .query("progressSessions")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (historyLeft || sessionsLeft) return { done: false };
+
+    const [factsBackfill, stats, statsBackfill] = await Promise.all([
+      ctx.db
+        .query("journalTradeFactsBackfills")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+      ctx.db
+        .query("journalTradeStats")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+      ctx.db
+        .query("journalTradeStatsBackfills")
+        .withIndex("by_user_journal", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .unique(),
+    ]);
+    if (factsBackfill) await ctx.db.delete(factsBackfill._id);
+    if (stats) await ctx.db.delete(stats._id);
+    if (statsBackfill) await ctx.db.delete(statsBackfill._id);
+
+    const account = await ctx.db
+      .query("proAccounts")
+      .withIndex("by_user", (q) => q.eq("userId", userId))
+      .unique();
+    if (account?.freeJournalId === args.id) {
+      await ctx.db.patch(account._id, {
+        freeJournalId: undefined,
+        freeJournalChosen: false,
+        updatedAtMs: Date.now(),
+      });
+    }
+
+    await ctx.db.delete(args.id);
+    return { done: true };
+  },
+});
+
+/**
+ * Backward-compatible mutation for cached clients. It only deletes a truly
+ * empty journal. Non-empty journals must use the asset-aware resumable route.
+ */
+export const remove = mutation({
+  args: { id: v.id("tradingAccounts") },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const existing = await ctx.db.get(args.id);
+    if (!existing || existing.userId !== userId) throw new Error("Journal not found");
+
+    const access = await getProAccess(ctx, userId);
+    if (!access.pro && access.freeJournalId === args.id) {
+      throw new Error(
+        access.canChooseFreeJournal
+          ? "Choose your one Free journal before deleting the current Free journal."
+          : "PRO_REQUIRED: Your selected Free journal cannot be deleted while you are on Free.",
+      );
+    }
+
+    const [trade, attachment, notebook, fact] = await Promise.all([
+      ctx.db
+        .query("tradingJournal")
+        .withIndex("by_user_journal_created", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+      ctx.db
+        .query("tradeJournalAttachments")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("tradeNotebooks")
+        .withIndex("by_journal", (q) => q.eq("journalId", args.id))
+        .first(),
+      ctx.db
+        .query("journalTradeFacts")
+        .withIndex("by_user_journal_date", (q) =>
+          q.eq("userId", userId).eq("journalId", args.id),
+        )
+        .first(),
+    ]);
+    if (trade || attachment || notebook || fact) {
+      throw new Error(
+        "This journal contains entries and requires the asset-aware deletion flow. Refresh Poscal and try again.",
+      );
+    }
+
+    await ctx.db.patch(args.id, {
+      status: "archived",
+      deletionRequestedAtMs: Date.now(),
+      updatedAtMs: Date.now(),
+    });
+
+    // Small empty journals can finish in one call. If non-trade child rows
+    // exceed the bounded batch, the refreshed client will resume safely.
     const historyRows = await ctx.db
       .query("calculatorHistory")
       .withIndex("by_user_journal_created", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of historyRows) {
-      await ctx.db.delete(row._id);
-      history += 1;
-    }
-
+      .take(51);
     const sessionRows = await ctx.db
       .query("progressSessions")
       .withIndex("by_user_journal_date", (q) =>
         q.eq("userId", userId).eq("journalId", args.id),
       )
-      .collect();
-    for (const row of sessionRows) {
-      await ctx.db.delete(row._id);
-      sessions += 1;
+      .take(51);
+    if (historyRows.length > 50 || sessionRows.length > 50) {
+      throw new Error(
+        "This journal requires the resumable deletion flow. Refresh Poscal and try again.",
+      );
     }
+    for (const row of historyRows) await ctx.db.delete(row._id);
+    for (const row of sessionRows) await ctx.db.delete(row._id);
 
     await ctx.db.delete(args.id);
-
-    return { success: true, trades, history, sessions };
+    return {
+      success: true,
+      trades: 0,
+      history: historyRows.length,
+      sessions: sessionRows.length,
+    };
   },
 });
 
@@ -358,25 +562,10 @@ export const attachOrphanData = mutation({
 
 export const getLimits = query({
   args: {},
-  handler: async (ctx) => {
+  handler: async ctx => {
     const userId = await getVerifiedAuthUserId(ctx);
-    if (!userId) {
-      return {
-        tier: "free" as const,
-        limit: JOURNAL_LIMITS.free,
-        activeCount: 0,
-        canCreate: false,
-      };
-    }
-
-    const tier = normalizeTier(await getUserTier(ctx, userId));
-    const limit = JOURNAL_LIMITS[tier];
-    const activeCount = await countActiveJournals(ctx, userId);
-    return {
-      tier,
-      limit,
-      activeCount,
-      canCreate: activeCount < limit,
-    };
+    if (!userId) return { tier: "free" as const, limit: 1, activeCount: 0, canCreate: false };
+    const access = await getProAccess(ctx, userId);
+    return { tier: access.pro ? "pro" as const : "free" as const, limit: access.limits.journals, activeCount: access.usage.journals, canCreate: access.usage.journals < access.limits.journals };
   },
 });

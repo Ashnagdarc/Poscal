@@ -20,10 +20,17 @@
       // Apply theme + font before paint to prevent flash
       (function() {
         try {
-          if (localStorage.getItem('theme') === 'dark') {
+          var consentRaw = localStorage.getItem('poscal.privacyConsent.v1');
+          var consent = consentRaw ? JSON.parse(consentRaw) : null;
+          var preferencesAllowed =
+            consent &&
+            consent.version === 1 &&
+            consent.preferences === true;
+
+          if (preferencesAllowed && localStorage.getItem('theme') === 'dark') {
             document.documentElement.classList.add('dark');
           }
-          var font = localStorage.getItem('appFont');
+          var font = preferencesAllowed ? localStorage.getItem('appFont') : null;
           if (font === 'classic' || font === 'markets') {
             document.documentElement.setAttribute('data-font', font);
           } else {

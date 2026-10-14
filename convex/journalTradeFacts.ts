@@ -1,3 +1,4 @@
+import { getProAccess } from "./lib/proAccess";
 import { anyApi } from "convex/server";
 import { v } from "convex/values";
 
@@ -448,6 +449,7 @@ export const getPerformanceSummary = query({
   handler: async (ctx, args) => {
     const userId = await getVerifiedAuthUserId(ctx);
     if (!userId) return { ready: false, truncated: false };
+    if (!(await getProAccess(ctx, userId)).pro) return { ready: true, truncated: false };
     const journal = await assertOwnedJournal(ctx, userId, args.journalId);
     if (!(await requireReady(ctx, userId, args.journalId))) {
       return { ready: false, truncated: false };

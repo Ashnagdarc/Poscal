@@ -1,3 +1,4 @@
+import { useJournal } from "@/contexts/JournalContext";
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Save } from "lucide-react";
 
@@ -37,6 +38,8 @@ export const ProgressTracker = ({
   onDateKeyChange,
   timeZone = null,
 }: ProgressTrackerProps) => {
+  const { activeJournal } = useJournal();
+  const readOnly = !!activeJournal?.isReadOnly;
   const { currency } = useCurrency();
   const { showErrorFromUnknown } = useActionError();
   const [draft, setDraft] = useState<ProgressSession | null>(null);
@@ -105,6 +108,7 @@ export const ProgressTracker = ({
   };
 
   const handleSave = async () => {
+    if (readOnly) return;
     try {
       const saved = await saveMutation.mutateAsync(session);
       setDraft(saved);
@@ -159,6 +163,7 @@ export const ProgressTracker = ({
         </div>
 
         <Textarea
+          readOnly={readOnly}
           rows={5}
           value={notesValue}
           onChange={(event) => setNotes(event.target.value)}
@@ -195,7 +200,7 @@ export const ProgressTracker = ({
       <Button
         className="h-12 w-full rounded-2xl"
         onClick={() => void handleSave()}
-        disabled={saveMutation.isPending}
+        disabled={readOnly || saveMutation.isPending}
       >
         {saveMutation.isPending ? (
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />

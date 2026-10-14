@@ -1,18 +1,12 @@
 import { useQuery } from 'convex/react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { useSubscription } from '@/contexts/SubscriptionContext';
 import { useAdmin } from '@/hooks/use-admin';
-import { usePaidLock } from '@/hooks/use-paid-lock';
 import { isClientEmailVerificationRequired } from '@/lib/emailVerificationClient';
 import { api } from '../../convex/_generated/api';
 
-// Feature: honor admin-controlled paid lock. When enabled, routes marked as `requiresPremium` are enforced.
-// Fail-open: payment wall stays off until an admin turns the lock on (and on fetch errors/timeouts).
-
 interface ProtectedRouteProps {
   children: React.ReactNode;
-  requiresPremium?: boolean;
   requiresAdmin?: boolean;
 }
 
@@ -26,13 +20,10 @@ const buildSignInRedirect = (pathname: string, search: string, reason: string) =
 
 export const ProtectedRoute = ({
   children,
-  requiresPremium = false,
   requiresAdmin = false,
 }: ProtectedRouteProps) => {
   const { user, loading: authLoading } = useAuth();
-  const { isPaid, isTrial, isLoading: subLoading } = useSubscription();
   const { isAdmin, loading: adminLoading } = useAdmin();
-  const { paidLockEnabled } = usePaidLock();
   const location = useLocation();
   // Prefer Convex server policy when available so UI matches API hard-gates.
   // Fall back to Vite mirror while the query loads / if it errors.
@@ -41,7 +32,7 @@ export const ProtectedRoute = ({
     verificationPolicy?.requireEmailVerification ?? isClientEmailVerificationRequired();
 
   // Show loading spinner while checking auth or subscription
-  if (authLoading || subLoading || adminLoading) {
+  if (authLoading || adminLoading) {
     return (
       <div className="flex min-h-full items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-3">
@@ -83,12 +74,6 @@ export const ProtectedRoute = ({
 
   if (requiresAdmin && !isAdmin) {
     return <Navigate to="/settings" replace />;
-  }
-
-  // Enforce only if route requires premium AND admin has enabled paid lock.
-  if (requiresPremium && paidLockEnabled && !isPaid && !isTrial) {
-    const redirectPath = encodeURIComponent(location.pathname || '/');
-    return <Navigate to={`/upgrade?tier=premium&redirectPath=${redirectPath}`} replace />;
   }
 
   return <>{children}</>;

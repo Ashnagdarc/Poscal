@@ -160,6 +160,15 @@ export const processPendingBatch = internalAction({
 
     for (const notification of claimed as QueuedNotification[]) {
       try {
+        if (notification.data?.billingOrderId && notification.data?.billingKind) {
+          const relevant = await ctx.runQuery(internal.proBilling.notificationStillRelevant, {
+            id: notification.data.billingOrderId as Id<"proOrders">, kind: notification.data.billingKind,
+          });
+          if (!relevant) {
+            await ctx.runMutation(internal.notifications.finalizeNotification, { id: notification._id, status: "sent", errorMessage: "Suppressed: superseded billing status" });
+            continue;
+          }
+        }
         if (notification.channel === "push") {
           if (!webPushReady) {
             throw new Error("VAPID keys are not configured");

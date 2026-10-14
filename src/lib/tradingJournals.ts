@@ -1,11 +1,11 @@
 import { getAuthenticatedConvexHttpClient } from "@/lib/convexClient";
+import { getConvexAuthTokenMirror } from "@/lib/authTokenStore";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { SubscriptionTier } from "@/contexts/SubscriptionContext";
 
 export const JOURNAL_LIMITS = {
-  free: 2,
-  premium: 5,
+  free: 1,
   pro: 5,
 } as const;
 
@@ -19,6 +19,7 @@ export type TradingJournal = {
   status: string;
   createdAt: string;
   updatedAt: string;
+  isReadOnly?: boolean;
 };
 
 export type CreateJournalInput = {
@@ -32,7 +33,7 @@ export type CreateJournalInput = {
 const ACTIVE_JOURNAL_STORAGE_KEY = "poscal.activeJournalId";
 
 export const getJournalLimit = (tier?: string | null) => {
-  if (tier === "premium" || tier === "pro") return JOURNAL_LIMITS.premium;
+  if (tier === "pro") return JOURNAL_LIMITS.pro;
   return JOURNAL_LIMITS.free;
 };
 
@@ -66,8 +67,10 @@ const fromConvexJournal = (row: {
   status?: string | null;
   createdAtMs: number;
   updatedAtMs: number;
+  isReadOnly?: boolean;
 }): TradingJournal => ({
   id: row._id,
+  isReadOnly: row.isReadOnly,
   userId: row.userId,
   name: row.name,
   currency: row.currency,
@@ -112,26 +115,40 @@ export const attachOrphanJournalData = async (_userId: string, journalId: string
 };
 
 export const deleteTradingJournal = async (_userId: string, journalId: string) => {
-  const client = getAuthenticatedConvexHttpClient();
+  const token = getConvexAuthTokenMirror();
+  if (!token) throw new Error("Your session is not ready. Please try again.");
 
-  return await client.mutation(api.tradingJournals.remove, {
-    id: journalId as Id<"tradingAccounts">,
-  });
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    const response = await fetch("/api/journal-book", {
+      method: "DELETE",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ journalId }),
+    });
+    const payload = (await response.json().catch(() => null)) as
+      | { success?: boolean; done?: boolean; message?: string }
+      | null;
+
+    if (!response.ok && response.status !== 202) {
+      throw new Error(payload?.message || `Could not delete journal (${response.status})`);
+    }
+    if (payload?.done) return { success: true };
+  }
+
+  throw new Error(
+    "Journal deletion is taking longer than expected. Your journal is archived and cleanup can be resumed safely.",
+  );
 };
 
 export const getTradingJournalLimits = async (
   _userId: string,
-  subscriptionTier?: string | null,
+  _subscriptionTier?: string | null,
 ) => {
   const client = getAuthenticatedConvexHttpClient();
 
-  // Tier is derived server-side from the authenticated user — never trust client tier.
-  try {
-    return await client.query(api.tradingJournals.getLimits, {});
-  } catch {
-    const limit = getJournalLimit(subscriptionTier);
-    return { tier: subscriptionTier ?? "free", limit, activeCount: 0, canCreate: true };
-  }
+  return await client.query(api.tradingJournals.getLimits, {});
 };
 
 export type JournalId = Id<"tradingAccounts">;
