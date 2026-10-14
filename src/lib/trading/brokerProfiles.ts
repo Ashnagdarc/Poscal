@@ -233,9 +233,6 @@ export const resolveAutomaticBrokerProfile = (
     contractSize: representative.contractSize,
     minLot: representative.minLot,
     lotStep: representative.lotStep,
-    warning:
-      `Using automatic broker consensus from ${selected.length} measured profile${selected.length === 1 ? "" : "s"} ` +
-      `in the ${snapshot.source.snapshotDate} snapshot. Live MT5/cTrader verification is not connected yet.`,
   };
 
   return {

@@ -767,14 +767,7 @@ export const Calculator = () => {
                       : calculation.specSource}
                 </span>
               </div>
-              {calculation.specSource === "broker-profile" ? (
-                <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
-                  Poscal automatically selected a consensus specification from{" "}
-                  {automaticBrokerResolution?.selectedProfiles.length ?? 0} measured broker profile
-                  {(automaticBrokerResolution?.selectedProfiles.length ?? 0) === 1 ? "" : "s"}.
-                  This is snapshot data, not live MT5/cTrader verification.
-                </p>
-              ) : calculation.spec.brokerSpecific && calculation.specSource === "poscal-fallback" ? (
+              {calculation.spec.brokerSpecific && calculation.specSource === "poscal-fallback" ? (
                 <p className="mt-3 border-t border-border/60 pt-3 leading-relaxed">
                   No complete broker consensus is available for this instrument, so Poscal Standard is being used.
                 </p>
