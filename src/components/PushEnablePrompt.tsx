@@ -1,9 +1,8 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle, Bell, CalendarDays, Loader2, Trophy } from "lucide-react";
+import { Bell, Loader2 } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -27,22 +26,22 @@ const PREVIEW_NOTIFICATIONS = [
     title: "USD Non-Farm Payrolls",
     body: "High-impact event starts in 15 minutes",
     time: "2m",
-    icon: CalendarDays,
-    iconClassName: "bg-brand/15 text-brand",
+    avatarSrc: "/push-prompt/cynthia.png",
+    showBadge: true,
   },
   {
     title: "Risk warning",
     body: "Trade size exceeds your 1% risk limit",
     time: "1h",
-    icon: AlertTriangle,
-    iconClassName: "bg-destructive/10 text-destructive",
+    avatarSrc: "/push-prompt/spark.png",
+    showBadge: false,
   },
   {
     title: "Journal milestone",
     body: "You've logged 50 trades this month",
     time: "2h",
-    icon: Trophy,
-    iconClassName: "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+    avatarSrc: "/push-prompt/kevin.png",
+    showBadge: true,
   },
 ] as const;
 
@@ -68,24 +67,30 @@ export const PushEnablePrompt = () => {
   const { user, loading: authLoading } = useAuth();
   const { checked, isSupported, isConfigured, isSubscribed, permission, loading, lastError, subscribe } =
     usePushNotifications();
+  const forcePreview =
+    import.meta.env.DEV &&
+    new URLSearchParams(location.search).has("previewPushPrompt");
+
   const [dismissedThisVisit, setDismissedThisVisit] = useState(false);
   const [snoozed, setSnoozed] = useState(false);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(forcePreview);
   const [attempted, setAttempted] = useState(false);
   const [iosInstallHint, setIosInstallHint] = useState(false);
 
-  const eligible = shouldShowPushEnablePrompt({
-    pathname: location.pathname,
-    isAuthenticated: Boolean(user),
-    authLoading,
-    checked,
-    isSupported,
-    isConfigured,
-    isSubscribed,
-    permission,
-    dismissedThisVisit,
-    snoozed,
-  });
+  const eligible =
+    forcePreview ||
+    shouldShowPushEnablePrompt({
+      pathname: location.pathname,
+      isAuthenticated: Boolean(user),
+      authLoading,
+      checked,
+      isSupported,
+      isConfigured,
+      isSubscribed,
+      permission,
+      dismissedThisVisit,
+      snoozed,
+    });
 
   useEffect(() => {
     setIosInstallHint(isIosBrowser() && !isStandaloneDisplay());
@@ -95,22 +100,27 @@ export const PushEnablePrompt = () => {
     setDismissedThisVisit(false);
     setSnoozed(isPushPromptSnoozed(user?.id));
     setAttempted(false);
-    setOpen(false);
-  }, [user?.id]);
+    if (!forcePreview) {
+      setOpen(false);
+    }
+  }, [user?.id, forcePreview]);
 
   useEffect(() => {
     if (!eligible) {
       setOpen(false);
       return;
     }
-    const timer = window.setTimeout(() => setOpen(true), OPEN_DELAY_MS);
+    const delay = forcePreview ? 0 : OPEN_DELAY_MS;
+    const timer = window.setTimeout(() => setOpen(true), delay);
     return () => window.clearTimeout(timer);
-  }, [eligible]);
+  }, [eligible, forcePreview]);
 
   const dismiss = () => {
     setDismissedThisVisit(true);
-    snoozePushPrompt(user?.id);
-    setSnoozed(true);
+    if (!forcePreview) {
+      snoozePushPrompt(user?.id);
+      setSnoozed(true);
+    }
     setOpen(false);
   };
 
@@ -149,103 +159,116 @@ export const PushEnablePrompt = () => {
     >
       <DialogContent
         className={cn(
-          "fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 bg-background p-0 shadow-none",
+          "fixed inset-0 left-0 top-0 z-50 flex h-[100dvh] max-h-[100dvh] w-screen max-w-none translate-x-0 translate-y-0 items-stretch justify-center gap-0 overflow-hidden rounded-none border-0 bg-[#F5F5F5] p-0 shadow-none dark:bg-background",
           "duration-300 data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-0 data-[state=closed]:slide-out-to-top-0 data-[state=open]:slide-in-from-bottom-2",
-          "[&>button]:hidden",
+          "font-sans [&>button]:hidden",
         )}
       >
-        <div className="mx-auto flex h-full w-full max-w-md flex-col px-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(2.5rem,env(safe-area-inset-top))]">
-          <div className="flex flex-1 flex-col">
-            <div className="space-y-3 pt-2 animate-fade-in">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-secondary text-muted-foreground">
-                <Bell className="h-5 w-5" strokeWidth={2.25} />
-              </div>
-              <DialogTitle className="font-display text-3xl font-bold tracking-tight text-foreground">
+        <div className="mx-auto flex h-full w-full max-w-[390px] flex-col px-[28px] pb-[max(18px,env(safe-area-inset-bottom))] pt-[max(52px,calc(env(safe-area-inset-top)+24px))]">
+          <header className="shrink-0 space-y-[14px] text-left">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#E9E9E9] dark:bg-secondary">
+              <Bell className="h-[17px] w-[17px] text-[#6B6B6B]" strokeWidth={2.2} />
+            </div>
+            <div className="space-y-[10px]">
+              <DialogTitle className="text-left text-[34px] font-bold leading-none tracking-[-0.035em] text-black dark:text-foreground">
                 Get Notified
               </DialogTitle>
-              <DialogDescription className="max-w-[18rem] text-base leading-relaxed text-muted-foreground">
-                Keep up with high-impact calendar events, risk alerts, and account updates from Poscal.
+              <DialogDescription className="max-w-[250px] text-left text-[15px] font-normal leading-[1.35] text-[#9A9A9A] dark:text-muted-foreground">
+                Keep up with high-impact events, risk alerts, and journal updates from Poscal.
               </DialogDescription>
             </div>
+          </header>
 
-            <div className="relative flex flex-1 items-center justify-center py-8 animate-slide-up">
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-x-8 top-6 bottom-10 rounded-[2.75rem] border-[1.5px] border-border/70 bg-secondary/30"
-              >
-                <div className="mx-auto mt-3 h-5 w-24 rounded-full bg-border/60" />
-              </div>
-
-              <ul className="relative z-10 flex w-full flex-col gap-3 px-1">
-                {PREVIEW_NOTIFICATIONS.map((item, index) => {
-                  const Icon = item.icon;
-                  return (
-                    <li
-                      key={item.title}
-                      className="flex items-start gap-3 rounded-2xl border border-border/60 bg-card px-3.5 py-3 shadow-sm animate-slide-up"
-                      style={{ animationDelay: `${80 + index * 70}ms` }}
-                    >
-                      <div
-                        className={cn(
-                          "mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full",
-                          item.iconClassName,
-                        )}
-                      >
-                        <Icon className="h-[18px] w-[18px]" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-foreground">{item.title}</p>
-                          <span className="shrink-0 text-xs text-muted-foreground">{item.time}</span>
-                        </div>
-                        <p className="mt-0.5 text-sm leading-snug text-muted-foreground">{item.body}</p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+          <div className="relative flex min-h-0 flex-1 items-center">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute left-1/2 top-[4%] h-[92%] w-[228px] -translate-x-1/2 rounded-[42px] border border-[#D6D6D6] dark:border-border/60"
+            >
+              <div className="mx-auto mt-3 h-[23px] w-[90px] rounded-full bg-[#D6D6D6] dark:bg-muted" />
             </div>
+
+            <ul className="relative z-10 w-full space-y-[14px]">
+              {PREVIEW_NOTIFICATIONS.map((item) => (
+                <li
+                  key={item.title}
+                  className="flex items-center gap-[12px] rounded-[22px] bg-white py-[14px] pl-[14px] pr-[16px] shadow-[0_10px_36px_rgba(0,0,0,0.07)] dark:bg-card dark:shadow-[0_10px_36px_rgba(0,0,0,0.4)]"
+                >
+                  <div className="relative h-11 w-11 shrink-0">
+                    <img
+                      src={item.avatarSrc}
+                      alt=""
+                      width={44}
+                      height={44}
+                      className="h-11 w-11 rounded-full object-cover"
+                      draggable={false}
+                    />
+                    {item.showBadge ? (
+                      <img
+                        src="/push-prompt/badge.png"
+                        alt=""
+                        width={18}
+                        height={18}
+                        className="absolute -bottom-0.5 -right-0.5 h-[18px] w-[18px] rounded-full shadow-[0_1px_3px_rgba(0,0,0,0.15)]"
+                        draggable={false}
+                      />
+                    ) : null}
+                  </div>
+                  <div className="min-w-0 flex-1 text-left">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="truncate text-[15px] font-semibold leading-[1.2] tracking-[-0.01em] text-black dark:text-foreground">
+                        {item.title}
+                      </p>
+                      <span className="shrink-0 pt-px text-[12px] font-medium text-[#B4B4B4]">
+                        {item.time}
+                      </span>
+                    </div>
+                    <p className="mt-[2px] truncate text-[13.5px] leading-[1.3] text-[#9A9A9A] dark:text-muted-foreground">
+                      {item.body}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <div className="space-y-3 pb-2 animate-fade-in" style={{ animationDelay: "180ms" }}>
+          <footer className="shrink-0 pt-1">
             {blocked ? (
-              <p className="text-center text-sm leading-relaxed text-muted-foreground">
+              <p className="mb-3 text-center text-sm leading-relaxed text-[#9A9A9A]">
                 Notifications are blocked for this browser. Allow them from the lock icon in the address bar, then come
                 back and turn them on.
               </p>
             ) : null}
 
             {iosInstallHint && !blocked ? (
-              <p className="text-center text-sm leading-relaxed text-muted-foreground">
+              <p className="mb-3 text-center text-sm leading-relaxed text-[#9A9A9A]">
                 On iPhone, add Poscal to your home screen first, open it from there, then turn notifications on.
               </p>
             ) : null}
 
             {attempted && lastError && !blocked ? (
-              <p className="text-center text-sm leading-relaxed text-destructive">{lastError}</p>
+              <p className="mb-3 text-center text-sm leading-relaxed text-destructive">{lastError}</p>
             ) : null}
 
             {blocked ? null : (
-              <Button
+              <button
                 type="button"
                 onClick={() => void enable()}
                 disabled={loading}
-                className="h-14 w-full rounded-full bg-foreground text-base font-semibold text-background hover:bg-foreground/90"
+                className="flex h-[54px] w-full items-center justify-center gap-2 rounded-full bg-black text-[16px] font-semibold text-white transition-transform active:scale-[0.985] disabled:opacity-60 dark:bg-foreground dark:text-background"
               >
-                {loading ? <Loader2 className="animate-spin" /> : null}
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                 Turn On Notifications
-              </Button>
+              </button>
             )}
 
-            <Button
+            <button
               type="button"
-              variant="ghost"
               onClick={dismiss}
-              className="h-11 w-full rounded-full text-base font-medium text-muted-foreground hover:bg-transparent hover:text-foreground"
+              className="mt-1 flex h-11 w-full items-center justify-center text-[15px] font-medium text-[#9A9A9A] transition-colors hover:text-black dark:text-muted-foreground dark:hover:text-foreground"
             >
               Not Right Now
-            </Button>
-          </div>
+            </button>
+          </footer>
         </div>
       </DialogContent>
     </Dialog>
