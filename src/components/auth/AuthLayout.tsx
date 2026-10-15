@@ -1,5 +1,6 @@
 import { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import poscalLogo from "@/assets/poscal-logo.png";
 import poscalLogoLight from "@/assets/poscal-logo-light.png";
 import { cn } from "@/lib/utils";
 
@@ -18,9 +19,14 @@ export const AuthLayout = ({ title, subtitle, children, footer, banner }: AuthLa
         <div className="animate-fade-in text-center">
           <div className="relative mx-auto mb-8 h-16 w-full max-w-[340px] overflow-hidden sm:h-[4.5rem]">
             <img
+              src={poscalLogo}
+              alt="Poscal"
+              className="absolute left-1/2 top-1/2 w-full max-w-[340px] -translate-x-1/2 -translate-y-1/2 dark:hidden"
+            />
+            <img
               src={poscalLogoLight}
               alt="Poscal"
-              className="absolute left-1/2 top-1/2 w-full max-w-[340px] -translate-x-1/2 -translate-y-1/2 dark:brightness-110 dark:contrast-125"
+              className="absolute left-1/2 top-1/2 hidden w-full max-w-[340px] -translate-x-1/2 -translate-y-1/2 dark:block"
             />
           </div>
 
