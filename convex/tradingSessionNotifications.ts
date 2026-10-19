@@ -2,7 +2,7 @@ import { v } from "convex/values";
 
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
-import { SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
+import { NOTIFICATION_PAGE_DELAY_MS, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
 import {
   isJournalLogReminderHour,
   journalLogReminderDeliveryKey,
@@ -11,7 +11,7 @@ import {
   utcDateKey,
 } from "./lib/tradingSessionAlerts";
 
-const JOURNAL_REMINDER_PAGE_SIZE = 25;
+const JOURNAL_REMINDER_PAGE_SIZE = SUBSCRIBER_ALERT_PAGE_SIZE;
 
 /**
  * Fire once when a UTC forex session opens. Idempotent via notification tag + deliveryKey.
@@ -85,7 +85,7 @@ export const enqueueDueSessionAlert = internalMutation({
     }
 
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.tradingSessionNotifications.enqueueDueSessionAlert, {
+      await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.tradingSessionNotifications.enqueueDueSessionAlert, {
         nowMs: now,
         cursor: page.continueCursor,
       });
@@ -207,7 +207,7 @@ export const enqueueDueJournalLogReminders = internalMutation({
     }
 
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.tradingSessionNotifications.enqueueDueJournalLogReminders, {
+      await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.tradingSessionNotifications.enqueueDueJournalLogReminders, {
         nowMs: now,
         cursor: page.continueCursor,
       });

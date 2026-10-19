@@ -10,11 +10,20 @@ export const CALENDAR_ALERT_GRACE_MS = 30 * 60 * 1000;
  */
 export const CALENDAR_ALERT_HORIZON_MS = 7 * 24 * 60 * 60 * 1000;
 
-/** One worker pass. A full pass schedules another so the rest still go out. */
-export const NOTIFICATION_BATCH_LIMIT = 50;
+/**
+ * One worker pass. A full pass schedules another so the rest still go out.
+ * Kept small so a backlog cannot occupy the only Convex worker ahead of login.
+ */
+export const NOTIFICATION_BATCH_LIMIT = 20;
 
 /** Device rows written per enqueue transaction. The next page continues the rest. */
-export const SUBSCRIBER_ALERT_PAGE_SIZE = 25;
+export const SUBSCRIBER_ALERT_PAGE_SIZE = 8;
+
+/** Gap between subscriber pages so interactive queries can run. */
+export const NOTIFICATION_PAGE_DELAY_MS = 5_000;
+
+/** Gap before the next delivery pass. Immediate rescheduling pinned the backend. */
+export const NOTIFICATION_DRAIN_DELAY_MS = 15_000;
 
 export type NotificationChannel = "push" | "email" | "in_app";
 

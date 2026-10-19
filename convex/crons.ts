@@ -8,8 +8,8 @@ crons.interval(
   "process notification queue",
   { minutes: 1 },
   internal.notificationsNode.processPendingBatch,
-  // Each pass claims a bounded batch. A full batch schedules the next pass immediately.
-  { limit: 50 },
+  // Each pass claims a bounded batch. A full batch schedules another pass after a short gap.
+  { limit: 20 },
 );
 
 // Keep pulling the free Forex Factory week feed. force skips the short burst gate

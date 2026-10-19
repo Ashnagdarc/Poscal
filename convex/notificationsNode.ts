@@ -6,7 +6,12 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { sendBrevoEmail } from "./lib/brevoEmail";
-import { classifyPushFailure, NOTIFICATION_BATCH_LIMIT, shouldDrainAnotherBatch } from "./lib/notificationStaging";
+import {
+  classifyPushFailure,
+  NOTIFICATION_BATCH_LIMIT,
+  NOTIFICATION_DRAIN_DELAY_MS,
+  shouldDrainAnotherBatch,
+} from "./lib/notificationStaging";
 import { internalAction } from "./_generated/server";
 
 const DEFAULT_BATCH_LIMIT = NOTIFICATION_BATCH_LIMIT;
@@ -281,7 +286,7 @@ export const processPendingBatch = internalAction({
     }
 
     if (shouldDrainAnotherBatch(claimed.length, limit)) {
-      await ctx.scheduler.runAfter(0, internal.notificationsNode.processPendingBatch, { limit });
+      await ctx.scheduler.runAfter(NOTIFICATION_DRAIN_DELAY_MS, internal.notificationsNode.processPendingBatch, { limit });
     }
 
     return summary;

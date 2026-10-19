@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { selectClaimBatch, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
+import { NOTIFICATION_PAGE_DELAY_MS, selectClaimBatch, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
 import { internalMutation, internalQuery, mutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -155,7 +155,7 @@ export const enqueueDevicePushes = internalMutation({
     }
 
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.notifications.enqueueDevicePushes, {
+      await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.notifications.enqueueDevicePushes, {
         userId: null,
         title: args.title,
         body: args.body,

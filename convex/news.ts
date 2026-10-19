@@ -8,6 +8,7 @@ import { economicEventWrite } from "./lib/economicEventMerge";
 import {
   CALENDAR_ALERT_GRACE_MS,
   CALENDAR_ALERT_HORIZON_MS,
+  NOTIFICATION_PAGE_DELAY_MS,
   planCalendarAlert,
   SUBSCRIBER_ALERT_PAGE_SIZE,
 } from "./lib/notificationStaging";
@@ -599,7 +600,7 @@ export const queueHighImpactAlerts = internalMutation({
       case "skip": {
         const hasAnotherEvent = eventIndex + 1 < args.events.length;
         if (hasAnotherEvent) {
-          await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+          await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.news.queueHighImpactAlerts, {
             events: args.events,
             eventIndex: eventIndex + 1,
             cursor: null,
@@ -674,7 +675,7 @@ export const queueHighImpactAlerts = internalMutation({
     }
 
     if (!page.isDone) {
-      await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+      await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.news.queueHighImpactAlerts, {
         events: args.events,
         eventIndex,
         cursor: page.continueCursor,
@@ -684,7 +685,7 @@ export const queueHighImpactAlerts = internalMutation({
 
     const hasAnotherEvent = eventIndex + 1 < args.events.length;
     if (hasAnotherEvent) {
-      await ctx.scheduler.runAfter(0, internal.news.queueHighImpactAlerts, {
+      await ctx.scheduler.runAfter(NOTIFICATION_PAGE_DELAY_MS, internal.news.queueHighImpactAlerts, {
         events: args.events,
         eventIndex: eventIndex + 1,
         cursor: null,
