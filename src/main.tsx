@@ -24,7 +24,6 @@ try {
   // ignore
 }
 
-const SW_REGISTRATION_TIMEOUT_MS = 5000;
 /** Check CDN + SW for a new release more often so sessions don't stick to a stale shell. */
 const UPDATE_POLL_MS = 60 * 1000;
 
@@ -78,32 +77,16 @@ const ENABLE_SW =
 if (ENABLE_SW && "serviceWorker" in navigator) {
   const registerServiceWorker = async () => {
     try {
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("SW registration timeout")), SW_REGISTRATION_TIMEOUT_MS),
-      );
-
-      const existingRegistration = await navigator.serviceWorker.getRegistration("/");
-      const registrationPromise = existingRegistration
-        ? Promise.resolve(existingRegistration)
-        : navigator.serviceWorker.register("/sw.js", { scope: "/" });
-
-      const registration = await Promise.race([
-        registrationPromise,
-        timeoutPromise,
-      ]) as ServiceWorkerRegistration;
-
-      // Always re-register against the latest URL so Vercel deploys can replace
-      // a stale worker that was installed from an older build.
-      if (existingRegistration) {
-        await navigator.serviceWorker.register("/sw.js", { scope: "/" });
-      }
-
+      // Always re-register against the latest URL so a deploy can replace a
+      // worker left in `waiting`. A short race here used to abandon that
+      // registration while push setup was still waiting for it to activate.
+      const registration = await navigator.serviceWorker.register("/sw.js", { scope: "/" });
       const latest = (await navigator.serviceWorker.getRegistration("/")) ?? registration;
       watchRegistrationForUpdates(latest);
       requestUpdateCheck(latest);
       if (import.meta.env.DEV) console.log("[sw] Service worker registered:", latest);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("[sw] Failed to register service worker:", error);
+      console.error("[sw] Failed to register service worker:", error);
     }
   };
 

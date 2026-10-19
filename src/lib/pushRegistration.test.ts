@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isBrowserSubscriptionRegistered,
+  pushSetupErrorMessage,
   shouldRotatePushSubscription,
 } from "@/lib/pushRegistration";
 
@@ -33,5 +34,22 @@ describe("push registration state", () => {
       ),
     ).toBe(true);
     expect(shouldRotatePushSubscription(new Error("Not authenticated"))).toBe(false);
+  });
+});
+
+describe("push setup errors", () => {
+  it("names a service worker failure instead of a Poscal timeout", () => {
+    expect(pushSetupErrorMessage(new Error("Service worker did not become active"))).toMatch(
+      /service worker did not activate/i,
+    );
+    expect(pushSetupErrorMessage(new Error("Service Worker ready timeout"))).not.toMatch(
+      /contacting Poscal/i,
+    );
+  });
+
+  it("keeps a real server timeout distinct", () => {
+    expect(pushSetupErrorMessage(new Error("Server request timeout"))).toMatch(
+      /contacting Poscal/i,
+    );
   });
 });

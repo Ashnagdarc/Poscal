@@ -1,7 +1,7 @@
 // Service Worker for Push Notifications with Workbox
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/7.0.0/workbox-sw.js');
 
-const SW_VERSION = 'v30-update-cache-bust';
+const SW_VERSION = 'v31-activate-first-worker';
 const isDev = self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1';
 
 // Conditional logging helper
@@ -144,6 +144,12 @@ workbox.routing.setCatchHandler(async ({ request }) => {
 
 self.addEventListener('install', (event) => {
   log(`Installing ${SW_VERSION}...`);
+  // The first worker has nobody to wait behind. Leaving it in `waiting`
+  // makes navigator.serviceWorker.ready hang, so push setup never starts.
+  // An update that replaces a live worker still waits for the in-app prompt.
+  if (!self.registration.active) {
+    event.waitUntil(self.skipWaiting());
+  }
 });
 
 self.addEventListener('message', (event) => {

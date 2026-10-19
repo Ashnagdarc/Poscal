@@ -13,10 +13,10 @@ import { useMutation, useQuery } from "convex/react";
 import { api as convexApi } from "../../convex/_generated/api";
 import { useAuth } from "@/contexts/AuthContext";
 import { logger } from "@/lib/logger";
-import { isBrowserSubscriptionRegistered, shouldRotatePushSubscription } from "@/lib/pushRegistration";
+import { isBrowserSubscriptionRegistered, pushSetupErrorMessage, shouldRotatePushSubscription } from "@/lib/pushRegistration";
+import { ensurePushServiceWorker } from "@/lib/pushServiceWorker";
 
 const PERMISSION_REQUEST_TIMEOUT_MS = 10_000;
-const SW_READY_TIMEOUT_MS = 5_000;
 const SERVER_REQUEST_TIMEOUT_MS = 15_000;
 
 const VAPID_PUBLIC_KEY =
@@ -65,25 +65,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promi
       window.setTimeout(() => reject(new Error(message)), ms);
     }),
   ]);
-}
-
-function pushErrorMessage(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error ?? "");
-
-  if (/not authenticated|authentication|unauthorized/i.test(message)) {
-    return "Your Poscal session is not ready. Sign in again, then retry.";
-  }
-  if (/credentials do not match/i.test(message)) {
-    return "This browser has a stale push subscription. Disable notifications in your browser, refresh Poscal, then enable them again.";
-  }
-  if (/timeout/i.test(message)) {
-    return "Push setup timed out while contacting Poscal. Please try again.";
-  }
-  if (/network|fetch|connection|offline/i.test(message)) {
-    return "Poscal could not reach the notification service. Check your connection and try again.";
-  }
-
-  return "Poscal could not save this device for push notifications. Please try again.";
 }
 
 const PushNotificationsContext =
@@ -140,17 +121,16 @@ function usePushNotificationsState(): UsePushNotificationsResult {
       setPermission(Notification.permission);
 
       try {
-        // navigator.serviceWorker.ready is the correct readiness signal.
-        // A newly installed worker may exist before navigator.serviceWorker.controller does.
-        const registration = await withTimeout(
-          navigator.serviceWorker.ready,
-          SW_READY_TIMEOUT_MS,
-          "Service Worker ready timeout",
-        );
+        // Do not wait on navigator.serviceWorker.ready here. That promise stays
+        // pending until a worker is active, so a first install or a waiting
+        // worker used to fail this check after 5 seconds.
+        const registration = await navigator.serviceWorker.getRegistration("/");
         if (cancelled) return;
 
-        setSwRegistration(registration);
-        const subscription = await registration.pushManager.getSubscription();
+        setSwRegistration(registration ?? null);
+        const subscription = registration
+          ? await registration.pushManager.getSubscription()
+          : null;
         if (cancelled) return;
 
         setBrowserSubscription(subscription);
@@ -233,13 +213,9 @@ function usePushNotificationsState(): UsePushNotificationsResult {
     setLoading(true);
 
     try {
-      let registration = swRegistration;
+      let registration = swRegistration?.active ? swRegistration : null;
       if (!registration) {
-        registration = await withTimeout(
-          navigator.serviceWorker.ready,
-          SW_READY_TIMEOUT_MS,
-          "Service Worker ready timeout",
-        );
+        registration = await ensurePushServiceWorker();
         setSwRegistration(registration);
       }
 
@@ -361,7 +337,7 @@ function usePushNotificationsState(): UsePushNotificationsResult {
       return "subscribed";
     } catch (error) {
       logger.error("[push] Push registration failed:", error);
-      setLastError(pushErrorMessage(error));
+      setLastError(pushSetupErrorMessage(error));
       return false;
     } finally {
       setLoading(false);
@@ -414,12 +390,15 @@ function usePushNotificationsState(): UsePushNotificationsResult {
     setLoading(true);
     try {
       const registration =
-        swRegistration ??
-        (await withTimeout(
-          navigator.serviceWorker.ready,
-          SW_READY_TIMEOUT_MS,
-          "Service Worker ready timeout",
-        ));
+        swRegistration
+        ?? (await navigator.serviceWorker.getRegistration("/"))
+        ?? null;
+      if (!registration) {
+        setBrowserSubscription(null);
+        setOptimisticEndpoint(null);
+        setIsSubscribed(false);
+        return true;
+      }
       const subscription =
         browserSubscription ?? (await registration.pushManager.getSubscription());
 
@@ -446,7 +425,7 @@ function usePushNotificationsState(): UsePushNotificationsResult {
       return true;
     } catch (error) {
       logger.error("[push] Error unsubscribing from push:", error);
-      setLastError(pushErrorMessage(error));
+      setLastError(pushSetupErrorMessage(error));
       return false;
     } finally {
       setLoading(false);

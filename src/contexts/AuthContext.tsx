@@ -207,10 +207,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       && "PushManager" in window
     ) {
       try {
-        const registration = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise<null>((resolve) => window.setTimeout(() => resolve(null), 2_000)),
-        ]);
+        const registration = (await navigator.serviceWorker.getRegistration("/")) ?? null;
 
         if (registration) {
           const subscription = await registration.pushManager.getSubscription();
