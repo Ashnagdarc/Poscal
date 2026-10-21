@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { assertConvexTarget } from "./guard-convex-target.mjs";
 
 const run = (command, args, env = process.env) => {
   const result = spawnSync(command, args, {
@@ -16,102 +17,18 @@ const run = (command, args, env = process.env) => {
   return result.status ?? 1;
 };
 
-// Verify before any backend deployment, so a test failure cannot remove APIs
-// from the running app while leaving the previous frontend in production.
+// Frontend builds never deploy Convex. Backend releases use the separately
+// reviewed self-hosted staging/production commands in package.json.
 run("npm", ["run", "gate:fx"]);
 if (process.exitCode) process.exit(process.exitCode);
 
-if (process.env.VERCEL_ENV === "preview") {
-  // Billing previews reuse Poscal's isolated Convex development deployment.
-  // This deliberately avoids disposable Convex preview deployments and
-  // never falls back to the production backend.
-  const devDeploymentName = "valuable-axolotl-815";
-  const devConvexUrl = `https://${devDeploymentName}.convex.cloud`;
-  const devDeployKey = (process.env.CONVEX_DEV_DEPLOY_KEY || "").trim();
-
-  if (devDeployKey) {
-    if (
-      !devDeployKey.startsWith(`dev:${devDeploymentName}|`)
-    ) {
-      console.error(
-        "[convex-preview] CONVEX_DEV_DEPLOY_KEY must be scoped to valuable-axolotl-815.",
-      );
-      process.exit(1);
-    }
-    console.log(
-      "[convex-preview] pushing branch functions to isolated dev backend",
-      devDeploymentName,
-    );
-    run(
-      "npx",
-      ["convex", "dev", "--once"],
-      { ...process.env, CONVEX_DEPLOY_KEY: devDeployKey },
-    );
-    if (process.exitCode) process.exit(process.exitCode);
-  } else {
-    console.warn(
-      "[convex-preview] CONVEX_DEV_DEPLOY_KEY is not configured; frontend will build against the existing dev backend without pushing branch functions.",
-    );
-  }
-
-  console.log(
-    "[convex-preview] building against isolated dev backend",
-    devConvexUrl,
-  );
-  run("npm", ["run", "build"], {
-    ...process.env,
-    VITE_CONVEX_URL: devConvexUrl,
-  });
-  process.exit(process.exitCode ?? 0);
-}
-if (process.env.VERCEL_ENV !== "production") {
-  run("npm", ["run", "build"]);
-  process.exit(process.exitCode ?? 0);
-}
-
-// Compile once before deploying. Convex's --cmd below rebuilds with its exact URL.
-run("npm", ["run", "build"]);
-if (process.exitCode) process.exit(process.exitCode);
-
-const deploymentName = "helpful-sturgeon-546";
-const token = (process.env.CONVEX_DEPLOY_TOKEN || "").trim();
-const configured = (process.env.CONVEX_DEPLOY_KEY || "").trim();
-
-let deployKey = "";
-
-if (token) {
-  deployKey = `prod:${deploymentName}|${token}`;
-} else if (configured.startsWith("prod:") && configured.includes("|")) {
-  deployKey = configured;
-} else if (configured && !configured.includes("|") && !configured.startsWith("prod:")) {
-  // Backward-compatible path for Vercel values that contain only the token fragment.
-  deployKey = `prod:${deploymentName}|${configured}`;
-}
-
-if (!deployKey) {
-  console.error("[convex-deploy] No usable production deploy credential was found.");
+const target = process.env.VERCEL_ENV === "production" ? "production" : "staging";
+try {
+  assertConvexTarget({ action: "build", target, env: process.env });
+} catch (error) {
+  console.error(`[frontend-build] ${error instanceof Error ? error.message : String(error)}`);
   process.exit(1);
 }
 
-console.log(
-  "[convex-deploy] credential ready",
-  JSON.stringify({
-    source: token ? "CONVEX_DEPLOY_TOKEN" : configured.includes("|") ? "CONVEX_DEPLOY_KEY" : "CONVEX_DEPLOY_KEY_TOKEN_FRAGMENT",
-    deployment: deploymentName,
-  }),
-);
-
-run(
-  "npx",
-  [
-    "convex",
-    "deploy",
-    "--cmd-url-env-var-name",
-    "VITE_CONVEX_URL",
-    "--cmd",
-    "npm run build",
-  ],
-  { ...process.env, CONVEX_DEPLOY_KEY: deployKey },
-);
-
+run("npm", ["run", "build"]);
 process.exit(process.exitCode ?? 0);

@@ -83,19 +83,24 @@ Rebuild only:
 - notification processing
 
 
-## Production deployment coupling
+## Production release separation
 
-Vercel production builds deploy the Convex backend and frontend from the same Git revision. Preview builds do not touch production Convex.
-
-Production command:
-
-```sh
-npx convex deploy --cmd-url-env-var-name VITE_CONVEX_URL --cmd 'npm run gate:fx && npm run build'
-```
+Frontend builds do not deploy Convex. Backend releases are reviewed and pushed
+separately to the self-hosted deployment with an explicit target guard.
 
 Safety rules:
 
-- `CONVEX_DEPLOY_KEY` is configured for Vercel Production only.
-- Preview deployments run the quality gate and frontend build without deploying Convex.
-- Convex schema validation must pass before backend changes are pushed.
-- Instrument additions do not require a data migration because trade symbols are stored as strings.
+- Never configure `CONVEX_DEPLOY_KEY` or target `*.convex.cloud`.
+- Pull requests run CI and rehearse backend/schema changes on an isolated
+  self-hosted staging deployment.
+- Production releases use `CONVEX_SELF_HOSTED_URL` and
+  `CONVEX_SELF_HOSTED_ADMIN_KEY` through `npm run convex:deploy:production`.
+- Convex schema validation and the full quality gate must pass before backend
+  functions are pushed.
+- Create and verify a fresh off-server backup immediately before a production
+  backend or data migration release.
+- Instrument additions do not require a data migration because trade symbols
+  are stored as strings.
+
+See `docs/DATABASE_RELEASE_AND_RECOVERY.md` for staging, backup, restore and
+migration-review procedures.

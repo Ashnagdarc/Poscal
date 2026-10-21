@@ -64,6 +64,7 @@ exports/
 # Vercel
 .vercel
 .env*
+!.env.staging.example
 
 # Test / coverage artifacts
 coverage/

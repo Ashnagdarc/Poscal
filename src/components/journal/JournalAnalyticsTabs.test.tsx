@@ -4,6 +4,7 @@ import { JournalAnalyticsTabs } from "./JournalAnalyticsTabs";
 import type { JournalTradeStatsSnapshot } from "@/hooks/queries/use-journal-trade-stats";
 
 vi.mock("@/contexts/CurrencyContext", () => ({ useCurrency: () => ({ currency: { symbol: "$" } }) }));
+vi.mock("@/contexts/SubscriptionContext", () => ({ useSubscription: () => ({ hasPro: true }) }));
 vi.mock("@/components/evilcharts/charts/echarts-area-chart", () => ({ EChartsAreaChart: () => null }));
 
 const stats: JournalTradeStatsSnapshot = {

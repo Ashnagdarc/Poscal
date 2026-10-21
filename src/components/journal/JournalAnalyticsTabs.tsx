@@ -481,6 +481,17 @@ export const JournalAnalyticsTabs = ({
     );
   }
 
+  if (!serverStats && canLoadMoreTrades) {
+    return (
+      <div
+        role="status"
+        className="rounded-2xl bg-secondary px-4 py-8 text-center text-sm text-muted-foreground"
+      >
+        Preparing complete lifetime statistics…
+      </div>
+    );
+  }
+
   if (!hasPro) return <div className="space-y-4">
     <div className="grid grid-cols-3 gap-2 rounded-2xl bg-secondary p-3"><MetricCard label="Net P&L" value={formatJournalMoney(stats.totalPnl, currency.symbol)} /><MetricCard label="Win rate" value={formatJournalPercent(stats.winRate)} /><MetricCard label="Trades" value={String(stats.totalTrades)} /></div>
     <button className="w-full rounded-2xl border border-border bg-muted/40 p-5 text-left" onClick={() => openPro("Unlock full analytics")}><h3 className="font-semibold">Full analytics · Poscal Pro</h3><p className="mt-2 text-sm text-muted-foreground">Unlock drawdown, expectancy, strategy and session breakdowns, and equity charts.</p></button>
@@ -528,7 +539,7 @@ export const JournalAnalyticsTabs = ({
           </TabsTrigger>
         </TabsList>
 
-        {trades.length === 0 ? (
+        {stats.totalTrades === 0 ? (
           <div className="mt-4">
             <EmptyState onAddTrade={onAddTrade} />
           </div>
@@ -637,6 +648,15 @@ export const JournalAnalyticsTabs = ({
             </TabsContent>
 
             <TabsContent value="insights" className="mt-4 space-y-4">
+              {!serverPerformance ? (
+                <div
+                  role="status"
+                  className="rounded-2xl bg-secondary px-4 py-8 text-center text-sm text-muted-foreground"
+                >
+                  Preparing complete performance history…
+                </div>
+              ) : (
+                <>
               <section className="rounded-2xl bg-secondary p-3 sm:p-4">
                 <div className="mb-3">
                   <h3 className="text-base font-bold text-foreground">Trade Statistics</h3>
@@ -719,8 +739,11 @@ export const JournalAnalyticsTabs = ({
                   />
                 </div>
               </section>
+                </>
+              )}
             </TabsContent>
 
+            {serverPerformance ? (
             <TabsContent value="insights" className="mt-4 space-y-4">
               <BreakdownSection
                 title="By Strategy"
@@ -799,6 +822,7 @@ export const JournalAnalyticsTabs = ({
                 </div>
               </section>
             </TabsContent>
+            ) : null}
 
             <TabsContent value="charts" className="mt-4 space-y-4">
               <section className="overflow-hidden rounded-2xl bg-secondary p-3 sm:p-4">

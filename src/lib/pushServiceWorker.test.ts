@@ -3,10 +3,23 @@ import { waitForActivePushWorker } from "@/lib/pushServiceWorker";
 
 function fakeWorker(state: ServiceWorkerState) {
   const worker = new EventTarget() as ServiceWorker;
-  worker.state = state;
-  worker.postMessage = vi.fn();
+  Object.defineProperty(worker, "state", { configurable: true, value: state });
+  Object.defineProperty(worker, "postMessage", {
+    configurable: true,
+    value: vi.fn(),
+    writable: true,
+  });
   return worker;
 }
+
+const setWorkerState = (worker: ServiceWorker, state: ServiceWorkerState) =>
+  Object.defineProperty(worker, "state", { configurable: true, value: state });
+
+const setRegistrationWorker = (
+  registration: ServiceWorkerRegistration,
+  key: "active" | "installing" | "waiting",
+  worker: ServiceWorker | null,
+) => Object.defineProperty(registration, key, { configurable: true, value: worker });
 
 function fakeRegistration(partial: {
   active?: ServiceWorker | null;
@@ -33,8 +46,8 @@ describe("waitForActivePushWorker", () => {
     const waiting = fakeWorker("installed");
     const registration = fakeRegistration({ waiting });
     waiting.postMessage = vi.fn(() => {
-      waiting.state = "activated";
-      registration.active = waiting;
+      setWorkerState(waiting, "activated");
+      setRegistrationWorker(registration, "active", waiting);
       waiting.dispatchEvent(new Event("statechange"));
     });
 
@@ -47,8 +60,8 @@ describe("waitForActivePushWorker", () => {
     const registration = fakeRegistration({ installing });
     const pending = waitForActivePushWorker(registration, 50);
 
-    installing.state = "redundant";
-    registration.installing = null;
+    setWorkerState(installing, "redundant");
+    setRegistrationWorker(registration, "installing", null);
     installing.dispatchEvent(new Event("statechange"));
 
     await expect(pending).rejects.toThrow(/failed to install/i);
