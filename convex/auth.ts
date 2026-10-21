@@ -6,15 +6,16 @@ import { internal } from "./_generated/api";
 import { BrevoOTP } from "./BrevoOTP";
 import { BrevoOTPPasswordReset } from "./BrevoOTPPasswordReset";
 import { isEmailVerificationRequired } from "./lib/emailVerificationPolicy";
+import { canAdoptOrphanProfile, resolveOwnedProfilePrivileges } from "./lib/authProfilePrivileges";
 
 const MIN_PASSWORD_LENGTH = 10;
 
 /*
- * Email verification kill-switch:
+ * Email verification rollout switch:
  * - Default OFF via REQUIRE_EMAIL_VERIFICATION unset/false → no Password `verify`
  *   provider; sign-up/sign-in issue sessions without OTP (OTP code paths stay in repo).
  * - Set REQUIRE_EMAIL_VERIFICATION=true (or "1") in Convex env + redeploy to re-enable
- *   hard verification (MC-010).
+ *   hard verification (MC-010) after Brevo is configured and tested.
  *   npx convex env set REQUIRE_EMAIL_VERIFICATION true
  */
 const requireEmailVerification = isEmailVerificationRequired();
@@ -42,7 +43,9 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
           email,
           ...(rawName ? { name: rawName, fullName: rawName } : {}),
           role: "user",
-
+          paymentStatus: "free",
+          subscriptionTier: "free",
+          subscriptionExpiresAtMs: null,
           avatarUrl: null,
           image: null,
         };
@@ -61,9 +64,18 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       // Credentials sign-up only. Sign-in and a later verification pass set existingUserId.
       if (args.existingUserId === null && args.type === "credentials") {
         const rawName = (user.fullName ?? user.name ?? "").trim();
-        await ctx.scheduler.runAfter(0, internal.welcomeEmail.sendWelcome, {
+        // When verification is enabled, BrevoOTP already sends the combined
+        // verification + welcome message, so do not send a duplicate welcome.
+        if (!requireEmailVerification) {
+          await ctx.scheduler.runAfter(0, internal.welcomeEmail.sendWelcome, {
+            email,
+            name: rawName,
+          });
+        }
+        await ctx.scheduler.runAfter(0, internal.brevoContacts.syncContact, {
+          userId: args.userId,
           email,
-          name: rawName,
+          fullName: rawName || null,
         });
       }
 
@@ -78,15 +90,11 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         .withIndex("by_email", (q: any) => q.eq("email", email))
         .first();
 
-      // Only adopt orphan email profiles (no other auth user bound). Never steal
-      // role/payment from a profile already linked to someone else (soft-verify risk).
-      const emailBoundTo = (byEmail?.externalUserId ?? "").trim();
-      const orphanLegacy =
-        byEmail
-        && byEmail._id !== byUserId?._id
-        && (!emailBoundTo || emailBoundTo === args.userId)
-          ? byEmail
-          : null;
+      // Never overwrite an ID-linked profile with a secondary email match.
+      // Rebinding an actual orphan does not import its admin/paid privileges.
+      const orphanLegacy = canAdoptOrphanProfile(args.userId, Boolean(byUserId), byEmail)
+        ? byEmail
+        : null;
 
       const avatarSource = orphanLegacy ?? byUserId;
       const avatarUrl =
@@ -95,15 +103,16 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
         avatarSource?.avatarUrl ??
         null;
 
-      // Privileges come from the auth user / own profile only — not from email matches.
-      const privilegeSource = byUserId;
+      // An existing ID-linked profile is authoritative. Convex Auth can carry
+      // a stale "user"/"free" default after verification; never overwrite an
+      // owned admin/paid profile with those defaults.
+      const privileges = resolveOwnedProfilePrivileges(user, byUserId);
       const payload = {
         externalUserId: args.userId,
         email,
         fullName: user.fullName ?? user.name ?? avatarSource?.fullName ?? null,
         avatarUrl,
-        role: user.role ?? privilegeSource?.role ?? "user",
-
+        ...privileges,
         updatedAtMs: Date.now(),
       };
 
@@ -118,17 +127,27 @@ export const { auth, signIn, signOut, store, isAuthenticated } = convexAuth({
       if (orphanLegacy) {
         await db.patch(orphanLegacy._id, {
           ...payload,
-          // Preserve orphan display fields; do not import their paid/admin state.
-          role: privilegeSource?.role ?? user.role ?? "user",
-
+          // Source is the authenticated user, NOT the legacy email match.
         });
-        if (byUserId && byUserId._id !== orphanLegacy._id) {
-          await db.delete(byUserId._id);
-        }
         return;
       }
 
       if (byUserId) {
+        // Keep the auth-user mirror aligned with the canonical owned profile.
+        // Admin mutations write both records; auth verification must not
+        // silently demote an administrator or reset paid entitlements.
+        const userPrivilegePatch = {
+          ...(user.role !== privileges.role ? { role: privileges.role } : {}),
+          ...(user.paymentStatus !== privileges.paymentStatus
+            ? { paymentStatus: privileges.paymentStatus } : {}),
+          ...(user.subscriptionTier !== privileges.subscriptionTier
+            ? { subscriptionTier: privileges.subscriptionTier } : {}),
+          ...(user.subscriptionExpiresAtMs !== privileges.subscriptionExpiresAtMs
+            ? { subscriptionExpiresAtMs: privileges.subscriptionExpiresAtMs } : {}),
+        };
+        if (Object.keys(userPrivilegePatch).length > 0) {
+          await ctx.db.patch(args.userId, userPrivilegePatch);
+        }
         await db.patch(byUserId._id, {
           ...payload,
           avatarUrl: avatarUrl ?? byUserId.avatarUrl ?? null,

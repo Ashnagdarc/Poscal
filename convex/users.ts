@@ -2,6 +2,7 @@ import { getProAccess } from "./lib/proAccess";
 import { getAuthSessionId, getAuthUserId } from "@convex-dev/auth/server";
 import { v } from "convex/values";
 
+import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { requireAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
 import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
@@ -206,6 +207,13 @@ export const updateViewerProfile = mutation({
     }
 
     const updated = await ctx.db.get(userId);
+    if (updated?.email) {
+      await ctx.scheduler.runAfter(0, internal.brevoContacts.syncContact, {
+        userId,
+        email: updated.email,
+        fullName: updated.fullName ?? updated.name ?? null,
+      });
+    }
     return {
       id: updated!._id,
       email: updated!.email ?? null,
@@ -662,6 +670,12 @@ export const deleteAccount = mutation({
       }
       await ctx.db.delete(account._id);
       counts.authAccounts += 1;
+    }
+
+    if (user.email) {
+      await ctx.scheduler.runAfter(0, internal.brevoContacts.removeContact, {
+        email: user.email,
+      });
     }
 
     await ctx.db.delete(userId);
