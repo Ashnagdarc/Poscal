@@ -11,7 +11,7 @@ development must never use that deployment.
 | Development | local Convex or a developer-only self-hosted deployment | synthetic data | normal implementation work |
 | Staging | a separate self-hosted Convex installation | synthetic or explicitly approved snapshot | release and migration rehearsal |
 | Production | `https://convex.poscalfx.com` on Openship | live user data | reviewed releases only |
-| Cloud DR standby | `helpful-sturgeon-546` in the existing `Poscalfx` project | daily replace-all snapshot | recovery only; never normal app traffic |
+| Cloud DR standby | `helpful-sturgeon-546` in the existing `Poscalfx` project | paused; manual replace-all only | recovery only; never normal app traffic |
 
 Convex Cloud is not a normal Poscal deployment target. The repository guards
 continue to reject `*.convex.cloud` for builds, releases and application
@@ -77,12 +77,16 @@ remain after any manual deletion.
 
 ## Convex Cloud DR refresh
 
-The `Convex Cloud DR refresh` GitHub Actions workflow runs at 04:30 Africa/Lagos,
-after the Openship backup window. It exports the self-hosted production data and
-file storage directly to an ephemeral GitHub runner, validates the ZIP, imports
-it atomically with `--replace-all` into `helpful-sturgeon-546`, and compares
-critical table counts. The ZIP is never uploaded as a GitHub artifact and is
-deleted from the runner after the job.
+The `Convex Cloud DR refresh` GitHub Actions workflow is manual. The scheduled
+copy is paused because the Convex team that owns `helpful-sturgeon-546` exceeded
+its free-plan database allowance and Convex disabled the Cloud projects. A
+replace-all import would add more database I/O. Run it only after that team is
+back within its plan limits, and only by changing `POSCAL_CLOUD_DR_IMPORT` from
+`paused` to `run` for that dispatch. The job exports the self-hosted production
+data and file storage directly to an ephemeral GitHub runner, validates the ZIP,
+imports it atomically with `--replace-all` into `helpful-sturgeon-546`, and
+compares critical table counts. The ZIP is never uploaded as a GitHub artifact
+and is deleted from the runner after the job.
 
 Required GitHub Actions secrets:
 

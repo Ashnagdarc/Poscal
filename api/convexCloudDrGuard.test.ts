@@ -17,6 +17,17 @@ const runGuard = (overrides: NodeJS.ProcessEnv = {}) =>
   });
 
 describe("Convex Cloud disaster-recovery guard", () => {
+  it("refuses to export or import while the Cloud copy is paused", () => {
+    const result = spawnSync(process.execPath, ["scripts/sync-convex-cloud-dr.mjs"], {
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH, ...validEnvironment },
+      encoding: "utf8",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Cloud DR import is paused");
+  });
+
   it("allows only the known production source and standby", () => {
     const result = runGuard();
 

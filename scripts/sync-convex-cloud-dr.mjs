@@ -121,6 +121,12 @@ const main = async () => {
     return;
   }
 
+  if (process.env.POSCAL_CLOUD_DR_IMPORT !== "run") {
+    throw new Error(
+      "Cloud DR import is paused. Set POSCAL_CLOUD_DR_IMPORT=run only after the standby team is within its Convex plan limits",
+    );
+  }
+
   const sourceEnv = sourceEnvironment();
   const targetEnv = targetEnvironment();
   if (sourceEnv.CONVEX_DEPLOY_KEY || sourceEnv.POSCAL_CLOUD_DR_DEPLOY_KEY) {

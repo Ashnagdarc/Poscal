@@ -1,10 +1,9 @@
 name: Convex Cloud DR refresh
 
+# Manual only. The standby team is over the Convex free-plan database allowance,
+# so a scheduled import would add more database I/O to a disabled project.
 on:
   workflow_dispatch:
-  schedule:
-    # 03:30 UTC is 04:30 in Lagos, after the Openship volume backup window.
-    - cron: "30 3 * * *"
 
 permissions:
   contents: read
@@ -24,6 +23,7 @@ jobs:
       POSCAL_PRODUCTION_APPROVAL: export:convex.poscalfx.com
       POSCAL_CLOUD_DR_DEPLOYMENT: helpful-sturgeon-546
       POSCAL_CLOUD_DR_DEPLOY_KEY: ${{ secrets.POSCAL_CLOUD_DR_DEPLOY_KEY }}
+      POSCAL_CLOUD_DR_IMPORT: paused
     steps:
       - uses: actions/checkout@v4
 
