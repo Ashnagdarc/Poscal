@@ -29,6 +29,16 @@ import {
   type JournalImageRole,
 } from "@/lib/journalImages";
 import { TRADES_QUERY_KEY, type ManualTradeInput } from "@/hooks/queries/use-trades-query";
+import {
+  createClientOperationId,
+  enqueueOfflineOperation,
+  findOfflineTrade,
+  isLikelyNetworkError,
+  OFFLINE_ENTITY_REMAPPED_EVENT,
+  offlineWritesEnabled,
+  removeOfflineTrade,
+  upsertOfflineTrade,
+} from "@/lib/offlineStore";
 
 type NotebookDraft = {
   journal_title: string;
@@ -39,7 +49,7 @@ type NotebookDraft = {
   updatedAtMs: number;
 };
 
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
+type SaveState = "idle" | "dirty" | "saving" | "saved" | "saved_on_device" | "error";
 
 const MAX_SECTION_CHARS = 100_000;
 const MAX_TITLE_CHARS = 120;
@@ -54,7 +64,8 @@ const emptyDraft = (): NotebookDraft => ({
   updatedAtMs: Date.now(),
 });
 
-const draftKey = (tradeId: string) => `poscal.tradeNotebookDraft.${tradeId}`;
+const legacyDraftKey = (tradeId: string) => `poscal.tradeNotebookDraft.${tradeId}`;
+const draftKey = (accountId: string, tradeId: string) => `poscal.tradeNotebookDraft.${accountId}.${tradeId}`;
 
 const fromTrade = (trade: JournalTrade): NotebookDraft => ({
   journal_title: trade.journal_title ?? "",
@@ -65,10 +76,9 @@ const fromTrade = (trade: JournalTrade): NotebookDraft => ({
   updatedAtMs: trade.journal_updated_at ? new Date(trade.journal_updated_at).getTime() : 0,
 });
 
-const readLocalDraft = (tradeId: string): NotebookDraft | null => {
+const parseDraft = (raw: string | null): NotebookDraft | null => {
+  if (!raw) return null;
   try {
-    const raw = localStorage.getItem(draftKey(tradeId));
-    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<NotebookDraft>;
     if (
       typeof parsed.entry_reason !== "string"
@@ -92,17 +102,33 @@ const readLocalDraft = (tradeId: string): NotebookDraft | null => {
   }
 };
 
-const writeLocalDraft = (tradeId: string, draft: NotebookDraft) => {
+const readLocalDraft = (accountId: string, tradeId: string): NotebookDraft | null => {
   try {
-    localStorage.setItem(draftKey(tradeId), JSON.stringify(draft));
+    const current = parseDraft(localStorage.getItem(draftKey(accountId, tradeId)));
+    if (current) return current;
+    const legacy = parseDraft(localStorage.getItem(legacyDraftKey(tradeId)));
+    if (!legacy) return null;
+    localStorage.setItem(draftKey(accountId, tradeId), JSON.stringify(legacy));
+    localStorage.removeItem(legacyDraftKey(tradeId));
+    return legacy;
   } catch {
-    // Storage can be unavailable or full. Server autosave still runs.
+    return null;
   }
 };
 
-const clearLocalDraft = (tradeId: string) => {
+const writeLocalDraft = (accountId: string, tradeId: string, draft: NotebookDraft) => {
   try {
-    localStorage.removeItem(draftKey(tradeId));
+    localStorage.setItem(draftKey(accountId, tradeId), JSON.stringify(draft));
+    localStorage.removeItem(legacyDraftKey(tradeId));
+  } catch {
+    // Storage can be unavailable or full. The offline outbox still records the save.
+  }
+};
+
+const clearLocalDraft = (accountId: string, tradeId: string) => {
+  try {
+    localStorage.removeItem(draftKey(accountId, tradeId));
+    localStorage.removeItem(legacyDraftKey(tradeId));
   } catch {
     // ignore
   }
@@ -130,7 +156,7 @@ const TradeNotebook = () => {
   const { tradeId } = useParams<{ tradeId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, authMode, isOffline } = useAuth();
   const authToken = useAuthToken();
 
   const [trade, setTrade] = useState<JournalTrade | null>(null);
@@ -157,6 +183,17 @@ const TradeNotebook = () => {
   const latestPatchRef = useRef<NotebookPatch | null>(null);
 
   useEffect(() => {
+    const handleRemap = (event: Event) => {
+      const detail = (event as CustomEvent<{ temporaryId?: string; serverId?: string }>).detail;
+      if (detail?.temporaryId === tradeId && detail.serverId) {
+        navigate(`/journal/trade/${detail.serverId}`, { replace: true });
+      }
+    };
+    window.addEventListener(OFFLINE_ENTITY_REMAPPED_EVENT, handleRemap);
+    return () => window.removeEventListener(OFFLINE_ENTITY_REMAPPED_EVENT, handleRemap);
+  }, [navigate, tradeId]);
+
+  useEffect(() => {
     if (!tradeId || !user?.id) return;
 
     let cancelled = false;
@@ -164,7 +201,21 @@ const TradeNotebook = () => {
     setLoadError(null);
     hydratedRef.current = false;
 
-    void getJournalEntry(user.id, tradeId)
+    const loadTrade = async () => {
+      if (authMode === "offline_verified_device") {
+        return (await findOfflineTrade<JournalTrade>(user.id, tradeId))?.trade ?? null;
+      }
+      try {
+        const result = await getJournalEntry(user.id, tradeId);
+        if (result?.journal_id) void upsertOfflineTrade(user.id, result.journal_id, result);
+        return result;
+      } catch (error) {
+        if (!isLikelyNetworkError(error)) throw error;
+        return (await findOfflineTrade<JournalTrade>(user.id, tradeId))?.trade ?? null;
+      }
+    };
+
+    void loadTrade()
       .then((result) => {
         if (cancelled) return;
         if (!result) {
@@ -175,7 +226,7 @@ const TradeNotebook = () => {
         setTrade(result);
 
         const remote = fromTrade(result);
-        const local = readLocalDraft(tradeId);
+        const local = readLocalDraft(user.id, tradeId);
         const initial = local && local.updatedAtMs > remote.updatedAtMs ? local : remote;
         setDraft(initial);
         revisionRef.current = 0;
@@ -193,12 +244,12 @@ const TradeNotebook = () => {
     return () => {
       cancelled = true;
     };
-  }, [tradeId, user?.id]);
+  }, [authMode, tradeId, user?.id]);
 
   useEffect(() => {
     // Chart images load through /api/journal-images with the JWT mirror.
     // Wait for authToken so we do not race AuthProvider and silently empty the slots.
-    if (!tradeId || !user?.id || !authToken) return;
+    if (!tradeId || !user?.id || !authToken || authMode !== "online_authenticated") return;
     let cancelled = false;
 
     void listJournalImages(tradeId)
@@ -218,7 +269,7 @@ const TradeNotebook = () => {
     return () => {
       cancelled = true;
     };
-  }, [tradeId, user?.id, authToken]);
+  }, [authMode, tradeId, user?.id, authToken]);
 
   const patch = useMemo<NotebookPatch>(() => ({
     journal_title: draft.journal_title.trim() || null,
@@ -255,15 +306,59 @@ const TradeNotebook = () => {
       saveQueuedRef.current = false;
       setSaveState("saving");
 
-      void updateTradeNotebook(user.id, tradeId, patchToSave)
-        .then((updated) => {
+      const queueNotebook = async () => {
+        const cached = await findOfflineTrade<JournalTrade>(user.id, tradeId);
+        if (!cached) throw new Error("This notebook is not available on this device.");
+        const baseRevision = cached.trade.revision ?? 0;
+        const now = Date.now();
+        const updated: JournalTrade = {
+          ...cached.trade,
+          ...patchToSave,
+          journal_updated_at: new Date(now).toISOString(),
+          updated_at: new Date(now).toISOString(),
+          revision: baseRevision + 1,
+        };
+        await upsertOfflineTrade(user.id, cached.journalId, updated);
+        await enqueueOfflineOperation({
+          clientOperationId: createClientOperationId(),
+          accountId: user.id,
+          entityType: "notebook",
+          entityId: tradeId,
+          journalId: cached.journalId,
+          operation: "update",
+          baseRevision,
+          payload: patchToSave,
+          createdAtMs: now,
+          attemptCount: 0,
+          status: "pending",
+          lastError: null,
+        });
+        return updated;
+      };
+
+      const saveNotebook = async () => {
+        if (!offlineWritesEnabled() && authMode !== "online_authenticated") {
+          throw new Error("Reconnect before editing. This notebook can still be read on this device.");
+        }
+        if (authMode === "online_authenticated") {
+          try {
+            return { trade: await updateTradeNotebook(user.id, tradeId, patchToSave), savedOnDevice: false };
+          } catch (error) {
+            if (!isLikelyNetworkError(error) || !offlineWritesEnabled()) throw error;
+          }
+        }
+        return { trade: await queueNotebook(), savedOnDevice: true };
+      };
+
+      void saveNotebook()
+        .then((result) => {
           const hasNewerDraft =
             savingRevision !== revisionRef.current || saveQueuedRef.current;
 
           if (!hasNewerDraft) {
-            setTrade(updated);
-            clearLocalDraft(tradeId);
-            setSaveState("saved");
+            setTrade(result.trade);
+            if (!result.savedOnDevice) clearLocalDraft(user.id, tradeId);
+            setSaveState(result.savedOnDevice ? "saved_on_device" : "saved");
             return;
           }
 
@@ -286,7 +381,7 @@ const TradeNotebook = () => {
     }, AUTOSAVE_DELAY_MS);
 
     return () => window.clearTimeout(timer);
-  }, [patch, saveState, tradeId, user?.id, readOnly]);
+  }, [authMode, patch, saveState, tradeId, user?.id, readOnly]);
 
   const previouslyReadOnly = useRef(readOnly);
   useEffect(() => {
@@ -305,7 +400,7 @@ const TradeNotebook = () => {
         journal_title: normalized,
         updatedAtMs: Date.now(),
       };
-      writeLocalDraft(tradeId, next);
+      if (user?.id) writeLocalDraft(user.id, tradeId, next);
       return next;
     });
     setSaveState("dirty");
@@ -324,7 +419,7 @@ const TradeNotebook = () => {
         [key]: value.slice(0, MAX_SECTION_CHARS),
         updatedAtMs: Date.now(),
       };
-      writeLocalDraft(tradeId, next);
+      if (user?.id) writeLocalDraft(user.id, tradeId, next);
       return next;
     });
     setSaveState("dirty");
@@ -335,6 +430,7 @@ const TradeNotebook = () => {
     file: File | null,
   ) => {
     if (!file || !tradeId) return;
+    if (isOffline) { toast.info("Chart uploads will be available when Poscal reconnects."); return; }
     if (readOnly) { openPro("Upload more screenshots"); return; }
     const replacesImage = attachments.some(image => image.role === role);
     if (!replacesImage && imageQuota && (imageQuota.attachmentCount >= imageQuota.limitCount || imageQuota.usedBytes >= imageQuota.limitBytes)) {
@@ -362,6 +458,7 @@ const TradeNotebook = () => {
   };
 
   const handleDeleteImage = async (attachment: JournalAttachment) => {
+    if (isOffline) { toast.info("Reconnect before removing a chart."); return; }
     setDeletingAttachmentId(attachment.id);
     try {
       await deleteJournalImage(attachment.id);
@@ -380,13 +477,58 @@ const TradeNotebook = () => {
 
   const handleSaveTradeDetails = async (input: ManualTradeInput) => {
     if (!trade || !user?.id) return;
+    if (isOffline && !offlineWritesEnabled()) {
+      toast.info("Reconnect before editing trade details. Notebook text still saves offline.");
+      return;
+    }
 
     setIsSavingTradeDetails(true);
     try {
       const changes = buildJournalTradeEditPatch(trade, input);
-      const updated = Object.keys(changes).length > 0
-        ? await updateJournalEntry(user.id, trade.id, changes)
-        : trade;
+      const queueTradeUpdate = async () => {
+        const cached = await findOfflineTrade<JournalTrade>(user.id, trade.id);
+        if (!cached) throw new Error("This trade is not available on this device.");
+        const baseRevision = cached.trade.revision ?? 0;
+        const now = Date.now();
+        const updatedTrade: JournalTrade = {
+          ...cached.trade,
+          ...changes,
+          updated_at: new Date(now).toISOString(),
+          revision: baseRevision + 1,
+        };
+        await upsertOfflineTrade(user.id, cached.journalId, updatedTrade);
+        await enqueueOfflineOperation({
+          clientOperationId: createClientOperationId(),
+          accountId: user.id,
+          entityType: "trade",
+          entityId: trade.id,
+          journalId: cached.journalId,
+          operation: "update",
+          baseRevision,
+          payload: changes,
+          createdAtMs: now,
+          attemptCount: 0,
+          status: "pending",
+          lastError: null,
+        });
+        return updatedTrade;
+      };
+      let updated = trade;
+      let savedOnDevice = false;
+      if (Object.keys(changes).length > 0) {
+        if (authMode === "online_authenticated") {
+          try {
+            updated = await updateJournalEntry(user.id, trade.id, changes);
+          } catch (error) {
+            if (!isLikelyNetworkError(error) || !offlineWritesEnabled()) throw error;
+            updated = await queueTradeUpdate();
+            savedOnDevice = true;
+          }
+        } else {
+          updated = await queueTradeUpdate();
+          savedOnDevice = true;
+        }
+      }
       setTrade((current) => ({
         ...updated,
         entry_reason: current?.entry_reason ?? null,
@@ -395,7 +537,7 @@ const TradeNotebook = () => {
         lessons_learned: current?.lessons_learned ?? null,
       }));
       setIsTradeDetailsOpen(false);
-      toast.success("Trade details saved");
+      toast.success(savedOnDevice ? "Trade details saved on this device" : "Trade details saved");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not save trade details");
     } finally {
@@ -405,13 +547,48 @@ const TradeNotebook = () => {
 
   const handleDeleteJournal = async () => {
     if (!trade || !user?.id || isDeletingJournal) return;
+    if (isOffline && !offlineWritesEnabled()) {
+      toast.info("Reconnect before deleting this journal entry.");
+      return;
+    }
 
     setIsDeletingJournal(true);
     try {
-      await deleteJournalEntry(user.id, trade.id);
-      clearLocalDraft(trade.id);
+      const queueDelete = async () => {
+        const cached = await findOfflineTrade<JournalTrade>(user.id, trade.id);
+        if (!cached) throw new Error("This trade is not available on this device.");
+        await removeOfflineTrade<JournalTrade>(user.id, cached.journalId, trade.id);
+        await enqueueOfflineOperation({
+          clientOperationId: createClientOperationId(),
+          accountId: user.id,
+          entityType: "trade",
+          entityId: trade.id,
+          journalId: cached.journalId,
+          operation: "delete",
+          baseRevision: cached.trade.revision ?? 0,
+          payload: {},
+          createdAtMs: Date.now(),
+          attemptCount: 0,
+          status: "pending",
+          lastError: null,
+        });
+      };
+      let savedOnDevice = false;
+      if (authMode === "online_authenticated") {
+        try {
+          await deleteJournalEntry(user.id, trade.id);
+        } catch (error) {
+          if (!isLikelyNetworkError(error) || !offlineWritesEnabled()) throw error;
+          await queueDelete();
+          savedOnDevice = true;
+        }
+      } else {
+        await queueDelete();
+        savedOnDevice = true;
+      }
+      clearLocalDraft(user.id, trade.id);
       await queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
-      toast.success("Journal deleted");
+      toast.success(savedOnDevice ? "Deletion saved on this device" : "Journal deleted");
       navigate("/journal", { replace: true });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not delete journal");
@@ -509,7 +686,8 @@ const TradeNotebook = () => {
 
   const statusLabel = (() => {
     if (saveState === "saving") return "Saving…";
-    if (saveState === "error") return "Saved on this device";
+    if (saveState === "saved_on_device") return "Saved on this device";
+    if (saveState === "error") return "Could not save";
     if (saveState === "saved") return "Saved";
     if (saveState === "dirty") return "Unsaved changes";
     return trade?.journal_status === "complete"
@@ -573,10 +751,16 @@ const TradeNotebook = () => {
           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
             {saveState === "saving" ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : saveState === "saved" || trade.journal_status === "complete" ? (
+            ) : saveState === "saved" || saveState === "saved_on_device" || trade.journal_status === "complete" ? (
               <Check className="h-3.5 w-3.5" />
             ) : null}
-            <span>{saveState === "error" ? "Offline draft" : "Autosave"}</span>
+            <span>
+              {saveState === "saved_on_device"
+                ? "On this device"
+                : saveState === "error"
+                  ? "Not saved"
+                  : "Autosave"}
+            </span>
           </div>
         </div>
       </header>
@@ -758,9 +942,13 @@ const TradeNotebook = () => {
             </p>
           ) : null}
 
-          {saveState === "error" ? (
+          {saveState === "saved_on_device" ? (
             <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">
-              Poscal could not reach the server. Your latest writing is stored on this device and will remain available when you reopen this trade.
+              Saved on this device. It will sync when Poscal reconnects.
+            </p>
+          ) : saveState === "error" ? (
+            <p className="mt-3 rounded-xl bg-secondary px-4 py-3 text-xs text-muted-foreground">
+              This change could not be saved. The text in the editor is still here.
             </p>
           ) : null}
         </section>

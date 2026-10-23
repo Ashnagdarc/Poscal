@@ -125,6 +125,7 @@ const Journal = () => {
     () => paginatedManualTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
     [paginatedManualTrades],
   );
+  const effectiveEntryUsage = Math.max(usage.entries, paginatedManualTrades.length);
 
   const { dayMap: resultDaySummaries } = useJournalCalendar({
     month: calendarMonth,
@@ -161,7 +162,7 @@ const Journal = () => {
   }, [user?.id]);
 
   const openLogChooser = () => {
-    if (activeJournal?.isReadOnly || (!hasPro && usage.entries >= 15)) { openPro("Add more trades and notebooks"); return; }
+    if (activeJournal?.isReadOnly || (!hasPro && effectiveEntryUsage >= 15)) { openPro("Add more trades and notebooks"); return; }
     setTradeToEdit(null);
     setIsLogTradeChooserOpen(true);
   };

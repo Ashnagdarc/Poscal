@@ -57,6 +57,7 @@ const DayJournal = () => {
     () => loadedTrades.filter((trade) => trade.journal_type !== "notebook_draft"),
     [loadedTrades],
   );
+  const effectiveEntryUsage = Math.max(usage.entries, loadedTrades.length);
   const dayPnl = dayTrades
     .filter((trade) => trade.journal_type !== "notebook_draft")
     .reduce((sum, trade) => sum + (trade.pnl ?? 0), 0);
@@ -123,7 +124,7 @@ const DayJournal = () => {
 
           <button
             type="button"
-            onClick={() => (activeJournal?.isReadOnly || (!hasPro && usage.entries >= 15) ? openPro("Add more trades and notebooks") : setShowChooser(true))}
+            onClick={() => (activeJournal?.isReadOnly || (!hasPro && effectiveEntryUsage >= 15) ? openPro("Add more trades and notebooks") : setShowChooser(true))}
             className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-brand text-sm font-bold text-brand-foreground transition active:scale-[0.99]"
           >
             <Plus className="h-4 w-4" />

@@ -11,9 +11,12 @@ development must never use that deployment.
 | Development | local Convex or a developer-only self-hosted deployment | synthetic data | normal implementation work |
 | Staging | a separate self-hosted Convex installation | synthetic or explicitly approved snapshot | release and migration rehearsal |
 | Production | `https://convex.poscalfx.com` on Openship | live user data | reviewed releases only |
+| Cloud DR standby | `helpful-sturgeon-546` in the existing `Poscalfx` project | daily replace-all snapshot | recovery only; never normal app traffic |
 
-Convex Cloud is not a Poscal deployment target. The repository guards reject
-`*.convex.cloud`, and frontend builds never deploy backend functions.
+Convex Cloud is not a normal Poscal deployment target. The repository guards
+continue to reject `*.convex.cloud` for builds, releases and application
+functions. The only exception is the dedicated data-only DR workflow, whose
+separate guard pins the source and destination exactly.
 
 The current Openship host is not an appropriate place for another permanent
 Convex installation without a capacity change: staging should run on a separate
@@ -71,6 +74,27 @@ Never delete the only known-good restore point. Retention cleanup is allowed
 only after the newest run is `Succeeded`, has a non-zero archive size, and the
 R2 destination verification is current. At least two successful copies must
 remain after any manual deletion.
+
+## Convex Cloud DR refresh
+
+The `Convex Cloud DR refresh` GitHub Actions workflow runs at 04:30 Africa/Lagos,
+after the Openship backup window. It exports the self-hosted production data and
+file storage directly to an ephemeral GitHub runner, validates the ZIP, imports
+it atomically with `--replace-all` into `helpful-sturgeon-546`, and compares
+critical table counts. The ZIP is never uploaded as a GitHub artifact and is
+deleted from the runner after the job.
+
+Required GitHub Actions secrets:
+
+- `POSCAL_SELF_HOSTED_CONVEX_ADMIN_KEY`: the self-hosted production admin key;
+- `POSCAL_CLOUD_DR_DEPLOY_KEY`: a key scoped to `helpful-sturgeon-546` with only
+  data view and backup import access.
+
+The workflow deliberately does not deploy Convex functions or environment
+variables to Cloud. This prevents scheduled jobs, email, notification and
+billing side effects while the standby is being refreshed. A failover requires
+a reviewed runbook step to deploy the matching code and secrets, switch routing,
+and preserve the single-writer rule.
 
 ## Verification and restore drills
 

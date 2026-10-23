@@ -524,7 +524,11 @@ export const attachOrphanData = mutation({
 
     for (const row of tradeRows) {
       if (row.journalId) continue;
-      await ctx.db.patch(row._id, { journalId: args.journalId, updatedAtMs: Date.now() });
+      await ctx.db.patch(row._id, {
+        journalId: args.journalId,
+        updatedAtMs: Date.now(),
+        revision: (row.revision ?? 0) + 1,
+      });
       trades += 1;
     }
 

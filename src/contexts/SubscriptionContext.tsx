@@ -5,10 +5,11 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useConvexAuth } from "@convex-dev/auth/react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { FREE_LIMITS, PRO_LIMITS } from "../../shared/proPolicy";
+import { useAuth } from "@/contexts/AuthContext";
+import { saveOfflineViewerSubscription } from "@/lib/offlineStore";
 
 export type SubscriptionTier = "free" | "pro";
 export type PaymentStatus = "free" | "paid" | "trial" | "expired";
@@ -49,11 +50,11 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(
   undefined,
 );
 
-// Read Convex Auth directly: custom AuthContext can be recreated by HMR.
 export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
-  const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  const { user, loading: authLoading, authMode, viewerSubscription } = useAuth();
+  const isAuthenticated = authMode === "online_authenticated";
   const [now, setNow] = useState(Date.now());
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
   const liveAccess = useQuery(
@@ -61,10 +62,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     isAuthenticated ? { nowMs: Math.floor(now / 15_000) * 15_000 } : "skip",
   );
   const cachedAccess = useRef<typeof liveAccess>();
-  if (
-    !isAuthenticated ||
-    (cachedAccess.current && cachedAccess.current.userId !== viewer?.id)
-  )
+  if (cachedAccess.current && user?.id && cachedAccess.current.userId !== user.id)
     cachedAccess.current = undefined;
   const belongsToViewer =
     liveAccess === null || liveAccess?.userId === viewer?.id;
@@ -85,10 +83,31 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
       window.removeEventListener("focus", update);
     };
   }, []);
-  const isBeta = !!access?.beta;
-  const isPaid = !!access?.paid && (access.expiresAtMs ?? 0) > now;
-  const hasPro = isBeta || isPaid;
-  const expiresAt = access?.expiresAtMs ? new Date(access.expiresAtMs) : null;
+  const offlineExpiresAtMs = access?.expiresAtMs ?? viewerSubscription?.expiresAtMs ?? null;
+  const offlineHasPro = authMode === "offline_verified_device"
+    && (access?.beta || access?.paid || viewerSubscription?.subscriptionTier === "pro")
+    && (offlineExpiresAtMs === null || offlineExpiresAtMs > now);
+  const isBeta = isAuthenticated && !!access?.beta;
+  const isPaid = isAuthenticated
+    ? !!access?.paid && (access.expiresAtMs ?? 0) > now
+    : offlineHasPro && (access?.paid || viewerSubscription?.paymentStatus === "paid");
+  const hasPro = isAuthenticated ? isBeta || isPaid : offlineHasPro;
+  const expiresAtMs = isAuthenticated ? access?.expiresAtMs ?? null : offlineExpiresAtMs;
+  const expiresAt = expiresAtMs ? new Date(expiresAtMs) : null;
+  useEffect(() => {
+    if (!isAuthenticated || !user?.id || !access) return;
+    void saveOfflineViewerSubscription(user.id, {
+      paymentStatus: access.paid ? "paid" : "free",
+      subscriptionTier: access.beta || access.paid ? "pro" : "free",
+      expiresAtMs: access.expiresAtMs ?? null,
+      freeJournalId: access.freeJournalId ?? null,
+      lockedJournalIds: access.lockedJournalIds ?? [],
+      usage: access.usage,
+    }).catch((error) => {
+      console.warn("[subscription] Could not cache offline access", error);
+    });
+  }, [access, isAuthenticated, user?.id]);
+
   const value: SubscriptionContextType = {
     isPaid,
     isTrial: false,
@@ -100,7 +119,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     expiresAt,
     trialEndsAt: null,
     limits: hasPro ? PRO_LIMITS : FREE_LIMITS,
-    usage: access?.usage ?? {
+    usage: (isAuthenticated ? access?.usage : access?.usage ?? viewerSubscription?.usage) ?? {
       journals: 0,
       entries: 0,
       screenshots: 0,
@@ -109,10 +128,10 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
     // A clock tick closes the expiry gap even when no database write occurs.
     lockedJournalIds: hasPro
       ? []
-      : access?.lockedJournalIds?.length
-        ? access.lockedJournalIds
+      : (isAuthenticated ? access?.lockedJournalIds : access?.lockedJournalIds ?? viewerSubscription?.lockedJournalIds)?.length
+        ? (isAuthenticated ? access?.lockedJournalIds : access?.lockedJournalIds ?? viewerSubscription?.lockedJournalIds) ?? []
         : [],
-    freeJournalId: access?.freeJournalId ?? null,
+    freeJournalId: (isAuthenticated ? access?.freeJournalId : access?.freeJournalId ?? viewerSubscription?.freeJournalId) ?? null,
     canChooseFreeJournal: !!access?.canChooseFreeJournal,
     autoRenew: {
       enabled: access?.autoRenew?.enabled ?? false,
@@ -125,7 +144,7 @@ export const SubscriptionProvider: React.FC<{ children: React.ReactNode }> = ({
       brand: access?.autoRenew?.brand ?? null,
     },
     checkFeatureAccess: (feature) =>
-      isAuthenticated &&
+      Boolean(user) &&
       (feature === "export_csv" ||
         ([
           "journal_unlimited",

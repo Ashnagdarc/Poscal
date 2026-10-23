@@ -1,5 +1,5 @@
 import { useAuthActions } from "@convex-dev/auth/react";
-import { createContext, useContext, ReactNode, useEffect } from 'react';
+import { createContext, useContext, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useAuthToken, useConvexAuth } from '@convex-dev/auth/react';
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '../../convex/_generated/api';
@@ -7,6 +7,20 @@ import { clearLegacyAuthMirrors, setConvexAuthTokenMirror } from '@/lib/authToke
 import { mapPasswordResetRequestError, toSafeAuthErrorMessage } from '@/lib/authErrorMessages';
 import { syncSharedConvexHttpAuth } from '@/lib/convexClient';
 import { clearSensitiveLocalStorage } from '@/lib/privacyCleanup';
+import { useBackendAvailability, type BackendAvailability } from '@/hooks/use-backend-availability';
+import {
+  clearOfflineAccount,
+  loadLastOfflineAccount,
+  saveOfflineAccount,
+  type OfflineAccountSnapshot,
+} from '@/lib/offlineStore';
+
+export type AuthMode =
+  | "checking"
+  | "online_authenticated"
+  | "offline_verified_device"
+  | "reauthentication_required"
+  | "signed_out";
 
 export type AuthResult = {
   error: string | null;
@@ -18,6 +32,9 @@ interface AuthContextType {
   user: User | null;
   session: { access_token: string } | null;
   loading: boolean;
+  authMode: AuthMode;
+  backendAvailability: BackendAvailability;
+  isOffline: boolean;
   isConfigured: boolean;
   /** Subscription fields from the same `users.viewer` query (no extra fetch). */
   viewerSubscription: ViewerSubscription | null;
@@ -51,6 +68,14 @@ export interface ViewerSubscription {
   paymentStatus: string;
   subscriptionTier: string;
   expiresAtMs: number | null;
+  freeJournalId?: string | null;
+  lockedJournalIds?: string[];
+  usage?: {
+    journals: number;
+    entries: number;
+    screenshots: number;
+    storageBytes: number;
+  };
 }
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
@@ -59,8 +84,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const authToken = useAuthToken();
   const viewer = useQuery(api.users.viewer, isAuthenticated ? {} : "skip");
   const unregisterPush = useMutation(api.admin.unsubscribePush);
+  const { availability: backendAvailability } = useBackendAvailability();
+  const [cachedAccount, setCachedAccount] = useState<OfflineAccountSnapshot | null>(null);
+  const [offlineCacheLoaded, setOfflineCacheLoaded] = useState(false);
+  const persistedAccountId = useRef<string | null>(null);
 
-  const user: User | null = viewer
+  const liveUser = useMemo<User | null>(() => viewer
     ? {
         id: viewer.id,
         email: viewer.email ?? "",
@@ -69,18 +98,87 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         email_verified: viewer.emailVerified,
         role: viewer.role ?? "user",
       }
-    : null;
+    : null, [viewer]);
 
-  const viewerSubscription: ViewerSubscription | null = viewer
+  const liveViewerSubscription = useMemo<ViewerSubscription | null>(() => viewer
     ? {
         paymentStatus: viewer.paymentStatus ?? "free",
         subscriptionTier: viewer.subscriptionTier ?? "free",
         expiresAtMs: viewer.subscriptionExpiresAtMs ?? null,
       }
-    : null;
+    : null, [viewer]);
 
-  const session = user ? { access_token: "convex-auth" } : null;
-  const loading = authLoading || (isAuthenticated && viewer === undefined);
+  useEffect(() => {
+    let active = true;
+    void loadLastOfflineAccount()
+      .then((snapshot) => {
+        if (!active || !snapshot) return;
+        setCachedAccount((current) => current ?? snapshot);
+        if (persistedAccountId.current && persistedAccountId.current !== snapshot.accountId) {
+          void clearOfflineAccount(snapshot.accountId).catch((error) => {
+            console.warn("[auth] Could not clear a stale offline account", error);
+          });
+        }
+      })
+      .finally(() => {
+        if (active) setOfflineCacheLoaded(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (cachedAccount && !persistedAccountId.current) {
+      persistedAccountId.current = cachedAccount.accountId;
+    }
+  }, [cachedAccount]);
+
+  useEffect(() => {
+    if (!liveUser) return;
+    if (persistedAccountId.current && persistedAccountId.current !== liveUser.id) {
+      const previousAccountId = persistedAccountId.current;
+      void clearOfflineAccount(previousAccountId).catch((error) => {
+        console.warn("[auth] Could not clear the previous account cache", error);
+      });
+    }
+    persistedAccountId.current = liveUser.id;
+    const snapshot: OfflineAccountSnapshot = {
+      accountId: liveUser.id,
+      user: liveUser,
+      viewerSubscription: liveViewerSubscription,
+      lastVerifiedAtMs: Date.now(),
+      schemaVersion: 1,
+    };
+    setCachedAccount(snapshot);
+    void saveOfflineAccount(snapshot).catch((error) => {
+      console.warn("[auth] Could not persist offline account snapshot", error);
+    });
+  }, [liveUser, liveViewerSubscription]);
+
+  const authMode = useMemo<AuthMode>(() => {
+    if (!offlineCacheLoaded || authLoading) return "checking";
+    if (backendAvailability === "offline" && cachedAccount) return "offline_verified_device";
+    if (liveUser) return "online_authenticated";
+    if (backendAvailability === "checking" || (isAuthenticated && viewer === undefined)) return "checking";
+    if (cachedAccount) return "reauthentication_required";
+    return "signed_out";
+  }, [authLoading, backendAvailability, cachedAccount, isAuthenticated, liveUser, offlineCacheLoaded, viewer]);
+
+  const user: User | null = liveUser ?? (
+    authMode === "offline_verified_device" && cachedAccount
+      ? { ...cachedAccount.user, role: "user" }
+      : null
+  );
+
+  const viewerSubscription: ViewerSubscription | null = liveViewerSubscription ?? (
+    authMode === "offline_verified_device"
+      ? cachedAccount?.viewerSubscription ?? null
+      : null
+  );
+
+  const session = authMode === "online_authenticated" ? { access_token: "convex-auth" } : null;
+  const loading = authMode === "checking";
 
   // Sync the in-memory JWT mirror during render so child effects (journal images,
   // HTTP helpers) never race ahead of an empty token after auth resolves.
@@ -241,6 +339,13 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       clearLegacyAuthMirrors();
       setConvexAuthTokenMirror(null);
       syncSharedConvexHttpAuth(null);
+      const accountId = user?.id ?? cachedAccount?.accountId ?? null;
+      setCachedAccount(null);
+      if (accountId) {
+        await clearOfflineAccount(accountId).catch((error) => {
+          console.warn("[auth] Could not clear offline account cache", error);
+        });
+      }
     }
   };
 
@@ -250,6 +355,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         user,
         session,
         loading,
+        authMode,
+        backendAvailability,
+        isOffline: authMode === "offline_verified_device",
         isConfigured: true,
         viewerSubscription,
         signUp,

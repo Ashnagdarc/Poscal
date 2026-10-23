@@ -23,6 +23,8 @@ import { BottomNav } from "@/components/BottomNav";
 import { PWAUpdateBanner } from "@/components/PWAUpdateBanner";
 import { lazyWithRetry } from "@/lib/lazyWithRetry";
 import { PushNotificationsProvider } from "@/hooks/use-push-notifications";
+import { OfflineStatusBanner } from "@/components/OfflineStatusBanner";
+import { OfflineSyncManager } from "@/components/OfflineSyncManager";
 
 const Welcome = lazyWithRetry(() => import("./pages/Welcome"));
 const SignIn = lazyWithRetry(() => import("./pages/SignIn"));
@@ -114,6 +116,7 @@ const AppContent = () => {
     <div className="flex h-full min-h-0 flex-col overflow-hidden bg-background">
       <SkipLink />
       <PWAUpdateBanner />
+      <OfflineStatusBanner />
       <Suspense fallback={null}>
         <AppUpdateModal />
         <PWAInstallPrompt />
@@ -232,6 +235,7 @@ const App = () => (
           <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
             <GoogleAnalytics />
             <AuthProvider>
+              <OfflineSyncManager />
               <PushNotificationsProvider>
                 <SubscriptionProvider>
                   <FontProvider>

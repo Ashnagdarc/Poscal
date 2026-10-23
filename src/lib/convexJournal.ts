@@ -22,6 +22,8 @@ export interface JournalTrade {
   entry_date: string | null;
   exit_date?: string | null;
   created_at: string;
+  updated_at?: string | null;
+  revision?: number;
   journal_type?: "structured" | "notes" | "notebook_draft";
   journal_title?: string | null;
   rich_content?: unknown;
@@ -74,6 +76,8 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   entry_date: toIsoString(row.entryDateMs),
   exit_date: toIsoString(row.exitDateMs),
   created_at: new Date(row.createdAtMs).toISOString(),
+  updated_at: toIsoString(row.updatedAtMs),
+  revision: row.revision ?? 0,
   journal_type: (row.journalType as "structured" | "notes" | "notebook_draft" | null) ?? "structured",
   journal_title: row.journalTitle ?? null,
   rich_content: row.richContent ?? null,
@@ -87,7 +91,7 @@ export const fromConvexTrade = (row: any): JournalTrade => ({
   tags: row.tags ?? null,
 });
 
-const toConvexTradeInput = (trade: Record<string, any>) => ({
+export const toConvexTradeInput = (trade: Record<string, any>) => ({
   journalId: trade.journal_id ?? trade.journalId ?? null,
   externalId: trade.externalId ?? null,
   pair: trade.pair || trade.symbol || "JOURNAL",
@@ -119,7 +123,7 @@ const toConvexTradeInput = (trade: Record<string, any>) => ({
   exitDateMs: trade.exit_date ? new Date(trade.exit_date).getTime() : null,
 });
 
-const toConvexTradePatch = (updates: Record<string, any>) => {
+export const toConvexTradePatch = (updates: Record<string, any>) => {
   const patch: Record<string, any> = {};
 
   if (updates.pair !== undefined || updates.symbol !== undefined) {

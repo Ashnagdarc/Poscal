@@ -3,6 +3,10 @@
  * (AP-009 / MC-020). Preference keys (theme, font, risk default) are left alone.
  */
 
+const SENSITIVE_KEY_STARTS = [
+  "poscal.tradeNotebookDraft.",
+] as const;
+
 const SENSITIVE_KEY_PREFIXES = [
   "positionSizeHistory",
   "progressSession",
@@ -25,6 +29,10 @@ export function clearSensitiveLocalStorage(): void {
       const key = localStorage.key(i);
       if (!key) continue;
       if (SENSITIVE_EXACT_KEYS.includes(key as (typeof SENSITIVE_EXACT_KEYS)[number])) {
+        keysToRemove.push(key);
+        continue;
+      }
+      if (SENSITIVE_KEY_STARTS.some((prefix) => key.startsWith(prefix))) {
         keysToRemove.push(key);
         continue;
       }

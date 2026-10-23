@@ -23,6 +23,11 @@ import {
   type CreateJournalInput,
   type TradingJournal,
 } from "@/lib/tradingJournals";
+import {
+  cacheOfflineJournals,
+  isLikelyNetworkError,
+  loadOfflineJournals,
+} from "@/lib/offlineStore";
 
 const JOURNALS_QUERY_KEY = ["tradingJournals"] as const;
 
@@ -43,7 +48,7 @@ interface JournalContextValue {
 const JournalContext = createContext<JournalContextValue | undefined>(undefined);
 
 export const JournalProvider = ({ children }: { children: ReactNode }) => {
-  const { user } = useAuth();
+  const { user, authMode } = useAuth();
   const { subscriptionTier, limits, hasPro, freeJournalId, isLoading: subscriptionLoading } = useSubscription();
   const { setCurrency } = useCurrency();
   const queryClient = useQueryClient();
@@ -65,8 +70,24 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
 
     setIsLoading(true);
     try {
-      const next = await listTradingJournals(user.id);
+      let next: TradingJournal[];
+      if (authMode === "offline_verified_device") {
+        next = await loadOfflineJournals<TradingJournal>(user.id);
+      } else {
+        try {
+          next = await listTradingJournals(user.id);
+        } catch (error) {
+          if (!isLikelyNetworkError(error)) throw error;
+          next = await loadOfflineJournals<TradingJournal>(user.id);
+        }
+      }
       setJournals(next);
+
+      if (authMode === "online_authenticated") {
+        void cacheOfflineJournals(user.id, next).catch((error) => {
+          console.warn("[journal] Could not cache journals for offline use", error);
+        });
+      }
 
       const stored = readStoredActiveJournalId(user.id);
       const preferred =
@@ -83,7 +104,7 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  }, [user?.id]);
+  }, [authMode, user?.id]);
 
   useEffect(() => {
     void refreshJournals();
@@ -115,6 +136,9 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     if (!user?.id) {
       throw new Error("User not authenticated");
     }
+    if (authMode !== "online_authenticated") {
+      throw new Error("Creating a journal requires a connection. Your existing journals remain available offline.");
+    }
 
     const created = await createTradingJournal(user.id, {
       ...input,
@@ -133,11 +157,14 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
 
     return created;
-  }, [queryClient, subscriptionTier, user?.id]);
+  }, [authMode, queryClient, subscriptionTier, user?.id]);
 
   const deleteJournal = useCallback(async (journalId: string) => {
     if (!user?.id) {
       throw new Error("User not authenticated");
+    }
+    if (authMode !== "online_authenticated") {
+      throw new Error("Deleting a journal requires a connection.");
     }
 
     await deleteTradingJournal(user.id, journalId);
@@ -158,7 +185,7 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     void queryClient.invalidateQueries({ queryKey: JOURNALS_QUERY_KEY });
     void queryClient.invalidateQueries({ queryKey: TRADES_QUERY_KEY });
     void queryClient.invalidateQueries({ queryKey: PROGRESS_QUERY_KEY });
-  }, [activeJournalId, queryClient, user?.id]);
+  }, [activeJournalId, authMode, queryClient, user?.id]);
 
   const value = useMemo<JournalContextValue>(() => ({
     journals: accessibleJournals,

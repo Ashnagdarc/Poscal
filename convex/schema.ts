@@ -185,6 +185,11 @@ export default defineSchema({
     exitDateMs: nullableNumber,
     createdAtMs: v.number(),
     updatedAtMs: v.number(),
+    /**
+     * Monotonic edit version used by offline replay conflict checks.
+     * Optional so existing production rows remain valid without a backfill.
+     */
+    revision: v.optional(v.number()),
   })
     .index("by_user_created", ["userId", "createdAtMs"])
     .index("by_user_journal_created", ["userId", "journalId", "createdAtMs"])
@@ -209,6 +214,28 @@ export default defineSchema({
     .index("by_trade", ["tradeId"])
     .index("by_journal", ["journalId", "createdAtMs"])
     .index("by_user_updated", ["userId", "updatedAtMs"]),
+
+  /**
+   * A single bounded idempotency bucket per user. Keeping receipts together
+   * avoids an unbounded receipt row per offline edit on the free-tier VPS.
+   */
+  offlineMutationReceipts: defineTable({
+    userId: v.string(),
+    receipts: v.array(v.object({
+      clientOperationId: v.string(),
+      operation: v.union(
+        v.literal("create_entry"),
+        v.literal("create_notebook_draft"),
+        v.literal("update_entry"),
+        v.literal("update_notebook"),
+        v.literal("delete_entry"),
+      ),
+      entityId: v.id("tradingJournal"),
+      revision: v.union(v.number(), v.null()),
+      createdAtMs: v.number(),
+    })),
+    updatedAtMs: v.number(),
+  }).index("by_user", ["userId"]),
 
   tradeJournalAttachments: defineTable({
     userId: v.string(),

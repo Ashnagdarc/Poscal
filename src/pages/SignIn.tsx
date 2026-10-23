@@ -22,7 +22,7 @@ const SignIn = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { signIn } = useAuth();
+  const { signIn, backendAvailability } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -42,6 +42,9 @@ const SignIn = () => {
   }, [searchParams, locationState?.from]);
 
   const reasonBanner = useMemo(() => {
+    if (backendAvailability === "offline") {
+      return "Poscal can't reach the server, so a new sign-in can't be verified right now.";
+    }
     const reason = searchParams.get("reason") ?? locationState?.reason ?? "";
     switch (reason) {
       case "session":
@@ -50,10 +53,12 @@ const SignIn = () => {
         return "Sign in to open your trading journal.";
       case "protected":
         return "Sign in to continue to that page.";
+      case "reauth":
+        return "Sign in again to continue. Journal changes saved on this device stay here until they sync.";
       default:
         return "";
     }
-  }, [searchParams, locationState?.reason]);
+  }, [backendAvailability, searchParams, locationState?.reason]);
 
   const bannerMessage = useMemo(() => {
     if (fromSignupBanner || searchParams.get("fromSignup") === "1") {
@@ -96,6 +101,13 @@ const SignIn = () => {
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setFormError(null);
+
+    if (backendAvailability === "offline") {
+      const message = "Poscal can't reach the server right now. Sign-in needs a connection.";
+      setFormError(message);
+      toast.error(message, { duration: 5000 });
+      return;
+    }
 
     if (!email || !password) {
       const message = "Please fill in all fields";

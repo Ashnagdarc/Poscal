@@ -18,6 +18,114 @@ import { updateJournalStats, type TradeChange } from "./lib/updateJournalStats";
 
 type TradeStatus = "open" | "closed" | "cancelled";
 
+type OfflineOperation =
+  | "create_entry"
+  | "create_notebook_draft"
+  | "update_entry"
+  | "update_notebook"
+  | "delete_entry";
+
+const OFFLINE_RECEIPT_LIMIT = 256;
+const CLIENT_OPERATION_ID_MAX_CHARS = 128;
+
+const offlineReplayResultValidator = v.object({
+  status: v.union(v.literal("applied"), v.literal("replayed")),
+  entityId: v.id("tradingJournal"),
+  revision: v.union(v.number(), v.null()),
+});
+
+type OfflineReplayResult = {
+  status: "applied" | "replayed";
+  entityId: Id<"tradingJournal">;
+  revision: number | null;
+};
+
+const normalizeClientOperationId = (value: string) => {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > CLIENT_OPERATION_ID_MAX_CHARS) {
+    throw new Error(
+      `Invalid client operation ID (must be 1-${CLIENT_OPERATION_ID_MAX_CHARS} characters)`,
+    );
+  }
+  return normalized;
+};
+
+const getOfflineReceipt = async (
+  ctx: MutationCtx,
+  userId: string,
+  clientOperationId: string,
+  operation: OfflineOperation,
+): Promise<OfflineReplayResult | null> => {
+  const bucket = await ctx.db
+    .query("offlineMutationReceipts")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  const receipt = bucket?.receipts.find(
+    (item) => item.clientOperationId === clientOperationId,
+  );
+  if (!receipt) return null;
+  if (receipt.operation !== operation) {
+    throw new Error("OFFLINE_SYNC_OPERATION_ID_REUSED");
+  }
+  return {
+    status: "replayed",
+    entityId: receipt.entityId,
+    revision: receipt.revision,
+  };
+};
+
+const saveOfflineReceipt = async (
+  ctx: MutationCtx,
+  userId: string,
+  clientOperationId: string,
+  operation: OfflineOperation,
+  entityId: Id<"tradingJournal">,
+  revision: number | null,
+) => {
+  const now = Date.now();
+  const bucket = await ctx.db
+    .query("offlineMutationReceipts")
+    .withIndex("by_user", (q) => q.eq("userId", userId))
+    .unique();
+  const receipt = {
+    clientOperationId,
+    operation,
+    entityId,
+    revision,
+    createdAtMs: now,
+  };
+  if (bucket) {
+    const retained = bucket.receipts
+      .filter((item) => item.clientOperationId !== clientOperationId)
+      .slice(-(OFFLINE_RECEIPT_LIMIT - 1));
+    await ctx.db.patch(bucket._id, {
+      receipts: [...retained, receipt],
+      updatedAtMs: now,
+    });
+  } else {
+    await ctx.db.insert("offlineMutationReceipts", {
+      userId,
+      receipts: [receipt],
+      updatedAtMs: now,
+    });
+  }
+};
+
+const assertOfflineRevision = (
+  currentRevision: number | undefined,
+  expectedRevision: number,
+) => {
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision < 0) {
+    throw new Error("Invalid expected revision");
+  }
+  const current = currentRevision ?? 0;
+  if (current !== expectedRevision) {
+    throw new Error(
+      `OFFLINE_SYNC_CONFLICT: expected revision ${expectedRevision}, found ${current}`,
+    );
+  }
+};
+
 const parseTradeStatusFilter = (status: string | null | undefined): TradeStatus | null => {
   if (!status || status === "all") return null;
   switch (status) {
@@ -59,6 +167,39 @@ const tradeCreateFields = {
   tags: nullableStringArg,
   entryDateMs: nullableNumberArg,
   exitDateMs: nullableNumberArg,
+};
+
+const tradeUpdateFields = {
+  pair: nullableStringArg,
+  direction: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short"))),
+  entryPrice: nullableNumberArg,
+  exitPrice: nullableNumberArg,
+  stopLoss: nullableNumberArg,
+  takeProfit: nullableNumberArg,
+  riskPercent: nullableNumberArg,
+  riskAmount: nullableNumberArg,
+  positionSize: nullableNumberArg,
+  pnl: nullableNumberArg,
+  pnlPercent: nullableNumberArg,
+  status: v.optional(v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled"))),
+  notes: nullableStringArg,
+  journalType: nullableStringArg,
+  richContent: nullableAnyArg,
+  images: nullableAnyArg,
+  links: nullableAnyArg,
+  screenshots: nullableAnyArg,
+  marketCondition: nullableStringArg,
+  tags: nullableStringArg,
+  entryDateMs: nullableNumberArg,
+  exitDateMs: nullableNumberArg,
+};
+
+const notebookUpdateFields = {
+  title: nullableStringArg,
+  entryReason: nullableStringArg,
+  duringTradeNotes: nullableStringArg,
+  postTradeReview: nullableStringArg,
+  lessonsLearned: nullableStringArg,
 };
 
 const assertJournalOwned = async (
@@ -601,13 +742,11 @@ export const evaluateTradeAlerts = internalMutation({
   },
 });
 
-export const createNotebookDraft = mutation({
-  args: {
-    journalId: v.id("tradingAccounts"),
-    entryDateMs: nullableNumberArg,
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+const createNotebookDraftForUser = async (
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: { journalId: Id<"tradingAccounts">; entryDateMs?: number | null },
+) => {
     await assertJournalOwned(ctx, userId, args.journalId);
 
     await consumeEntryAllowance(ctx, userId, args.journalId);
@@ -644,19 +783,56 @@ export const createNotebookDraft = mutation({
       exitDateMs: null,
       createdAtMs: now,
       updatedAtMs: now,
+      revision: 1,
     });
 
     // Notebook drafts deliberately do not touch trade facts, statsVersion, or
     // trading alerts. They become a real analytics trade only when the user
     // adds structured trade details.
     return await ctx.db.get(insertedId);
+};
+
+export const createNotebookDraft = mutation({
+  args: {
+    journalId: v.id("tradingAccounts"),
+    entryDateMs: nullableNumberArg,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    return await createNotebookDraftForUser(ctx, userId, args);
   },
 });
 
-export const createEntry = mutation({
-  args: tradeCreateFields,
-  handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+const createEntryForUser = async (
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    journalId?: Id<"tradingAccounts"> | null;
+    externalId?: string | null;
+    pair: string;
+    direction: "buy" | "sell" | "long" | "short";
+    entryPrice?: number | null;
+    exitPrice?: number | null;
+    stopLoss?: number | null;
+    takeProfit?: number | null;
+    riskPercent?: number | null;
+    riskAmount?: number | null;
+    positionSize?: number | null;
+    pnl?: number | null;
+    pnlPercent?: number | null;
+    status: TradeStatus;
+    notes?: string | null;
+    journalType?: string | null;
+    richContent?: unknown;
+    images?: unknown;
+    links?: unknown;
+    screenshots?: unknown;
+    marketCondition?: string | null;
+    tags?: string | null;
+    entryDateMs?: number | null;
+    exitDateMs?: number | null;
+  },
+) => {
     await assertJournalOwned(ctx, userId, args.journalId);
     assertValidTradeFields(args);
 
@@ -668,6 +844,7 @@ export const createEntry = mutation({
       journalId: args.journalId ?? null,
       createdAtMs: now,
       updatedAtMs: now,
+      revision: 1,
     });
 
     const insertedTrade = await ctx.db.get(insertedId);
@@ -684,37 +861,45 @@ export const createEntry = mutation({
     });
 
     return await ctx.db.get(insertedId);
+};
+
+export const createEntry = mutation({
+  args: tradeCreateFields,
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    return await createEntryForUser(ctx, userId, args);
   },
 });
 
-export const updateEntry = mutation({
+const updateEntryForUser = async (
+  ctx: MutationCtx,
+  userId: Id<"users">,
   args: {
-    id: v.id("tradingJournal"),
-    pair: nullableStringArg,
-    direction: v.optional(v.union(v.literal("buy"), v.literal("sell"), v.literal("long"), v.literal("short"))),
-    entryPrice: nullableNumberArg,
-    exitPrice: nullableNumberArg,
-    stopLoss: nullableNumberArg,
-    takeProfit: nullableNumberArg,
-    riskPercent: nullableNumberArg,
-    riskAmount: nullableNumberArg,
-    positionSize: nullableNumberArg,
-    pnl: nullableNumberArg,
-    pnlPercent: nullableNumberArg,
-    status: v.optional(v.union(v.literal("open"), v.literal("closed"), v.literal("cancelled"))),
-    notes: nullableStringArg,
-    journalType: nullableStringArg,
-    richContent: nullableAnyArg,
-    images: nullableAnyArg,
-    links: nullableAnyArg,
-    screenshots: nullableAnyArg,
-    marketCondition: nullableStringArg,
-    tags: nullableStringArg,
-    entryDateMs: nullableNumberArg,
-    exitDateMs: nullableNumberArg,
+    id: Id<"tradingJournal">;
+    pair?: string | null;
+    direction?: "buy" | "sell" | "long" | "short";
+    entryPrice?: number | null;
+    exitPrice?: number | null;
+    stopLoss?: number | null;
+    takeProfit?: number | null;
+    riskPercent?: number | null;
+    riskAmount?: number | null;
+    positionSize?: number | null;
+    pnl?: number | null;
+    pnlPercent?: number | null;
+    status?: TradeStatus;
+    notes?: string | null;
+    journalType?: string | null;
+    richContent?: unknown;
+    images?: unknown;
+    links?: unknown;
+    screenshots?: unknown;
+    marketCondition?: string | null;
+    tags?: string | null;
+    entryDateMs?: number | null;
+    exitDateMs?: number | null;
   },
-  handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
+) => {
     const existing = await ctx.db.get(args.id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -751,6 +936,7 @@ export const updateEntry = mutation({
       direction: nextDirection,
       status: nextStatus,
       updatedAtMs: Date.now(),
+      revision: (existing.revision ?? 0) + 1,
     });
 
     const updatedTrade = await ctx.db.get(id);
@@ -786,20 +972,31 @@ export const updateEntry = mutation({
     }
 
     return await ctx.db.get(id);
-  },
-});
+};
 
-export const updateNotebook = mutation({
+export const updateEntry = mutation({
   args: {
     id: v.id("tradingJournal"),
-    title: nullableStringArg,
-    entryReason: nullableStringArg,
-    duringTradeNotes: nullableStringArg,
-    postTradeReview: nullableStringArg,
-    lessonsLearned: nullableStringArg,
+    ...tradeUpdateFields,
   },
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
+    return await updateEntryForUser(ctx, userId, args);
+  },
+});
+
+const updateNotebookForUser = async (
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  args: {
+    id: Id<"tradingJournal">;
+    title?: string | null;
+    entryReason?: string | null;
+    duringTradeNotes?: string | null;
+    postTradeReview?: string | null;
+    lessonsLearned?: string | null;
+  },
+) => {
     const trade = await ctx.db.get(args.id);
     if (!trade || trade.userId !== userId) {
       throw new Error("Journal entry not found");
@@ -889,6 +1086,7 @@ export const updateNotebook = mutation({
       journalPreview,
       journalUpdatedAtMs: now,
       updatedAtMs: now,
+      revision: (trade.revision ?? 0) + 1,
     });
 
     // Notebook writes never invalidate trade facts or journal analytics.
@@ -899,6 +1097,16 @@ export const updateNotebook = mutation({
       .unique();
 
     return { trade: updatedTrade, notebook: updatedNotebook };
+};
+
+export const updateNotebook = mutation({
+  args: {
+    id: v.id("tradingJournal"),
+    ...notebookUpdateFields,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    return await updateNotebookForUser(ctx, userId, args);
   },
 });
 
@@ -977,6 +1185,7 @@ export const beginDeleteEntry = mutation({
     await ctx.db.patch(args.id, {
       deletionRequestedAtMs: Date.now(),
       updatedAtMs: Date.now(),
+      revision: (existing.revision ?? 0) + 1,
     });
 
     return {
@@ -1000,6 +1209,7 @@ export const cancelDeleteEntry = mutation({
     await ctx.db.patch(args.id, {
       deletionRequestedAtMs: null,
       updatedAtMs: Date.now(),
+      revision: (existing.revision ?? 0) + 1,
     });
     return { success: true };
   },
@@ -1034,20 +1244,19 @@ export const accountDeletionBatch = query({
   },
 });
 
-export const deleteEntry = mutation({
-  args: {
-    id: v.id("tradingJournal"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await requireVerifiedAuthUserId(ctx);
-    const existing = await ctx.db.get(args.id);
+const deleteEntryForUser = async (
+  ctx: MutationCtx,
+  userId: Id<"users">,
+  id: Id<"tradingJournal">,
+) => {
+    const existing = await ctx.db.get(id);
     if (!existing || existing.userId !== userId) {
       throw new Error("Journal entry not found");
     }
 
     const attachments = await ctx.db
       .query("tradeJournalAttachments")
-      .withIndex("by_trade_role", (q) => q.eq("tradeId", args.id))
+      .withIndex("by_trade_role", (q) => q.eq("tradeId", id))
       .collect();
     const hasStoredAssets = attachments.some(
       (row) => row.userId === userId && row.objectKey !== "pending",
@@ -1056,8 +1265,17 @@ export const deleteEntry = mutation({
       throw new Error("Journal has stored images and requires asset-aware deletion");
     }
 
-    await deleteJournalEntryRows(ctx, userId, args.id, existing);
+    await deleteJournalEntryRows(ctx, userId, id, existing);
     return { success: true };
+};
+
+export const deleteEntry = mutation({
+  args: {
+    id: v.id("tradingJournal"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    return await deleteEntryForUser(ctx, userId, args.id);
   },
 });
 
@@ -1100,6 +1318,7 @@ export const saveMany = mutation({
         journalId: item.journalId ?? null,
         createdAtMs: now,
         updatedAtMs: now,
+        revision: 1,
       });
       ids.push(insertedId);
       const insertedTrade = await ctx.db.get(insertedId);
@@ -1118,5 +1337,202 @@ export const saveMany = mutation({
     }
 
     return ids;
+  },
+});
+
+/**
+ * Offline replay uses the same journal writes as the online mutations, then
+ * stores the receipt in that same transaction. A retry returns the receipt
+ * instead of creating or applying the change twice.
+ */
+export const replayCreateEntry = mutation({
+  args: {
+    clientOperationId: v.string(),
+    entry: v.object(tradeCreateFields),
+  },
+  returns: offlineReplayResultValidator,
+  handler: async (ctx, args): Promise<OfflineReplayResult> => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const clientOperationId = normalizeClientOperationId(args.clientOperationId);
+    const replayed = await getOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "create_entry",
+    );
+    if (replayed) return replayed;
+
+    const created = await createEntryForUser(ctx, userId, args.entry);
+    if (!created) throw new Error("Journal entry was not created");
+    const revision = created.revision ?? 0;
+    await saveOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "create_entry",
+      created._id,
+      revision,
+    );
+    return { status: "applied", entityId: created._id, revision };
+  },
+});
+
+export const replayCreateNotebookDraft = mutation({
+  args: {
+    clientOperationId: v.string(),
+    journalId: v.id("tradingAccounts"),
+    entryDateMs: nullableNumberArg,
+  },
+  returns: offlineReplayResultValidator,
+  handler: async (ctx, args): Promise<OfflineReplayResult> => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const clientOperationId = normalizeClientOperationId(args.clientOperationId);
+    const replayed = await getOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "create_notebook_draft",
+    );
+    if (replayed) return replayed;
+
+    const created = await createNotebookDraftForUser(ctx, userId, {
+      journalId: args.journalId,
+      entryDateMs: args.entryDateMs,
+    });
+    if (!created) throw new Error("Notebook draft was not created");
+    const revision = created.revision ?? 0;
+    await saveOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "create_notebook_draft",
+      created._id,
+      revision,
+    );
+    return { status: "applied", entityId: created._id, revision };
+  },
+});
+
+export const replayUpdateEntry = mutation({
+  args: {
+    clientOperationId: v.string(),
+    id: v.id("tradingJournal"),
+    expectedRevision: v.number(),
+    patch: v.object(tradeUpdateFields),
+  },
+  returns: offlineReplayResultValidator,
+  handler: async (ctx, args): Promise<OfflineReplayResult> => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const clientOperationId = normalizeClientOperationId(args.clientOperationId);
+    const replayed = await getOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "update_entry",
+    );
+    if (replayed) return replayed;
+
+    const current = await ctx.db.get(args.id);
+    if (!current || current.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+    assertOfflineRevision(current.revision, args.expectedRevision);
+
+    const updated = await updateEntryForUser(ctx, userId, {
+      id: args.id,
+      ...args.patch,
+    });
+    if (!updated) throw new Error("Journal entry was not updated");
+    const revision = updated.revision ?? 0;
+    await saveOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "update_entry",
+      args.id,
+      revision,
+    );
+    return { status: "applied", entityId: args.id, revision };
+  },
+});
+
+export const replayUpdateNotebook = mutation({
+  args: {
+    clientOperationId: v.string(),
+    id: v.id("tradingJournal"),
+    expectedRevision: v.number(),
+    patch: v.object(notebookUpdateFields),
+  },
+  returns: offlineReplayResultValidator,
+  handler: async (ctx, args): Promise<OfflineReplayResult> => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const clientOperationId = normalizeClientOperationId(args.clientOperationId);
+    const replayed = await getOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "update_notebook",
+    );
+    if (replayed) return replayed;
+
+    const current = await ctx.db.get(args.id);
+    if (!current || current.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+    assertOfflineRevision(current.revision, args.expectedRevision);
+
+    const updated = await updateNotebookForUser(ctx, userId, {
+      id: args.id,
+      ...args.patch,
+    });
+    if (!updated.trade) throw new Error("Notebook was not updated");
+    const revision = updated.trade.revision ?? 0;
+    await saveOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "update_notebook",
+      args.id,
+      revision,
+    );
+    return { status: "applied", entityId: args.id, revision };
+  },
+});
+
+export const replayDeleteEntry = mutation({
+  args: {
+    clientOperationId: v.string(),
+    id: v.id("tradingJournal"),
+    expectedRevision: v.number(),
+  },
+  returns: offlineReplayResultValidator,
+  handler: async (ctx, args): Promise<OfflineReplayResult> => {
+    const userId = await requireVerifiedAuthUserId(ctx);
+    const clientOperationId = normalizeClientOperationId(args.clientOperationId);
+    const replayed = await getOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "delete_entry",
+    );
+    if (replayed) return replayed;
+
+    const current = await ctx.db.get(args.id);
+    if (!current || current.userId !== userId) {
+      throw new Error("Journal entry not found");
+    }
+    assertOfflineRevision(current.revision, args.expectedRevision);
+
+    const deleted = await deleteEntryForUser(ctx, userId, args.id);
+    if (!deleted.success) throw new Error("Journal entry was not deleted");
+    await saveOfflineReceipt(
+      ctx,
+      userId,
+      clientOperationId,
+      "delete_entry",
+      args.id,
+      null,
+    );
+    return { status: "applied", entityId: args.id, revision: null };
   },
 });

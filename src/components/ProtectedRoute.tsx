@@ -22,12 +22,15 @@ export const ProtectedRoute = ({
   children,
   requiresAdmin = false,
 }: ProtectedRouteProps) => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, authMode } = useAuth();
   const { isAdmin, loading: adminLoading } = useAdmin();
   const location = useLocation();
   // Prefer Convex server policy when available so UI matches API hard-gates.
   // Fall back to Vite mirror while the query loads / if it errors.
-  const verificationPolicy = useQuery(api.authSettings.getVerificationPolicy, {});
+  const verificationPolicy = useQuery(
+    api.authSettings.getVerificationPolicy,
+    authMode === "online_authenticated" ? {} : "skip",
+  );
   const requireEmailVerification =
     verificationPolicy?.requireEmailVerification ?? isClientEmailVerificationRequired();
 
@@ -40,6 +43,16 @@ export const ProtectedRoute = ({
           <p className="font-display text-sm text-muted-foreground">Loading Poscal…</p>
         </div>
       </div>
+    );
+  }
+
+  if (authMode === "reauthentication_required") {
+    return (
+      <Navigate
+        to={buildSignInRedirect(location.pathname, location.search, "reauth")}
+        replace
+        state={{ from: `${location.pathname}${location.search}`, reason: "reauth" }}
+      />
     );
   }
 
@@ -72,7 +85,7 @@ export const ProtectedRoute = ({
     );
   }
 
-  if (requiresAdmin && !isAdmin) {
+  if (requiresAdmin && (authMode !== "online_authenticated" || !isAdmin)) {
     return <Navigate to="/settings" replace />;
   }
 
