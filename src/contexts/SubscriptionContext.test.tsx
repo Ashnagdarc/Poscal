@@ -9,6 +9,18 @@ vi.mock("@convex-dev/auth/react", () => ({
 
 vi.mock("convex/react", () => ({
   useQuery: () => undefined,
+  ConvexReactClient: class ConvexReactClient {},
+}));
+
+vi.mock("@/contexts/AuthContext", () => ({
+  useAuth: () => ({
+    user: null,
+    loading: false,
+    authMode: "signed_out",
+    backendAvailability: "online",
+    isOffline: false,
+    viewerSubscription: null,
+  }),
 }));
 
 function Probe() {
@@ -21,9 +33,7 @@ function Probe() {
 }
 
 describe("SubscriptionProvider", () => {
-  it("mounts without custom AuthProvider (does not call useAuth)", () => {
-    // Regression: calling useAuth here crashed with
-    // "useAuth must be used within an AuthProvider" under Auth HMR / wrong nesting.
+  it("stays on the free tier when nobody is signed in", () => {
     render(
       <SubscriptionProvider>
         <Probe />
