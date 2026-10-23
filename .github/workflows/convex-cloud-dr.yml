@@ -1,0 +1,42 @@
+name: Convex Cloud DR refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:30 UTC is 04:30 in Lagos, after the Openship volume backup window.
+    - cron: "30 3 * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: convex-cloud-dr-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    name: Refresh read-only Cloud standby
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CONVEX_SELF_HOSTED_URL: https://convex.poscalfx.com
+      CONVEX_SELF_HOSTED_ADMIN_KEY: ${{ secrets.POSCAL_SELF_HOSTED_CONVEX_ADMIN_KEY }}
+      POSCAL_PRODUCTION_APPROVAL: export:convex.poscalfx.com
+      POSCAL_CLOUD_DR_DEPLOYMENT: helpful-sturgeon-546
+      POSCAL_CLOUD_DR_DEPLOY_KEY: ${{ secrets.POSCAL_CLOUD_DR_DEPLOY_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install pinned dependencies
+        run: npm ci
+
+      - name: Verify standby configuration
+        run: npm run convex:cloud-dr:verify
+
+      - name: Export production, replace the standby, and compare counts
+        run: npm run convex:cloud-dr:sync
