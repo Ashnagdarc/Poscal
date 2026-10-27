@@ -111,6 +111,13 @@ These are operational targets, not provider guarantees. The seven-day baseline m
 - Add a kill switch for optional notification, calendar-ingestion, analytics, and backfill work.
 - Preserve authentication, journal reads, and ordinary trade saves when optional work is disabled.
 
+The implemented switch is the Convex environment variable
+`POSCAL_OPTIONAL_BACKGROUND_WORK_PAUSED`. Set it to `true` during backend
+contention to stop optional notification delivery, calendar ingestion/alerts,
+session and journal reminders, and analytics backfill continuations. Queued
+records and backfill cursors are retained. Remove the variable or set it to
+`false` after interactive query latency and host headroom have recovered.
+
 ### Disk and database-storage controls
 
 - Configure Docker log rotation with bounded file size and file count.
