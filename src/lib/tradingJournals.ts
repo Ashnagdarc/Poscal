@@ -127,12 +127,21 @@ export const deleteTradingJournal = async (_userId: string, journalId: string) =
       },
       body: JSON.stringify({ journalId }),
     });
+    const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+    if (!contentType.includes("application/json")) {
+      throw new Error(
+        "Journal deletion service is unavailable. Your journal is safe. Try again in a moment.",
+      );
+    }
     const payload = (await response.json().catch(() => null)) as
       | { success?: boolean; done?: boolean; message?: string }
       | null;
 
     if (!response.ok && response.status !== 202) {
       throw new Error(payload?.message || `Could not delete journal (${response.status})`);
+    }
+    if (!payload?.success) {
+      throw new Error(payload?.message || "Journal deletion did not return a valid result.");
     }
     if (payload?.done) return { success: true };
   }

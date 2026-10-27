@@ -3,12 +3,8 @@ import { createReadStream, existsSync, statSync } from "node:fs";
 import { extname, join, normalize, resolve, sep } from "node:path";
 import { URL } from "node:url";
 
-import journalEntry from "../api/journal-entry.ts";
-import journalImages from "../api/journal-images.ts";
-import paystackWebhook from "../api/paystack-webhook.ts";
-import prices from "../api/prices.ts";
-import pricesMultiple from "../api/prices/multiple.ts";
-import { invokeVercelHandler, type ApiHandler } from "./vercelAdapter.ts";
+import { apiHandlers } from "./apiHandlers.ts";
+import { invokeVercelHandler } from "./vercelAdapter.ts";
 
 const MIME: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -68,14 +64,6 @@ const distRoot = resolve(
   process.env.STATIC_ROOT?.trim() || join(process.cwd(), "dist"),
 );
 
-const handlers: Record<string, ApiHandler> = {
-  "/api/prices": prices as ApiHandler,
-  "/api/prices/multiple": pricesMultiple as ApiHandler,
-  "/api/journal-images": journalImages as ApiHandler,
-  "/api/journal-entry": journalEntry as ApiHandler,
-  "/api/paystack-webhook": paystackWebhook as ApiHandler,
-};
-
 const isSafeDistPath = (candidate: string) => {
   const normalized = normalize(candidate);
   return normalized === distRoot || normalized.startsWith(distRoot + sep);
@@ -125,7 +113,7 @@ const server = createServer(async (request, response) => {
       return;
     }
 
-    const apiHandler = handlers[url.pathname];
+    const apiHandler = apiHandlers[url.pathname];
     if (apiHandler) {
       response.setHeader("Cache-Control", "no-store");
       await invokeVercelHandler(apiHandler, request, response, url);
