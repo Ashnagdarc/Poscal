@@ -5,6 +5,7 @@ import { v } from "convex/values";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { getVerifiedAuthUserId, requireVerifiedAuthUserId } from "./lib/auth";
+import { isOptionalBackgroundWorkPaused } from "./lib/backgroundWork";
 
 const BATCH_SIZE = 200;
 const MAX_LOOKBACK_YEARS = 5;
@@ -101,6 +102,10 @@ export const ensureForJournal = mutation({
   handler: async (ctx, args) => {
     const userId = await requireVerifiedAuthUserId(ctx);
     const journal = await assertOwnedJournal(ctx, userId, args.journalId);
+    if (isOptionalBackgroundWorkPaused()) {
+      return { status: "paused" as const };
+    }
+
     const sourceVersion = journal.statsVersion ?? 0;
     const existing = await ctx.db
       .query("journalTradeFactsBackfills")
@@ -148,6 +153,8 @@ export const ensureForJournal = mutation({
 export const processBackfill = internalMutation({
   args: { backfillId: v.id("journalTradeFactsBackfills") },
   handler: async (ctx, args) => {
+    if (isOptionalBackgroundWorkPaused()) return;
+
     const state = await ctx.db.get(args.backfillId);
     if (!state || state.status !== "running") return;
 

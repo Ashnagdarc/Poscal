@@ -4,6 +4,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -25,7 +26,6 @@ import {
 } from "@/lib/tradingJournals";
 import {
   cacheOfflineJournals,
-  isLikelyNetworkError,
   loadOfflineJournals,
 } from "@/lib/offlineStore";
 
@@ -36,6 +36,7 @@ interface JournalContextValue {
   activeJournal: TradingJournal | null;
   activeJournalId: string | null;
   isLoading: boolean;
+  loadError: boolean;
   needsOnboarding: boolean;
   canCreateJournal: boolean;
   journalLimit: number;
@@ -56,37 +57,60 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
   const [journals, setJournals] = useState<TradingJournal[]>([]);
   const [activeJournalId, setActiveJournalIdState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+  const loadedAccountIdRef = useRef<string | null>(null);
 
   const journalLimit = limits.journals;
   const canCreateJournal = journals.length < journalLimit;
 
   const refreshJournals = useCallback(async () => {
     if (!user?.id) {
+      loadedAccountIdRef.current = null;
       setJournals([]);
       setActiveJournalIdState(null);
+      setLoadError(false);
       setIsLoading(false);
       return [] as TradingJournal[];
+    }
+
+    if (loadedAccountIdRef.current !== user.id) {
+      loadedAccountIdRef.current = user.id;
+      setJournals([]);
+      setActiveJournalIdState(null);
+      setLoadError(false);
     }
 
     setIsLoading(true);
     try {
       let next: TradingJournal[];
+      let usedFallback = false;
       if (authMode === "offline_verified_device") {
         next = await loadOfflineJournals<TradingJournal>(user.id);
       } else {
         try {
           next = await listTradingJournals(user.id);
         } catch (error) {
-          if (!isLikelyNetworkError(error)) throw error;
+          usedFallback = true;
+          console.warn("[journal] Live journal list unavailable; using the last verified cache", error);
           next = await loadOfflineJournals<TradingJournal>(user.id);
         }
       }
-      setJournals(next);
+      setLoadError(usedFallback);
 
-      if (authMode === "online_authenticated") {
+      // A failed live read is not proof that the user has no journals. Keep
+      // already-rendered metadata when IndexedDB has no replacement snapshot.
+      if (!usedFallback || next.length > 0) {
+        setJournals(next);
+      }
+
+      if (authMode === "online_authenticated" && !usedFallback) {
         void cacheOfflineJournals(user.id, next).catch((error) => {
           console.warn("[journal] Could not cache journals for offline use", error);
         });
+      }
+
+      if (usedFallback && next.length === 0) {
+        return next;
       }
 
       const stored = readStoredActiveJournalId(user.id);
@@ -192,7 +216,8 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     activeJournal,
     activeJournalId,
     isLoading: isLoading || subscriptionLoading,
-    needsOnboarding: !isLoading && !!user?.id && journals.length === 0,
+    loadError,
+    needsOnboarding: !isLoading && !loadError && !!user?.id && journals.length === 0,
     canCreateJournal,
     journalLimit,
     setActiveJournalId,
@@ -205,6 +230,7 @@ export const JournalProvider = ({ children }: { children: ReactNode }) => {
     activeJournal,
     activeJournalId,
     isLoading,
+    loadError,
     subscriptionLoading,
     user?.id,
     canCreateJournal,
