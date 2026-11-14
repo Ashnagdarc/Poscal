@@ -1,8 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { ConvexAuthProvider } from "@convex-dev/auth/react";
-import App from "./App.tsx";
-import { convexReactClient } from "@/lib/convexClient";
+import { ACCOUNT_MAINTENANCE } from "@/lib/maintenance";
 import { initErrorReporting } from "@/lib/errorReporting";
 import { isClientBuildStale, notifyBuildMismatch } from "@/lib/appVersion";
 import { notifyPwaUpdateAvailable } from "@/lib/pwa-update";
@@ -112,10 +110,12 @@ if (ENABLE_SW && "serviceWorker" in navigator) {
   window.setTimeout(check, 4_000);
 }
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <ConvexAuthProvider client={convexReactClient}>
-      <App />
-    </ConvexAuthProvider>
-  </StrictMode>,
-);
+// Keep account providers and their network effects out of the outage shell.
+const root = createRoot(document.getElementById("root")!);
+const appModule = ACCOUNT_MAINTENANCE
+  ? import("./MaintenanceApp")
+  : import("./AuthenticatedApp");
+
+void appModule.then(({ default: RootApp }) => {
+  root.render(<StrictMode><RootApp /></StrictMode>);
+});

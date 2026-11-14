@@ -19,11 +19,7 @@ import {
 } from "./CurrencyGrid";
 import { StopLossSelector } from "./StopLossSelector";
 import { useCurrency } from "@/contexts/CurrencyContext";
-import { useJournal } from "@/contexts/JournalContext";
-import { useAuth } from "@/contexts/AuthContext";
-import { useSubscription } from "@/contexts/SubscriptionContext";
-import { saveJournalEntry } from "@/lib/calculatorHistory";
-import { createJournalEntry } from "@/lib/convexJournal";
+import type { User } from "@/contexts/AuthContext";
 import { pipsToPrices, pricesToPips } from "@/lib/calculatorModeSync";
 import { getStopLossUnitLabel } from "@/lib/instrumentSpecs";
 import {
@@ -41,6 +37,12 @@ import {
   resolveAutomaticBrokerProfile,
   type BrokerProfileSnapshot,
 } from "@/lib/trading/brokerProfiles";
+
+// Account code is loaded only when saving outside maintenance mode.
+const saveJournalEntry = async (...args: Parameters<typeof import("@/lib/calculatorHistory").saveJournalEntry>) =>
+  (await import("@/lib/calculatorHistory")).saveJournalEntry(...args);
+const createJournalEntry = async (...args: Parameters<typeof import("@/lib/convexJournal").createJournalEntry>) =>
+  (await import("@/lib/convexJournal")).createJournalEntry(...args);
 
 export interface HistoryItem {
   id: string;
@@ -95,12 +97,21 @@ const normalizeOrderType = (value: string | null): "buy" | "sell" | "buy_limit" 
   }
 };
 
-export const Calculator = () => {
+interface CalculatorProps {
+  user?: User | null;
+  isPaid?: boolean;
+  activeJournalId?: string | null;
+  accountMaintenance?: boolean;
+}
+
+export const Calculator = ({
+  user = null,
+  isPaid = false,
+  activeJournalId = null,
+  accountMaintenance = false,
+}: CalculatorProps = {}) => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { user } = useAuth();
-  const { isPaid } = useSubscription();
-  const { activeJournalId } = useJournal();
   const [brokerSnapshot, setBrokerSnapshot] = useState<BrokerProfileSnapshot | null>(null);
   const [accountBalance, setAccountBalance] = useState("");
   const [tradeDirection, setTradeDirection] = useState<'buy' | 'sell'>('buy');
@@ -425,6 +436,7 @@ export const Calculator = () => {
   };
 
   const saveToHistory = async () => {
+    if (accountMaintenance) return;
     if (!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal) return;
     if (user?.id && !activeJournalId) {
       toast.error("Create a journal before saving. Calculations attach to the active journal.");
@@ -656,7 +668,7 @@ export const Calculator = () => {
       <PageHeader
         title="Poscal"
         subtitle="Position size"
-        actions={
+        actions={accountMaintenance ? undefined : (
           <button
             onClick={() => navigate(user ? "/profile" : "/signin")}
             className="rounded-full transition-transform active:scale-95"
@@ -671,7 +683,7 @@ export const Calculator = () => {
               className="rounded-xl"
             />
           </button>
-        }
+        )}
       />
 
       <main id="main-content" className="mx-auto w-full max-w-2xl px-6 pb-8 md:max-w-3xl">
@@ -796,10 +808,12 @@ export const Calculator = () => {
 
           <button
             onClick={saveToHistory}
-            disabled={!calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal}
+            disabled={accountMaintenance || !calculation.isValid || calculation.positionSize <= 0 || isSavingToJournal}
             className="mt-3 h-12 w-full rounded-xl bg-brand font-semibold text-brand-foreground transition-all active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isSavingToJournal
+            {accountMaintenance
+              ? "Journaling temporarily unavailable"
+              : isSavingToJournal
               ? "Saving..."
               : isJournalLogFlow
                 ? "Create Journal Trade"
