@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Calculator } from "@/components/Calculator";
+import { ConnectedCalculator as Calculator } from "@/components/ConnectedCalculator";
 
 const Index = () => {
   const navigate = useNavigate();
