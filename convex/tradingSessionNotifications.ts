@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalMutation } from "./_generated/server";
 import { NOTIFICATION_PAGE_DELAY_MS, SUBSCRIBER_ALERT_PAGE_SIZE } from "./lib/notificationStaging";
+import { isOptionalBackgroundWorkPaused } from "./lib/backgroundWork";
 import {
   isJournalLogReminderHour,
   journalLogReminderDeliveryKey,
@@ -22,6 +23,10 @@ export const enqueueDueSessionAlert = internalMutation({
     cursor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<{ queued: number; sessionId: string | null; scheduledFollowUp: boolean }> => {
+    if (isOptionalBackgroundWorkPaused()) {
+      return { queued: 0, sessionId: null, scheduledFollowUp: false };
+    }
+
     const now = args.nowMs ?? Date.now();
     const session = sessionOpenDueAt(now);
     if (!session) {
@@ -106,6 +111,10 @@ export const enqueueDueJournalLogReminders = internalMutation({
     cursor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<{ queued: number; checked: number; scheduledFollowUp: boolean }> => {
+    if (isOptionalBackgroundWorkPaused()) {
+      return { queued: 0, checked: 0, scheduledFollowUp: false };
+    }
+
     const now = args.nowMs ?? Date.now();
     const page = await ctx.db
       .query("pushSubscriptions")

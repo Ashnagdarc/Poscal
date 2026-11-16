@@ -12,6 +12,7 @@ import {
   NOTIFICATION_DRAIN_DELAY_MS,
   shouldDrainAnotherBatch,
 } from "./lib/notificationStaging";
+import { isOptionalBackgroundWorkPaused } from "./lib/backgroundWork";
 import { internalAction } from "./_generated/server";
 
 const DEFAULT_BATCH_LIMIT = NOTIFICATION_BATCH_LIMIT;
@@ -134,6 +135,18 @@ export const processPendingBatch = internalAction({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args: { limit?: number }): Promise<BatchSummary> => {
+    if (isOptionalBackgroundWorkPaused()) {
+      return {
+        claimed: 0,
+        sent: 0,
+        failed: 0,
+        pushSent: 0,
+        emailSent: 0,
+        deactivatedSubscriptions: 0,
+        errors: [],
+      };
+    }
+
     let webPushReady = true;
     try {
       configureWebPush();

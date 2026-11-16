@@ -70,6 +70,8 @@ const Journal = () => {
     activeJournal,
     needsOnboarding,
     isLoading: isJournalsLoading,
+    loadError: journalLoadError,
+    refreshJournals,
   } = useJournal();
 
   const [pageSection, setPageSection] = useState<"today" | "trades" | "notebook">("today");
@@ -271,10 +273,43 @@ const Journal = () => {
             <Skeleton className="h-24 w-full rounded-2xl" />
             <Skeleton className="h-48 w-full rounded-2xl" />
           </div>
+        ) : journalLoadError && !activeJournal ? (
+          <section className="rounded-2xl border border-border bg-card px-5 py-6">
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-secondary text-muted-foreground">
+                <Clock3 className="h-5 w-5" aria-hidden />
+              </div>
+              <div>
+                <h2 className="font-semibold text-foreground">Journals are taking longer to load</h2>
+                <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                  Your journals remain saved. Try again when the backend has caught up.
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => void refreshJournals()}
+              className="mt-5 h-11 rounded-xl bg-foreground px-5 text-sm font-semibold text-background transition active:scale-[0.98]"
+            >
+              Try again
+            </button>
+          </section>
         ) : needsOnboarding ? (
           <JournalOnboarding mode="first" />
         ) : (
           <>
+            {journalLoadError ? (
+              <div className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3 text-sm">
+                <p className="text-muted-foreground">Showing the last saved journal list.</p>
+                <button
+                  type="button"
+                  onClick={() => void refreshJournals()}
+                  className="shrink-0 font-semibold text-foreground"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
             <div className="mb-4" data-tour-id="journal-switcher">
               <JournalSwitcher />
             </div>

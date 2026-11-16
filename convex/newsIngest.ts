@@ -10,6 +10,7 @@ import {
   indexFfDetailLinks,
   parseFfDetailLinks,
 } from "./lib/ffCalendarFeed";
+import { isOptionalBackgroundWorkPaused } from "./lib/backgroundWork";
 
 const MIN_INTERVAL_MS = 2 * 60 * 1000; // collapse bursts; the calendar still pulls on its own
 const INGEST_LEASE_MS = 2 * 60 * 1000;
@@ -103,6 +104,14 @@ export const runIngest = internalAction({
     highImpactCount?: number;
     alertsQueued?: number;
   }> => {
+    if (isOptionalBackgroundWorkPaused()) {
+      return {
+        ok: true,
+        skipped: true,
+        reason: "background_work_paused",
+      };
+    }
+
     const ingestToken = crypto.randomUUID();
     const claim = await ctx.runMutation(internal.news.claimIngest, {
       minIntervalMs: MIN_INTERVAL_MS,

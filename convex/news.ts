@@ -13,6 +13,7 @@ import {
   SUBSCRIBER_ALERT_PAGE_SIZE,
 } from "./lib/notificationStaging";
 import { findOwnedOrOrphanProfile } from "./lib/profileOwnership";
+import { isOptionalBackgroundWorkPaused } from "./lib/backgroundWork";
 
 const nullableStringArg = v.optional(v.union(v.string(), v.null()));
 const nullableNumberArg = v.optional(v.union(v.number(), v.null()));
@@ -588,6 +589,10 @@ export const queueHighImpactAlerts = internalMutation({
     cursor: v.optional(v.union(v.string(), v.null())),
   },
   handler: async (ctx, args): Promise<{ queued: number; recipients: number; scheduledFollowUp: boolean }> => {
+    if (isOptionalBackgroundWorkPaused()) {
+      return { queued: 0, recipients: 0, scheduledFollowUp: false };
+    }
+
     const now = Date.now();
     const eventIndex = args.eventIndex ?? 0;
     const item = args.events[eventIndex];
